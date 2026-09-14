@@ -64,6 +64,26 @@ final class AppSettingKeys {
     validator: _validateDiscoveryRecentSourceIds,
   );
 
+  static const libraryDocument = SettingsDocumentDefinition(id: 'app-settings:settings.library', kind: 'settings.library');
+
+  /// How often opening a bookshelf may check source catalogs for new chapters.
+  static const bookshelfCatalogRefreshIntervalHours = SettingKey<int>(
+    id: 'library.bookshelfCatalogRefreshIntervalHours',
+    documentKind: 'settings.library',
+    defaultValue: 24,
+    codec: SettingCodec<int>(_intEncode, _intDecode),
+    validator: _validateBookshelfCatalogRefreshIntervalHours,
+  );
+
+  /// UTC epoch milliseconds of the most recent automatic bookshelf check.
+  static const bookshelfCatalogLastCheckedAtMs = SettingKey<int>(
+    id: 'library.bookshelfCatalogLastCheckedAtMs',
+    documentKind: 'settings.library',
+    defaultValue: 0,
+    codec: SettingCodec<int>(_intEncode, _intDecode),
+    validator: _validateNonNegativeInt,
+  );
+
   static const profileDocument = SettingsDocumentDefinition(id: 'app-settings:settings.profile', kind: 'settings.profile');
 
   /// Local-only display identity for the profile summary card.
@@ -180,6 +200,8 @@ final class AppSettingKeys {
     discoverySourceId,
     discoveryPinnedSourceIds,
     discoveryRecentSourceIds,
+    bookshelfCatalogRefreshIntervalHours,
+    bookshelfCatalogLastCheckedAtMs,
     profileIdentity,
     diagnosticsEnabled,
     diagnosticsRealtimeDetailsEnabled,
@@ -197,6 +219,7 @@ final class AppSettingKeys {
       appearanceDocument,
       searchHistoryDocument,
       discoveryDocument,
+      libraryDocument,
       profileDocument,
       diagnosticsDocument,
       networkProxyDocument,
@@ -228,6 +251,16 @@ void _validateHomeLayoutMode(String value) {
   if (value != 'list' && value != 'card') {
     throw ArgumentError.value(value);
   }
+}
+
+void _validateBookshelfCatalogRefreshIntervalHours(int value) {
+  if (value != 2 && value != 6 && value != 12 && value != 24) {
+    throw ArgumentError.value(value);
+  }
+}
+
+void _validateNonNegativeInt(int value) {
+  if (value < 0) throw ArgumentError.value(value);
 }
 
 Object? _searchHistoryEncode(List<String> value) => List<String>.of(value);

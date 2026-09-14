@@ -50,4 +50,19 @@ final class LibraryBookRefreshOperation {
       Error.throwWithStackTrace(error, stackTrace);
     }
   }
+
+  /// Refreshes every requested shelf item without allowing one source failure
+  /// to prevent the remaining content types from being checked.
+  Future<void> refreshAll(Iterable<String> bookIds) async {
+    await Future.wait<void>(
+      bookIds.map((bookId) async {
+        try {
+          await refresh(bookId);
+        } on Object {
+          // Automatic checks are best-effort; the previous local catalog is
+          // retained and the next scheduled opening can try again.
+        }
+      }),
+    );
+  }
 }

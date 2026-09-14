@@ -81,6 +81,15 @@ class ProfileGeneralSettingPage extends ConsumerWidget {
     const SizedBox(height: AppSpacing.comfortable),
     const _InlineNotice(icon: Icons.data_saver_on_rounded, message: '预加载只读取当前章节之后的小说正文；设为 0 可关闭。最多 5 章，并按顺序加载以避免同时占用过多网络与内存。'),
     const SizedBox(height: AppSpacing.section),
+    const _SectionHeading(title: '书架目录更新', description: '打开书架时检查数据源是否有新章节；同一时间间隔内不会重复检查'),
+    const SizedBox(height: AppSpacing.regular),
+    _BookshelfCatalogRefreshIntervalCard(
+      value: settings.get(AppSettingKeys.bookshelfCatalogRefreshIntervalHours),
+      onChanged: (int value) async {
+        await settings.set(AppSettingKeys.bookshelfCatalogRefreshIntervalHours, value);
+      },
+    ),
+    const SizedBox(height: AppSpacing.section),
     const _SectionHeading(title: '可调项目', description: '打开任意书籍，在阅读器设置面板中调整'),
     const SizedBox(height: AppSpacing.regular),
     const _SettingsCard(
@@ -581,6 +590,54 @@ class _NovelPreloadChapterCountCardState extends State<_NovelPreloadChapterCount
               icon: const Icon(Icons.add_circle_outline_rounded),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _BookshelfCatalogRefreshIntervalCard extends StatefulWidget {
+  const _BookshelfCatalogRefreshIntervalCard({required this.value, required this.onChanged});
+
+  final int value;
+  final ValueChanged<int> onChanged;
+
+  @override
+  State<_BookshelfCatalogRefreshIntervalCard> createState() => _BookshelfCatalogRefreshIntervalCardState();
+}
+
+class _BookshelfCatalogRefreshIntervalCardState extends State<_BookshelfCatalogRefreshIntervalCard> {
+  late int _value = widget.value;
+
+  @override
+  void didUpdateWidget(covariant _BookshelfCatalogRefreshIntervalCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.value != widget.value) _value = widget.value;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppThemeTokens.of(context);
+    const options = <(int, String)>[(2, '2 小时'), (6, '6 小时'), (12, '12 小时'), (24, '24 小时')];
+    return DecoratedBox(
+      key: const Key('bookshelf-catalog-refresh-interval'),
+      decoration: BoxDecoration(
+        color: tokens.surface,
+        borderRadius: AppRadii.detailCard,
+        border: Border.all(color: tokens.divider),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.regular),
+        child: SegmentedButton<int>(
+          key: const Key('bookshelf-catalog-refresh-interval-options'),
+          segments: <ButtonSegment<int>>[for (final option in options) ButtonSegment<int>(value: option.$1, label: Text(option.$2))],
+          selected: <int>{_value},
+          showSelectedIcon: false,
+          onSelectionChanged: (Set<int> selected) {
+            final next = selected.single;
+            setState(() => _value = next);
+            widget.onChanged(next);
+          },
         ),
       ),
     );

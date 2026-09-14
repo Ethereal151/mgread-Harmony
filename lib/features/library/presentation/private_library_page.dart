@@ -21,6 +21,7 @@ import 'package:mg_read/core/content_library/content_library.dart';
 import 'package:mg_read/core/errors/app_error.dart';
 import 'package:mg_read/features/library/application/library_book_remover.dart';
 import 'package:mg_read/features/library/application/library_book_visibility_changer.dart';
+import 'package:mg_read/features/library/application/library_catalog_refresh_coordinator.dart';
 import 'package:mg_read/features/library/application/library_page_controller.dart';
 import 'package:mg_read/features/library/application/library_page_state.dart';
 import 'package:mg_read/features/library/presentation/library_book_list_view_data.dart';
@@ -55,6 +56,11 @@ class PrivateLibraryPage extends ConsumerWidget {
     final PrivateLibraryPageController controller = ref.read(privateLibraryPageControllerProvider.notifier);
     final LibraryBookRemover? remover = ref.read(libraryBookRemoverProvider);
     final LibraryBookVisibilityChanger? visibilityChanger = ref.read(libraryBookVisibilityChangerProvider);
+    final LibraryCatalogRefreshCoordinator? catalogRefreshCoordinator = ref.read(libraryCatalogRefreshCoordinatorProvider);
+    final overview = state.overview;
+    if (catalogRefreshCoordinator != null && overview != null) {
+      unawaited(catalogRefreshCoordinator.maybeRefresh(bookIds: overview.items.map((item) => item.id), onCompleted: controller.refresh));
+    }
 
     return Scaffold(
       body: SafeArea(

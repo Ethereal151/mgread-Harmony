@@ -45,6 +45,12 @@ void main() {
     await tester.tap(continueBehavior);
     await tester.pumpAndSettle();
     expect(settings.get(AppSettingKeys.audioExitBehavior), 'continue');
+
+    await tester.drag(find.byKey(const Key('profile-general-setting-reading-settings')), const Offset(0, 900));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('6 小时'));
+    await tester.pumpAndSettle();
+    expect(settings.get(AppSettingKeys.bookshelfCatalogRefreshIntervalHours), 6);
   });
 
   testWidgets('appearance settings persists the real shelf layout preference', (WidgetTester tester) async {

@@ -28,6 +28,7 @@ import 'package:mg_read/features/library/application/library_book_refresher.dart
 import 'package:mg_read/features/library/application/library_book_refresh_operation.dart';
 import 'package:mg_read/features/library/application/library_book_removal_operation.dart';
 import 'package:mg_read/features/library/application/library_book_visibility_changer.dart';
+import 'package:mg_read/features/library/application/library_catalog_refresh_coordinator.dart';
 import 'package:mg_read/features/library/application/library_entry_destination.dart';
 import 'package:mg_read/features/library/application/library_page_controller.dart';
 import 'package:mg_read/features/library/application/library_page_state.dart';
@@ -140,6 +141,12 @@ class LibraryPage extends ConsumerWidget {
     final ValueChanged<String>? bookDetailRequested = onBookDetailRequested;
     final LibraryBookDetailLauncher? detailLauncher = ref.read(libraryBookDetailLauncherProvider);
     final LibraryBookRefresher? bookRefresher = ref.read(libraryBookRefresherProvider);
+    final LibraryCatalogRefreshCoordinator? catalogRefreshCoordinator = ref.read(libraryCatalogRefreshCoordinatorProvider);
+    if (catalogRefreshCoordinator != null) {
+      unawaited(
+        catalogRefreshCoordinator.maybeRefresh(bookIds: state.overview!.items.map((item) => item.id), onCompleted: controller.refresh),
+      );
+    }
     final LibraryBookRefreshOperation? bookRefreshOperation = bookRefresher == null
         ? null
         : LibraryBookRefreshOperation(refresher: bookRefresher, diagnostics: diagnostics);
