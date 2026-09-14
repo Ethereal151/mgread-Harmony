@@ -512,6 +512,50 @@ void main() {
     expect(observer.firstContentCount, 1);
   });
 
+  testWidgets('tapping the comic reader middle area closes visible controls', (
+    WidgetTester tester,
+  ) async {
+    final controller = ComicReaderController();
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ComicReaderView(
+          bookId: 'book',
+          dataSource: _FakeComicSource(),
+          stateStore: _MemoryComicStateStore(),
+          controller: controller,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(const ValueKey<String>('comic-reader-content-surface')),
+    );
+    await tester.pump();
+    expect(controller.snapshot.controlsVisible, isTrue);
+    expect(
+      find.byKey(
+        const ValueKey<String>('comic-reader-controls-interaction-lock'),
+      ),
+      findsOneWidget,
+    );
+
+    await tester.tap(
+      find.byKey(
+        const ValueKey<String>('comic-reader-controls-interaction-lock'),
+      ),
+    );
+    await tester.pump();
+    expect(controller.snapshot.controlsVisible, isFalse);
+    expect(
+      find.byKey(
+        const ValueKey<String>('comic-reader-controls-interaction-lock'),
+      ),
+      findsNothing,
+    );
+  });
+
   testWidgets(
     'opening a saved middle chapter only stitches following chapters',
     (WidgetTester tester) async {

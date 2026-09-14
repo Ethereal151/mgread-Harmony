@@ -381,6 +381,7 @@ class _ComicReaderViewState extends State<ComicReaderView>
                             ),
                           ),
                         ),
+                        if (_controlsVisible) _buildControlsInteractionLock(),
                         _buildChrome(palette),
                         if (_loading && _window.isEmpty)
                           _buildLoadingOverlay(palette),

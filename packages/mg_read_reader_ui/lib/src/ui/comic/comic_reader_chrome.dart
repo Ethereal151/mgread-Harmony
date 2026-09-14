@@ -262,6 +262,21 @@ extension _ComicReaderChrome on _ComicReaderViewState {
     );
   }
 
+  /// 工具栏显示时覆盖正文，点击中间空白区域只关闭工具栏。
+  ///
+  /// 该层位于 chrome 之下，因此顶部和底部按钮仍可操作；同时避免
+  /// 点击或拖动透明区域继续命中漫画列表。
+  Widget _buildControlsInteractionLock() {
+    return Positioned.fill(
+      child: GestureDetector(
+        key: const ValueKey<String>('comic-reader-controls-interaction-lock'),
+        behavior: HitTestBehavior.opaque,
+        excludeFromSemantics: true,
+        onTap: () => _setControlsVisible(false),
+      ),
+    );
+  }
+
   Widget _chromeButton({
     Key? key,
     required IconData icon,
