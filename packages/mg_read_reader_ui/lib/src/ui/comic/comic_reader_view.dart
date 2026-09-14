@@ -43,12 +43,25 @@ part 'comic_reader_session.dart';
 part 'comic_reader_preferences.dart';
 part 'comic_reader_chrome.dart';
 
-const _comicReaderSystemUiStyle = SystemUiOverlayStyle(
+const Color _comicReaderChromeColor = Color(0xFF17191B);
+
+const _comicReaderImmersiveSystemUiStyle = SystemUiOverlayStyle(
   statusBarColor: Colors.transparent,
   statusBarIconBrightness: Brightness.light,
   statusBarBrightness: Brightness.dark,
   systemNavigationBarColor: Colors.transparent,
   systemNavigationBarDividerColor: Colors.transparent,
+  systemNavigationBarIconBrightness: Brightness.light,
+  systemStatusBarContrastEnforced: false,
+  systemNavigationBarContrastEnforced: false,
+);
+
+const _comicReaderControlsSystemUiStyle = SystemUiOverlayStyle(
+  statusBarColor: _comicReaderChromeColor,
+  statusBarIconBrightness: Brightness.light,
+  statusBarBrightness: Brightness.dark,
+  systemNavigationBarColor: _comicReaderChromeColor,
+  systemNavigationBarDividerColor: _comicReaderChromeColor,
   systemNavigationBarIconBrightness: Brightness.light,
   systemStatusBarContrastEnforced: false,
   systemNavigationBarContrastEnforced: false,
@@ -311,7 +324,9 @@ class _ComicReaderViewState extends State<ComicReaderView>
       ReaderThemePreset.deepNight,
     );
     return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: _comicReaderSystemUiStyle,
+      value: _controlsVisible
+          ? _comicReaderControlsSystemUiStyle
+          : _comicReaderImmersiveSystemUiStyle,
       child: PopScope<void>(
         canPop: true,
         onPopInvokedWithResult: (bool didPop, void result) {

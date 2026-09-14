@@ -534,6 +534,15 @@ void main() {
     );
     await tester.pump();
     expect(controller.snapshot.controlsVisible, isTrue);
+    final regionWithControls = tester
+        .widget<AnnotatedRegion<SystemUiOverlayStyle>>(
+          find.byType(AnnotatedRegion<SystemUiOverlayStyle>),
+        );
+    expect(regionWithControls.value.statusBarColor, const Color(0xFF17191B));
+    expect(
+      regionWithControls.value.systemNavigationBarColor,
+      const Color(0xFF17191B),
+    );
     expect(
       find.byKey(
         const ValueKey<String>('comic-reader-controls-interaction-lock'),
@@ -548,6 +557,15 @@ void main() {
     );
     await tester.pump();
     expect(controller.snapshot.controlsVisible, isFalse);
+    final regionWithoutControls = tester
+        .widget<AnnotatedRegion<SystemUiOverlayStyle>>(
+          find.byType(AnnotatedRegion<SystemUiOverlayStyle>),
+        );
+    expect(regionWithoutControls.value.statusBarColor, Colors.transparent);
+    expect(
+      regionWithoutControls.value.systemNavigationBarColor,
+      Colors.transparent,
+    );
     expect(
       find.byKey(
         const ValueKey<String>('comic-reader-controls-interaction-lock'),

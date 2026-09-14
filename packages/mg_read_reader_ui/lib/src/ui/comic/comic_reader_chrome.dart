@@ -150,108 +150,126 @@ extension _ComicReaderChrome on _ComicReaderViewState {
           children: <Widget>[
             Align(
               alignment: Alignment.topCenter,
-              child: SafeArea(
-                bottom: false,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: <Widget>[
-                    Container(
-                      key: const ValueKey<String>(
-                        'comic-reader-primary-top-bar',
-                      ),
-                      height: 54,
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      decoration: const BoxDecoration(
-                        color: Color(0xE617191B),
-                        border: Border(
-                          bottom: BorderSide(color: Color(0x243A3D40)),
-                        ),
-                      ),
-                      child: Row(
-                        children: <Widget>[
-                          _chromeButton(
-                            key: const ValueKey<String>(
-                              'comic-reader-back-action',
-                            ),
-                            icon: Icons.arrow_back_rounded,
-                            label: ComicReaderStrings.back,
-                            onPressed: () => unawaited(_requestExit()),
+              child: SizedBox(
+                width: double.infinity,
+                child: ColoredBox(
+                  color: _comicReaderChromeColor,
+                  child: SafeArea(
+                    bottom: false,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        Container(
+                          key: const ValueKey<String>(
+                            'comic-reader-primary-top-bar',
                           ),
-                          const SizedBox(width: 4),
-                          Expanded(
-                            child: Text(
-                              _currentChapter?.title ?? _book?.title ?? '',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: palette.text,
-                                fontWeight: FontWeight.w600,
+                          height: 54,
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          decoration: const BoxDecoration(
+                            color: _comicReaderChromeColor,
+                            border: Border(
+                              bottom: BorderSide(color: Color(0x243A3D40)),
+                            ),
+                          ),
+                          child: Row(
+                            children: <Widget>[
+                              _chromeButton(
+                                key: const ValueKey<String>(
+                                  'comic-reader-back-action',
+                                ),
+                                icon: Icons.arrow_back_rounded,
+                                label: ComicReaderStrings.back,
+                                onPressed: () => unawaited(_requestExit()),
                               ),
-                            ),
+                              const SizedBox(width: 4),
+                              Expanded(
+                                child: Text(
+                                  _currentChapter?.title ?? _book?.title ?? '',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: palette.text,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                              _chromeButton(
+                                key: const ValueKey<String>(
+                                  'comic-reader-add-bookmark',
+                                ),
+                                icon: Icons.bookmark_add_outlined,
+                                label: ComicReaderStrings.addBookmark,
+                                onPressed: () => unawaited(_addBookmark()),
+                              ),
+                            ],
                           ),
-                          _chromeButton(
-                            key: const ValueKey<String>(
-                              'comic-reader-add-bookmark',
-                            ),
-                            icon: Icons.bookmark_add_outlined,
-                            label: ComicReaderStrings.addBookmark,
-                            onPressed: () => unawaited(_addBookmark()),
+                        ),
+                        ReaderSourceStrip(
+                          key: const ValueKey<String>(
+                            'comic-reader-source-strip',
                           ),
-                        ],
-                      ),
+                          sourceName: _book?.sourceName,
+                          sourceUrl: _book?.sourceUrl?.toString(),
+                          sourceUri: _book?.sourceUrl,
+                          style: ReaderSourceStripStyle.comic(palette),
+                          onOpenSource: _book?.sourceUrl == null
+                              ? null
+                              : () => unawaited(
+                                  _openSourceUrl(_book!.sourceUrl!),
+                                ),
+                          sourceNameKey: const ValueKey<String>(
+                            'comic-reader-source-name',
+                          ),
+                          sourceUrlRegionKey: const ValueKey<String>(
+                            'comic-reader-source-url-region',
+                          ),
+                        ),
+                      ],
                     ),
-                    ReaderSourceStrip(
-                      key: const ValueKey<String>('comic-reader-source-strip'),
-                      sourceName: _book?.sourceName,
-                      sourceUrl: _book?.sourceUrl?.toString(),
-                      sourceUri: _book?.sourceUrl,
-                      style: ReaderSourceStripStyle.comic(palette),
-                      onOpenSource: _book?.sourceUrl == null
-                          ? null
-                          : () => unawaited(_openSourceUrl(_book!.sourceUrl!)),
-                      sourceNameKey: const ValueKey<String>(
-                        'comic-reader-source-name',
-                      ),
-                      sourceUrlRegionKey: const ValueKey<String>(
-                        'comic-reader-source-url-region',
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ),
             ),
             Align(
               alignment: Alignment.bottomCenter,
-              child: SafeArea(
-                top: false,
-                child: Container(
-                  height: 70,
-                  decoration: const BoxDecoration(
-                    color: Color(0xF2181A1C),
-                    border: Border(top: BorderSide(color: Color(0x243A3D40))),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: <Widget>[
-                      _bottomButton(
-                        const ValueKey<String>('comic-reader-catalog'),
-                        Icons.list_alt_rounded,
-                        ComicReaderStrings.catalog,
-                        _showCatalog,
+              child: SizedBox(
+                width: double.infinity,
+                child: ColoredBox(
+                  color: _comicReaderChromeColor,
+                  child: SafeArea(
+                    top: false,
+                    child: Container(
+                      height: 70,
+                      decoration: const BoxDecoration(
+                        color: _comicReaderChromeColor,
+                        border: Border(
+                          top: BorderSide(color: Color(0x243A3D40)),
+                        ),
                       ),
-                      _bottomButton(
-                        const ValueKey<String>('comic-reader-bookmarks'),
-                        Icons.bookmarks_outlined,
-                        ComicReaderStrings.bookmarks,
-                        _showBookmarks,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: <Widget>[
+                          _bottomButton(
+                            const ValueKey<String>('comic-reader-catalog'),
+                            Icons.list_alt_rounded,
+                            ComicReaderStrings.catalog,
+                            _showCatalog,
+                          ),
+                          _bottomButton(
+                            const ValueKey<String>('comic-reader-bookmarks'),
+                            Icons.bookmarks_outlined,
+                            ComicReaderStrings.bookmarks,
+                            _showBookmarks,
+                          ),
+                          _bottomButton(
+                            const ValueKey<String>('comic-reader-settings'),
+                            Icons.tune_rounded,
+                            ComicReaderStrings.settings,
+                            _showSettings,
+                          ),
+                        ],
                       ),
-                      _bottomButton(
-                        const ValueKey<String>('comic-reader-settings'),
-                        Icons.tune_rounded,
-                        ComicReaderStrings.settings,
-                        _showSettings,
-                      ),
-                    ],
+                    ),
                   ),
                 ),
               ),
