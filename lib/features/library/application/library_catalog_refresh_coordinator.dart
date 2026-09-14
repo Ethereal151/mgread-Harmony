@@ -30,6 +30,30 @@ final libraryCatalogRefreshCoordinatorProvider = Provider<LibraryCatalogRefreshC
   );
 });
 
+final libraryCatalogChangeProvider = NotifierProvider<LibraryCatalogChangeController, LibraryCatalogChange>(
+  LibraryCatalogChangeController.new,
+);
+
+final class LibraryCatalogChange {
+  const LibraryCatalogChange({required this.revision, required this.bookIds});
+
+  const LibraryCatalogChange.initial() : revision = 0, bookIds = const <String>{};
+
+  final int revision;
+  final Set<String> bookIds;
+}
+
+final class LibraryCatalogChangeController extends Notifier<LibraryCatalogChange> {
+  @override
+  LibraryCatalogChange build() => const LibraryCatalogChange.initial();
+
+  void publish(Iterable<String> bookIds) {
+    final ids = bookIds.toSet();
+    if (ids.isEmpty) return;
+    state = LibraryCatalogChange(revision: state.revision + 1, bookIds: Set<String>.unmodifiable(ids));
+  }
+}
+
 final class LibraryCatalogRefreshCoordinator {
   LibraryCatalogRefreshCoordinator({required this.settings, required this.operation, DateTime Function()? now})
     : _now = now ?? DateTime.now;
@@ -40,7 +64,7 @@ final class LibraryCatalogRefreshCoordinator {
   Future<void>? _inFlight;
   int? _lastAttemptAtMs;
 
-  Future<void> maybeRefresh({required Iterable<String> bookIds, required Future<void> Function() onCompleted}) {
+  Future<void> maybeRefresh({required Iterable<String> bookIds, required Future<void> Function(Set<String> bookIds) onChanged}) {
     final ids = bookIds.toSet().toList(growable: false);
     if (ids.isEmpty || _inFlight != null) return _inFlight ?? Future<void>.value();
 
@@ -53,16 +77,16 @@ final class LibraryCatalogRefreshCoordinator {
 
     _lastAttemptAtMs = nowMs;
     _persistLastAttempt(nowMs);
-    final task = _run(ids, onCompleted);
+    final task = _run(ids, onChanged);
     _inFlight = task;
     return task.whenComplete(() {
       if (identical(_inFlight, task)) _inFlight = null;
     });
   }
 
-  Future<void> _run(List<String> bookIds, Future<void> Function() onCompleted) async {
-    await operation.refreshAll(bookIds);
-    await onCompleted();
+  Future<void> _run(List<String> bookIds, Future<void> Function(Set<String> bookIds) onChanged) async {
+    final changedBookIds = await operation.refreshAll(bookIds);
+    if (changedBookIds.isNotEmpty) await onChanged(changedBookIds);
   }
 
   void _persistLastAttempt(int value) {

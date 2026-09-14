@@ -39,6 +39,13 @@ abstract interface class TextReaderDataSource {
   );
 }
 
+/// Optional host capability for refreshing a durable catalog after an
+/// external background append. The reader keeps its current chapter and
+/// silently replaces only catalog metadata.
+abstract interface class ReaderCatalogRefreshDataSource {
+  Future<void> refreshCatalog(String bookId);
+}
+
 @immutable
 /// Host-prepared values that let the reader render without repeating hot-path reads.
 class ReaderSessionSeed {

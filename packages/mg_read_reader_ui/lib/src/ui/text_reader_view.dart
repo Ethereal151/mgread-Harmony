@@ -85,6 +85,7 @@ class TextReaderView extends StatefulWidget {
     this.observer,
     this.controller,
     this.extensions = const ReaderExtensions(),
+    this.catalogRefreshToken = 0,
   }) : assert(chapterPreloadCount >= 0 && chapterPreloadCount <= 5);
 
   /// Stable host identifier for the book being read.
@@ -113,6 +114,9 @@ class TextReaderView extends StatefulWidget {
 
   /// Optional capabilities such as the read-only comment feed.
   final ReaderExtensions extensions;
+
+  /// Monotonic host signal for an already-open background catalog append.
+  final int catalogRefreshToken;
 
   @override
   State<TextReaderView> createState() => _TextReaderViewState();
@@ -524,6 +528,11 @@ class _TextReaderViewState extends State<TextReaderView>
       _cancelAdjacentPreparation();
       final ReaderChapterInfo? chapter = _currentChapterInfo;
       if (chapter != null) unawaited(_prefetchNext(chapter.index));
+    }
+    if (oldWidget.catalogRefreshToken != widget.catalogRefreshToken &&
+        oldWidget.bookId == widget.bookId &&
+        identical(oldWidget.dataSource, widget.dataSource)) {
+      unawaited(_refreshCatalogFromHost());
     }
   }
 

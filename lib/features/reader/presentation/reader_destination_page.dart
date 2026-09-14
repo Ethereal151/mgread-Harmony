@@ -19,6 +19,7 @@ import 'package:novel_reader_ui/novel_reader_ui.dart';
 
 import 'package:mg_read/core/diagnostics/diagnostics.dart';
 import 'package:mg_read/features/library/application/library_page_controller.dart';
+import 'package:mg_read/features/library/application/library_catalog_refresh_coordinator.dart';
 import 'package:mg_read/features/reader/application/library_reader_launcher.dart';
 import 'package:mg_read/features/reader/application/reader_launch_failure.dart';
 import 'package:mg_read/features/reader/application/reader_launch_request.dart';
@@ -58,6 +59,7 @@ class _ReaderDestinationPageState extends ConsumerState<ReaderDestinationPage> {
   var _generation = 0;
   var _usesShelfCoordinator = false;
   var _readerMode = 'unknown';
+  var _catalogRefreshToken = 0;
 
   @override
   void initState() {
@@ -317,6 +319,10 @@ class _ReaderDestinationPageState extends ConsumerState<ReaderDestinationPage> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<LibraryCatalogChange>(libraryCatalogChangeProvider, (_, next) {
+      if (!mounted || next.revision == 0 || !next.bookIds.contains(widget.bookId)) return;
+      setState(() => _catalogRefreshToken = next.revision);
+    });
     final request = _request;
     if (request != null) {
       final mountStage = _readerMountStage;
@@ -325,6 +331,7 @@ class _ReaderDestinationPageState extends ConsumerState<ReaderDestinationPage> {
       }
       return ReaderEntryTransition(
         request: request,
+        catalogRefreshToken: _catalogRefreshToken,
         onFirstContentPresented: _completeLaunch,
         onFirstComicContentPresented: _completeComicLaunch,
         onInitialFailure: _failLaunchFromReader,

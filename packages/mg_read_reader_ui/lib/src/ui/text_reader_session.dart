@@ -503,6 +503,50 @@ extension _TextReaderSession on _TextReaderViewState {
     return request;
   }
 
+  Future<void> _refreshCatalogFromHost() async {
+    final active = _catalogCompletion;
+    if (active != null) {
+      try {
+        await active;
+      } on Object {
+        // The background refresh remains best effort for the reader surface.
+      }
+    }
+    final int generation = _sessionGeneration;
+    final TextReaderDataSource dataSource = widget.dataSource;
+    final String bookId = widget.bookId;
+    try {
+      if (dataSource case final ReaderCatalogRefreshDataSource refreshable) {
+        await refreshable.refreshCatalog(bookId);
+      }
+      if (!_isCatalogSessionCurrent(generation, dataSource, bookId)) return;
+      final current = _currentChapterInfo;
+      _catalog.clear();
+      _catalogById.clear();
+      _catalogByIndex.clear();
+      _catalogPageIds.clear();
+      _catalogCursor = null;
+      _catalogTotal = 0;
+      _catalogHasMore = false;
+      _catalogLoading = false;
+      _seededSparseCatalog = false;
+      final page = await dataSource.loadChapterCatalog(
+        bookId,
+        pageSize: _TextReaderViewState._catalogCompletionPageSize,
+      );
+      if (!_isCatalogSessionCurrent(generation, dataSource, bookId)) return;
+      _mergeCatalog(page, refreshChapterStates: false);
+      if (current != null && !_catalogById.containsKey(current.id)) {
+        _catalogById[current.id] = current;
+        _catalogByIndex[current.index] = current;
+      }
+      _catalogRevision.value++;
+      if (mounted) setState(() {});
+    } on Object {
+      // A silent background signal must never interrupt an active chapter.
+    }
+  }
+
   Future<void> _loadCompleteCatalogPages({required bool notify}) async {
     final int generation = _sessionGeneration;
     final TextReaderDataSource dataSource = widget.dataSource;

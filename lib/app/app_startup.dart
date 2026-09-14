@@ -496,13 +496,16 @@ final class DeferredLibraryBookDetailLauncher implements LibraryBookDetailLaunch
   Future<LibraryBookDetailLaunchData> load(String bookId) async => ContentLibraryBookDetailLauncher(await _get()).load(bookId);
 }
 
-final class DeferredLibraryBookRefresher implements LibraryBookRefresher {
+final class DeferredLibraryBookRefresher implements LibraryBookRefresher, LibraryBookRefreshReporter {
   const DeferredLibraryBookRefresher(this._get, this._gateway);
   final ContentLibraryGetter _get;
   final SourceContentGateway _gateway;
 
   @override
   Future<void> refresh(String bookId) async => ContentLibraryBookRefresher(await _get(), _gateway).refresh(bookId);
+
+  @override
+  Future<bool> refreshAndReport(String bookId) async => ContentLibraryBookRefresher(await _get(), _gateway).refreshAndReport(bookId);
 }
 
 final class DeferredProfileReadingStatsLoader implements ProfileReadingStatsLoader {

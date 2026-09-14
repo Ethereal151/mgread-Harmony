@@ -144,7 +144,13 @@ class LibraryPage extends ConsumerWidget {
     final LibraryCatalogRefreshCoordinator? catalogRefreshCoordinator = ref.read(libraryCatalogRefreshCoordinatorProvider);
     if (catalogRefreshCoordinator != null) {
       unawaited(
-        catalogRefreshCoordinator.maybeRefresh(bookIds: state.overview!.items.map((item) => item.id), onCompleted: controller.refresh),
+        catalogRefreshCoordinator.maybeRefresh(
+          bookIds: state.overview!.items.map((item) => item.id),
+          onChanged: (changedBookIds) async {
+            ref.read(libraryCatalogChangeProvider.notifier).publish(changedBookIds);
+            await controller.silentRefresh();
+          },
+        ),
       );
     }
     final LibraryBookRefreshOperation? bookRefreshOperation = bookRefresher == null

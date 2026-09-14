@@ -57,6 +57,41 @@ extension _ComicReaderSession on _ComicReaderViewState {
     );
   }
 
+  Future<void> _refreshCatalogFromHost() async {
+    if (_catalogLoading) return;
+    final int generation = _sessionGeneration;
+    final ComicReaderDataSource dataSource = widget.dataSource;
+    final String bookId = widget.bookId;
+    try {
+      if (dataSource case final ReaderCatalogRefreshDataSource refreshable) {
+        await refreshable.refreshCatalog(bookId);
+      }
+      if (!_isSessionForSource(generation, bookId, dataSource)) return;
+      final current = _currentChapter;
+      _catalog.clear();
+      _catalogById.clear();
+      _catalogByIndex.clear();
+      _catalogCursors.clear();
+      _catalogCursor = null;
+      _catalogTotal = 0;
+      _catalogHasMore = false;
+      _catalogPageCoverage = 0;
+      final page = await dataSource.loadChapterCatalog(
+        bookId,
+        pageSize: _ComicReaderViewState._catalogPageSize,
+      );
+      if (!_isSessionForSource(generation, bookId, dataSource)) return;
+      _mergeCatalog(page, requestedCursor: null);
+      if (current != null && !_catalogById.containsKey(current.id)) {
+        _rememberChapter(current);
+      }
+      if (mounted) setState(() {});
+      _publishSnapshot();
+    } on Object {
+      // A silent background signal must never interrupt an active chapter.
+    }
+  }
+
   Future<void> _initialize({
     int? generation,
     ComicReaderPreferences? preferenceOverride,

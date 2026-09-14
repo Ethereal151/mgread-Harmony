@@ -15,5 +15,10 @@ abstract interface class LibraryBookRefresher {
   Future<void> refresh(String bookId);
 }
 
+/// Reports whether a refresh appended one or more catalog entries.
+abstract interface class LibraryBookRefreshReporter {
+  Future<bool> refreshAndReport(String bookId);
+}
+
 /// Provides the refresh capability only in an app composition with persistence.
 final libraryBookRefresherProvider = Provider<LibraryBookRefresher?>((Ref ref) => null);

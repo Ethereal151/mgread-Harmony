@@ -17,15 +17,20 @@ import 'package:mg_read/features/discovery/application/source_content_gateway.da
 import 'package:mg_read/features/library/application/library_book_refresher.dart';
 
 /// Refreshes one source-backed shelf item through typed source and library APIs.
-final class ContentLibraryBookRefresher implements LibraryBookRefresher {
+final class ContentLibraryBookRefresher implements LibraryBookRefresher, LibraryBookRefreshReporter {
   ContentLibraryBookRefresher(this._library, this._gateway);
 
   final ContentLibrary _library;
   final SourceContentGateway _gateway;
-  final Map<String, Future<void>> _active = <String, Future<void>>{};
+  final Map<String, Future<bool>> _active = <String, Future<bool>>{};
 
   @override
-  Future<void> refresh(String bookId) {
+  Future<void> refresh(String bookId) async {
+    await refreshAndReport(bookId);
+  }
+
+  @override
+  Future<bool> refreshAndReport(String bookId) {
     final current = _active[bookId];
     if (current != null) return current;
     final task = _refresh(bookId);
@@ -35,7 +40,7 @@ final class ContentLibraryBookRefresher implements LibraryBookRefresher {
     });
   }
 
-  Future<void> _refresh(String bookId) async {
+  Future<bool> _refresh(String bookId) async {
     final item = await _library.getLibraryItem(LibraryItemId(bookId));
     if (item == null) throw StateError('The bookshelf item no longer exists.');
     final source = item.source;
@@ -52,7 +57,7 @@ final class ContentLibraryBookRefresher implements LibraryBookRefresher {
     final kind = _contentKind(item.kind);
     if (summary.contentKind != kind) throw StateError('The refreshed content kind does not match the shelf item.');
 
-    await _syncCatalog(item, chapters);
+    final int catalogAdded = await _syncCatalog(item, chapters);
     await _library.addLibraryItem(
       BookshelfAddRequest(
         title: summary.title.isEmpty ? item.title : summary.title,
@@ -102,9 +107,10 @@ final class ContentLibraryBookRefresher implements LibraryBookRefresher {
           ),
         ),
     ]);
+    return catalogAdded > 0;
   }
 
-  Future<void> _syncCatalog(LibraryItem item, PluginChaptersResult chapters) => switch (item.kind) {
+  Future<int> _syncCatalog(LibraryItem item, PluginChaptersResult chapters) => switch (item.kind) {
     ContentKind.novel => _library.syncNovelCatalog(
       itemId: item.id,
       chapters: <SourceNovelCatalogChapter>[
@@ -133,8 +139,8 @@ final class ContentLibraryBookRefresher implements LibraryBookRefresher {
     // Media catalogs are session-owned because their playable resources may
     // contain short-lived proxy state. The detail/player refreshes them from
     // the source instead of persisting a stale playback catalog.
-    ContentKind.audio || ContentKind.video => Future<void>.value(),
-  }.then<void>((_) {});
+    ContentKind.audio || ContentKind.video => Future<int>.value(0),
+  };
 
   PluginContentKind _contentKind(ContentKind kind) => switch (kind) {
     ContentKind.audio => PluginContentKind.audio,

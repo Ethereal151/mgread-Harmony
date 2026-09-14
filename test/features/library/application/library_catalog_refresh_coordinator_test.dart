@@ -28,11 +28,11 @@ void main() {
 
     await coordinator.maybeRefresh(
       bookIds: const <String>['novel-book', 'manga-book', 'audio-book', 'video-book', 'novel-book'],
-      onCompleted: () async => reloadCount++,
+      onChanged: (_) async => reloadCount++,
     );
     await coordinator.maybeRefresh(
       bookIds: const <String>['novel-book', 'manga-book', 'audio-book', 'video-book'],
-      onCompleted: () async => reloadCount++,
+      onChanged: (_) async => reloadCount++,
     );
 
     expect(refresher.bookIds, containsAllInOrder(<String>['novel-book', 'manga-book', 'audio-book', 'video-book']));
@@ -41,10 +41,35 @@ void main() {
     expect(settings.get(AppSettingKeys.bookshelfCatalogLastCheckedAtMs), now.millisecondsSinceEpoch);
 
     now = now.add(const Duration(hours: 24, minutes: 1));
-    await coordinator.maybeRefresh(bookIds: const <String>['novel-book'], onCompleted: () async => reloadCount++);
+    await coordinator.maybeRefresh(bookIds: const <String>['novel-book'], onChanged: (_) async => reloadCount++);
 
     expect(refresher.bookIds, <String>['novel-book', 'manga-book', 'audio-book', 'video-book', 'novel-book']);
     expect(reloadCount, 2);
+  });
+
+  test('does not notify listeners when the source has no new catalog entries', () async {
+    final settings = AppSettingsManager(store: FakeSettingsStore(), registry: AppSettingKeys.registry);
+    await settings.initialize();
+    addTearDown(settings.close);
+    final diagnostics = DiagnosticsTestkit();
+    addTearDown(diagnostics.dispose);
+    final refresher = _NoChangeRefresher();
+    final now = DateTime.utc(2026, 9, 14, 8);
+    final coordinator = LibraryCatalogRefreshCoordinator(
+      settings: settings,
+      operation: LibraryBookRefreshOperation(refresher: refresher, diagnostics: diagnostics.manager),
+      now: () => now,
+    );
+    var reloadCount = 0;
+
+    await coordinator.maybeRefresh(
+      bookIds: const <String>['novel-book'],
+      onChanged: (_) async => reloadCount++,
+    );
+
+    expect(refresher.bookIds, <String>['novel-book']);
+    expect(reloadCount, 0);
+    expect(settings.get(AppSettingKeys.bookshelfCatalogLastCheckedAtMs), now.millisecondsSinceEpoch);
   });
 }
 
@@ -58,5 +83,20 @@ final class _RecordingRefresher implements LibraryBookRefresher {
   Future<void> refresh(String bookId) async {
     bookIds.add(bookId);
     if (bookId == failingBookId) throw StateError('source unavailable');
+  }
+}
+
+final class _NoChangeRefresher implements LibraryBookRefresher, LibraryBookRefreshReporter {
+  final List<String> bookIds = <String>[];
+
+  @override
+  Future<void> refresh(String bookId) async {
+    await refreshAndReport(bookId);
+  }
+
+  @override
+  Future<bool> refreshAndReport(String bookId) async {
+    bookIds.add(bookId);
+    return false;
   }
 }

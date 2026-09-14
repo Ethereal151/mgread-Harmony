@@ -59,7 +59,15 @@ class PrivateLibraryPage extends ConsumerWidget {
     final LibraryCatalogRefreshCoordinator? catalogRefreshCoordinator = ref.read(libraryCatalogRefreshCoordinatorProvider);
     final overview = state.overview;
     if (catalogRefreshCoordinator != null && overview != null) {
-      unawaited(catalogRefreshCoordinator.maybeRefresh(bookIds: overview.items.map((item) => item.id), onCompleted: controller.refresh));
+      unawaited(
+        catalogRefreshCoordinator.maybeRefresh(
+          bookIds: overview.items.map((item) => item.id),
+          onChanged: (changedBookIds) async {
+            ref.read(libraryCatalogChangeProvider.notifier).publish(changedBookIds);
+            await controller.silentRefresh();
+          },
+        ),
+      );
     }
 
     return Scaffold(

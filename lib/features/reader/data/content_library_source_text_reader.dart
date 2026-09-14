@@ -254,6 +254,7 @@ final class ContentLibrarySourceTextReader implements LibraryReaderLauncher, Loc
     Future<void>? initialWrite,
   }) {
     final chapterAccess = _SessionNovelChapterAccess(
+      library: _library,
       session: session,
       item: item,
       source: source,
@@ -365,6 +366,7 @@ final class _SessionNovelChapterAccess
   static const int _maximumMemoryWeight = 128 * 1024;
 
   _SessionNovelChapterAccess({
+    required this.library,
     required this.session,
     required this.item,
     required this.source,
@@ -383,7 +385,8 @@ final class _SessionNovelChapterAccess
     if (initialWrite != null) _trackWrite(initialEntry.remoteIdentity, initialWrite);
   }
 
-  final NovelReaderSession session;
+  final ContentLibrary library;
+  NovelReaderSession session;
   final LibraryItem item;
   final LibraryItemSource source;
   final SourceContentGateway gateway;
@@ -401,6 +404,13 @@ final class _SessionNovelChapterAccess
   final Map<String, Future<PluginChapterContent>> _loading = <String, Future<PluginChapterContent>>{};
   final Map<String, Future<ChapterCacheItemResult>> _cacheLoading = <String, Future<ChapterCacheItemResult>>{};
   final Map<String, Future<void>> _writing = <String, Future<void>>{};
+
+  Future<NovelReaderSession?> refreshSession() async {
+    final refreshed = await library.openNovelReaderSession(item.id);
+    if (refreshed == null) return null;
+    session = refreshed;
+    return refreshed;
+  }
 
   Future<PluginChapterContent> load(String chapterId) async {
     final content = await _load(chapterId);
@@ -621,11 +631,11 @@ final class _SessionNovelChapterAccess
   }
 }
 
-final class _SessionTextReaderDataSource implements TextReaderDataSource {
-  const _SessionTextReaderDataSource({required this.item, required this.session, required this.chapterAccess, required this.sourceKind});
+final class _SessionTextReaderDataSource implements TextReaderDataSource, ReaderCatalogRefreshDataSource {
+  _SessionTextReaderDataSource({required this.item, required this.session, required this.chapterAccess, required this.sourceKind});
 
   final LibraryItem item;
-  final NovelReaderSession session;
+  NovelReaderSession session;
   final _SessionNovelChapterAccess chapterAccess;
   final ReaderBookSourceKind sourceKind;
 
@@ -650,6 +660,13 @@ final class _SessionTextReaderDataSource implements TextReaderDataSource {
   Future<ReaderBookInfo> loadBookInfo(String bookId) async {
     _requireBook(bookId);
     return bookInfo;
+  }
+
+  @override
+  Future<void> refreshCatalog(String bookId) async {
+    _requireBook(bookId);
+    final refreshed = await chapterAccess.refreshSession();
+    if (refreshed != null) session = refreshed;
   }
 
   @override

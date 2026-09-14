@@ -82,6 +82,7 @@ class ComicReaderView extends StatefulWidget {
     this.observer,
     this.controller,
     this.commentFeed,
+    this.catalogRefreshToken = 0,
   });
 
   /// Stable host identifier for the comic.
@@ -103,6 +104,9 @@ class ComicReaderView extends StatefulWidget {
   ///
   /// The reader never reserves image layout space when this is null.
   final ReaderCommentFeed? commentFeed;
+
+  /// Monotonic host signal for an already-open background catalog append.
+  final int catalogRefreshToken;
 
   @override
   State<ComicReaderView> createState() => _ComicReaderViewState();
@@ -277,6 +281,11 @@ class _ComicReaderViewState extends State<ComicReaderView>
         onDimensionsChanged: _scheduleDimensionsUpdate,
       );
       unawaited(_restart(preferenceOverride: preferenceOverride));
+    }
+    if (oldWidget.catalogRefreshToken != widget.catalogRefreshToken &&
+        oldWidget.bookId == widget.bookId &&
+        identical(oldWidget.dataSource, widget.dataSource)) {
+      unawaited(_refreshCatalogFromHost());
     }
   }
 

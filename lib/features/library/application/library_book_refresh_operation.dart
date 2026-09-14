@@ -53,16 +53,26 @@ final class LibraryBookRefreshOperation {
 
   /// Refreshes every requested shelf item without allowing one source failure
   /// to prevent the remaining content types from being checked.
-  Future<void> refreshAll(Iterable<String> bookIds) async {
+  Future<Set<String>> refreshAll(Iterable<String> bookIds) async {
+    final changedBookIds = <String>{};
     await Future.wait<void>(
       bookIds.map((bookId) async {
         try {
-          await refresh(bookId);
+          final bool changed = refresher is LibraryBookRefreshReporter
+              ? await (refresher as LibraryBookRefreshReporter).refreshAndReport(bookId)
+              : await _refreshConservatively(bookId);
+          if (changed) changedBookIds.add(bookId);
         } on Object {
           // Automatic checks are best-effort; the previous local catalog is
           // retained and the next scheduled opening can try again.
         }
       }),
     );
+    return changedBookIds;
+  }
+
+  Future<bool> _refreshConservatively(String bookId) async {
+    await refresher.refresh(bookId);
+    return true;
   }
 }

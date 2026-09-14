@@ -61,6 +61,7 @@ class ReaderEntryTransition extends StatefulWidget {
     this.onFirstContentPresented,
     this.onFirstComicContentPresented,
     this.onInitialFailure,
+    this.catalogRefreshToken = 0,
     super.key,
   });
 
@@ -75,6 +76,7 @@ class ReaderEntryTransition extends StatefulWidget {
 
   /// Receives a recoverable failure before readable content is shown.
   final ValueChanged<ReaderFailure>? onInitialFailure;
+  final int catalogRefreshToken;
 
   @override
   State<ReaderEntryTransition> createState() => _ReaderEntryTransitionState();
@@ -363,7 +365,7 @@ class _ReaderEntryTransitionState extends State<ReaderEntryTransition> with Tick
                 opacity: _firstContentPresented ? handoff : 0,
                 child: KeyedSubtree(
                   key: ValueKey<int>(_readerEpoch),
-                  child: ReaderHostPage(request: _boundRequest),
+                  child: ReaderHostPage(request: _boundRequest, catalogRefreshToken: widget.catalogRefreshToken),
                 ),
               ),
             ),

@@ -17,10 +17,11 @@ import 'package:mg_read/features/reader/application/reader_launch_request.dart';
 /// Application page that hosts the reader plugin through its public API.
 class ReaderHostPage extends StatelessWidget {
   /// Creates a page for one resolved reader launch [request].
-  const ReaderHostPage({required this.request, super.key});
+  const ReaderHostPage({required this.request, this.catalogRefreshToken = 0, super.key});
 
   /// The main-application inputs for this reading session.
   final ReaderLaunchRequest request;
+  final int catalogRefreshToken;
 
   @override
   Widget build(BuildContext context) {
@@ -36,6 +37,7 @@ class ReaderHostPage extends StatelessWidget {
           observer: request.observer,
           controller: request.controller,
           extensions: request.extensions,
+          catalogRefreshToken: catalogRefreshToken,
         ),
         ComicReaderLaunchRequest request => ComicReaderView(
           bookId: request.bookId,
@@ -44,6 +46,7 @@ class ReaderHostPage extends StatelessWidget {
           observer: request.observer,
           controller: request.controller,
           commentFeed: request.commentFeed,
+          catalogRefreshToken: catalogRefreshToken,
         ),
       },
     );

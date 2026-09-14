@@ -39,7 +39,8 @@ final class ComicImageHttpStatusException extends HttpException {
 }
 
 /// Content Library adapter for a source-backed comic session.
-final class ContentLibraryComicReaderDataSource implements ComicReaderDataSource, DisposableReaderDataSource {
+final class ContentLibraryComicReaderDataSource
+    implements ComicReaderDataSource, DisposableReaderDataSource, ReaderCatalogRefreshDataSource {
   ContentLibraryComicReaderDataSource({
     required this.library,
     required this.gateway,
@@ -129,6 +130,21 @@ final class ContentLibraryComicReaderDataSource implements ComicReaderDataSource
       sourceUrl: item.sourceUrl,
       sourceKind: ReaderBookSourceKind.remote,
     );
+  }
+
+  @override
+  Future<void> refreshCatalog(String bookId) async {
+    _checkBook(bookId);
+    final active = _catalogLoading;
+    if (active != null) {
+      try {
+        await active;
+      } on Object {
+        // Reopen the durable catalog below even when the prior load failed.
+      }
+    }
+    _catalog = null;
+    _catalogLoading = null;
   }
 
   @override
