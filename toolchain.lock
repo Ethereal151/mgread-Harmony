@@ -1,0 +1,49 @@
+# MgRead OHOS adaptation - stage 0 toolchain baseline
+# Recorded: 2026-09-15 (Asia/Shanghai)
+
+[source]
+upstream_url = "https://github.com/lingy-Mg/mg_read.git"
+upstream_commit = "d61464b6dbbd268eed0681ede1a776a51e9832b3"
+target_url = "https://github.com/Ethereal151/mgread-Harmony.git"
+target_main_commit = "d8c014d11007efe78982b8166dc4cd2aada2677f"
+working_branch = "oh-3.44.9-dev3.12.2"
+
+[flutter]
+version = "3.44.9+ohos-0.0.1-canary1"
+framework_revision = "d7f5b90c59"
+engine_revision = "5a2a6a42cc"
+dart_version = "3.12.2"
+sdk_path = "D:\\f"
+ohos_enabled = true
+
+[harmony]
+dev_eco_studio = "26.0.0.821"
+dev_eco_studio_build = "261.23567.138.36.2600821"
+api_level = 26
+ohos_sdk_path = "D:\\DevEco Studio\\sdk\\default"
+ohpm_version = "26.0.0.630"
+hvigor_version = "6.26.4"
+hdc_version = "3.2.0f"
+primary_architecture = "arm64"
+
+[runtime]
+node_version = "24.16.0"
+node_path = "D:\\nodejs\\node.exe"
+
+[application]
+name = "mg_read"
+version = "0.9.199+317"
+dart_constraint = "^3.12.2"
+lockfile = "pubspec.lock"
+
+[baseline]
+pub_get = "pass"
+flutter_analyze = "fail: 3 pre-existing warnings"
+flutter_test = "incomplete: stopped after 669 passed and 28 failed"
+windows_debug_build = "blocked: Windows Developer Mode/symlink support is disabled"
+ohos_debug_hap = "blocked: no ohos entry module exists yet"
+connected_devices = "Windows desktop, Edge; no OHOS device or emulator"
+
+[known_issues]
+git_lfs = "Upstream commit references missing LFS objects for Darwin arm64 and Windows x64 runtime binaries; checkout used GIT_LFS_SKIP_SMUDGE=1."
+pub_get_lock_drift = "flutter pub get selected six older transitive versions under the current SDK; pubspec.lock was restored to the upstream commit and was not changed."
