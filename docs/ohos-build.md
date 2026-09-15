@@ -69,7 +69,7 @@ flutter devices
 flutter build hap --debug --target-platform ohos-arm64 --no-pub --no-codesign
 ```
 
-要生成可安装调试 HAP，请在 DevEco Studio 打开 `ohos/` 工程，进入 `File -> Project Structure -> Signing Configs`，勾选 `Automatically generate signature`，保存后执行：
+要生成可安装调试 HAP，请在 DevEco Studio 以 `D:\Desktop\mgread\ohos` 作为工程根目录打开（不要打开仓库根目录 `D:\Desktop\mgread`）。如果 Project Structure 中包名为空或 Compatible SDK 显示异常，请关闭当前工程后重新导入该目录，并让 DevEco 重新同步工程模型；包名应从 `ohos/AppScope/app.json5` 读取为 `com.ohos.mgread`。然后进入 `File -> Project Structure -> Signing Configs`，勾选 `Automatically generate signature`，保存后执行：
 
 ```powershell
 flutter build hap --debug --target-platform ohos-arm64 --no-pub
