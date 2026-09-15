@@ -1,0 +1,16 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "MgRead Flutter application entry module"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "MgRead Flutter application"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "MgRead"
+    }
+  ]
+}

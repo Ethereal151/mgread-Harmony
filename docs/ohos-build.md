@@ -1,6 +1,6 @@
 # OHOS 构建基线
 
-本文记录 MgRead 鸿蒙适配阶段 0 的源代码、工具链和原平台基线。阶段 0 不生成 OHOS 工程，也不包含 HAP；OHOS 工程和 HAP 生成属于阶段 1。
+本文记录 MgRead 鸿蒙适配阶段 1 的源代码、工具链和构建验证结果。阶段 1 生成 OHOS 工程并验证 Flutter 引擎能够编译；签名安装和模拟器运行验收需要在 DevEco Studio 中完成调试签名配置后继续。
 
 ## 源代码基线
 
@@ -31,7 +31,7 @@ origin    https://github.com/Ethereal151/mgread-Harmony.git
 - hvigor：`6.26.4`
 - hdc：`3.2.0f`
 
-`flutter doctor -v` 已识别 HarmonyOS toolchain，当前 Flutter 连接设备只有 Windows desktop 和 Edge，尚未连接 OHOS 真机或模拟器。
+`flutter doctor -v` 已识别 HarmonyOS toolchain。当前已启动 DevEco Studio 的 Mate 70 Pro+ API 26 模拟器，Flutter 识别为 `127.0.0.1:5555`、`ohos-x64`、`Ohos OpenHarmony-7.0.0.105 (API 26)`。
 
 ## 已完成的基线检查
 
@@ -51,20 +51,32 @@ flutter build hap --debug
 - `flutter analyze` 以 3 个 warning 结束，均为上游现有代码 warning，不是 OHOS 改动引入。
 - `flutter test` 在 669 个通过、28 个失败时停止。已观察到 golden 像素差异、局域网同步超时/跨设备测试失败和一个书架组件 finder 失败；失败反馈为测试运行产物，未纳入提交。
 - Windows debug 构建被本机 Windows Developer Mode 未开启阻塞，Flutter 提示缺少 symlink 支持。
-- OHOS debug 构建被阻塞，因为当前仓库还没有 `ohos/` entry module。
+- OHOS 工程已由 Flutter OHOS 工具链生成，包含 `AppScope` 和 `entry` 模块；应用版本固定为 `0.9.199`、versionCode 为 `317`，应用名称为 `MgRead`。
+- `ohos/entry/src/main/module.json5` 保留网络权限，Flutter 入口使用标准 `FlutterAbility` 和 `FlutterPage`。
+- 由于仓库位于 `D:` 而 pub 缓存位于 `C:`，OHOS Hvigor 对跨盘插件绝对路径校验失败。`ohos/hvigorconfig.ts` 在注入原生模块前，把跨盘 OHOS 插件复制到根目录下的忽略目录 `.flutter_ohos_plugins/`，再提供盘内相对路径。
+- 当前 Windows 未开启 Developer Mode，`flutter pub get` 会提示缺少 symlink 支持；已使用 `--no-pub` 完成原生构建验证。日常构建前建议在 Windows 设置中开启 Developer Mode。
+- 在当前 DevEco 安装布局下，构建命令需要把 `DEVECO_SDK_HOME`、`HOS_SDK_HOME` 和 `OHOS_SDK_HOME` 指向 `D:\DevEco Studio\sdk`（不是 `...\sdk\default`）。
 
-## 阶段 1 入口
+## 阶段 1 构建与签名
 
-下一阶段应使用固定 Flutter OHOS SDK 生成 `ohos/` 工程，按 API 26 配置 bundle/module/签名和 arm64，然后重新执行：
+未签名的 x64 调试 HAP 已成功生成：`build/ohos/hap/entry-default-unsigned.hap`。可用以下命令验证 arm64 编译：
 
 ```powershell
+$env:DEVECO_SDK_HOME = 'D:\DevEco Studio\sdk'
+$env:HOS_SDK_HOME = 'D:\DevEco Studio\sdk'
+$env:OHOS_SDK_HOME = 'D:\DevEco Studio\sdk'
 flutter devices
-flutter build hap --debug
-flutter build hap --release
-hdc install <hap-path>
+flutter build hap --debug --target-platform ohos-arm64 --no-pub --no-codesign
 ```
 
-HAP、签名文件和本机配置不应提交到 Git。
+要生成可安装调试 HAP，请在 DevEco Studio 打开 `ohos/` 工程，进入 `File -> Project Structure -> Signing Configs`，勾选 `Automatically generate signature`，保存后执行：
+
+```powershell
+flutter build hap --debug --target-platform ohos-arm64 --no-pub
+hdc install build/ohos/hap/entry-default-signed.hap
+```
+
+随后在模拟器上验证启动、退出、切后台和恢复。HAP、签名文件和本机配置不应提交到 Git。
 
 ## 已知限制
 
