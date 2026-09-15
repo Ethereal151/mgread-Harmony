@@ -56,6 +56,7 @@ flutter build hap --debug
 - 由于仓库位于 `D:` 而 pub 缓存位于 `C:`，OHOS Hvigor 对跨盘插件绝对路径校验失败。`ohos/hvigorconfig.ts` 在注入原生模块前，把跨盘 OHOS 插件复制到根目录下的忽略目录 `.flutter_ohos_plugins/`，再提供盘内相对路径。
 - 当前 Windows 未开启 Developer Mode，`flutter pub get` 会提示缺少 symlink 支持；已使用 `--no-pub` 完成原生构建验证。日常构建前建议在 Windows 设置中开启 Developer Mode。
 - 在当前 DevEco 安装布局下，构建命令需要把 `DEVECO_SDK_HOME`、`HOS_SDK_HOME` 和 `OHOS_SDK_HOME` 指向 `D:\DevEco Studio\sdk`（不是 `...\sdk\default`）。
+- DevEco 26 在 Windows 下通过 `hvigorw.js` 同步工程时，内置 `ohpm.bat` 会触发批处理递归。`ohos/tools/ohpm-safe.cmd` 直接启动同一 DevEco 进程对应的 ohpm Node 入口；`hvigorconfig.ts` 仅对本工程配置该包装器。
 
 ## 阶段 1 构建与签名
 
