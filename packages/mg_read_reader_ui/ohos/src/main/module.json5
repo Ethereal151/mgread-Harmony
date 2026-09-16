@@ -1,0 +1,7 @@
+{
+  "module": {
+    "name": "novel_reader_ui",
+    "type": "har",
+    "deviceTypes": ["default", "tablet"]
+  }
+}

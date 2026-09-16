@@ -27,8 +27,8 @@ final class PlatformCapabilities {
   bool get isWindows => operatingSystem == 'windows';
   bool get isMacOS => operatingSystem == 'macos';
 
-  /// OHOS currently has no registered `file_selector` implementation in this
-  /// app. Android selection is provided by the Runtime host, not this flag.
+  /// OHOS file selection is not yet registered in the application plugin graph.
+  /// Android selection is provided by the Runtime host, not this flag.
   bool get supportsFilePicker => !isOhos && !isAndroid;
 
   /// `share_plus` and `path_provider` do not currently have an OHOS adapter in
@@ -40,7 +40,7 @@ final class PlatformCapabilities {
   /// OHOS exposes an application-window brightness override through
   /// `@ohos.window`; global system brightness remains unavailable.
   bool get supportsApplicationBrightness => isAndroid || isOhos;
-  bool get supportsKeepScreenOn => isAndroid || isWindows || isMacOS;
+  bool get supportsKeepScreenOn => isAndroid || isWindows || isMacOS || isOhos;
   bool get supportsWindowManagement => isWindows;
 
   /// Audio and video are provided by the package-owned OHOS AVPlayer bridge.
@@ -48,14 +48,12 @@ final class PlatformCapabilities {
   bool get supportsVideoPlayback => true;
   bool get supportsBarcodeScanning => true;
 
-  /// Node 24.16.0 is not bundled for OHOS arm64 yet. The Runtime facade still
-  /// exposes a typed host boundary, but the capability remains unavailable.
-  /// Whether the Flutter bridge is registered. OHOS returns true because the
-  /// staged bridge provides a typed unsupported result instead of a missing
-  /// plugin/channel failure.
+  /// Whether the Flutter Runtime bridge is registered.
   bool get supportsPluginRuntime => isAndroid || isWindows || isMacOS || isOhos;
 
-  /// Whether a verified executable/embedded Node host is available.
+  /// Whether a verified executable/embedded Node host is available. The x64
+  /// emulator intentionally uses the native stub; arm64 is enabled only after
+  /// the real-device smoke gate.
   bool get supportsPluginRuntimeNode => isAndroid || isWindows || isMacOS;
 
   /// Resolves the app-owned persistence directory.
@@ -64,7 +62,7 @@ final class PlatformCapabilities {
   /// HAP updates. Other platforms continue to use the platform provider.
   Future<Directory> resolvePersistenceRoot() async {
     if (isOhos) {
-      return Directory('/data/storage/el2/base/files/persistence');
+      return Directory('/data/storage/el2/base/haps/entry/files/persistence');
     }
     final support = await getApplicationSupportDirectory();
     return Directory('${support.path}${Platform.pathSeparator}persistence');

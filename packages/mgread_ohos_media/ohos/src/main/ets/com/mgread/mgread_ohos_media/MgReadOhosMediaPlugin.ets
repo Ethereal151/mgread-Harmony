@@ -149,7 +149,13 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
     })
     player.on('timeUpdate', (value: number) => this.emit(sessionId, 'position', value))
     player.on('durationUpdate', (value: number) => this.emit(sessionId, 'duration', value))
-    player.on('bufferingUpdate', (kind: media.BufferingInfoType, value: number) => this.emit(sessionId, 'buffering', true))
+    player.on('bufferingUpdate', (kind: media.BufferingInfoType, value: number) => {
+      if (kind === media.BufferingInfoType.BUFFERING_START) {
+        this.emit(sessionId, 'buffering', true)
+      } else if (kind === media.BufferingInfoType.BUFFERING_END) {
+        this.emit(sessionId, 'buffering', false)
+      }
+    })
     player.on('startRenderFrame', () => this.emit(sessionId, 'firstFrame', true))
     player.on('endOfStream', () => this.emit(sessionId, 'completed', true))
     player.on('volumeChange', (value: number) => this.emit(sessionId, 'volume', value))

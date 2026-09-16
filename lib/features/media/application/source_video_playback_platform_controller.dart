@@ -10,6 +10,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:screen_brightness/screen_brightness.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
+import 'package:novel_reader_ui/novel_reader_ui.dart';
 
 import 'package:mg_read/platform/platform_capabilities.dart';
 
@@ -30,6 +31,9 @@ final class SystemSourceVideoPlaybackPlatform implements SourceVideoPlaybackPlat
   @override
   Future<void> setScreenAwake(bool active) {
     if (!platformCapabilities.supportsKeepScreenOn) return Future<void>.value();
+    if (platformCapabilities.isOhos) {
+      return ReaderPlatform.instance.setReaderSystemUi(keepScreenOn: active, immersiveMode: false);
+    }
     return WakelockPlus.toggle(enable: active);
   }
 

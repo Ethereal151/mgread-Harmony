@@ -156,7 +156,7 @@ final class OhosVideoPlaybackBackend implements VideoPlaybackBackend {
           _state.value.copyWith(duration: Duration(milliseconds: milliseconds)),
         );
       case 'buffering':
-        _emit(_state.value.copyWith(buffering: true));
+        _emit(_state.value.copyWith(buffering: value == true));
       case 'completed':
         _emit(
           _state.value.copyWith(

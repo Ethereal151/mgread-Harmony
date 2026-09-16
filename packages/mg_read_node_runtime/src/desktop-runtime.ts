@@ -21,7 +21,6 @@ import {
 import type { Duplex } from "node:stream";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
-import { copyFile } from "node:fs/promises";
 
 import {
   type JsonObject,
@@ -89,6 +88,7 @@ import {
   dispatchPluginTransferRequest,
 } from "./desktop-plugin-transfer-dispatch.js";
 import { emitRuntimeDiagnostic, observeRuntimeDiagnostics } from "./runtime-diagnostics.js";
+import { materializeTransferEmbedded } from "./embedded-transfer-materializer.js";
 import {
   parseChaptersParams,
   parseContentParams,
@@ -316,43 +316,10 @@ export class DesktopRuntime {
       : { ok: true, result: dispatched.result };
   }
 
-  /**
-   * Materializes one already-issued transfer token for an embedded host.
-   *
-   * The token is still consumed exactly once by PluginManager. The destination
-   * is supplied only by the package-owned native host and remains inside the
-   * application sandbox; no loopback listener or resource URL is required.
-   */
-  async materializeTransferEmbedded(
-    token: string,
-    destination: string,
-  ): Promise<EmbeddedRuntimeResult> {
-    const resource = this.#pluginManager?.consumePluginTransferResource(token);
-    if (resource === undefined) {
-      return { ok: false, error: {
-        code: "plugin_transfer_artifact_missing",
-        message: "The Runtime transfer artifact is unavailable.",
-        requestId: undefined,
-        traceId: undefined,
-      } };
-    }
-    try {
-      await copyFile(resource.path, destination);
-      return { ok: true, result: { bytes: resource.bytes, checksum: resource.checksum } };
-    } catch {
-      return { ok: false, error: {
-        code: "internal",
-        message: "The Runtime transfer artifact could not be materialized.",
-        requestId: undefined,
-        traceId: undefined,
-      } };
-    }
-  }
+  /** Materializes a transfer token for the embedded host. */
+  async materializeTransferEmbedded(token: string, destination: string): Promise<EmbeddedRuntimeResult> { return materializeTransferEmbedded(this.#pluginManager, token, destination); }
 
-  /**
-   * Stops all sessions, aborts pending handlers, and closes the listener once.
-   * Concurrent stop requests share one cleanup operation.
-   */
+  /** Stops all sessions, aborts pending handlers, and closes the listener once. */
   stop(): Promise<void> {
     if (this.#stopPromise === undefined) {
       this.#stopPromise = this.#stop();

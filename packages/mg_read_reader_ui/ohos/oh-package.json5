@@ -1,0 +1,8 @@
+{
+  "name": "novel_reader_ui",
+  "version": "0.4.1",
+  "description": "MgRead native OHOS reader window bridge.",
+  "main": "Index.ets",
+  "license": "Apache-2.0",
+  "dependencies": {}
+}

@@ -1,5 +1,5 @@
 name: novel_reader_ui
-description: An embeddable Flutter text and vertical comic reader with Android and Windows screen-awake support.
+description: An embeddable Flutter text and vertical comic reader with native screen-awake support.
 version: 0.4.1
 publish_to: none
 
@@ -33,3 +33,6 @@ flutter:
         pluginClass: NovelReaderUiPlugin
       windows:
         pluginClass: NovelReaderUiPluginCApi
+      ohos:
+        package: com.example.novel_reader_ui
+        pluginClass: NovelReaderUiPlugin

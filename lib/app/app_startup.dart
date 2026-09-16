@@ -134,6 +134,7 @@ final class AppStartupController extends ValueNotifier<AppStartupState> {
   bool _shellFrameRecorded = false;
   bool _libraryFrameRecorded = false;
   int _attemptNumber = 0;
+  AppError? _lastFailure;
   final Stopwatch _elapsed = Stopwatch()..start();
 
   Future<void> start() => _runIfNeeded();
@@ -267,6 +268,7 @@ final class AppStartupController extends ValueNotifier<AppStartupState> {
     final attemptNumber = ++_attemptNumber;
     _shellFrameRecorded = false;
     _libraryFrameRecorded = false;
+    _lastFailure = null;
     _resources = null;
     final future = _openAttempt(attemptNumber);
     _attempt = future;
@@ -295,6 +297,7 @@ final class AppStartupController extends ValueNotifier<AppStartupState> {
       _resources = null;
       if (!_disposed) {
         final normalized = AppError.fromUnknown(error);
+        _lastFailure = normalized;
         state = AppStartupState.retryableFailure(normalized.code.wireValue);
         recordStage('resourcesReady', resultState: 'retryableFailure', errorCode: normalized.code.wireValue, attempt: attemptNumber);
       }
@@ -313,9 +316,9 @@ final class AppStartupController extends ValueNotifier<AppStartupState> {
       final attempt = _attempt;
       if (attempt != null) await attempt;
       final current = _resources;
-      if (current == null) throw StateError('startup_failed');
+      if (current == null) throw _lastFailure ?? StateError('startup_failed');
       final currentLibrary = current.contentLibrary;
-      if (currentLibrary == null) throw StateError('startup_failed');
+      if (currentLibrary == null) throw _lastFailure ?? StateError('startup_failed');
       return currentLibrary;
     } finally {
       // A retry receives a fresh future; the old failed loader is discarded by

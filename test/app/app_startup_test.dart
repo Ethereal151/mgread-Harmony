@@ -8,6 +8,7 @@ import 'package:mg_read/app/app_startup.dart';
 import 'package:mg_read/app/bootstrap.dart';
 import 'package:mg_read/app/mg_read_app.dart';
 import 'package:mg_read/core/diagnostics/diagnostics.dart';
+import 'package:mg_read/core/errors/app_error.dart';
 import 'package:mg_read/core/content_library/content_library.dart';
 import 'package:mg_read/core/persistence/persistence.dart';
 import 'package:mg_read/core/settings/settings.dart';
@@ -58,6 +59,24 @@ void main() {
     await Future.wait(<Future<void>>[controller.retry(), controller.retry()]);
     expect(calls, 2);
     expect(controller.state.status, AppStartupStatus.ready);
+  });
+
+  test('library loading preserves the original startup failure detail', () async {
+    final controller = AppStartupController(
+      diagnostics: DiagnosticsManager(
+        sink: const NoopDiagnosticEventSink(),
+        registry: AppDiagnosticEvents.registry,
+        source: DiagnosticSource.app,
+      ),
+      openResources: () async => throw AppError.fromCode(AppErrorCode.internal, detail: 'sqlite native asset unavailable'),
+    );
+    addTearDown(controller.close);
+
+    await controller.start();
+    await expectLater(
+      controller.contentLibrary,
+      throwsA(isA<AppError>().having((error) => error.detail, 'detail', 'sqlite native asset unavailable')),
+    );
   });
 
   testWidgets('delayed startup exposes one loading animation', (tester) async {

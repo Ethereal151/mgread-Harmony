@@ -1,6 +1,7 @@
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
+import 'dart:io';
 
 abstract class ReaderPlatform extends PlatformInterface {
   ReaderPlatform() : super(token: _token);
@@ -47,17 +48,21 @@ class ReaderPlatformCapabilities {
 class MethodChannelReaderPlatform extends ReaderPlatform {
   static const MethodChannel _channel = MethodChannel('novel_reader_ui/system');
 
+  bool get _isOhos => !kIsWeb && Platform.operatingSystem == 'ohos';
+
   @override
   bool get supportsKeepScreenOn =>
       !kIsWeb &&
       (defaultTargetPlatform == TargetPlatform.android ||
-          defaultTargetPlatform == TargetPlatform.windows);
+          defaultTargetPlatform == TargetPlatform.windows ||
+          _isOhos);
 
   @override
   Future<ReaderPlatformCapabilities> capabilities() async {
     if (kIsWeb ||
         (defaultTargetPlatform != TargetPlatform.android &&
-            defaultTargetPlatform != TargetPlatform.windows)) {
+            defaultTargetPlatform != TargetPlatform.windows &&
+            !_isOhos)) {
       return const ReaderPlatformCapabilities();
     }
     final Map<Object?, Object?>? result = await _channel
