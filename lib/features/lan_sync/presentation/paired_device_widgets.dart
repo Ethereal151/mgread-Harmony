@@ -279,7 +279,7 @@ class _PairedDeviceTile extends StatelessWidget {
           child: SizedBox.square(
             dimension: 52,
             child: Icon(switch (device.platform) {
-              PairedDevicePlatform.android => Icons.phone_android_rounded,
+              PairedDevicePlatform.android || PairedDevicePlatform.ohos => Icons.phone_android_rounded,
               PairedDevicePlatform.windows || PairedDevicePlatform.macos => Icons.computer_rounded,
               PairedDevicePlatform.unknown => Icons.devices_other_rounded,
             }, color: online ? tokens.dataSourceAccent : tokens.mutedText),

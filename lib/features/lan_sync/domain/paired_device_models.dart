@@ -15,6 +15,7 @@ enum PairedDevicePlatform {
   android,
   windows,
   macos,
+  ohos,
   unknown;
 
   bool get isDesktop => this == PairedDevicePlatform.windows || this == PairedDevicePlatform.macos;

@@ -17,12 +17,14 @@ enum AppUpdatePlatform {
   android,
   windows,
   macos,
+  ohos,
   unknown;
 
   static AppUpdatePlatform parse(Object? value) => switch (value) {
     'android' => AppUpdatePlatform.android,
     'windows' => AppUpdatePlatform.windows,
     'macos' => AppUpdatePlatform.macos,
+    'ohos' => AppUpdatePlatform.ohos,
     _ => AppUpdatePlatform.unknown,
   };
 }

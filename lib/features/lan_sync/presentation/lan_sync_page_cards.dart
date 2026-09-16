@@ -261,7 +261,7 @@ class _TemporaryDataSheet extends StatelessWidget {
 }
 
 IconData _platformIcon(PairedDevicePlatform platform) => switch (platform) {
-  PairedDevicePlatform.android => Icons.phone_android_rounded,
+  PairedDevicePlatform.android || PairedDevicePlatform.ohos => Icons.phone_android_rounded,
   PairedDevicePlatform.windows || PairedDevicePlatform.macos => Icons.computer_rounded,
   PairedDevicePlatform.unknown => Icons.devices_other_rounded,
 };

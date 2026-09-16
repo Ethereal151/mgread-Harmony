@@ -18,6 +18,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:mg_read/features/lan_sync/application/app_update_service.dart';
 import 'package:mg_read/features/lan_sync/data/lan_sync_checksum.dart';
 import 'package:mg_read/features/lan_sync/domain/app_update_models.dart';
+import 'package:mgread_ohos_system/mgread_ohos_system.dart';
 
 const MethodChannel _appUpdateChannel = MethodChannel('mgread/app_update');
 const String _windowsBundleManifestName = '.mgread-bundle.json';
@@ -32,6 +33,7 @@ final class PlatformAppUpdateDependencies {
     required this.isAndroid,
     required this.isWindows,
     required this.isMacOS,
+    this.isOhos = false,
     required this.isDebug,
     required this.resolvedExecutable,
     required this.currentDirectory,
@@ -45,6 +47,7 @@ final class PlatformAppUpdateDependencies {
     isAndroid: Platform.isAndroid,
     isWindows: Platform.isWindows,
     isMacOS: Platform.isMacOS,
+    isOhos: Platform.operatingSystem == 'ohos',
     isDebug: kDebugMode,
     resolvedExecutable: Platform.resolvedExecutable,
     currentDirectory: Directory.current,
@@ -62,6 +65,7 @@ final class PlatformAppUpdateDependencies {
   final bool isAndroid;
   final bool isWindows;
   final bool isMacOS;
+  final bool isOhos;
   final bool isDebug;
   final String resolvedExecutable;
   final Directory currentDirectory;
@@ -93,7 +97,9 @@ final class PlatformAppUpdateService implements AppUpdateService {
     return switch (platform) {
       AppUpdatePlatform.android => _prepareAndroidPackage(offer.version),
       AppUpdatePlatform.windows => _prepareWindowsPackage(offer.version),
-      AppUpdatePlatform.macos || AppUpdatePlatform.unknown => throw UnsupportedError('app_update_platform_unsupported'),
+      AppUpdatePlatform.macos ||
+      AppUpdatePlatform.ohos ||
+      AppUpdatePlatform.unknown => throw UnsupportedError('app_update_platform_unsupported'),
     };
   }
 
@@ -126,6 +132,14 @@ final class PlatformAppUpdateService implements AppUpdateService {
   }
 
   Future<AppVersionInfo> _readCurrentVersion() async {
+    if (_dependencies.isOhos) {
+      final info = await OhosSystemClient.getPackageInfo();
+      return AppVersionInfo(
+        platform: AppUpdatePlatform.ohos,
+        version: info?.version.trim().isNotEmpty == true ? info!.version.trim() : '0.0.0',
+        buildNumber: info?.build ?? 0,
+      );
+    }
     final info = await PackageInfo.fromPlatform();
     return AppVersionInfo(
       platform: _currentPlatform,
@@ -140,6 +154,8 @@ final class PlatformAppUpdateService implements AppUpdateService {
       ? AppUpdatePlatform.windows
       : _dependencies.isMacOS
       ? AppUpdatePlatform.macos
+      : _dependencies.isOhos
+      ? AppUpdatePlatform.ohos
       : AppUpdatePlatform.unknown;
 
   Future<List<AppPackageOffer>> _readAvailablePackages() async {
@@ -148,7 +164,9 @@ final class PlatformAppUpdateService implements AppUpdateService {
       AppPackageOffer(
         version: current,
         available: current.platform == AppUpdatePlatform.android || current.platform == AppUpdatePlatform.windows,
-        reason: current.platform == AppUpdatePlatform.macos ? 'app_update_platform_unsupported' : null,
+        reason: current.platform == AppUpdatePlatform.macos || current.platform == AppUpdatePlatform.ohos
+            ? 'app_update_platform_unsupported'
+            : null,
       ),
     ];
     if (_dependencies.isWindows && _dependencies.isDebug) {

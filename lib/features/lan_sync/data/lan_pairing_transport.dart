@@ -367,6 +367,8 @@ PairedDevicePlatform get _localPlatform => Platform.isWindows
     ? PairedDevicePlatform.windows
     : Platform.isMacOS
     ? PairedDevicePlatform.macos
+    : Platform.operatingSystem == 'ohos'
+    ? PairedDevicePlatform.ohos
     : Platform.isAndroid
     ? PairedDevicePlatform.android
     : PairedDevicePlatform.unknown;
@@ -374,6 +376,7 @@ PairedDevicePlatform? _platform(Object? value) => switch (value) {
   'android' => PairedDevicePlatform.android,
   'windows' => PairedDevicePlatform.windows,
   'macos' => PairedDevicePlatform.macos,
+  'ohos' => PairedDevicePlatform.ohos,
   'unknown' => PairedDevicePlatform.unknown,
   _ => null,
 };

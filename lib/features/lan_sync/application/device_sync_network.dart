@@ -138,7 +138,10 @@ abstract base class _DeviceSyncNetworkBase extends Notifier<DeviceSyncState> {
   }
 
   bool _shouldAutomaticallyInitiate(PairedDevice device) {
-    if ((Platform.isWindows || Platform.isMacOS) && device.platform == PairedDevicePlatform.android) return true;
+    if ((Platform.isWindows || Platform.isMacOS) &&
+        (device.platform == PairedDevicePlatform.android || device.platform == PairedDevicePlatform.ohos)) {
+      return true;
+    }
     if (Platform.isAndroid && device.platform.isDesktop) return false;
     return (_identity?.deviceId.compareTo(device.deviceId) ?? 1) < 0;
   }
