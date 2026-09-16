@@ -24,6 +24,7 @@ Javet Node patch 与 desktop Node patch 必须完全一致；不得回退用户 
 | Android | Javet Node；minSdk 24；arm64-v8a 生产、x86_64 emulator/CI | 不支持 armeabi-v7a；仍需真实宿主 build 与生命周期证据 |
 | Windows | bundled Node 24.16.0 x64 child process | Windows 测试不证明 Android、macOS 或最终安装包 |
 | macOS | bundled Node 24.16.0；当前产物为 arm64 | arm64 验证执行、签名和启动；x64、hardened runtime 与公证待发布验证 |
+| OHOS | Node 24.16.0 OpenHarmony arm64 shared build；单嵌入 VM | Node 源码已声明 OpenHarmony 实验支持；shared library 和 Flutter host 必须先通过 API 26 arm64 真机 PoC，才能启用能力 |
 
 Android adapter 只能在一个专用后台线程上创建一个 Node-mode `NodeRuntime`。事件循环、停止、低内存通知和
 关闭必须在拥有线程上验证；不得引入 VM Pool、Worker 或未经当前版本公开类型证明的 lifecycle API。
