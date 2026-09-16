@@ -1,0 +1,8 @@
+{
+  "name": "mgread_ohos_scanner",
+  "version": "0.1.0",
+  "description": "MgRead native OHOS Scan Kit bridge.",
+  "main": "Index.ets",
+  "license": "Apache-2.0",
+  "dependencies": {}
+}

@@ -14,6 +14,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:mgread_ohos_scanner/mgread_ohos_scanner.dart';
 
 import 'package:mg_read/app/app_theme.dart';
 import 'package:mg_read/features/lan_sync/domain/lan_pairing_payload.dart';
@@ -72,6 +73,8 @@ class LanSyncQrScannerPage extends StatefulWidget {
 class _LanSyncQrScannerPageState extends State<LanSyncQrScannerPage> with WidgetsBindingObserver {
   PlatformCapabilities get _capabilities => widget.capabilities ?? platformCapabilities;
 
+  bool get _usesOhosScanner => _capabilities.isOhos && platformCapabilities.isOhos;
+
   late final MobileScannerController _controller = MobileScannerController(
     autoStart: false,
     formats: const <BarcodeFormat>[BarcodeFormat.qrCode],
@@ -108,6 +111,10 @@ class _LanSyncQrScannerPageState extends State<LanSyncQrScannerPage> with Widget
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    // The OHOS ScanKit call owns a separate system UI.  Flutter receives an
+    // inactive/resumed pair while that UI is open; restarting here would
+    // immediately open a second scanner after the user cancels the first one.
+    if (_capabilities.isOhos) return;
     switch (state) {
       case AppLifecycleState.resumed:
         _shouldRun = true;
@@ -120,6 +127,10 @@ class _LanSyncQrScannerPageState extends State<LanSyncQrScannerPage> with Widget
 
   Future<void> _startScanner() async {
     if (_isClosing || !_shouldRun || _isStarting || _cameraUnavailable || !_capabilities.supportsBarcodeScanning) return;
+    if (_capabilities.isOhos) {
+      if (_usesOhosScanner) unawaited(_startOhosScanner());
+      return;
+    }
     _isStarting = true;
     try {
       await _controller.start();
@@ -136,7 +147,34 @@ class _LanSyncQrScannerPageState extends State<LanSyncQrScannerPage> with Widget
     }
   }
 
+  Future<void> _startOhosScanner() async {
+    if (_isClosing || !_shouldRun || _isStarting) return;
+    _isStarting = true;
+    try {
+      final payload = await OhosBarcodeScanner.instance.scan();
+      if (_isClosing || !mounted) return;
+      if (payload == null) {
+        setState(() => _message = '扫码已取消');
+      } else if (widget.purpose.accepts(payload)) {
+        _handled = true;
+        await _finish(payload);
+      } else {
+        setState(() => _message = widget.purpose.invalidMessage);
+      }
+    } on Object {
+      if (mounted) {
+        setState(() {
+          _cameraUnavailable = true;
+          _message = '无法使用相机，请检查相机权限后重试';
+        });
+      }
+    } finally {
+      _isStarting = false;
+    }
+  }
+
   Future<void> _stopScanner() async {
+    if (_capabilities.isOhos) return;
     try {
       await _controller.stop();
     } on Object {
@@ -166,6 +204,7 @@ class _LanSyncQrScannerPageState extends State<LanSyncQrScannerPage> with Widget
   }
 
   Future<void> _disposeControllerSafely() async {
+    if (_capabilities.isOhos) return;
     await _stopScanner();
     try {
       await _controller.dispose();
@@ -197,7 +236,12 @@ class _LanSyncQrScannerPageState extends State<LanSyncQrScannerPage> with Widget
         child: Stack(
           fit: StackFit.expand,
           children: <Widget>[
-            if (_cameraUnavailable)
+            if (_capabilities.isOhos)
+              ColoredBox(
+                color: colorScheme.surface,
+                child: Center(child: Text(_usesOhosScanner ? '正在打开 OHOS 系统扫码界面' : 'OHOS 原生扫码桥仅在 OHOS 宿主中运行', textAlign: TextAlign.center)),
+              )
+            else if (_cameraUnavailable)
               ColoredBox(
                 color: colorScheme.surface,
                 child: Center(

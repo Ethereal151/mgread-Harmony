@@ -46,7 +46,7 @@ final class PlatformCapabilities {
   /// Audio and video are provided by the package-owned OHOS AVPlayer bridge.
   bool get supportsAudioPlayback => true;
   bool get supportsVideoPlayback => true;
-  bool get supportsBarcodeScanning => !isOhos;
+  bool get supportsBarcodeScanning => true;
 
   /// Node 24.16.0 is not bundled for OHOS arm64 yet. The Runtime facade still
   /// exposes a typed host boundary, but the capability remains unavailable.

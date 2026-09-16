@@ -38,12 +38,12 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('OHOS shows a scanner downgrade without creating a native preview', (tester) async {
+  testWidgets('OHOS uses the native scanner path without creating a mobile_scanner preview', (tester) async {
     await tester.pumpWidget(MaterialApp(home: LanSyncQrScannerPage(capabilities: PlatformCapabilities.forOperatingSystem('ohos'))));
     await tester.pump();
 
     expect(find.byKey(const Key('lan-sync-qr-scanner')), findsNothing);
-    expect(find.text('当前 OHOS 版本暂不支持相机扫码'), findsOneWidget);
+    expect(find.text('OHOS 原生扫码桥仅在 OHOS 宿主中运行'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

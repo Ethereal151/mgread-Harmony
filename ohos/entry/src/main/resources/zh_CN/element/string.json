@@ -11,6 +11,10 @@
     {
       "name": "EntryAbility_label",
       "value": "MgRead"
+    },
+    {
+      "name": "camera_permission_reason",
+      "value": "允许 MgRead 使用相机扫描二维码"
     }
   ]
 }

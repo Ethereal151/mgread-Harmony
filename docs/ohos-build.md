@@ -1,6 +1,6 @@
 # OHOS 构建基线
 
-本文记录 MgRead 鸿蒙适配阶段 1～6 的源代码、工具链和构建验证结果。当前已完成签名 HAP 构建、模拟器安装启动和原生 AVPlayer/窗口亮度 bridge 的编译接入；在线 Runtime、真实媒体会话和扫码真机闭环仍未宣称完成。
+本文记录 MgRead 鸿蒙适配阶段 1～6 的源代码、工具链和构建验证结果。当前已完成签名 HAP 构建、模拟器安装启动、arm64 真机启动、ScanKit 真机扫码界面和原生 AVPlayer/窗口亮度 bridge 的编译接入；在线 Runtime 和真实媒体会话仍未宣称完成。
 
 ## 源代码基线
 
@@ -9,7 +9,7 @@
 - 上游基线 commit：`d61464b6dbbd268eed0681ede1a776a51e9832b3`
 - 目标仓库 `main` 当前 commit：`d8c014d11007efe78982b8166dc4cd2aada2677f`
 - 工作分支：`oh-3.44.9-dev3.12.2`
-- 根应用版本：`0.9.199+317`
+- 根应用版本：`0.9.201+319`
 
 工作区已配置以下 remote：
 
@@ -51,7 +51,7 @@ flutter build hap --debug
 - `flutter analyze` 以 3 个 warning 结束，均为上游现有代码 warning，不是 OHOS 改动引入。
 - `flutter test` 在 669 个通过、28 个失败时停止。已观察到 golden 像素差异、局域网同步超时/跨设备测试失败和一个书架组件 finder 失败；失败反馈为测试运行产物，未纳入提交。
 - Windows debug 构建被本机 Windows Developer Mode 未开启阻塞，Flutter 提示缺少 symlink 支持。
-- OHOS 工程已由 Flutter OHOS 工具链生成，包含 `AppScope` 和 `entry` 模块；应用版本固定为 `0.9.199`、versionCode 为 `317`，应用名称为 `MgRead`。
+- OHOS 工程已由 Flutter OHOS 工具链生成，包含 `AppScope` 和 `entry` 模块；应用版本为 `0.9.201`、versionCode 为 `319`，应用名称为 `MgRead`。
 - `ohos/entry/src/main/module.json5` 保留网络权限，Flutter 入口使用标准 `FlutterAbility` 和 `FlutterPage`。
 - 由于仓库位于 `D:` 而 pub 缓存位于 `C:`，OHOS Hvigor 对跨盘插件绝对路径校验失败。`ohos/hvigorconfig.ts` 在注入原生模块前，把跨盘 OHOS 插件复制到根目录下的忽略目录 `.flutter_ohos_plugins/`，再提供盘内相对路径。
 - 当前 Windows 未开启 Developer Mode，`flutter pub get` 会提示缺少 symlink 支持；已使用 `--no-pub` 完成原生构建验证。日常构建前建议在 Windows 设置中开启 Developer Mode。
@@ -86,7 +86,7 @@ hdc install build/ohos/hap/entry-default-signed.hap
 - `flutter build hap --debug --target-platform ohos-x64 --no-pub` 成功生成签名 HAP；
 - `hdc install -r` 安装成功，`aa start -a EntryAbility -b com.ohos.mgread` 启动成功，应用进程保持存活；
 - `hdc snapshot_display` 截图显示首页正常渲染；启动日志未出现 `mgread_ohos_media` 或 `screen_brightness_ohos` 原生插件错误；
-- Dart 能力测试和局域网扫码页测试通过。模拟器只证明安装、启动、Flutter 注册和页面渲染，不替代音视频实际播放、后台音频、相机扫码或 arm64 真机结论。
+- Dart 能力测试和局域网扫码页测试通过。模拟器只证明安装、启动和页面渲染；本机已在 `PLA-AL10`（HarmonyOS `7.0.0.105`、API 26、`arm64-v8a`）上验证 HAP 安装、启动、ScanKit 系统扫码 UI 拉起、扫码页取消回传和 ScanKit 进程退出。
 
 ## 已知限制
 
@@ -98,6 +98,7 @@ hdc install build/ohos/hap/entry-default-signed.hap
 - 阶段 3：新增 `lib/platform/platform_capabilities.dart`，集中描述 OHOS 文件选择、分享、包信息、外部链接、亮度、常亮、窗口和 Runtime 宿主能力；导入导出、版本展示、视频亮度/常亮和窗口初始化均按能力降级。
 - 阶段 4：`mgread_plugin_runtime` 增加 OHOS 插件声明、MethodChannel、进度 EventChannel 和单例 supervisor。Native bridge 当前对 Runtime invoke 返回稳定 `unsupported`，待 Node 24.16.0 OHOS arm64 PoC 后只需替换 package 内宿主实现，不改变 Dart Facade/wire protocol。
 - 阶段 4/5：新增 `mgread_ohos_media` 包，以 OHOS `AVPlayer` 承载音频和视频；音频、视频 package 仅通过 backend adapter 使用它，视频通过 Flutter Texture 输出 Surface。阶段 3 的 `screen_brightness_ohos` 已改为 `@ohos.window` 应用窗口亮度控制；全局系统亮度仍返回明确错误。
+- 阶段 6：新增 `mgread_ohos_scanner` 包，使用 HMS ScanKit 默认系统 UI；Dart 页面只负责调用、取消/错误反馈和现有四类载荷校验路由，原生层不复制同步业务。真机已确认系统扫码 UI、后置相机预览和取消返回；有效载荷路由仍需准备配对二维码后继续做业务闭环。
 
 本次代码变更后的签名 x64 debug/release HAP 均已构建：
 

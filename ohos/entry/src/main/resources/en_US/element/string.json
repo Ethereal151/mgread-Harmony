@@ -11,6 +11,10 @@
     {
       "name": "EntryAbility_label",
       "value": "MgRead"
+    },
+    {
+      "name": "camera_permission_reason",
+      "value": "Allow MgRead to scan QR codes using the camera"
     }
   ]
 }
