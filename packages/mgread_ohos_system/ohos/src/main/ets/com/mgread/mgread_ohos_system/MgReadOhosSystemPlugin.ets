@@ -133,11 +133,14 @@ export default class MgReadOhosSystemPlugin implements FlutterPlugin, MethodCall
     }
     try {
       const uri = fileUri.getUriFromPath(path)
+      const parameters: Record<string, Object> = {}
+      parameters['ability.params.stream'] = [uri]
       await this.context.startAbility({
         action: wantConstant.Action.ACTION_SEND_DATA,
         type: 'application/octet-stream',
         uri,
         flags: wantConstant.Flags.FLAG_AUTH_READ_URI_PERMISSION,
+        parameters,
       })
       result.success(true)
     } catch (error) {
