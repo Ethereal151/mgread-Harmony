@@ -9,6 +9,7 @@ import {
   MethodResult,
 } from '@ohos/flutter_ohos'
 import media from '@ohos.multimedia.media'
+import audio from '@ohos.multimedia.audio'
 import { SurfaceTextureEntry, TextureRegistry } from '@ohos/flutter_ohos'
 import OhosMediaEventStreamHandler from './OhosMediaEventStreamHandler'
 
@@ -64,8 +65,9 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
         this.open(args, true, result)
         break
       case 'dispose':
-        this.disposeSession(this.sessionId(args))
-        result.success(null)
+        this.disposeSession(this.sessionId(args)).then(() => result.success(null)).catch((error: Error) => {
+          result.error('dispose_failed', this.errorMessage(error), null)
+        })
         break
       case 'play':
         this.run(args, (session) => session.player.play(), result)
@@ -108,8 +110,8 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
       result.error('invalid_argument', 'A sessionId and URL are required.', null)
       return
     }
-    this.disposeSession(sessionId)
     try {
+      await this.disposeSession(sessionId)
       const player = await media.createAVPlayer()
       const texture = video ? this.textures?.createSurfaceTexture() : undefined
       if (video && texture === undefined) {
@@ -134,7 +136,7 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
         durationMs: player.duration,
       })
     } catch (error) {
-      this.disposeSession(sessionId)
+      await this.disposeSession(sessionId)
       result.error('open_failed', this.errorMessage(error), null)
     }
   }
@@ -161,6 +163,9 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
     player.on('volumeChange', (value: number) => this.emit(sessionId, 'volume', value))
     player.on('playbackRateDone', (value: number) => this.emit(sessionId, 'rate', value))
     player.on('error', (error: Error) => this.emit(sessionId, 'error', null, this.errorMessage(error)))
+    player.on('audioInterrupt', (event: audio.InterruptEvent) => {
+      this.emit(sessionId, 'interrupted', event.eventType === audio.InterruptType.INTERRUPT_TYPE_BEGIN)
+    })
   }
 
   private run(args: Record<string, Any> | null, operation: (session: MediaSession) => Promise<void>, result: MethodResult): void {
@@ -169,7 +174,7 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
       result.error('session_unavailable', 'The OHOS media session is not available.', null)
       return
     }
-    operation(session).then(() => result.success(null)).catch((error: Error) => result.error('operation_failed', this.errorMessage(error), null))
+    Promise.resolve().then(() => operation(session)).then(() => result.success(null)).catch((error: Error) => result.error('operation_failed', this.errorMessage(error), null))
   }
 
   private emit(sessionId: string, kind: string, value?: Any, message?: string): void {
@@ -179,16 +184,23 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
     this.events.emit(event)
   }
 
-  private disposeSession(sessionId: string): void {
+  private async disposeSession(sessionId: string): Promise<void> {
     const session = this.sessions.get(sessionId)
     if (session === undefined) return
     this.sessions.delete(sessionId)
-    session.texture?.release()
-    session.player.release().catch(() => {})
+    try {
+      await session.player.release()
+    } catch (_) {
+      // Release is best effort after the session has been removed from the
+      // registry; a native cleanup error must not block the next media item.
+    } finally {
+      session.texture?.release()
+    }
   }
 
-  private disposeAll(): void {
-    for (const sessionId of this.sessions.keys()) this.disposeSession(sessionId)
+  private async disposeAll(): Promise<void> {
+    const sessionIds = Array.from(this.sessions.keys())
+    await Promise.all(sessionIds.map((sessionId) => this.disposeSession(sessionId)))
   }
 
   private sessionId(args: Record<string, Any> | null): string {

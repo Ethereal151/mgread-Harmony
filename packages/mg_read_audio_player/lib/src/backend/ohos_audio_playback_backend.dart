@@ -170,6 +170,10 @@ final class OhosAudioPlaybackBackend implements AudioPlaybackBackend {
         _emit(
           _snapshot.copyWith(completed: true, playing: false, buffering: false),
         );
+      case 'interrupted':
+        if (value == true) {
+          _emit(_snapshot.copyWith(playing: false, buffering: false));
+        }
       case 'volume':
         _emit(
           _snapshot.copyWith(

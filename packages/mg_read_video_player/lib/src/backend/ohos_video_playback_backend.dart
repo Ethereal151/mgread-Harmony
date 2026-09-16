@@ -165,6 +165,10 @@ final class OhosVideoPlaybackBackend implements VideoPlaybackBackend {
             buffering: false,
           ),
         );
+      case 'interrupted':
+        if (value == true) {
+          _emit(_state.value.copyWith(playing: false, buffering: false));
+        }
       case 'firstFrame':
         _emit(_state.value.copyWith(firstFrameReady: true, buffering: false));
       case 'volume':
