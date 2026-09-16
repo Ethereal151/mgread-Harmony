@@ -223,7 +223,8 @@ final class _SourceVideoPlayerDestinationState extends State<_SourceVideoPlayerD
           diagnostics: widget.diagnostics,
         ),
         startupSession: widget.startupSession,
-        backendFactory: () => createMediaKitVideoPlaybackBackend(proxyUri: setup.proxyUri),
+        backendFactory: () =>
+            platformCapabilities.isOhos ? createOhosVideoPlaybackBackend() : createMediaKitVideoPlaybackBackend(proxyUri: setup.proxyUri),
       ),
     );
   }

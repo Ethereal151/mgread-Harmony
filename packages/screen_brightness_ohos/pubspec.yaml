@@ -1,5 +1,5 @@
 name: screen_brightness_ohos
-description: MgRead's safe OHOS fallback for screen_brightness.
+description: MgRead's OHOS application-window adapter for screen_brightness.
 version: 2.1.4
 publish_to: none
 

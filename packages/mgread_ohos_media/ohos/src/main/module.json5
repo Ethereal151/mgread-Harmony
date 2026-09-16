@@ -1,0 +1,7 @@
+{
+  "module": {
+    "name": "mgread_ohos_media",
+    "type": "har",
+    "deviceTypes": ["default", "tablet"]
+  }
+}

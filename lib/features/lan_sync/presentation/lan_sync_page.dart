@@ -14,10 +14,11 @@ library;
 
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+
+import 'package:mg_read/platform/platform_capabilities.dart';
 
 import 'package:mg_read/app/app_theme.dart';
 import 'package:mg_read/features/lan_sync/application/app_transfer_controller.dart';
@@ -245,7 +246,7 @@ class _LanSyncPageState extends ConsumerState<LanSyncPage> {
     };
   }
 
-  bool get _supportsQrScanner => defaultTargetPlatform == TargetPlatform.android;
+  bool get _supportsQrScanner => platformCapabilities.supportsBarcodeScanning;
 
   Future<void> _scanAndRoute() async {
     final payload = await Navigator.of(

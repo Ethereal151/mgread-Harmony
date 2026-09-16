@@ -19,6 +19,8 @@ export 'src/api/contracts.dart'
 export 'src/api/controller.dart' show VideoPlayerController;
 export 'src/backend/media_kit_video_playback_backend.dart'
     show createMediaKitVideoPlaybackBackend;
+export 'src/backend/ohos_video_playback_backend.dart'
+    show createOhosVideoPlaybackBackend;
 export 'src/api/models.dart'
     show
         VideoContent,

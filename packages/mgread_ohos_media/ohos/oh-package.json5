@@ -1,0 +1,8 @@
+{
+  "name": "mgread_ohos_media",
+  "version": "0.1.0",
+  "description": "MgRead native OHOS AVPlayer host.",
+  "main": "Index.ets",
+  "license": "Apache-2.0",
+  "dependencies": {}
+}

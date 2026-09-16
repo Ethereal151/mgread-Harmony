@@ -256,7 +256,9 @@ final class SourceAudioPlaybackService extends Notifier<SourceAudioPlaybackState
         dataSource: localDataSource,
         stateStore: stateStore,
         controller: localController,
-        backend: ref.read(sourceAudioPlaybackBackendFactoryProvider)?.call(),
+        backend:
+            ref.read(sourceAudioPlaybackBackendFactoryProvider)?.call() ??
+            (platformCapabilities.isOhos ? createOhosAudioPlaybackBackend() : null),
         proxyUri: proxyUri,
         observer: observer,
         prefetchBatchSize: 1,

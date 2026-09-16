@@ -1,6 +1,6 @@
 # OHOS 构建基线
 
-本文记录 MgRead 鸿蒙适配阶段 1～6 的源代码、工具链和构建验证结果。当前最低可交付版本已完成签名 HAP 构建、模拟器安装启动和首次启动集成测试；在线 Runtime、OHOS 原生音视频和扫码仍按能力层安全降级。
+本文记录 MgRead 鸿蒙适配阶段 1～6 的源代码、工具链和构建验证结果。当前已完成签名 HAP 构建、模拟器安装启动和原生 AVPlayer/窗口亮度 bridge 的编译接入；在线 Runtime、真实媒体会话和扫码真机闭环仍未宣称完成。
 
 ## 源代码基线
 
@@ -79,6 +79,15 @@ hdc install build/ohos/hap/entry-default-signed.hap
 
 随后在模拟器上验证启动、退出、切后台和恢复。HAP、签名文件和本机配置不应提交到 Git。
 
+## 当前验证结果
+
+最近一次 VM 验证使用 `127.0.0.1:5555` API 26 x86_64 模拟器：
+
+- `flutter build hap --debug --target-platform ohos-x64 --no-pub` 成功生成签名 HAP；
+- `hdc install -r` 安装成功，`aa start -a EntryAbility -b com.ohos.mgread` 启动成功，应用进程保持存活；
+- `hdc snapshot_display` 截图显示首页正常渲染；启动日志未出现 `mgread_ohos_media` 或 `screen_brightness_ohos` 原生插件错误；
+- Dart 能力测试和局域网扫码页测试通过。模拟器只证明安装、启动、Flutter 注册和页面渲染，不替代音视频实际播放、后台音频、相机扫码或 arm64 真机结论。
+
 ## 已知限制
 
 上游 commit 使用 Git LFS 管理 Node Runtime。当前远端对 Darwin arm64 和 Windows x64 runtime 二进制返回缺失对象（404），因此拉取基线时使用了 `GIT_LFS_SKIP_SMUDGE=1`。本次阶段 4 已加入 OHOS Flutter MethodChannel/EventChannel 宿主边界和 typed 错误映射，但没有把未经验证的 Node 24.16.0 OHOS arm64 二进制伪装成可用能力；在线数据源在 OHOS 上继续显示 `unsupported`，不阻塞本地书架和阅读。
@@ -88,6 +97,7 @@ hdc install build/ohos/hap/entry-default-signed.hap
 - 阶段 2：主应用的 metadata/content/file 三类持久化继续由 `AppPersistence`/`ContentLibrary` 拥有；OHOS 使用 EL2 `files/persistence` 沙箱目录，HAP 内置由 OHOS clang 编译的 `libsqlite3.so`（`x86_64` 与 `arm64-v8a`），避免 Linux 动态库和后台 isolate 假设。启动、路由、书架、历史、小说/漫画进度恢复仍复用现有业务实现。
 - 阶段 3：新增 `lib/platform/platform_capabilities.dart`，集中描述 OHOS 文件选择、分享、包信息、外部链接、亮度、常亮、窗口和 Runtime 宿主能力；导入导出、版本展示、视频亮度/常亮和窗口初始化均按能力降级。
 - 阶段 4：`mgread_plugin_runtime` 增加 OHOS 插件声明、MethodChannel、进度 EventChannel 和单例 supervisor。Native bridge 当前对 Runtime invoke 返回稳定 `unsupported`，待 Node 24.16.0 OHOS arm64 PoC 后只需替换 package 内宿主实现，不改变 Dart Facade/wire protocol。
+- 阶段 4/5：新增 `mgread_ohos_media` 包，以 OHOS `AVPlayer` 承载音频和视频；音频、视频 package 仅通过 backend adapter 使用它，视频通过 Flutter Texture 输出 Surface。阶段 3 的 `screen_brightness_ohos` 已改为 `@ohos.window` 应用窗口亮度控制；全局系统亮度仍返回明确错误。
 
 本次代码变更后的签名 x64 debug/release HAP 均已构建：
 

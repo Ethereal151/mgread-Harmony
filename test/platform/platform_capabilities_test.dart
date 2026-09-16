@@ -12,12 +12,12 @@ void main() {
     expect(capabilities.supportsPackageInfo, isFalse);
     expect(capabilities.supportsExternalUrls, isFalse);
     expect(capabilities.supportsKeepScreenOn, isFalse);
-    expect(capabilities.supportsAudioPlayback, isFalse);
-    expect(capabilities.supportsVideoPlayback, isFalse);
+    expect(capabilities.supportsAudioPlayback, isTrue);
+    expect(capabilities.supportsVideoPlayback, isTrue);
     expect(capabilities.supportsBarcodeScanning, isFalse);
     expect(capabilities.supportsPluginRuntime, isTrue);
     expect(capabilities.supportsPluginRuntimeNode, isFalse);
-    expect(capabilities.supportsApplicationBrightness, isFalse);
+    expect(capabilities.supportsApplicationBrightness, isTrue);
   });
 
   test('desktop capabilities retain their existing responsibilities', () {
