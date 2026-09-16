@@ -1,7 +1,7 @@
 import { Any } from '@ohos/flutter_ohos';
 import { EventSink, StreamHandler } from '@ohos/flutter_ohos/src/main/ets/plugin/common/EventChannel';
 
-/** Keeps the progress channel ready for the future Node host implementation. */
+/** Bridges Node host progress events to Flutter's broadcast stream. */
 export default class OhosRuntimeProgressStreamHandler implements StreamHandler {
   private eventSink: EventSink | null = null
 
@@ -11,5 +11,9 @@ export default class OhosRuntimeProgressStreamHandler implements StreamHandler {
 
   onCancel(args: Any): void {
     this.eventSink = null
+  }
+
+  emit(value: Any): void {
+    this.eventSink?.success(value)
   }
 }

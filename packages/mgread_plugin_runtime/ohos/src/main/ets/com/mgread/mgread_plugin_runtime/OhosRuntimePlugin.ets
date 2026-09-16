@@ -1,4 +1,6 @@
 import {
+  Any,
+  FlutterAssets,
   FlutterPlugin,
   FlutterPluginBinding,
   MethodCall,
@@ -7,28 +9,39 @@ import {
   MethodResult,
   EventChannel,
 } from '@ohos/flutter_ohos'
+import fs from '@ohos.file.fs'
+import common from '@ohos.app.ability.common'
+import { picker } from '@kit.CoreFileKit'
+import mgreadNodeHost from 'libmgread_node_host.so'
 import OhosRuntimeProgressStreamHandler from './OhosRuntimeProgressStreamHandler'
+
+const RUNTIME_ASSET_PATH = 'packages/mgread_plugin_runtime/assets/runtime/ohos'
+const RUNTIME_DIRECTORY = 'mgread-runtime/ohos'
 
 /**
  * OHOS Runtime bridge.
  *
- * The bridge is deliberately present even before a verified Node 24.16.0
- * OHOS arm64 binary is available. It gives Dart one stable error envelope and
- * keeps all future VM/process ownership inside this package.
+ * The bridge keeps all Node VM/process ownership inside the native host.
  */
 export default class OhosRuntimePlugin implements FlutterPlugin, MethodCallHandler {
   private channel?: MethodChannel
   private progressChannel?: EventChannel
+  private progressHandler = new OhosRuntimeProgressStreamHandler()
+  private context?: common.Context
+  private assets?: FlutterAssets
+  private runtimeReady = false
 
   getUniqueClassName(): string {
     return 'OhosRuntimePlugin'
   }
 
   onAttachedToEngine(binding: FlutterPluginBinding): void {
+    this.context = binding.getApplicationContext()
+    this.assets = binding.getFlutterAssets()
     this.channel = new MethodChannel(binding.getBinaryMessenger(), 'mgread_plugin_runtime/ohos')
     this.channel.setMethodCallHandler(this)
     this.progressChannel = new EventChannel(binding.getBinaryMessenger(), 'mgread_plugin_runtime/ohos/progress')
-    this.progressChannel.setStreamHandler(new OhosRuntimeProgressStreamHandler())
+    this.progressChannel.setStreamHandler(this.progressHandler)
   }
 
   onDetachedFromEngine(binding: FlutterPluginBinding): void {
@@ -36,24 +49,149 @@ export default class OhosRuntimePlugin implements FlutterPlugin, MethodCallHandl
     this.channel = undefined
     this.progressChannel?.setStreamHandler(null)
     this.progressChannel = undefined
+    if (this.runtimeReady) mgreadNodeHost.dispose()
+    this.context = undefined
+    this.assets = undefined
+    this.runtimeReady = false
   }
 
   onMethodCall(call: MethodCall, result: MethodResult): void {
     switch (call.method) {
       case 'cancelInvocation':
+        this.cancel(call.argument as Record<string, Any>)
+        result.success(null)
+        break
       case 'dispose':
+        if (this.runtimeReady) mgreadNodeHost.dispose()
+        this.runtimeReady = false
         result.success(null)
         break
       case 'invoke':
-        result.error(
-          'unsupported',
-          'Node 24.16.0 OHOS Runtime host is not bundled for this build.',
-          null,
-        )
+        this.invoke(call.argument as Record<string, Any>, result)
+        break
+      case 'runtimePaths':
+        try {
+          this.ensureRuntime()
+          result.success(mgreadNodeHost.runtimePaths())
+        } catch (error) {
+          result.error('runtime_start_failed', this.errorMessage(error), null)
+        }
+        break
+      case 'materializeTransfer':
+        try {
+          this.ensureRuntime()
+          const args = call.argument as Record<string, Any>
+          result.success(mgreadNodeHost.materializeTransfer(
+            String(args['token'] ?? ''),
+            String(args['destination'] ?? ''),
+          ))
+        } catch (error) {
+          result.error('runtime_transfer_failed', this.errorMessage(error), null)
+        }
+        break
+      case 'restart':
+        try {
+          result.success(mgreadNodeHost.restart())
+        } catch (error) {
+          result.error('runtime_restart_failed', this.errorMessage(error), null)
+        }
+        break
+      case 'pickLocalPlugin':
+        this.pickLocalPlugin(result)
         break
       default:
         result.notImplemented()
         break
     }
+  }
+
+  private cancel(args: Record<string, Any>): void {
+    mgreadNodeHost.cancelInvocation(String(args['requestId'] ?? ''))
+  }
+
+  private invoke(args: Record<string, Any>, result: MethodResult): void {
+    try {
+      this.ensureRuntime()
+      result.success(mgreadNodeHost.invoke(
+         String(args['requestId'] ?? ''),
+         String(args['method'] ?? ''),
+         JSON.stringify(args['params'] ?? {}),
+         Number(args['deadlineUnixMs'] ?? 0),
+      ))
+    } catch (error) {
+      result.error('runtime_invocation_failed', this.errorMessage(error), null)
+    }
+  }
+
+  private async pickLocalPlugin(result: MethodResult): Promise<void> {
+    const context = this.context
+    if (context === undefined) {
+      result.error('picker_unavailable', 'The OHOS file picker context is unavailable.', null)
+      return
+    }
+    try {
+      const options = new picker.DocumentSelectOptions()
+      options.fileSuffixFilters = ['.mgplugin.js', '.mgplugin']
+      options.maxSelectNumber = 1
+      const pickerView = new picker.DocumentViewPicker(context as common.UIAbilityContext)
+      const selected = await pickerView.select(options)
+      result.success(selected.length === 0 ? '' : selected[0])
+    } catch (error) {
+      result.error('picker_failed', this.errorMessage(error), null)
+    }
+  }
+
+  private ensureRuntime(): void {
+    if (this.runtimeReady) return
+    const context = this.context
+    const assets = this.assets
+    if (context === undefined || assets === undefined) throw new Error('The OHOS Runtime context is not ready.')
+    const runtimeRoot = `${context.filesDir}/${RUNTIME_DIRECTORY}`
+    this.copyRuntimeAssets(assets.getAssetFilePathBySubpath(RUNTIME_ASSET_PATH), runtimeRoot)
+    if (mgreadNodeHost.runtimeVersion() !== '24.16.0') {
+      throw new Error('The OHOS Node host version is not supported.')
+    }
+    const dataRoot = `${context.filesDir}/mgread-runtime/data`
+    const inboxRoot = `${context.filesDir}/mgread-runtime/import-inbox`
+    this.makeDirectory(dataRoot)
+    this.makeDirectory(inboxRoot)
+    mgreadNodeHost.setProgressCallback((payload: string): void => {
+      try { this.progressHandler.emit(JSON.parse(payload) as Any) } catch (_) { /* diagnostic only */ }
+    })
+    mgreadNodeHost.initialize(runtimeRoot, dataRoot, inboxRoot)
+    this.runtimeReady = true
+  }
+
+  private copyRuntimeAssets(sourceRoot: string, destinationRoot: string): void {
+    try {
+      fs.accessSync(`${destinationRoot}/runtime-version.txt`)
+      return
+    } catch (_) {
+      this.makeDirectory(destinationRoot)
+    }
+    const entries = this.context?.resourceManager.getRawFileListSync(sourceRoot) ?? []
+    for (const entry of entries) {
+      const source = `${sourceRoot}/${entry}`
+      const destination = `${destinationRoot}/${entry}`
+      try {
+        const content = this.context?.resourceManager.getRawFileContentSync(source)
+        if (content === undefined) continue
+        this.makeDirectory(destination.substring(0, destination.lastIndexOf('/')))
+        const file = fs.openSync(destination, fs.OpenMode.READ_WRITE | fs.OpenMode.CREATE)
+        fs.writeSync(file.fd, content.buffer)
+        fs.closeSync(file.fd)
+      } catch (_) {
+        this.copyRuntimeAssets(source, destination)
+      }
+    }
+  }
+
+  private makeDirectory(path: string): void {
+    if (path.length === 0) return
+    try { fs.mkdirSync(path, true) } catch (_) { /* already exists */ }
+  }
+
+  private errorMessage(error: Object): string {
+    return String((error as Record<string, Any>)['message'] ?? error)
   }
 }

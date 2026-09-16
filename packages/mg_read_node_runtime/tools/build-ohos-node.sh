@@ -40,19 +40,19 @@ if [[ ! -d "$ohos_sdk_root" || ! -d "$ohos_llvm_root" ]]; then
   exit 2
 fi
 
-source_url="https://nodejs.org/dist/${node_version}/node-${node_version#v}.tar.gz"
+source_url="https://nodejs.org/dist/${node_version}/node-${node_version}.tar.gz"
 source_sums_url="https://nodejs.org/dist/${node_version}/SHASUMS256.txt"
-source_archive="${work_root}/node-${node_version#v}.tar.gz"
+source_archive="${work_root}/node-${node_version}.tar.gz"
 source_sums="${work_root}/SHASUMS256.txt"
-source_root="${work_root}/node-${node_version#v}"
-install_root="${work_root}/node-${node_version#v}-openharmony-arm64"
+source_root="${work_root}/node-${node_version}"
+install_root="${work_root}/node-${node_version}-openharmony-arm64"
 
 mkdir -p "$work_root"
 if [[ ! -f "$source_archive" ]]; then
   curl --fail --location --show-error --silent --output "$source_archive" "$source_url"
 fi
 curl --fail --location --show-error --silent --output "$source_sums" "$source_sums_url"
-grep " node-${node_version#v}\.tar\.gz$" "$source_sums" | sha256sum --check --status -
+(cd "$work_root" && grep " node-${node_version}\.tar\.gz$" "$source_sums" | sha256sum --check --status -)
 
 if [[ ! -f "${source_root}/configure.py" ]]; then
   tar --extract --gzip --file "$source_archive" --directory "$work_root"

@@ -21,6 +21,7 @@ import {
 import type { Duplex } from "node:stream";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
+import { copyFile } from "node:fs/promises";
 
 import {
   type JsonObject,
@@ -313,6 +314,39 @@ export class DesktopRuntime {
     return "error" in dispatched
       ? { error: dispatched.error, ok: false }
       : { ok: true, result: dispatched.result };
+  }
+
+  /**
+   * Materializes one already-issued transfer token for an embedded host.
+   *
+   * The token is still consumed exactly once by PluginManager. The destination
+   * is supplied only by the package-owned native host and remains inside the
+   * application sandbox; no loopback listener or resource URL is required.
+   */
+  async materializeTransferEmbedded(
+    token: string,
+    destination: string,
+  ): Promise<EmbeddedRuntimeResult> {
+    const resource = this.#pluginManager?.consumePluginTransferResource(token);
+    if (resource === undefined) {
+      return { ok: false, error: {
+        code: "plugin_transfer_artifact_missing",
+        message: "The Runtime transfer artifact is unavailable.",
+        requestId: undefined,
+        traceId: undefined,
+      } };
+    }
+    try {
+      await copyFile(resource.path, destination);
+      return { ok: true, result: { bytes: resource.bytes, checksum: resource.checksum } };
+    } catch {
+      return { ok: false, error: {
+        code: "internal",
+        message: "The Runtime transfer artifact could not be materialized.",
+        requestId: undefined,
+        traceId: undefined,
+      } };
+    }
   }
 
   /**

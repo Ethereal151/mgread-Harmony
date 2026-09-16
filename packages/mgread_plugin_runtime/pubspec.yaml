@@ -27,7 +27,6 @@ flutter:
         package: com.mgread.mgread_plugin_runtime
         pluginClass: OhosRuntimePlugin
   assets:
-    # The native Runtime bundles are release artifacts and are not present in
-    # this OHOS checkout. Keep the version marker available without declaring
-    # directories that do not exist in the current source tree.
     - assets/runtime/android/runtime-version.txt
+    - assets/runtime/ohos/runtime-version.txt
+    - assets/runtime/ohos/dist/
