@@ -7,10 +7,10 @@ void main() {
 
     expect((await capabilities.resolvePersistenceRoot()).path, '/data/storage/el2/base/haps/entry/files/persistence');
     expect(capabilities.isOhos, isTrue);
-    expect(capabilities.supportsFilePicker, isFalse);
-    expect(capabilities.supportsSharing, isFalse);
-    expect(capabilities.supportsPackageInfo, isFalse);
-    expect(capabilities.supportsExternalUrls, isFalse);
+    expect(capabilities.supportsFilePicker, isTrue);
+    expect(capabilities.supportsSharing, isTrue);
+    expect(capabilities.supportsPackageInfo, isTrue);
+    expect(capabilities.supportsExternalUrls, isTrue);
     expect(capabilities.supportsKeepScreenOn, isTrue);
     expect(capabilities.supportsAudioPlayback, isTrue);
     expect(capabilities.supportsVideoPlayback, isTrue);

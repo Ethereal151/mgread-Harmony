@@ -21,6 +21,7 @@ import 'package:share_plus/share_plus.dart' hide XFile;
 import 'package:mg_read/features/lan_sync/application/lan_sync_gateway.dart';
 import 'package:mg_read/features/lan_sync/domain/lan_sync_models.dart';
 import 'package:mg_read/platform/platform_capabilities.dart';
+import 'package:mgread_ohos_system/mgread_ohos_system.dart';
 
 const int _bundleHeaderLimit = lanSyncMaxManifestBytes;
 const List<int> _bundleMagic = <int>[0x4d, 0x47, 0x52, 0x45, 0x41, 0x44, 0x31, 0x0a];
@@ -83,7 +84,10 @@ final class PlatformImportExportFilePicker implements ImportExportFilePicker {
   @override
   Future<String?> chooseExportPath(String suggestedName) async {
     if (platformCapabilities.isOhos) {
-      throw const ImportExportException('unsupported_platform');
+      final directory = await platformCapabilities.resolvePersistenceRoot();
+      final temporary = Directory('${directory.path}/import-export');
+      await temporary.create(recursive: true);
+      return '${temporary.path}/$suggestedName';
     }
     if (Platform.isAndroid) {
       final directory = await getTemporaryDirectory();
@@ -100,6 +104,16 @@ final class PlatformImportExportFilePicker implements ImportExportFilePicker {
 
   @override
   Future<bool> completeExport(String path) async {
+    if (platformCapabilities.isOhos) {
+      try {
+        final separator = path.lastIndexOf('/');
+        final suggestedName = separator < 0 ? path : path.substring(separator + 1);
+        return await OhosSystemClient.exportFile(path: path, suggestedName: suggestedName);
+      } finally {
+        final temporary = File(path);
+        if (await temporary.exists()) await temporary.delete();
+      }
+    }
     if (!Platform.isAndroid) return true;
     try {
       final result = await SharePlus.instance.share(
@@ -118,7 +132,7 @@ final class PlatformImportExportFilePicker implements ImportExportFilePicker {
   @override
   Future<String?> chooseImportPath() async {
     if (platformCapabilities.isOhos) {
-      throw const ImportExportException('unsupported_platform');
+      return OhosSystemClient.pickImportFile();
     }
     final file = await openFile(acceptedTypeGroups: const <XTypeGroup>[_bundleType], confirmButtonText: '导入');
     return file?.path;

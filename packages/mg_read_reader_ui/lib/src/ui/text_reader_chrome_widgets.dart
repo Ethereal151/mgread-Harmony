@@ -151,10 +151,7 @@ extension _TextReaderChromeWidgets on _TextReaderViewState {
 
   Future<void> _openSourceUrl(Uri uri) async {
     try {
-      final launched = await launchUrl(
-        uri,
-        mode: LaunchMode.externalApplication,
-      );
+      final launched = await ReaderPlatform.instance.openExternalUrl(uri);
       if (!launched) {
         throw StateError(ReaderStrings.chapterUrlOpenFailed);
       }

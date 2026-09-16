@@ -37,6 +37,8 @@ dependencies:
     path: packages/mgread_ohos_media
   mgread_ohos_scanner:
     path: packages/mgread_ohos_scanner
+  mgread_ohos_system:
+    path: packages/mgread_ohos_system
   # Video native libraries include audio support and package Windows libmpv.
   # Do not add media_kit_libs_audio alongside this package.
   media_kit_libs_video: 1.0.7

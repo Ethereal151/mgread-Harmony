@@ -27,15 +27,15 @@ final class PlatformCapabilities {
   bool get isWindows => operatingSystem == 'windows';
   bool get isMacOS => operatingSystem == 'macos';
 
-  /// OHOS file selection is not yet registered in the application plugin graph.
-  /// Android selection is provided by the Runtime host, not this flag.
-  bool get supportsFilePicker => !isOhos && !isAndroid;
+  /// OHOS selection and export use the application-owned DocumentViewPicker
+  /// bridge. Android selection is provided by the Runtime host, not this flag.
+  bool get supportsFilePicker => !isAndroid;
 
-  /// `share_plus` and `path_provider` do not currently have an OHOS adapter in
-  /// the resolved plugin graph.
-  bool get supportsSharing => !isOhos;
-  bool get supportsPackageInfo => !isOhos;
-  bool get supportsExternalUrls => !isOhos;
+  /// OHOS sharing uses a URI-granting implicit Want; other platforms keep their
+  /// existing share_plus implementation.
+  bool get supportsSharing => true;
+  bool get supportsPackageInfo => true;
+  bool get supportsExternalUrls => true;
 
   /// OHOS exposes an application-window brightness override through
   /// `@ohos.window`; global system brightness remains unavailable.

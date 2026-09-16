@@ -17,11 +17,11 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import 'package:mg_read/app/app_theme.dart';
 import 'package:mg_read/features/plugins/application/plugin_runtime_connection.dart';
 import 'package:mg_read/features/plugins/application/plugin_runtime_debug_http.dart';
+import 'package:mg_read/platform/platform_system_actions.dart';
 import 'package:mg_read/shared/presentation/widgets/app_secondary_page_chrome.dart';
 
 typedef RuntimeDebugEndpointLauncher = Future<bool> Function(Uri endpoint);
@@ -122,7 +122,7 @@ class _PluginRuntimeHelpPageState extends ConsumerState<PluginRuntimeHelpPage> {
   }
 }
 
-Future<bool> _launchRuntimeDebugEndpoint(Uri endpoint) => launchUrl(endpoint, mode: LaunchMode.externalApplication);
+Future<bool> _launchRuntimeDebugEndpoint(Uri endpoint) => openExternalUri(endpoint);
 
 class _HelpSection extends StatelessWidget {
   const _HelpSection({required this.icon, required this.title, required this.body, this.action});

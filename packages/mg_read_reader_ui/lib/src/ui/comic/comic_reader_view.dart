@@ -19,7 +19,6 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show RenderBox, ScrollCacheExtent;
 import 'package:flutter/services.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../api/contracts.dart';
 import '../../api/comic_contracts.dart';

@@ -1,0 +1,7 @@
+{
+  "module": {
+    "name": "mgread_ohos_system",
+    "type": "har",
+    "deviceTypes": ["default", "tablet"]
+  }
+}

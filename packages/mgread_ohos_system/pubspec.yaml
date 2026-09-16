@@ -1,0 +1,19 @@
+name: mgread_ohos_system
+description: MgRead's native OHOS system integration bridge.
+publish_to: none
+version: 0.1.0
+
+environment:
+  sdk: ^3.12.2
+  flutter: ">=3.44.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+flutter:
+  plugin:
+    platforms:
+      ohos:
+        package: com.mgread.mgread_ohos_system
+        pluginClass: MgReadOhosSystemPlugin

@@ -13,11 +13,19 @@ library;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
+import 'package:mg_read/platform/platform_capabilities.dart';
+import 'package:mgread_ohos_system/mgread_ohos_system.dart';
+
 const String unavailableAppVersion = '--';
 
 /// Loads the version name embedded in the currently running application.
 final appVersionProvider = FutureProvider<String>((Ref ref) async {
   try {
+    if (platformCapabilities.isOhos) {
+      final packageInfo = await OhosSystemClient.getPackageInfo();
+      final version = packageInfo?.version.trim() ?? '';
+      return version.isEmpty ? unavailableAppVersion : version;
+    }
     final packageInfo = await PackageInfo.fromPlatform();
     final version = packageInfo.version.trim();
     return version.isEmpty ? unavailableAppVersion : version;

@@ -279,10 +279,7 @@ extension _ComicReaderChrome on _ComicReaderViewState {
 
   Future<void> _openSourceUrl(Uri uri) async {
     try {
-      final bool launched = await launchUrl(
-        uri,
-        mode: LaunchMode.externalApplication,
-      );
+      final bool launched = await ReaderPlatform.instance.openExternalUrl(uri);
       if (!launched) throw StateError(ReaderStrings.chapterUrlOpenFailed);
     } catch (error) {
       await _reportFailure(_asFailure(error, ReaderFailureKind.platform));

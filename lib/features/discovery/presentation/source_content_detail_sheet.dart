@@ -22,7 +22,6 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:mgread_plugin_runtime/mgread_plugin_runtime.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import 'package:mg_read/app/app_theme.dart';
 import 'package:mg_read/core/content_library/content_library.dart';
@@ -33,6 +32,7 @@ import 'package:mg_read/features/discovery/presentation/discovery_view_data.dart
 import 'package:mg_read/features/discovery/presentation/discovery_page.dart';
 import 'package:mg_read/features/discovery/presentation/widgets/discovery_book_cover.dart';
 import 'package:mg_read/features/library/presentation/widgets/bookshelf_removal_confirmation.dart';
+import 'package:mg_read/platform/platform_system_actions.dart';
 import 'package:mg_read/shared/presentation/widgets/app_operation_error_dialog.dart';
 import 'package:mg_read/shared/presentation/widgets/async_book_cover_loader.dart';
 
@@ -158,7 +158,7 @@ Future<void> showSourceContentDetailSheet(
   return Navigator.of(context).push<void>(MaterialPageRoute<void>(builder: (_) => detail));
 }
 
-Future<bool> _launchSystemBrowser(Uri url) => launchUrl(url, mode: LaunchMode.externalApplication);
+Future<bool> _launchSystemBrowser(Uri url) => openExternalUri(url);
 
 Future<void> _copySourceDetailFailure(String payload) => Clipboard.setData(ClipboardData(text: payload));
 

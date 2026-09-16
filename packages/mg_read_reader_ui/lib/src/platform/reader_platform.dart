@@ -1,6 +1,7 @@
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'dart:io';
 
 abstract class ReaderPlatform extends PlatformInterface {
@@ -30,6 +31,10 @@ abstract class ReaderPlatform extends PlatformInterface {
 
   bool get supportsKeepScreenOn => false;
 
+  /// Opens a source-owned URL in the platform browser.
+  Future<bool> openExternalUrl(Uri uri) =>
+      launchUrl(uri, mode: LaunchMode.externalApplication);
+
   /// Compatibility shorthand for existing platform fakes and clients.
   Future<void> setKeepScreenOn(bool enabled) =>
       setReaderSystemUi(keepScreenOn: enabled, immersiveMode: false);
@@ -47,6 +52,9 @@ class ReaderPlatformCapabilities {
 
 class MethodChannelReaderPlatform extends ReaderPlatform {
   static const MethodChannel _channel = MethodChannel('novel_reader_ui/system');
+  static const MethodChannel _systemChannel = MethodChannel(
+    'mgread/ohos_system',
+  );
 
   bool get _isOhos => !kIsWeb && Platform.operatingSystem == 'ohos';
 
@@ -56,6 +64,18 @@ class MethodChannelReaderPlatform extends ReaderPlatform {
       (defaultTargetPlatform == TargetPlatform.android ||
           defaultTargetPlatform == TargetPlatform.windows ||
           _isOhos);
+
+  @override
+  Future<bool> openExternalUrl(Uri uri) async {
+    if (_isOhos) {
+      return await _systemChannel.invokeMethod<bool>(
+            'openUri',
+            <String, Object>{'uri': uri.toString()},
+          ) ??
+          false;
+    }
+    return launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
 
   @override
   Future<ReaderPlatformCapabilities> capabilities() async {
