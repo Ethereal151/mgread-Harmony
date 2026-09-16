@@ -42,8 +42,9 @@ final class PersistenceRecordStore {
   int? _lastCodecWorkerIsolateId;
   int _batchReadCount = 0;
 
-  /// Native Drift hosts all SQL work on a dedicated background isolate.
-  bool get usesBackgroundExecutor => true;
+  /// Native Drift uses a background isolate except on OHOS, where the current
+  /// Flutter engine cannot reliably resolve FFI symbols in spawned isolates.
+  bool get usesBackgroundExecutor => Platform.operatingSystem != 'ohos';
 
   /// Historical compatibility name for the last JSON execution isolate.
   int? get lastCodecWorkerIsolateIdForTest => _lastCodecWorkerIsolateId;
@@ -66,7 +67,9 @@ final class PersistenceRecordStore {
     Future<PersistenceRecordStore> openStore() async {
       await dataRoot.create(recursive: true);
       final path = '${dataRoot.path}${Platform.pathSeparator}app_metadata.sqlite';
-      final database = _PersistenceDatabase(NativeDatabase.createInBackground(File(path)));
+      final database = _PersistenceDatabase(
+        Platform.operatingSystem == 'ohos' ? NativeDatabase(File(path)) : NativeDatabase.createInBackground(File(path)),
+      );
       await database.customStatement('PRAGMA journal_mode=WAL');
       await database.customStatement('PRAGMA synchronous=NORMAL');
       await database.customStatement('PRAGMA foreign_keys=ON');

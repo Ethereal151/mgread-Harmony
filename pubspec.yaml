@@ -65,3 +65,11 @@ flutter:
     - assets/illustrations/home/
     - assets/illustrations/page_backdrops/
     - assets/fixtures/home_covers/
+
+# OHOS provides SQLite as a system library. The package's Linux prebuilt
+# artifact targets glibc and cannot be loaded by the OHOS linker.
+hooks:
+  user_defines:
+    sqlite3:
+      source: system
+      name_ohos: /system/lib64/platformsdk/libsqlite.z.so

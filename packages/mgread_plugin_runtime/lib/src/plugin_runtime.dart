@@ -8,31 +8,20 @@ part of mgread_plugin_runtime;
 /// process-scoped: it keeps the same owned Runtime for the Flutter process
 /// lifetime and does not silently relaunch it after a terminal failure.
 abstract interface class _RuntimeSupervisor {
-  Future<T> invoke<T>(
-    PluginInvocation<T> invocation, {
-    PluginInvocationCancellation? cancellation,
-  });
+  Future<T> invoke<T>(PluginInvocation<T> invocation, {PluginInvocationCancellation? cancellation});
 
   Future<void> importLocalPlugin(String sourcePath);
 
   Future<bool> pickAndImportLocalPlugin();
 
-  Future<Stream<List<int>>> exportPluginArtifact(
-    PluginTransferArtifact artifact,
-  );
+  Future<Stream<List<int>>> exportPluginArtifact(PluginTransferArtifact artifact);
 
-  Future<MaterializedPluginArtifact> materializePluginArtifact(
-    PluginTransferOffer offer,
-  );
+  Future<MaterializedPluginArtifact> materializePluginArtifact(PluginTransferOffer offer);
 
-  Future<PluginDevelopmentPackage> packageDevelopmentPlugin(
-    String pluginId,
-    String directoryPath,
-  );
+  Future<PluginDevelopmentPackage> packageDevelopmentPlugin(String pluginId, String directoryPath);
 
   Future<List<PluginTransferImportResult>> importPluginArtifacts(
-    List<({PluginTransferArtifact artifact, Stream<List<int>> bytes})>
-    artifacts, {
+    List<({PluginTransferArtifact artifact, Stream<List<int>> bytes})> artifacts, {
     Set<String> forceUpgradePluginIds = const <String>{},
   });
 
@@ -55,11 +44,80 @@ abstract interface class _RuntimeSupervisor {
   Future<void> dispose();
 }
 
+/// Keeps unsupported Flutter platforms constructible during staged adoption.
+///
+/// OHOS currently has no Node Runtime host. The application can still render
+/// local-library pages while Runtime-backed capabilities fail with a typed,
+/// user-facing error instead of throwing during provider construction.
+final class _UnsupportedRuntimeSupervisor implements _RuntimeSupervisor {
+  const _UnsupportedRuntimeSupervisor();
+
+  PluginRuntimeException get _error =>
+      const PluginRuntimeException('unsupported', 'This Runtime package currently has no launcher for this platform.');
+
+  @override
+  Future<T> invoke<T>(PluginInvocation<T> invocation, {PluginInvocationCancellation? cancellation}) => Future<T>.error(_error);
+
+  @override
+  Future<void> importLocalPlugin(String sourcePath) => Future<void>.error(_error);
+
+  @override
+  Future<bool> pickAndImportLocalPlugin() => Future<bool>.error(_error);
+
+  @override
+  Future<Stream<List<int>>> exportPluginArtifact(PluginTransferArtifact artifact) => Future<Stream<List<int>>>.error(_error);
+
+  @override
+  Future<MaterializedPluginArtifact> materializePluginArtifact(PluginTransferOffer offer) =>
+      Future<MaterializedPluginArtifact>.error(_error);
+
+  @override
+  Future<PluginDevelopmentPackage> packageDevelopmentPlugin(String pluginId, String directoryPath) =>
+      Future<PluginDevelopmentPackage>.error(_error);
+
+  @override
+  Future<List<PluginTransferImportResult>> importPluginArtifacts(
+    List<({PluginTransferArtifact artifact, Stream<List<int>> bytes})> artifacts, {
+    Set<String> forceUpgradePluginIds = const <String>{},
+  }) => Future<List<PluginTransferImportResult>>.error(_error);
+
+  @override
+  Future<void> setDevelopmentDirectory(String path) => Future<void>.error(_error);
+
+  @override
+  Stream<RuntimeDiagnostic> get diagnostics => const Stream<RuntimeDiagnostic>.empty();
+
+  @override
+  Stream<RuntimeInitializationProgress> get initialization => const Stream<RuntimeInitializationProgress>.empty();
+
+  @override
+  Stream<DevelopmentPluginChangeBatch> get developmentChanges => const Stream<DevelopmentPluginChangeBatch>.empty();
+
+  @override
+  List<RuntimeDiagnostic> get latestDiagnostics => const <RuntimeDiagnostic>[];
+
+  @override
+  int get debugProcessStartCount => 0;
+
+  @override
+  Future<void> configureNodeEnvironmentProxy(bool enabled) => Future<void>.error(_error);
+
+  @override
+  Future<void> configurePluginHttpProxy(Uri? proxyUri) => Future<void>.error(_error);
+
+  @override
+  Future<void> dispose() => Future<void>.value();
+}
+
 final class PluginRuntime {
   PluginRuntime._(this._supervisor);
 
   static PluginRuntime? _bundledInstance;
   static PluginRuntime? _androidInstance;
+  static PluginRuntime? _unsupportedInstance;
+
+  /// Whether this platform has a Runtime host implementation.
+  static bool get isPlatformSupported => Platform.isAndroid || Platform.isWindows || Platform.isMacOS;
 
   /// Creates or returns the process-scoped production Facade.
   ///
@@ -71,16 +129,10 @@ final class PluginRuntime {
       return _androidInstance ??= PluginRuntime._(_AndroidRuntimeSupervisor());
     }
     if (!Platform.isWindows && !Platform.isMacOS) {
-      throw const PluginRuntimeException(
-        'unsupported',
-        'This Runtime package currently has no launcher for this platform.',
-      );
+      return _unsupportedInstance ??= PluginRuntime._(const _UnsupportedRuntimeSupervisor());
     }
     return _bundledInstance ??= PluginRuntime._(
-      _DesktopRuntimeSupervisor(
-        _DesktopRuntimeBundle.fromApplicationPackage(),
-        useEnvironmentProxy: true,
-      ),
+      _DesktopRuntimeSupervisor(_DesktopRuntimeBundle.fromApplicationPackage(), useEnvironmentProxy: true),
     );
   }
 
@@ -88,14 +140,9 @@ final class PluginRuntime {
   ///
   /// The project path, artifact bytes and destination path are handled by this
   /// Runtime package; the application receives the resulting package metadata.
-  Future<PluginDevelopmentPackage?> packageDevelopmentPlugin(
-    String pluginId,
-  ) async {
+  Future<PluginDevelopmentPackage?> packageDevelopmentPlugin(String pluginId) async {
     if (!Platform.isWindows) {
-      throw const PluginRuntimeException(
-        'unsupported',
-        'Development source packaging is available on Windows desktop only.',
-      );
+      throw const PluginRuntimeException('unsupported', 'Development source packaging is available on Windows desktop only.');
     }
     final directoryPath = await getDirectoryPath(confirmButtonText: '选择打包目录');
     if (directoryPath == null || directoryPath.isEmpty) return null;
@@ -108,8 +155,7 @@ final class PluginRuntime {
   ///
   /// Android returns an empty stream and never starts a directory watcher or
   /// development build chain.
-  Stream<DevelopmentPluginChangeBatch> get developmentChanges =>
-      _supervisor.developmentChanges;
+  Stream<DevelopmentPluginChangeBatch> get developmentChanges => _supervisor.developmentChanges;
 
   /// Controls Node's ambient environment-proxy support on Windows.
   ///
@@ -120,8 +166,7 @@ final class PluginRuntime {
   /// (falling back to the Windows manual proxy). Android intentionally ignores
   /// this Windows-only startup preference. The explicit source HTTP dispatcher
   /// configured by [configurePluginHttpProxy] remains independent.
-  Future<void> configureNodeEnvironmentProxy(bool enabled) =>
-      _supervisor.configureNodeEnvironmentProxy(enabled);
+  Future<void> configureNodeEnvironmentProxy(bool enabled) => _supervisor.configureNodeEnvironmentProxy(enabled);
 
   /// Routes only data-source `ctx.http.fetch` requests through [proxyUri].
   ///
@@ -137,11 +182,7 @@ final class PluginRuntime {
             proxyUri.path.isNotEmpty && proxyUri.path != '/' ||
             proxyUri.hasQuery ||
             proxyUri.hasFragment)) {
-      throw ArgumentError.value(
-        proxyUri,
-        'proxyUri',
-        'An HTTP, HTTPS or SOCKS5 proxy endpoint is required.',
-      );
+      throw ArgumentError.value(proxyUri, 'proxyUri', 'An HTTP, HTTPS or SOCKS5 proxy endpoint is required.');
     }
     return _supervisor.configurePluginHttpProxy(proxyUri);
   }
@@ -152,17 +193,9 @@ final class PluginRuntime {
   /// WebSocket hello happen internally before this operation is dispatched.
   /// The returned [Future] completes with [PluginRuntimeException] containing
   /// a stable Runtime error code and diagnostics.
-  Future<T> invoke<T>(
-    PluginInvocation<T> invocation, {
-    PluginInvocationCancellation? cancellation,
-  }) {
-    if (invocation is OpenRuntimePrivateDirectoryInvocation &&
-        !Platform.isWindows &&
-        !Platform.isMacOS) {
-      throw const PluginRuntimeException(
-        'unsupported',
-        'Opening the Runtime private directory is available on desktop only.',
-      );
+  Future<T> invoke<T>(PluginInvocation<T> invocation, {PluginInvocationCancellation? cancellation}) {
+    if (invocation is OpenRuntimePrivateDirectoryInvocation && !Platform.isWindows && !Platform.isMacOS) {
+      throw const PluginRuntimeException('unsupported', 'Opening the Runtime private directory is available on desktop only.');
     }
     cancellation?._throwIfCancelled();
     return _supervisor.invoke(invocation, cancellation: cancellation);
@@ -191,25 +224,20 @@ final class PluginRuntime {
     if (Platform.isAndroid) {
       return _supervisor.pickAndImportLocalPlugin();
     }
+    if (!Platform.isWindows && !Platform.isMacOS) {
+      throw const PluginRuntimeException('unsupported', 'Local plugin import is not available on this platform yet.');
+    }
     final file = await openFile(
       acceptedTypeGroups: <XTypeGroup>[
-        XTypeGroup(
-          label: 'MgRead 数据源',
-          extensions: <String>['mgplugin.js', 'mgplugin'],
-        ),
+        XTypeGroup(label: 'MgRead 数据源', extensions: <String>['mgplugin.js', 'mgplugin']),
       ],
       confirmButtonText: '导入',
     );
     if (file == null) return false;
     final path = file.path;
     final lowerPath = path.toLowerCase();
-    if (path.isEmpty ||
-        (!lowerPath.endsWith('.mgplugin.js') &&
-            !lowerPath.endsWith('.mgplugin'))) {
-      throw const PluginRuntimeException(
-        'invalid_request',
-        'The selected file is not a MgRead plugin artifact.',
-      );
+    if (path.isEmpty || (!lowerPath.endsWith('.mgplugin.js') && !lowerPath.endsWith('.mgplugin'))) {
+      throw const PluginRuntimeException('invalid_request', 'The selected file is not a MgRead plugin artifact.');
     }
     await _supervisor.importLocalPlugin(path);
     return true;
@@ -217,32 +245,24 @@ final class PluginRuntime {
 
   /// Streams one Runtime-owned artifact without exposing a path, handle, port,
   /// or control-plane payload to the application.
-  Future<Stream<List<int>>> exportPluginArtifact(
-    PluginTransferArtifact artifact,
-  ) => _supervisor.exportPluginArtifact(artifact);
+  Future<Stream<List<int>>> exportPluginArtifact(PluginTransferArtifact artifact) => _supervisor.exportPluginArtifact(artifact);
 
   /// Materializes one selected transfer offer and streams its bytes.
   ///
   /// Development sources are packaged here, after the receiver has selected
   /// this exact source. Listing and planning offers never build every active
   /// development project.
-  Future<MaterializedPluginArtifact> materializePluginArtifact(
-    PluginTransferOffer offer,
-  ) => _supervisor.materializePluginArtifact(offer);
+  Future<MaterializedPluginArtifact> materializePluginArtifact(PluginTransferOffer offer) => _supervisor.materializePluginArtifact(offer);
 
   /// Accepts a byte-bounded batch and performs bounded Runtime cold activations.
   ///
   /// Android divides large selections into native-safe sub-batches; callers
   /// still receive one ordered result list for the complete selection.
   Future<List<PluginTransferImportResult>> importPluginArtifacts(
-    List<({PluginTransferArtifact artifact, Stream<List<int>> bytes})>
-    artifacts, {
+    List<({PluginTransferArtifact artifact, Stream<List<int>> bytes})> artifacts, {
     Set<String> forceUpgradePluginIds = const <String>{},
   }) {
-    return _supervisor.importPluginArtifacts(
-      artifacts,
-      forceUpgradePluginIds: forceUpgradePluginIds,
-    );
+    return _supervisor.importPluginArtifacts(artifacts, forceUpgradePluginIds: forceUpgradePluginIds);
   }
 
   /// Selects a desktop development-source directory.
@@ -252,10 +272,7 @@ final class PluginRuntime {
   /// artifacts.
   Future<bool> selectDevelopmentDirectory() async {
     if (!Platform.isWindows && !Platform.isMacOS) {
-      throw const PluginRuntimeException(
-        'unsupported',
-        'Development source directories are available on desktop only.',
-      );
+      throw const PluginRuntimeException('unsupported', 'Development source directories are available on desktop only.');
     }
     final path = await getDirectoryPath(confirmButtonText: '选择开发目录');
     if (path == null || path.isEmpty) return false;
@@ -311,16 +328,13 @@ final class PluginRuntime {
   /// start or exits unexpectedly. The next explicit capability invocation is
   /// allowed to perform one orderly cold restart; this stream never exposes
   /// process, port, raw stderr, or filesystem details.
-  Stream<RuntimeDiagnostic> get fatalDiagnostics =>
-      diagnostics.where((diagnostic) => diagnostic.isFatal);
+  Stream<RuntimeDiagnostic> get fatalDiagnostics => diagnostics.where((diagnostic) => diagnostic.isFatal);
 
   /// Reports bounded Runtime-owned lifecycle progress when available.
-  Stream<RuntimeInitializationProgress> get initialization =>
-      _supervisor.initialization;
+  Stream<RuntimeInitializationProgress> get initialization => _supervisor.initialization;
 
   /// Returns an immutable, oldest-to-newest snapshot of bounded diagnostics.
-  List<RuntimeDiagnostic> get latestDiagnostics =>
-      _supervisor.latestDiagnostics;
+  List<RuntimeDiagnostic> get latestDiagnostics => _supervisor.latestDiagnostics;
 
   /// Returns the number of child-process launch attempts for an owned test.
   ///

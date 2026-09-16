@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -91,6 +92,12 @@ class _MgReadAppState extends ConsumerState<MgReadApp> with WidgetsBindingObserv
   }
 
   Future<bool> _warmPluginRuntime() async {
+    if (!PluginRuntime.isPlatformSupported) {
+      // Runtime host adaptation is staged after the minimum OHOS shell. Keep
+      // unsupported Runtime capabilities out of startup and preserve local
+      // library access until the OHOS host is implemented.
+      return true;
+    }
     try {
       final connection = await ref.read(pluginRuntimeConnectionProvider.future);
       if (!mounted) return false;
@@ -203,6 +210,7 @@ class _MgReadAppState extends ConsumerState<MgReadApp> with WidgetsBindingObserv
                   child: AppFatalErrorDialogHost(
                     reporter: ref.watch(fatalErrorReporterProvider),
                     child: AppBottomNavigationMotionScope(
+                      animateTexture: Platform.operatingSystem != 'ohos',
                       child: AppBackNavigationScope(
                         onBackRequested: popApplicationRoute,
                         child: AppThemeModeScope(
@@ -275,7 +283,11 @@ final class _AppStartupGateState extends ConsumerState<_AppStartupGate> {
         }
       });
     }
-    if (startup.isInteractive) {
+    // OHOS currently cannot reliably deliver the first-frame callback while
+    // the routed page is kept Offstage. Let the route own its loading and
+    // failure presentation on that platform; the startup gate still opens
+    // resources and records diagnostics in the background.
+    if (Platform.operatingSystem == 'ohos' || startup.isInteractive) {
       _loadingArmed = false;
       return widget.child;
     }

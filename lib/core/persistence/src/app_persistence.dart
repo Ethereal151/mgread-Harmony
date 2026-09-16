@@ -217,7 +217,7 @@ final class _RetryableSharedOpener<T> {
 final class LazyContentObjectStore {
   LazyContentObjectStore._(this._opener);
   final _RetryableSharedOpener<ContentObjectStore> _opener;
-  bool get usesBackgroundExecutor => true;
+  bool get usesBackgroundExecutor => Platform.operatingSystem != 'ohos';
   void prewarm() => _opener.prewarm();
   Future<StoredContentObject> put({
     required String objectId,
@@ -308,7 +308,9 @@ final class ContentObjectStore {
   static Future<ContentObjectStore> open(Directory root, {DiagnosticsManager? diagnostics}) async {
     await root.create(recursive: true);
     final path = '${root.path}${Platform.pathSeparator}content.sqlite';
-    final db = _ContentDatabase(NativeDatabase.createInBackground(File(path)));
+    final db = _ContentDatabase(
+      Platform.operatingSystem == 'ohos' ? NativeDatabase(File(path)) : NativeDatabase.createInBackground(File(path)),
+    );
     await db.customStatement('PRAGMA journal_mode=WAL');
     await db.customStatement('PRAGMA synchronous=NORMAL');
     await db.customStatement('PRAGMA busy_timeout=2000');

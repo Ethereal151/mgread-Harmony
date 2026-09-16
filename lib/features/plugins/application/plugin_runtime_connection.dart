@@ -424,6 +424,9 @@ final pluginRuntimeStatusProvider = FutureProvider<PluginRuntimeStatus>((Ref ref
 /// consumers still share the Runtime Facade's one startup operation.
 final pluginRuntimeConnectionProvider = FutureProvider<PluginRuntimeConnection>((Ref ref) async {
   ref.watch(pluginRuntimeCatalogChangeProvider);
+  if (!PluginRuntime.isPlatformSupported) {
+    return const PluginRuntimeConnection(isHealthy: false, nodeVersion: '', runtimeVersion: '', plugins: <PluginRuntimePlugin>[]);
+  }
   final gateway = ref.watch(pluginRuntimeGatewayProvider);
   final runtime = ref.watch(pluginRuntimeFacadeProvider);
   final proxyManager = ref.watch(configuredFlutterNetworkProxyManagerProvider);

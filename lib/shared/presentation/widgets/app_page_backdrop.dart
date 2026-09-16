@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import 'package:mg_read/app/app_theme.dart';
@@ -29,18 +31,15 @@ class AppPageBackdrop extends StatelessWidget {
       child: Stack(
         fit: StackFit.expand,
         children: <Widget>[
-          ExcludeSemantics(
-            child: IgnorePointer(
-              child: Opacity(
-                opacity: opacity,
-                child: Image.asset(
-                  _assetPathFor(style),
-                  fit: BoxFit.cover,
-                  alignment: Alignment.topCenter,
+          if (Platform.operatingSystem != 'ohos')
+            ExcludeSemantics(
+              child: IgnorePointer(
+                child: Opacity(
+                  opacity: opacity,
+                  child: Image.asset(_assetPathFor(style), fit: BoxFit.cover, alignment: Alignment.topCenter),
                 ),
               ),
             ),
-          ),
           child,
         ],
       ),
@@ -49,14 +48,10 @@ class AppPageBackdrop extends StatelessWidget {
 
   static String _assetPathFor(AppPageBackdropStyle style) {
     return switch (style) {
-      AppPageBackdropStyle.home =>
-        'assets/illustrations/page_backdrops/home_paper.png',
-      AppPageBackdropStyle.search =>
-        'assets/illustrations/page_backdrops/search_index.png',
-      AppPageBackdropStyle.discover =>
-        'assets/illustrations/page_backdrops/discover_horizon.png',
-      AppPageBackdropStyle.profile =>
-        'assets/illustrations/page_backdrops/profile_bookmark.png',
+      AppPageBackdropStyle.home => 'assets/illustrations/page_backdrops/home_paper.png',
+      AppPageBackdropStyle.search => 'assets/illustrations/page_backdrops/search_index.png',
+      AppPageBackdropStyle.discover => 'assets/illustrations/page_backdrops/discover_horizon.png',
+      AppPageBackdropStyle.profile => 'assets/illustrations/page_backdrops/profile_bookmark.png',
     };
   }
 }

@@ -378,6 +378,13 @@ Future<void> bootstrapMgReadApp({
 }
 
 Future<Directory> _defaultSettingsDataRoot() async {
+  // path_provider has no OHOS implementation in the current plugin set.
+  // Use the application sandbox's EL2 files directory until the native
+  // path-provider plugin is added; it is writable by the app process and is
+  // preserved across normal HAP updates.
+  if (Platform.operatingSystem == 'ohos') {
+    return Directory('/data/storage/el2/base/files/persistence');
+  }
   final support = await getApplicationSupportDirectory();
   return Directory('${support.path}${Platform.pathSeparator}persistence');
 }
