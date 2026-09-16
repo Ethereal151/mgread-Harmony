@@ -85,8 +85,8 @@ hdc install build/ohos/hap/entry-default-signed.hap
 
 ## 阶段 2～4 代码适配记录
 
-- 阶段 2：主应用的 metadata/content/file 三类持久化继续由 `AppPersistence`/`ContentLibrary` 拥有；OHOS 使用 EL2 `files/persistence` 沙箱目录，Drift SQLite 在 OHOS 走当前进程执行器，避免 Linux 动态库和后台 isolate 假设。启动、路由、书架、历史、小说/漫画进度恢复仍复用现有业务实现。
+- 阶段 2：主应用的 metadata/content/file 三类持久化继续由 `AppPersistence`/`ContentLibrary` 拥有；OHOS 使用 EL2 `files/persistence` 沙箱目录，HAP 内置由 OHOS clang 编译的 `libsqlite3.so`（`x86_64` 与 `arm64-v8a`），避免 Linux 动态库和后台 isolate 假设。启动、路由、书架、历史、小说/漫画进度恢复仍复用现有业务实现。
 - 阶段 3：新增 `lib/platform/platform_capabilities.dart`，集中描述 OHOS 文件选择、分享、包信息、外部链接、亮度、常亮、窗口和 Runtime 宿主能力；导入导出、版本展示、视频亮度/常亮和窗口初始化均按能力降级。
 - 阶段 4：`mgread_plugin_runtime` 增加 OHOS 插件声明、MethodChannel、进度 EventChannel 和单例 supervisor。Native bridge 当前对 Runtime invoke 返回稳定 `unsupported`，待 Node 24.16.0 OHOS arm64 PoC 后只需替换 package 内宿主实现，不改变 Dart Facade/wire protocol。
 
-本次代码变更后的无签名 x64 debug HAP 已重新构建：`build/ohos/hap/entry-default-unsigned.hap`，SHA-256 为 `C334129DB0D1ADC17CE67C991A8F9CBF28971C6CC26C400138B17D2A9E41695C`。尚未执行设备安装，避免替代用户对当前设备的明确授权。
+本次代码变更后的签名 x64 debug HAP 已构建并安装到 `127.0.0.1:5555` 模拟器：`build/ohos/hap/entry-default-signed.hap`，SHA-256 为 `44C4105347D8D27C88FB05DA0371D60F7A6E10FE3E1ACD9ACC4C057793174578`。冷启动日志不再出现 SQLite FFI、启动失败或亮度插件断言，布局树已进入正常书架空状态。

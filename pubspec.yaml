@@ -66,10 +66,16 @@ flutter:
     - assets/illustrations/page_backdrops/
     - assets/fixtures/home_covers/
 
-# OHOS provides SQLite as a system library. The package's Linux prebuilt
-# artifact targets glibc and cannot be loaded by the OHOS linker.
+dependency_overrides:
+  # The published OHOS implementation reads settings with the plugin object
+  # before an Ability context is attached. MgRead treats brightness as an
+  # optional capability on OHOS, so use the local no-op bridge instead.
+  screen_brightness_ohos:
+    path: packages/screen_brightness_ohos
+
+# Use the app-bundled ABI-compatible SQLite library on OHOS. The public
+# platform library is not the standard sqlite3 ABI expected by Drift.
 hooks:
   user_defines:
     sqlite3:
       source: system
-      name_ohos: /system/lib64/platformsdk/libsqlite.z.so

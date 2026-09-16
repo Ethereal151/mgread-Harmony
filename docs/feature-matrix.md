@@ -7,7 +7,7 @@
 | 应用启动、首页、路由 | 已存在 | `test/app/` | 未验证 | 1/2 |
 | 主题、设置、个人资料 | 已存在 | `test/app/`、`test/features/profile/` | 已接入能力降级，待真机验证 | 2/3 |
 | 书架、阅读历史 | 已存在 | `lib/features/library/`、对应 widget tests | 已接入 OHOS 沙箱路径，待真机验证 | 2 |
-| 本地持久化、数据库、缓存 | 已存在 | `lib/core/persistence/`、`test/core/persistence/` | 已加入 OHOS SQLite 执行器/沙箱分支，待真机验证 | 2 |
+| 本地持久化、数据库、缓存 | 已存在 | `lib/core/persistence/`、`test/core/persistence/` | 已加入 EL2 沙箱路径和 HAP 内置 OHOS SQLite；模拟器冷启动与空书架加载通过 | 2 |
 | 小说阅读器 | 已存在 | `lib/features/reader/data/content_library_source_text_reader.dart` | 本地链路可用，待真机验证 | 2 |
 | 漫画阅读器、图片缓存 | 已存在 | `lib/features/reader/data/content_library_source_comic_reader.dart`、cache tests | 本地链路可用，待真机验证 | 2 |
 | 在线数据源 / Node Runtime | Android/Windows 宿主和资源声明 | `packages/mgread_plugin_runtime/` | OHOS bridge 已接入，Node 24.16.0 arm64 待 PoC | 4 |
@@ -19,4 +19,4 @@
 
 ## 阶段 0 结论
 
-核心本地阅读业务已接入 OHOS 沙箱和 SQLite 分支，但仍需在 API 26 模拟器/真机完成启动、数据库、缓存和进度的真实回归；在线数据源则等待 Node 24.16.0 OHOS arm64 PoC。
+核心本地阅读业务已接入 OHOS 沙箱和 HAP 内置 SQLite，并已在 API 26 x86_64 模拟器完成安装、冷启动和空书架加载回归；缓存、进度及 arm64 真机仍需后续真实设备回归。在线数据源则等待 Node 24.16.0 OHOS arm64 PoC。

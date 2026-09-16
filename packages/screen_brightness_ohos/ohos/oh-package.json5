@@ -1,0 +1,8 @@
+{
+  "name": "screen_brightness_ohos",
+  "version": "2.1.4",
+  "description": "MgRead's safe OHOS fallback for screen_brightness.",
+  "main": "Index.ets",
+  "license": "Apache-2.0",
+  "dependencies": {}
+}

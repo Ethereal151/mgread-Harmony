@@ -1,0 +1,20 @@
+name: screen_brightness_ohos
+description: MgRead's safe OHOS fallback for screen_brightness.
+version: 2.1.4
+publish_to: none
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+  flutter: ">=3.27.4-ohos-1.0.5"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  screen_brightness_platform_interface: ">=2.1.2 <3.0.0"
+
+flutter:
+  plugin:
+    platforms:
+      ohos:
+        package: com.mgread.screen_brightness_ohos
+        pluginClass: ScreenBrightnessOhosPlugin
