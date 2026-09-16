@@ -20,6 +20,7 @@ import 'package:share_plus/share_plus.dart' hide XFile;
 
 import 'package:mg_read/features/lan_sync/application/lan_sync_gateway.dart';
 import 'package:mg_read/features/lan_sync/domain/lan_sync_models.dart';
+import 'package:mg_read/platform/platform_capabilities.dart';
 
 const int _bundleHeaderLimit = lanSyncMaxManifestBytes;
 const List<int> _bundleMagic = <int>[0x4d, 0x47, 0x52, 0x45, 0x41, 0x44, 0x31, 0x0a];
@@ -81,6 +82,9 @@ final class PlatformImportExportFilePicker implements ImportExportFilePicker {
 
   @override
   Future<String?> chooseExportPath(String suggestedName) async {
+    if (platformCapabilities.isOhos) {
+      throw const ImportExportException('unsupported_platform');
+    }
     if (Platform.isAndroid) {
       final directory = await getTemporaryDirectory();
       return '${directory.path}${Platform.pathSeparator}$suggestedName';
@@ -113,6 +117,9 @@ final class PlatformImportExportFilePicker implements ImportExportFilePicker {
 
   @override
   Future<String?> chooseImportPath() async {
+    if (platformCapabilities.isOhos) {
+      throw const ImportExportException('unsupported_platform');
+    }
     final file = await openFile(acceptedTypeGroups: const <XTypeGroup>[_bundleType], confirmButtonText: '导入');
     return file?.path;
   }

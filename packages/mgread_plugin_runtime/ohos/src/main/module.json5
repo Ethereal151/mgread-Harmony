@@ -1,0 +1,10 @@
+{
+  "module": {
+    "name": "mgread_plugin_runtime",
+    "type": "har",
+    "deviceTypes": [
+      "default",
+      "tablet"
+    ]
+  }
+}

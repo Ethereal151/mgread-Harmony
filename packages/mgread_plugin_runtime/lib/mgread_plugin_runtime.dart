@@ -2,7 +2,7 @@
 ///
 /// 职责：
 /// - 暴露版本化、强类型的 Runtime Facade 与插件内容调用模型。
-/// - 统一管理 Windows/macOS/Android Runtime 的生命周期和内部 wire 协议。
+/// - 统一管理 Windows/macOS/Android/OHOS Runtime 的生命周期和内部 wire 协议。
 ///
 /// 注意：
 /// - Flutter 只能调用 [PluginRuntime.invoke]，不得获得 PID、端口或 WebSocket。
@@ -32,6 +32,7 @@ part 'src/desktop_supervisor_bundle.dart';
 part 'src/desktop_supervisor_support.dart';
 part 'src/development_plugin_change.dart';
 part 'src/android_supervisor.dart';
+part 'src/ohos_supervisor.dart';
 part 'src/plugin_content_summary.dart';
 part 'src/plugin_content_invocation.dart';
 part 'src/plugin_content_decoder.dart';

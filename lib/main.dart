@@ -8,11 +8,14 @@ import 'package:mg_read/app/bootstrap.dart';
 import 'package:mg_read/app/source_verification_command.dart';
 import 'package:mg_read/features/network_proxy/application/flutter_network_proxy_manager.dart';
 import 'package:mg_read/features/plugins/application/source_verification.dart';
+import 'package:mg_read/platform/platform_capabilities.dart';
 
 Future<void> main(List<String> arguments) async {
   // debugRepaintRainbowEnabled = true;
   WidgetsFlutterBinding.ensureInitialized();
-  if (Platform.isWindows) await windowManager.ensureInitialized();
+  if (platformCapabilities.supportsWindowManagement) {
+    await windowManager.ensureInitialized();
+  }
   SourceVerificationCommand? verificationCommand;
   try {
     verificationCommand = parseSourceVerificationCommand(arguments);

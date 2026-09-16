@@ -114,10 +114,11 @@ final class PluginRuntime {
 
   static PluginRuntime? _bundledInstance;
   static PluginRuntime? _androidInstance;
+  static PluginRuntime? _ohosInstance;
   static PluginRuntime? _unsupportedInstance;
 
   /// Whether this platform has a Runtime host implementation.
-  static bool get isPlatformSupported => Platform.isAndroid || Platform.isWindows || Platform.isMacOS;
+  static bool get isPlatformSupported => Platform.isAndroid || Platform.isWindows || Platform.isMacOS || Platform.operatingSystem == 'ohos';
 
   /// Creates or returns the process-scoped production Facade.
   ///
@@ -127,6 +128,9 @@ final class PluginRuntime {
   factory PluginRuntime() {
     if (Platform.isAndroid) {
       return _androidInstance ??= PluginRuntime._(_AndroidRuntimeSupervisor());
+    }
+    if (Platform.operatingSystem == 'ohos') {
+      return _ohosInstance ??= PluginRuntime._(_OhosRuntimeSupervisor());
     }
     if (!Platform.isWindows && !Platform.isMacOS) {
       return _unsupportedInstance ??= PluginRuntime._(const _UnsupportedRuntimeSupervisor());
@@ -356,6 +360,9 @@ final class PluginRuntime {
     await _supervisor.dispose();
     if (identical(_bundledInstance, this)) {
       _bundledInstance = null;
+    }
+    if (identical(_ohosInstance, this)) {
+      _ohosInstance = null;
     }
   }
 }

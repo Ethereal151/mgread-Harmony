@@ -1,0 +1,8 @@
+{
+  "name": "mgread_plugin_runtime",
+  "version": "0.5.0-standard.0",
+  "description": "MgRead OHOS Runtime bridge",
+  "main": "Index.ets",
+  "license": "MIT",
+  "dependencies": {}
+}

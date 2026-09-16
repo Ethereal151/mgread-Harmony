@@ -23,6 +23,9 @@ flutter:
         pluginClass: MgReadPluginRuntimePlugin
       windows:
         pluginClass: MgreadPluginRuntimePluginCApi
+      ohos:
+        package: com.mgread.mgread_plugin_runtime
+        pluginClass: OhosRuntimePlugin
   assets:
     - assets/runtime/android/runtime-version.txt
     - assets/runtime/android/dist/

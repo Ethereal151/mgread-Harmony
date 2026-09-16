@@ -17,7 +17,12 @@ const String unavailableAppVersion = '--';
 
 /// Loads the version name embedded in the currently running application.
 final appVersionProvider = FutureProvider<String>((Ref ref) async {
-  final packageInfo = await PackageInfo.fromPlatform();
-  final version = packageInfo.version.trim();
-  return version.isEmpty ? unavailableAppVersion : version;
+  try {
+    final packageInfo = await PackageInfo.fromPlatform();
+    final version = packageInfo.version.trim();
+    return version.isEmpty ? unavailableAppVersion : version;
+  } on Object {
+    // package_info_plus is not registered by the current OHOS plugin graph.
+    return unavailableAppVersion;
+  }
 });

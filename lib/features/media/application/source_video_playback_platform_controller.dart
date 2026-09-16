@@ -11,6 +11,8 @@ import 'package:flutter/foundation.dart';
 import 'package:screen_brightness/screen_brightness.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
+import 'package:mg_read/platform/platform_capabilities.dart';
+
 @visibleForTesting
 abstract interface class SourceVideoPlaybackPlatform {
   Future<void> setScreenAwake(bool active);
@@ -26,17 +28,34 @@ final class SystemSourceVideoPlaybackPlatform implements SourceVideoPlaybackPlat
   const SystemSourceVideoPlaybackPlatform();
 
   @override
-  Future<void> setScreenAwake(bool active) => WakelockPlus.toggle(enable: active);
+  Future<void> setScreenAwake(bool active) {
+    if (!platformCapabilities.supportsKeepScreenOn) return Future<void>.value();
+    return WakelockPlus.toggle(enable: active);
+  }
 
   @override
-  Future<double> readApplicationBrightness() => ScreenBrightness.instance.application;
+  Future<double> readApplicationBrightness() {
+    if (!platformCapabilities.supportsApplicationBrightness) {
+      return Future<double>.value(1);
+    }
+    return ScreenBrightness.instance.application;
+  }
 
   @override
-  Future<void> setApplicationBrightness(double brightness) =>
-      ScreenBrightness.instance.setApplicationScreenBrightness(brightness.clamp(0.05, 1).toDouble());
+  Future<void> setApplicationBrightness(double brightness) {
+    if (!platformCapabilities.supportsApplicationBrightness) {
+      return Future<void>.value();
+    }
+    return ScreenBrightness.instance.setApplicationScreenBrightness(brightness.clamp(0.05, 1).toDouble());
+  }
 
   @override
-  Future<void> resetApplicationBrightness() => ScreenBrightness.instance.resetApplicationScreenBrightness();
+  Future<void> resetApplicationBrightness() {
+    if (!platformCapabilities.supportsApplicationBrightness) {
+      return Future<void>.value();
+    }
+    return ScreenBrightness.instance.resetApplicationScreenBrightness();
+  }
 }
 
 final class SourceVideoPlaybackPlatformController {
@@ -74,9 +93,7 @@ final class SourceVideoPlaybackPlatformController {
   Future<double?> readBrightness() async {
     if (_closed) return null;
     try {
-      return (await _platform.readApplicationBrightness())
-          .clamp(0.05, 1)
-          .toDouble();
+      return (await _platform.readApplicationBrightness()).clamp(0.05, 1).toDouble();
     } on Object {
       return _appliedBrightness;
     }

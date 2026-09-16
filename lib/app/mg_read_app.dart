@@ -22,6 +22,7 @@ import 'package:mg_read/features/library/presentation/library_home_view_data.dar
 import 'package:mg_read/features/library/application/library_page_controller.dart';
 import 'package:mg_read/features/library/presentation/widgets/library_home_shell.dart';
 import 'package:mg_read/features/plugins/application/plugin_runtime_connection.dart';
+import 'package:mg_read/platform/platform_capabilities.dart';
 import 'package:mg_read/features/media/presentation/source_audio_playback_host.dart';
 import 'package:mg_read/features/reader/presentation/chapter_cache_task_bar.dart';
 import 'package:mg_read/shared/presentation/widgets/app_back_navigation_scope.dart';
@@ -92,10 +93,10 @@ class _MgReadAppState extends ConsumerState<MgReadApp> with WidgetsBindingObserv
   }
 
   Future<bool> _warmPluginRuntime() async {
-    if (!PluginRuntime.isPlatformSupported) {
-      // Runtime host adaptation is staged after the minimum OHOS shell. Keep
-      // unsupported Runtime capabilities out of startup and preserve local
-      // library access until the OHOS host is implemented.
+    if (!PluginRuntime.isPlatformSupported || !platformCapabilities.supportsPluginRuntimeNode) {
+      // OHOS has a registered bridge, but no verified Node 24.16.0 host yet.
+      // Keep the unsupported online capability out of startup and preserve
+      // local library access until the native host is implemented.
       return true;
     }
     try {

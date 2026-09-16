@@ -1,6 +1,6 @@
 # OHOS 构建基线
 
-本文记录 MgRead 鸿蒙适配阶段 1 的源代码、工具链和构建验证结果。阶段 1 生成 OHOS 工程并验证 Flutter 引擎能够编译；签名安装和模拟器运行验收需要在 DevEco Studio 中完成调试签名配置后继续。
+本文记录 MgRead 鸿蒙适配阶段 1 的源代码、工具链和构建验证结果，以及阶段 2～4 的代码适配结果。阶段 1 生成 OHOS 工程并验证 Flutter 引擎能够编译；签名安装和模拟器运行验收需要在 DevEco Studio 中完成调试签名配置后继续。
 
 ## 源代码基线
 
@@ -81,4 +81,12 @@ hdc install build/ohos/hap/entry-default-signed.hap
 
 ## 已知限制
 
-上游 commit 使用 Git LFS 管理 Node Runtime。当前远端对 Darwin arm64 和 Windows x64 runtime 二进制返回缺失对象（404），因此拉取基线时使用了 `GIT_LFS_SKIP_SMUDGE=1`。OHOS Runtime 适配前需要单独确认 Node Runtime 资源的可获取性和 arm64 兼容性。
+上游 commit 使用 Git LFS 管理 Node Runtime。当前远端对 Darwin arm64 和 Windows x64 runtime 二进制返回缺失对象（404），因此拉取基线时使用了 `GIT_LFS_SKIP_SMUDGE=1`。本次阶段 4 已加入 OHOS Flutter MethodChannel/EventChannel 宿主边界和 typed 错误映射，但没有把未经验证的 Node 24.16.0 OHOS arm64 二进制伪装成可用能力；在线数据源在 OHOS 上继续显示 `unsupported`，不阻塞本地书架和阅读。
+
+## 阶段 2～4 代码适配记录
+
+- 阶段 2：主应用的 metadata/content/file 三类持久化继续由 `AppPersistence`/`ContentLibrary` 拥有；OHOS 使用 EL2 `files/persistence` 沙箱目录，Drift SQLite 在 OHOS 走当前进程执行器，避免 Linux 动态库和后台 isolate 假设。启动、路由、书架、历史、小说/漫画进度恢复仍复用现有业务实现。
+- 阶段 3：新增 `lib/platform/platform_capabilities.dart`，集中描述 OHOS 文件选择、分享、包信息、外部链接、亮度、常亮、窗口和 Runtime 宿主能力；导入导出、版本展示、视频亮度/常亮和窗口初始化均按能力降级。
+- 阶段 4：`mgread_plugin_runtime` 增加 OHOS 插件声明、MethodChannel、进度 EventChannel 和单例 supervisor。Native bridge 当前对 Runtime invoke 返回稳定 `unsupported`，待 Node 24.16.0 OHOS arm64 PoC 后只需替换 package 内宿主实现，不改变 Dart Facade/wire protocol。
+
+本次代码变更后的无签名 x64 debug HAP 已重新构建：`build/ohos/hap/entry-default-unsigned.hap`，SHA-256 为 `C334129DB0D1ADC17CE67C991A8F9CBF28971C6CC26C400138B17D2A9E41695C`。尚未执行设备安装，避免替代用户对当前设备的明确授权。

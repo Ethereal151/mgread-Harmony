@@ -18,8 +18,6 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:path_provider/path_provider.dart';
-
 import 'package:mg_read/app/app.dart';
 import 'package:mg_read/app/app_content_library_source_prefetcher_coordinator.dart';
 import 'package:mg_read/app/app_diagnostics_boundary.dart';
@@ -63,6 +61,7 @@ import 'package:mg_read/features/discovery/application/discovery_bookshelf_saver
 import 'package:mg_read/features/discovery/application/discovery_bookshelf_remover.dart';
 import 'package:mg_read/features/diagnostics/application/diagnostics_activation.dart';
 import 'package:mg_read/features/library/domain/library_item_summary.dart';
+import 'package:mg_read/platform/platform_capabilities.dart';
 
 typedef SettingsDataRootResolver = Future<Directory> Function();
 typedef MgReadAppRunner = void Function(Widget app);
@@ -378,15 +377,7 @@ Future<void> bootstrapMgReadApp({
 }
 
 Future<Directory> _defaultSettingsDataRoot() async {
-  // path_provider has no OHOS implementation in the current plugin set.
-  // Use the application sandbox's EL2 files directory until the native
-  // path-provider plugin is added; it is writable by the app process and is
-  // preserved across normal HAP updates.
-  if (Platform.operatingSystem == 'ohos') {
-    return Directory('/data/storage/el2/base/files/persistence');
-  }
-  final support = await getApplicationSupportDirectory();
-  return Directory('${support.path}${Platform.pathSeparator}persistence');
+  return platformCapabilities.resolvePersistenceRoot();
 }
 
 Future<AppDiagnosticsService> _openDefaultDiagnostics(Directory dataRoot, {DiagnosticsManager? existingManager}) =>
