@@ -19,6 +19,7 @@ import 'package:mg_read/app/app_theme.dart';
 import 'package:mg_read/features/lan_sync/domain/lan_pairing_payload.dart';
 import 'package:mg_read/features/lan_sync/domain/app_transfer_qr_payload.dart';
 import 'package:mg_read/features/lan_sync/domain/lan_sync_qr_payload.dart';
+import 'package:mg_read/platform/platform_capabilities.dart';
 
 enum LanSyncQrScannerPurpose {
   auto,
@@ -59,15 +60,18 @@ enum LanSyncQrScannerPurpose {
 }
 
 class LanSyncQrScannerPage extends StatefulWidget {
-  const LanSyncQrScannerPage({super.key, this.purpose = LanSyncQrScannerPurpose.auto});
+  const LanSyncQrScannerPage({super.key, this.purpose = LanSyncQrScannerPurpose.auto, this.capabilities});
 
   final LanSyncQrScannerPurpose purpose;
+  final PlatformCapabilities? capabilities;
 
   @override
   State<LanSyncQrScannerPage> createState() => _LanSyncQrScannerPageState();
 }
 
 class _LanSyncQrScannerPageState extends State<LanSyncQrScannerPage> with WidgetsBindingObserver {
+  PlatformCapabilities get _capabilities => widget.capabilities ?? platformCapabilities;
+
   late final MobileScannerController _controller = MobileScannerController(
     autoStart: false,
     formats: const <BarcodeFormat>[BarcodeFormat.qrCode],
@@ -84,6 +88,10 @@ class _LanSyncQrScannerPageState extends State<LanSyncQrScannerPage> with Widget
   void initState() {
     super.initState();
     _message = widget.purpose.scanHint;
+    if (!_capabilities.supportsBarcodeScanning) {
+      _cameraUnavailable = true;
+      _message = '当前 OHOS 版本暂不支持相机扫码';
+    }
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(_startScanner());
@@ -111,7 +119,7 @@ class _LanSyncQrScannerPageState extends State<LanSyncQrScannerPage> with Widget
   }
 
   Future<void> _startScanner() async {
-    if (_isClosing || !_shouldRun || _isStarting || _cameraUnavailable) return;
+    if (_isClosing || !_shouldRun || _isStarting || _cameraUnavailable || !_capabilities.supportsBarcodeScanning) return;
     _isStarting = true;
     try {
       await _controller.start();
@@ -192,7 +200,9 @@ class _LanSyncQrScannerPageState extends State<LanSyncQrScannerPage> with Widget
             if (_cameraUnavailable)
               ColoredBox(
                 color: colorScheme.surface,
-                child: const Center(child: Text('无法使用相机，请检查相机权限')),
+                child: Center(
+                  child: Text(_capabilities.supportsBarcodeScanning ? '无法使用相机，请检查相机权限' : '相机扫码能力暂未接入 OHOS', textAlign: TextAlign.center),
+                ),
               )
             else
               MobileScanner(

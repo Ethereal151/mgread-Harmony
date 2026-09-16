@@ -9,6 +9,7 @@ import 'package:mg_read/features/lan_sync/domain/app_transfer_qr_payload.dart';
 import 'package:mg_read/features/lan_sync/domain/lan_pairing_payload.dart';
 import 'package:mg_read/features/lan_sync/domain/lan_sync_qr_payload.dart';
 import 'package:mg_read/features/lan_sync/presentation/lan_sync_qr_scanner_page.dart';
+import 'package:mg_read/platform/platform_capabilities.dart';
 
 void main() {
   test('scanner purpose accepts the intended MgRead QR payloads', () {
@@ -34,6 +35,15 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('lan-sync-qr-scanner')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('OHOS shows a scanner downgrade without creating a native preview', (tester) async {
+    await tester.pumpWidget(MaterialApp(home: LanSyncQrScannerPage(capabilities: PlatformCapabilities.forOperatingSystem('ohos'))));
+    await tester.pump();
+
+    expect(find.byKey(const Key('lan-sync-qr-scanner')), findsNothing);
+    expect(find.text('当前 OHOS 版本暂不支持相机扫码'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

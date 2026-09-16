@@ -27,6 +27,7 @@ import 'package:mg_read/features/media/application/transient_source_video_playba
 import 'package:mg_read/features/media/presentation/media_entry_cover.dart';
 import 'package:mg_read/features/network_proxy/application/flutter_network_proxy_manager.dart';
 import 'package:mg_read/features/network_proxy/application/network_proxy_settings.dart';
+import 'package:mg_read/platform/platform_capabilities.dart';
 
 /// Opens one selected neutral video group/episode in the video player.
 Future<void> openTransientSourceVideoPlayer(
@@ -37,6 +38,12 @@ Future<void> openTransientSourceVideoPlayer(
   required PluginChapterSummary chapter,
   String? libraryItemId,
 }) async {
+  if (!platformCapabilities.supportsVideoPlayback) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('当前 OHOS 版本暂不支持视频播放，请使用已支持的平台。')));
+    }
+    return;
+  }
   final group = firstCatalogPage.groups.cast<PluginMediaGroup?>().firstWhere(
     (candidate) => candidate?.episodes.any((episode) => episode.id == chapter.id) ?? false,
     orElse: () => null,

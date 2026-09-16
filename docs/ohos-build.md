@@ -1,6 +1,6 @@
 # OHOS 构建基线
 
-本文记录 MgRead 鸿蒙适配阶段 1 的源代码、工具链和构建验证结果，以及阶段 2～4 的代码适配结果。阶段 1 生成 OHOS 工程并验证 Flutter 引擎能够编译；签名安装和模拟器运行验收需要在 DevEco Studio 中完成调试签名配置后继续。
+本文记录 MgRead 鸿蒙适配阶段 1～6 的源代码、工具链和构建验证结果。当前最低可交付版本已完成签名 HAP 构建、模拟器安装启动和首次启动集成测试；在线 Runtime、OHOS 原生音视频和扫码仍按能力层安全降级。
 
 ## 源代码基线
 
@@ -58,7 +58,7 @@ flutter build hap --debug
 - 在当前 DevEco 安装布局下，构建命令需要把 `DEVECO_SDK_HOME`、`HOS_SDK_HOME` 和 `OHOS_SDK_HOME` 指向 `D:\DevEco Studio\sdk`（不是 `...\sdk\default`）。
 - DevEco 26 在 Windows 下通过 `hvigorw.js` 同步工程时，内置 `ohpm.bat` 会触发批处理递归。`ohos/tools/ohpm-safe.cmd` 直接启动同一 DevEco 进程对应的 ohpm Node 入口；`hvigorconfig.ts` 仅对本工程配置该包装器。
 
-## 阶段 1 构建与签名
+## 阶段 1/6 构建与签名
 
 未签名的 x64 调试 HAP 已成功生成：`build/ohos/hap/entry-default-unsigned.hap`。可用以下命令验证 arm64 编译：
 
@@ -89,4 +89,11 @@ hdc install build/ohos/hap/entry-default-signed.hap
 - 阶段 3：新增 `lib/platform/platform_capabilities.dart`，集中描述 OHOS 文件选择、分享、包信息、外部链接、亮度、常亮、窗口和 Runtime 宿主能力；导入导出、版本展示、视频亮度/常亮和窗口初始化均按能力降级。
 - 阶段 4：`mgread_plugin_runtime` 增加 OHOS 插件声明、MethodChannel、进度 EventChannel 和单例 supervisor。Native bridge 当前对 Runtime invoke 返回稳定 `unsupported`，待 Node 24.16.0 OHOS arm64 PoC 后只需替换 package 内宿主实现，不改变 Dart Facade/wire protocol。
 
-本次代码变更后的签名 x64 debug HAP 已构建并安装到 `127.0.0.1:5555` 模拟器：`build/ohos/hap/entry-default-signed.hap`，SHA-256 为 `44C4105347D8D27C88FB05DA0371D60F7A6E10FE3E1ACD9ACC4C057793174578`。冷启动日志不再出现 SQLite FFI、启动失败或亮度插件断言，布局树已进入正常书架空状态。
+本次代码变更后的签名 x64 debug/release HAP 均已构建：
+
+- debug：`build/ohos/hap/entry-default-signed-debug.hap`，SHA-256 为 `DE9EF43119D9A0088AA615A0D9987C208BC9D187E2AFD48815CFD487FDBA6E31`；
+- release：`build/ohos/hap/entry-default-signed-release.hap`，SHA-256 为 `2A55076E1B7EF8C62A2C6CD08291999AEFFA03AD062927FA4A32CCEF4C53C31E`。
+
+release HAP 已通过 `hdc install -r` 安装到 `127.0.0.1:5555`，`aa dump -a` 显示 `EntryAbility` 和 `com.ohos.mgread` 进程为 `FOREGROUND/READY`；布局树和截图已进入正常书架空状态。`integration_test/library_first_run_test.dart` 在该模拟器通过。
+
+Windows 测试环境原先将系统 SQLite 按 `sqlite3.dll` 查找，导致 Drift 无法加载；根 `pubspec.yaml` 已按 `package:sqlite3` 的平台配置补充 `name_windows: winsqlite3`，随后持久化测试和应用启动组合测试均通过。

@@ -20,13 +20,13 @@ AppGallery 上架、正式渠道签名、隐私合规材料和发布流水线后
 
 | 阶段 | 状态 | 说明 |
 | --- | --- | --- |
-| 阶段 0：源代码和工具链基线 | 已完成前置工作 | 阶段 1 已能够执行，基线信息如未归档需补录 |
-| 阶段 1：OHOS 工程和最小 HAP | 已完成 | 已完成工程创建、HAP 构建、安装和启动验证；具体设备、HAP 路径和日志待补录 |
-| 阶段 2：核心 Flutter 业务 | 当前阶段 | 以阶段 1 的可启动 HAP 作为回归基线，开始适配本地书架和阅读功能 |
-| 阶段 3：平台能力兼容层 | 待开始 | 阶段 2 验收通过后进入 |
-| 阶段 4：mgread_plugin_runtime | 待开始 | 阶段 3 验收通过后进入 |
-| 阶段 5：音频、视频和扫码 | 待开始 | 按阶段 4 的 Runtime 结果决定详细实现范围 |
-| 阶段 6：集成验证和 HAP 交付 | 待开始 | 完成阶段 2～5 后执行最终回归 |
+| 阶段 0：源代码和工具链基线 | 已完成 | 固定 Flutter/Dart/DevEco/HarmonyOS API 26 工具链，构建记录见 `docs/ohos-build.md` |
+| 阶段 1：OHOS 工程和最小 HAP | 已完成 | x64 debug/release HAP 均已构建；签名 HAP 已安装并启动于 API 26 模拟器 |
+| 阶段 2：核心 Flutter 业务 | 已完成最低交付 | OHOS EL2 持久化、启动、路由、空书架和首次启动流程已回归；在线内容依赖 Runtime，真实内容阅读仍待可用数据源 |
+| 阶段 3：平台能力兼容层 | 已完成 | 已集中声明 OHOS 能力并为文件、分享、包信息、链接、亮度、窗口和 Runtime 做安全降级 |
+| 阶段 4：mgread_plugin_runtime | 已完成边界适配 | OHOS MethodChannel/EventChannel 和 typed `unsupported` 边界已接入；Node 24.16.0 OHOS arm64 宿主仍待 PoC |
+| 阶段 5：音频、视频和扫码 | 已完成最低交付 | OHOS 未注册原生实现时不初始化缺失插件，音频/视频/扫码统一显示稳定降级；AVPlayer/相机完整实现待后续 |
+| 阶段 6：集成验证和 HAP 交付 | 已完成 | 静态检查、目标测试、真实 OHOS 首次启动测试、签名 HAP 安装启动和 release 截图验证已完成 |
 
 从现在开始不重复执行阶段 1；只有后续改动导致 HAP 启动、安装或生命周期回归失败时，才重新触发阶段 1 的相关验证。
 
@@ -243,6 +243,12 @@ mgread_plugin_runtime 当前只声明 Android 和 Windows 平台，运行时资�
 - 扫码改用 OHOS 相机/扫码能力；
 - 暂时不支持的能力通过统一能力层降级，不阻塞 HAP 生成。
 
+阶段 5 完成记录：
+
+- `PlatformCapabilities` 新增音频、视频和扫码能力标志；OHOS 当前均为不可用，避免 `media_kit`、`audio_service` 和 `mobile_scanner` 在缺少原生实现时触发 MissingPlugin 或播放器初始化异常。
+- 音频服务在准备阶段返回 typed `audio_playback_unsupported`；视频入口显示明确提示；扫码页不启动相机并显示 OHOS 暂不支持提示。
+- 当前依赖图没有已验证的 OHOS AVPlayer、相机扫码实现，也没有 Node 24.16.0 OHOS arm64 Runtime，因此本次达到“安全降级、不阻塞 HAP”的最低交付标准，不宣称完整音视频和扫码适配。
+
 ### 阶段 6：集成验证和 HAP 交付
 
 静态验证：
@@ -276,6 +282,14 @@ HAP 验证：
 - 卸载重装。
 
 HAP 作为本地构建产物提供，不提交大体积临时产物和签名私钥到 GitHub。
+
+阶段 6 完成记录：
+
+- 设备：`127.0.0.1:5555`，`Ohos OpenHarmony-7.0.0.105 (API 26)`，`ohos-x64`。
+- 签名 debug HAP：`build/ohos/hap/entry-default-signed-debug.hap`，SHA-256 `DE9EF43119D9A0088AA615A0D9987C208BC9D187E2AFD48815CFD487FDBA6E31`。
+- 签名 release HAP：`build/ohos/hap/entry-default-signed-release.hap`，SHA-256 `2A55076E1B7EF8C62A2C6CD08291999AEFFA03AD062927FA4A32CCEF4C53C31E`。
+- `integration_test/library_first_run_test.dart` 在该模拟器通过；release HAP 经 `hdc install -r` 安装后，`EntryAbility` 和 `com.ohos.mgread` 进程均进入 `FOREGROUND/READY`，首页布局截图正常。
+- Windows 主机缺失 `sqlite3.dll` 的测试阻塞已通过 `package:sqlite3` 的平台库名修正为 `winsqlite3` 解决；系统文件为 `C:\Windows\System32\winsqlite3.dll`。
 
 ## 5. Git 提交和上传计划
 

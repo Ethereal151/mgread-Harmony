@@ -79,3 +79,5 @@ hooks:
   user_defines:
     sqlite3:
       source: system
+      # Windows exposes the system SQLite ABI as winsqlite3.dll.
+      name_windows: winsqlite3

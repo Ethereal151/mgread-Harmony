@@ -37,11 +37,20 @@ final class PlatformCapabilities {
   bool get supportsPackageInfo => !isOhos;
   bool get supportsExternalUrls => !isOhos;
 
-  /// The resolved OHOS plugin graph contains screen brightness, while the
-  /// generic wakelock plugin has no OHOS implementation yet.
-  bool get supportsApplicationBrightness => isAndroid || isOhos;
+  /// The OHOS brightness bridge is intentionally a no-op fallback. Do not
+  /// advertise it as a user-visible capability until a real system adapter is
+  /// available.
+  bool get supportsApplicationBrightness => isAndroid;
   bool get supportsKeepScreenOn => isAndroid || isWindows || isMacOS;
   bool get supportsWindowManagement => isWindows;
+
+  /// MediaKit, audio_service and mobile_scanner currently have no OHOS
+  /// native implementation in the resolved plugin graph. These explicit
+  /// capabilities keep feature entry points from creating a missing channel
+  /// or native player and let the UI provide a stable downgrade message.
+  bool get supportsAudioPlayback => !isOhos;
+  bool get supportsVideoPlayback => !isOhos;
+  bool get supportsBarcodeScanning => !isOhos;
 
   /// Node 24.16.0 is not bundled for OHOS arm64 yet. The Runtime facade still
   /// exposes a typed host boundary, but the capability remains unavailable.

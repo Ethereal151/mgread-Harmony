@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
 import 'package:mg_read/app/app.dart';
+import 'package:mg_read/core/settings/settings.dart';
 
 void main() {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -11,7 +12,18 @@ void main() {
   testWidgets('first-run home matches the light empty bookshelf design', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(const ProviderScope(child: MgReadApp()));
+    final settings = AppSettingsManager(
+      store: _MemorySettingsStore(),
+      registry: AppSettingKeys.registry,
+    );
+    await settings.initialize();
+    addTearDown(settings.close);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [appSettingsProvider.overrideWithValue(settings)],
+        child: const MgReadApp(),
+      ),
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('首页'), findsAtLeastNWidgets(1));
@@ -25,4 +37,19 @@ void main() {
     await tester.pump();
     await binding.takeScreenshot('library_first_run_light');
   });
+}
+
+final class _MemorySettingsStore implements SettingsStore {
+  @override
+  Future<List<SettingsDocument>> loadAll(
+    Iterable<SettingsDocumentDefinition> documents,
+  ) async => const <SettingsDocument>[];
+
+  @override
+  Future<List<SettingsDocument>> writeAll(
+    List<SettingsDocument> documents,
+  ) async => documents;
+
+  @override
+  Future<void> close() async {}
 }

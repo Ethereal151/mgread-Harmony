@@ -27,6 +27,7 @@ import 'package:mg_read/core/settings/settings.dart';
 import 'package:mg_read/features/discovery/application/source_content_gateway.dart';
 import 'package:mg_read/features/network_proxy/application/flutter_network_proxy_manager.dart';
 import 'package:mg_read/features/network_proxy/application/network_proxy_settings.dart';
+import 'package:mg_read/platform/platform_capabilities.dart';
 
 import 'android_audio_background_service.dart';
 import 'source_audio_playback_lifecycle.dart';
@@ -195,6 +196,20 @@ final class SourceAudioPlaybackService extends Notifier<SourceAudioPlaybackState
 
   Future<void> _prepare(int sessionId, SourceAudioPlaybackRequest request) async {
     final generation = ++_operationGeneration;
+    if (!platformCapabilities.supportsAudioPlayback) {
+      if (_isCurrent(sessionId, generation)) {
+        state = state.copyWith(
+          setupFailure: const AudioPlayerFailure(
+            code: 'audio_playback_unsupported',
+            location: 'OHOS 音频播放',
+            message: '当前 OHOS 版本暂不支持音频播放。',
+            debugDetail: 'No OHOS implementation is registered for the audio playback stack.',
+          ),
+          playerPresented: false,
+        );
+      }
+      return;
+    }
     AudioPlayerController? localController;
     SourceAudioPlaylistDataSource? localDataSource;
     try {
