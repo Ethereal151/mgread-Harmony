@@ -86,7 +86,7 @@ void main() {
     semantics.dispose();
   });
 
-  testWidgets('keeps light-only top actions and local action feedback', (WidgetTester tester) async {
+  testWidgets('hides the theme action when no app callback is provided', (WidgetTester tester) async {
     await tester.pumpWidget(_host());
     await tester.pumpAndSettle();
 

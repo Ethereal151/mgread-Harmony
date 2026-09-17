@@ -113,7 +113,7 @@ class ProfileGeneralSettingPage extends ConsumerWidget {
         },
       ),
       const SizedBox(height: AppSpacing.comfortable),
-      const _InlineNotice(icon: Icons.dark_mode_outlined, message: '浅色模式提供多种主题色；深色模式使用固定的暖金色主题。阅读器内主题不受此处影响。'),
+      const _InlineNotice(icon: Icons.dark_mode_outlined, message: '浅色模式提供多种主题色；深色模式使用 OLED 冷黑主题。阅读器内主题不受此处影响。'),
     ];
   }
 

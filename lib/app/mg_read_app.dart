@@ -114,8 +114,8 @@ class _MgReadAppState extends ConsumerState<MgReadApp> with WidgetsBindingObserv
   }
 
   void _toggleTheme(Brightness currentBrightness) {
-    // Kept as a narrow no-op so callers can remain unchanged while the
-    // temporary light-only product mode is active.
+    final AppSettingsManager settings = ref.read(appSettingsProvider);
+    unawaited(settings.set(AppSettingKeys.themeMode, currentBrightness == Brightness.dark ? 'light' : 'dark'));
   }
 
   void _handleDevelopmentChanges(DevelopmentPluginChangeBatch batch) {
@@ -179,6 +179,11 @@ class _MgReadAppState extends ConsumerState<MgReadApp> with WidgetsBindingObserv
     ref.watch(appSettingsStatusProvider);
     final AppSettingsManager settings = ref.watch(appSettingsProvider);
     final AppThemeColor themeColor = AppThemeColor.fromId(settings.get(AppSettingKeys.themeColor));
+    final ThemeMode themeMode = switch (settings.get(AppSettingKeys.themeMode)) {
+      'dark' => ThemeMode.dark,
+      'light' => ThemeMode.light,
+      _ => ThemeMode.system,
+    };
     ref.listen(pluginRuntimeDevelopmentChangesProvider, (_, next) {
       next.whenData(_handleDevelopmentChanges);
     });
@@ -187,12 +192,13 @@ class _MgReadAppState extends ConsumerState<MgReadApp> with WidgetsBindingObserv
       title: 'MgRead',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(color: themeColor),
-      themeMode: ThemeMode.light,
+      darkTheme: AppTheme.dark(),
+      themeMode: themeMode,
       routerConfig: router,
       builder: (BuildContext context, Widget? child) {
         final pageBackground = AppThemeTokens.of(context).pageBackground;
         return AnnotatedRegion<SystemUiOverlayStyle>(
-          value: SystemUiOverlayStyle.dark.copyWith(
+          value: (Theme.of(context).brightness == Brightness.dark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark).copyWith(
             // Android 15 draws the status bar edge-to-edge. Declare its
             // contrast here so a platform default color cannot flash above a
             // loading destination before that page supplies its own chrome.
@@ -212,7 +218,7 @@ class _MgReadAppState extends ConsumerState<MgReadApp> with WidgetsBindingObserv
                       child: AppBackNavigationScope(
                         onBackRequested: popApplicationRoute,
                         child: AppThemeModeScope(
-                          themeMode: ThemeMode.light,
+                          themeMode: themeMode,
                           onToggleTheme: _toggleTheme,
                           child: child ?? const SizedBox.shrink(),
                         ),

@@ -20,6 +20,14 @@ void main() {
     await expectLater(find.byType(MaterialApp), matchesGoldenFile('goldens/profile_compact_light.png'));
   });
 
+  testWidgets('matches the compact OLED dark profile visual baseline', (WidgetTester tester) async {
+    await _setViewport(tester, const Size(390, 900));
+    await tester.pumpWidget(_host(themeMode: ThemeMode.dark));
+    await tester.pumpAndSettle();
+
+    await expectLater(find.byType(MaterialApp), matchesGoldenFile('goldens/profile_compact_dark.png'));
+  });
+
   testWidgets('keeps the phone-first profile surface centered when wide', (WidgetTester tester) async {
     await _setViewport(tester, const Size(1280, 900));
     await tester.pumpWidget(_host(themeMode: ThemeMode.light));

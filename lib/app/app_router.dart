@@ -19,6 +19,7 @@ import 'package:mgread_plugin_runtime/mgread_plugin_runtime.dart';
 import 'package:novel_reader_ui/novel_reader_ui.dart';
 
 import 'package:mg_read/app/app_theme.dart';
+import 'package:mg_read/app/app_theme_mode_scope.dart';
 import 'package:mg_read/core/diagnostics/diagnostics.dart';
 import 'package:mg_read/core/settings/settings.dart';
 import 'package:mg_read/features/cache/presentation/cache_management_page.dart';
@@ -509,6 +510,9 @@ class ProfileRoute extends GoRouteData with $ProfileRoute {
             readingStats: stats,
             profileIdentity: identity,
             appVersion: appVersion,
+            onToggleTheme: () {
+              AppThemeModeScope.of(context).onToggleTheme(Theme.of(context).brightness);
+            },
             onEditRequested: () {
               const EditProfileRoute().push(context);
             },
