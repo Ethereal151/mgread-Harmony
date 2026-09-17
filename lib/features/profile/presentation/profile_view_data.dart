@@ -157,7 +157,7 @@ abstract final class ProfileFixtures {
     syncLabel: '局域网同步',
     lastSyncLabel: '仅在你主动操作时传输',
     settings: <ProfileSettingsItemViewData>[
-      ProfileSettingsItemViewData(id: 'reading-settings', title: '阅读播放设置', description: '阅读偏好、后台播放等', icon: ProfileSettingsIcon.reading),
+      ProfileSettingsItemViewData(id: 'reading-settings', title: '阅读器与播放器', description: '章节预加载、音频退出行为', icon: ProfileSettingsIcon.reading),
       ProfileSettingsItemViewData(id: 'source-management', title: '数据源管理', description: '管理数据源与启用状态', icon: ProfileSettingsIcon.sources),
       ProfileSettingsItemViewData(
         id: 'network-proxy',
@@ -166,7 +166,12 @@ abstract final class ProfileFixtures {
         icon: ProfileSettingsIcon.networkProxy,
       ),
       ProfileSettingsItemViewData(id: 'downloads-cache', title: '缓存管理', description: '数据源缓存、封面缓存与存储用量', icon: ProfileSettingsIcon.download),
-      ProfileSettingsItemViewData(id: 'theme-appearance', title: '主题与外观', description: '跟随系统 / 暖光主题', icon: ProfileSettingsIcon.appearance),
+      ProfileSettingsItemViewData(
+        id: 'theme-appearance',
+        title: '主题与外观',
+        description: '应用主题色；阅读器主题独立管理',
+        icon: ProfileSettingsIcon.appearance,
+      ),
       ProfileSettingsItemViewData(id: 'privacy-permissions', title: '隐私与权限', description: '权限管理与隐私设置', icon: ProfileSettingsIcon.privacy),
       ProfileSettingsItemViewData(id: 'import-export', title: '导入导出', description: '选择数据源、书架与阅读进度', icon: ProfileSettingsIcon.importExport),
       ProfileSettingsItemViewData(id: 'data-backup', title: '局域网同步', description: '同一网络传输数据源、书架与进度', icon: ProfileSettingsIcon.backup),

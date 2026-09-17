@@ -14,6 +14,8 @@ import 'package:mg_read/core/settings/settings.dart';
 import 'package:mg_read/features/profile/presentation/about_document_page.dart';
 import 'package:mg_read/shared/presentation/widgets/app_secondary_page_chrome.dart';
 
+part 'profile_reading_player_settings_components.dart';
+
 class ProfileGeneralSettingPage extends ConsumerWidget {
   const ProfileGeneralSettingPage({required this.settingId, required this.onBackRequested, super.key});
 
@@ -66,11 +68,7 @@ class ProfileGeneralSettingPage extends ConsumerWidget {
   }
 
   List<Widget> _readingSections(BuildContext context, AppSettingsManager settings) => <Widget>[
-    const _SectionHeading(title: '阅读预览', description: '设置会由阅读器自动保存并用于后续阅读'),
-    const SizedBox(height: AppSpacing.regular),
-    const _ReadingPreviewCard(),
-    const SizedBox(height: AppSpacing.section),
-    const _SectionHeading(title: '小说章节预加载', description: '设置阅读时提前准备的后续章节数量'),
+    const _SectionHeading(title: '小说阅读', description: '只保留影响章节加载的设置'),
     const SizedBox(height: AppSpacing.regular),
     _NovelPreloadChapterCountCard(
       value: settings.get(AppSettingKeys.novelPreloadChapterCount),
@@ -78,32 +76,8 @@ class ProfileGeneralSettingPage extends ConsumerWidget {
         await settings.set(AppSettingKeys.novelPreloadChapterCount, value);
       },
     ),
-    const SizedBox(height: AppSpacing.comfortable),
-    const _InlineNotice(icon: Icons.data_saver_on_rounded, message: '预加载只读取当前章节之后的小说正文；设为 0 可关闭。最多 5 章，并按顺序加载以避免同时占用过多网络与内存。'),
     const SizedBox(height: AppSpacing.section),
-    const _SectionHeading(title: '书架目录更新', description: '打开书架时检查数据源是否有新章节；同一时间间隔内不会重复检查'),
-    const SizedBox(height: AppSpacing.regular),
-    _BookshelfCatalogRefreshIntervalCard(
-      value: settings.get(AppSettingKeys.bookshelfCatalogRefreshIntervalHours),
-      onChanged: (int value) async {
-        await settings.set(AppSettingKeys.bookshelfCatalogRefreshIntervalHours, value);
-      },
-    ),
-    const SizedBox(height: AppSpacing.section),
-    const _SectionHeading(title: '可调项目', description: '打开任意书籍，在阅读器设置面板中调整'),
-    const SizedBox(height: AppSpacing.regular),
-    const _SettingsCard(
-      children: <Widget>[
-        _InfoRow(icon: Icons.text_fields_rounded, title: '字体与字号', description: '字体、字重、字号和字间距'),
-        _InfoRow(icon: Icons.format_line_spacing_rounded, title: '排版与间距', description: '行距、段距、首行缩进和页面边距'),
-        _InfoRow(icon: Icons.swipe_rounded, title: '翻页与滚动', description: '左右翻页、上下滚动和翻页动画'),
-        _InfoRow(icon: Icons.brightness_6_outlined, title: '亮度与阅读主题', description: '独立于应用界面的阅读背景和亮度'),
-      ],
-    ),
-    const SizedBox(height: AppSpacing.comfortable),
-    const _InlineNotice(icon: Icons.book_outlined, message: '文本阅读与漫画阅读分别保存偏好；不同书籍会沿用最近一次对应阅读器设置。'),
-    const SizedBox(height: AppSpacing.section),
-    const _SectionHeading(title: '音频后台播放', description: '选择离开播放器时的默认行为'),
+    const _SectionHeading(title: '音频播放器', description: '选择离开音频播放器时的默认行为'),
     const SizedBox(height: AppSpacing.regular),
     _AudioExitBehaviorCard(
       value: settings.get(AppSettingKeys.audioExitBehavior),
@@ -112,23 +86,23 @@ class ProfileGeneralSettingPage extends ConsumerWidget {
       },
     ),
     const SizedBox(height: AppSpacing.regular),
-    const _SettingsCard(
-      children: <Widget>[
-        _InfoRow(icon: Icons.picture_in_picture_alt_rounded, title: '应用内播放条', description: '后台播放后可在任意页面恢复完整播放器'),
-        _InfoRow(icon: Icons.notifications_active_outlined, title: 'Android 系统媒体通知', description: '锁屏或切到其他应用后仍可暂停、切换和恢复'),
-        _InfoRow(icon: Icons.desktop_windows_outlined, title: 'Windows 后台播放', description: '窗口最小化时继续播放，恢复窗口后使用应用内播放条'),
-      ],
-    ),
-    const SizedBox(height: AppSpacing.comfortable),
-    const _InlineNotice(icon: Icons.layers_outlined, message: '不申请系统悬浮窗权限；Android 上其他音乐获得音频焦点时会暂停，在 MgRead 内开始视频播放时当前后台音频会停止。'),
+    const _InlineNotice(icon: Icons.tune_rounded, message: '字体、主题、排版、翻页和评论入口，请打开书籍后在阅读器工具栏的“设置”中调整。它们不会在这里重复显示。'),
   ];
 
   List<Widget> _appearanceSections(BuildContext context, AppSettingsManager settings) {
     final String layout = settings.get(AppSettingKeys.homeLayoutMode);
+    final AppThemeColor themeColor = AppThemeColor.fromId(settings.get(AppSettingKeys.themeColor));
     return <Widget>[
-      const _SectionHeading(title: '界面主题', description: '当前版本统一使用经过校准的暖光浅色'),
+      const _SectionHeading(title: '界面主题色', description: '只影响应用界面；小说、漫画、音频和视频阅读器独立管理主题'),
       const SizedBox(height: AppSpacing.regular),
-      const _AppearancePreviewCard(),
+      _ThemeColorCard(
+        value: themeColor,
+        onChanged: (AppThemeColor value) async {
+          await settings.set(AppSettingKeys.themeColor, value.id);
+        },
+      ),
+      const SizedBox(height: AppSpacing.regular),
+      _AppearancePreviewCard(color: themeColor),
       const SizedBox(height: AppSpacing.section),
       const _SectionHeading(title: '书架布局', description: '选择书架首页的默认浏览方式'),
       const SizedBox(height: AppSpacing.regular),
@@ -139,7 +113,7 @@ class ProfileGeneralSettingPage extends ConsumerWidget {
         },
       ),
       const SizedBox(height: AppSpacing.comfortable),
-      const _InlineNotice(icon: Icons.dark_mode_outlined, message: '深色主题仍在视觉校准中，完成前不会提供不完整的切换入口。'),
+      const _InlineNotice(icon: Icons.dark_mode_outlined, message: '浅色模式提供多种主题色；深色模式使用固定的暖金色主题。阅读器内主题不受此处影响。'),
     ];
   }
 
@@ -390,37 +364,10 @@ class _SettingsRowShell extends StatelessWidget {
   }
 }
 
-class _ReadingPreviewCard extends StatelessWidget {
-  const _ReadingPreviewCard();
-
-  @override
-  Widget build(BuildContext context) {
-    final ThemeData theme = Theme.of(context);
-    final AppThemeTokens tokens = AppThemeTokens.of(context);
-    return DecoratedBox(
-      key: const Key('reading-settings-preview'),
-      decoration: BoxDecoration(color: const Color(0xFFF5E8D4), borderRadius: AppRadii.detailCard),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(AppSpacing.section, AppSpacing.comfortable, AppSpacing.section, AppSpacing.comfortable),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Text('第一章  阅读的开始', style: theme.textTheme.titleMedium?.copyWith(color: const Color(0xFF3B2B1C))),
-            const SizedBox(height: AppSpacing.regular),
-            Text('文字在恰到好处的行距中缓缓铺开，留白让每一次翻页都更从容。', style: theme.textTheme.bodyLarge?.copyWith(color: const Color(0xFF4E3C2B), height: 1.9)),
-            const SizedBox(height: AppSpacing.regular),
-            Align(
-              child: Text('1 / 24', style: theme.textTheme.bodySmall?.copyWith(color: tokens.mutedText)),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class _AppearancePreviewCard extends StatelessWidget {
-  const _AppearancePreviewCard();
+  const _AppearancePreviewCard({required this.color});
+
+  final AppThemeColor color;
 
   @override
   Widget build(BuildContext context) {
@@ -441,7 +388,7 @@ class _AppearancePreviewCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
-                  Text('暖光浅色', style: theme.textTheme.titleMedium),
+                  Text(color.label, style: theme.textTheme.titleMedium),
                   const SizedBox(height: AppSpacing.unit),
                   Text('柔和、清晰，适合长时间浏览', style: theme.textTheme.bodySmall?.copyWith(color: tokens.mutedText)),
                 ],
@@ -459,6 +406,61 @@ class _AppearancePreviewCard extends StatelessWidget {
                 ),
               ),
             ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ThemeColorCard extends StatefulWidget {
+  const _ThemeColorCard({required this.value, required this.onChanged});
+
+  final AppThemeColor value;
+  final ValueChanged<AppThemeColor> onChanged;
+
+  @override
+  State<_ThemeColorCard> createState() => _ThemeColorCardState();
+}
+
+class _ThemeColorCardState extends State<_ThemeColorCard> {
+  late AppThemeColor _value = widget.value;
+
+  @override
+  void didUpdateWidget(covariant _ThemeColorCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.value != widget.value) _value = widget.value;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final AppThemeTokens tokens = AppThemeTokens.of(context);
+    return DecoratedBox(
+      key: const Key('appearance-theme-color'),
+      decoration: BoxDecoration(
+        color: tokens.surface,
+        borderRadius: AppRadii.detailCard,
+        border: Border.all(color: tokens.divider),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.regular),
+        child: Wrap(
+          spacing: AppSpacing.compact,
+          runSpacing: AppSpacing.compact,
+          children: <Widget>[
+            for (final AppThemeColor color in AppThemeColor.values)
+              ChoiceChip(
+                key: Key('appearance-theme-color-${color.id}'),
+                avatar: CircleAvatar(backgroundColor: color.accent, radius: 9),
+                label: Text(color.label),
+                selected: color == _value,
+                onSelected: (_) {
+                  setState(() => _value = color);
+                  widget.onChanged(color);
+                },
+                selectedColor: tokens.accentSoft,
+                side: BorderSide(color: color == _value ? tokens.accent : tokens.divider),
+              ),
           ],
         ),
       ),
@@ -508,217 +510,6 @@ class _LayoutModeCardState extends State<_LayoutModeCard> {
             setState(() => _value = value);
             widget.onChanged(value);
           },
-        ),
-      ),
-    );
-  }
-}
-
-class _NovelPreloadChapterCountCard extends StatefulWidget {
-  const _NovelPreloadChapterCountCard({required this.value, required this.onChanged});
-
-  final int value;
-  final ValueChanged<int> onChanged;
-
-  @override
-  State<_NovelPreloadChapterCountCard> createState() => _NovelPreloadChapterCountCardState();
-}
-
-class _NovelPreloadChapterCountCardState extends State<_NovelPreloadChapterCountCard> {
-  late int _value = widget.value;
-
-  @override
-  void didUpdateWidget(covariant _NovelPreloadChapterCountCard oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.value != widget.value) _value = widget.value;
-  }
-
-  void _change(int next) {
-    if (next == _value || next < 0 || next > 5) return;
-    setState(() => _value = next);
-    widget.onChanged(next);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final AppThemeTokens tokens = AppThemeTokens.of(context);
-    return DecoratedBox(
-      key: const Key('novel-preload-chapter-count'),
-      decoration: BoxDecoration(
-        color: tokens.surface,
-        borderRadius: AppRadii.detailCard,
-        border: Border.all(color: tokens.divider),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.regular),
-        child: Row(
-          children: <Widget>[
-            Icon(Icons.auto_stories_outlined, color: tokens.accent),
-            const SizedBox(width: AppSpacing.regular),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Text('小说预加载章节数量', style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 2),
-                  Text(
-                    _value == 0 ? '已关闭，翻到下一章时再加载' : '提前加载当前章节之后的 $_value 章',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(color: tokens.mutedText),
-                  ),
-                ],
-              ),
-            ),
-            IconButton(
-              key: const Key('novel-preload-count-decrease'),
-              tooltip: '减少预加载章节',
-              onPressed: _value > 0 ? () => _change(_value - 1) : null,
-              icon: const Icon(Icons.remove_circle_outline_rounded),
-            ),
-            Semantics(
-              label: '当前预加载章节数量',
-              value: '$_value 章',
-              liveRegion: true,
-              child: SizedBox(
-                width: 42,
-                child: Text(_value == 0 ? '关闭' : '$_value 章', textAlign: TextAlign.center, style: Theme.of(context).textTheme.titleSmall),
-              ),
-            ),
-            IconButton(
-              key: const Key('novel-preload-count-increase'),
-              tooltip: '增加预加载章节',
-              onPressed: _value < 5 ? () => _change(_value + 1) : null,
-              icon: const Icon(Icons.add_circle_outline_rounded),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _BookshelfCatalogRefreshIntervalCard extends StatefulWidget {
-  const _BookshelfCatalogRefreshIntervalCard({required this.value, required this.onChanged});
-
-  final int value;
-  final ValueChanged<int> onChanged;
-
-  @override
-  State<_BookshelfCatalogRefreshIntervalCard> createState() => _BookshelfCatalogRefreshIntervalCardState();
-}
-
-class _BookshelfCatalogRefreshIntervalCardState extends State<_BookshelfCatalogRefreshIntervalCard> {
-  late int _value = widget.value;
-
-  @override
-  void didUpdateWidget(covariant _BookshelfCatalogRefreshIntervalCard oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.value != widget.value) _value = widget.value;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = AppThemeTokens.of(context);
-    const options = <(int, String)>[(2, '2 小时'), (6, '6 小时'), (12, '12 小时'), (24, '24 小时')];
-    return DecoratedBox(
-      key: const Key('bookshelf-catalog-refresh-interval'),
-      decoration: BoxDecoration(
-        color: tokens.surface,
-        borderRadius: AppRadii.detailCard,
-        border: Border.all(color: tokens.divider),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.regular),
-        child: SegmentedButton<int>(
-          key: const Key('bookshelf-catalog-refresh-interval-options'),
-          segments: <ButtonSegment<int>>[for (final option in options) ButtonSegment<int>(value: option.$1, label: Text(option.$2))],
-          selected: <int>{_value},
-          showSelectedIcon: false,
-          onSelectionChanged: (Set<int> selected) {
-            final next = selected.single;
-            setState(() => _value = next);
-            widget.onChanged(next);
-          },
-        ),
-      ),
-    );
-  }
-}
-
-class _AudioExitBehaviorCard extends StatefulWidget {
-  const _AudioExitBehaviorCard({required this.value, required this.onChanged});
-
-  final String value;
-  final ValueChanged<String> onChanged;
-
-  @override
-  State<_AudioExitBehaviorCard> createState() => _AudioExitBehaviorCardState();
-}
-
-class _AudioExitBehaviorCardState extends State<_AudioExitBehaviorCard> {
-  late String _value = widget.value;
-
-  @override
-  void didUpdateWidget(covariant _AudioExitBehaviorCard oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.value != widget.value) _value = widget.value;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = AppThemeTokens.of(context);
-    const options = <(String, String, String)>[
-      ('ask', '每次询问', '返回时选择继续后台播放或停止'),
-      ('continue', '继续播放', '返回后自动收起到应用内播放条'),
-      ('stop', '停止播放', '返回后立即停止并释放播放器'),
-    ];
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: tokens.surface,
-        borderRadius: AppRadii.detailCard,
-        border: Border.all(color: tokens.divider),
-      ),
-      child: ClipRRect(
-        borderRadius: AppRadii.detailCard,
-        child: Column(
-          children: <Widget>[
-            for (int index = 0; index < options.length; index++) ...<Widget>[
-              Semantics(
-                selected: _value == options[index].$1,
-                button: true,
-                child: InkWell(
-                  key: Key('audio-exit-behavior-${options[index].$1}'),
-                  onTap: () {
-                    final value = options[index].$1;
-                    setState(() => _value = value);
-                    widget.onChanged(value);
-                  },
-                  child: Padding(
-                    padding: const EdgeInsets.all(AppSpacing.regular),
-                    child: Row(
-                      children: <Widget>[
-                        Icon(
-                          _value == options[index].$1 ? Icons.radio_button_checked_rounded : Icons.radio_button_unchecked_rounded,
-                          color: _value == options[index].$1 ? tokens.accent : tokens.mutedText,
-                        ),
-                        const SizedBox(width: AppSpacing.regular),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: <Widget>[
-                              Text(options[index].$2, style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600)),
-                              const SizedBox(height: 2),
-                              Text(options[index].$3, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: tokens.mutedText)),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              if (index < options.length - 1) Divider(height: 1, color: tokens.divider),
-            ],
-          ],
         ),
       ),
     );
@@ -786,10 +577,10 @@ class _GeneralSettingSpec {
 
 _GeneralSettingSpec _specFor(String settingId) => switch (settingId) {
   'reading-settings' => const _GeneralSettingSpec(
-    title: '阅读播放设置',
-    heroTitle: '阅读与播放体验',
-    description: '管理阅读偏好、音频后台播放与恢复方式',
-    badge: '自动沿用',
+    title: '阅读器与播放器',
+    heroTitle: '阅读器与播放器',
+    description: '管理章节预加载和离开音频播放器时的行为',
+    badge: '直接生效',
     icon: Icons.menu_book_rounded,
   ),
   'theme-appearance' => const _GeneralSettingSpec(

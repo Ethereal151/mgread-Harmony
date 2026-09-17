@@ -29,7 +29,7 @@ void main() {
     expect(find.text('书海行者'), findsOneWidget);
     expect(find.text('VIP'), findsOneWidget);
     expect(find.text('设置与管理'), findsOneWidget);
-    expect(find.text('阅读播放设置'), findsOneWidget);
+    expect(find.text('阅读器与播放器'), findsOneWidget);
     expect(find.text('数据源管理'), findsOneWidget);
     expect(find.text('缓存管理'), findsOneWidget);
     expect(find.text('下载与缓存'), findsNothing);
@@ -70,8 +70,8 @@ void main() {
     await tester.pumpAndSettle();
 
     final Text pageTitle = tester.widget<Text>(find.descendant(of: find.byType(ProfileTopBar), matching: find.text('我的')));
-    final Text settingTitle = tester.widget<Text>(find.text('阅读播放设置'));
-    final Text settingDescription = tester.widget<Text>(find.text('阅读偏好、后台播放等'));
+    final Text settingTitle = tester.widget<Text>(find.text('阅读器与播放器'));
+    final Text settingDescription = tester.widget<Text>(find.text('章节预加载、音频退出行为'));
     final Finder profileNavigation = find.byKey(const Key('app-nav-profile'));
     final SemanticsNode profileSemantics = tester.getSemantics(profileNavigation);
 
