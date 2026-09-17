@@ -27,6 +27,7 @@ test('18MD fixtures retain native routes, groups and HLS proxy metadata', async 
   assert.ok(calls.some((url) => url.includes('/index.php/vod/search.html?wd=fixture')));
   const catalog = await plugin.getChapters({ id: detailResult.id });
   assert.equal(catalog.groups.length, 2); assert.deepEqual(catalog.groups.map((group) => group.episodes.length), [2, 2]);
+  assert.deepEqual(catalog.groups.map((group) => group.order), [0, 1]);
   assert.equal(catalog.items.length, 4); assert.equal(catalog.groups[1].title, 'Group Beta');
   const content = await plugin.getContent({ id: 'video:101', chapterId: catalog.groups[1].episodes[1].id });
   assert.equal(content.media.resourceType, 'hls'); assert.equal(content.media.resourcePolicy, 'sessionOnly');

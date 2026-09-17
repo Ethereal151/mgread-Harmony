@@ -74,7 +74,7 @@ function parseDetail(html: string, id: string) { const title = firstText(html, /
 function summary(id: string, title: string, cover: string | null, updatedAt: string | null) { if (!/^\d+$/u.test(id)) throw new Error('Source item has no ID.'); return frozen({ id: `video:${id}`, title: decode(title) || `视频 ${id}`, contentKind: 'video', coverOrientation: 'landscape', author: null, url: detailUrl(id), coverUrl: proxyImage(cover), description: null, language: 'zh-CN', status: 'unknown', access: 'unknown', wordCount: null, chapterCount: null, publishedAt: null, updatedAt, latestChapter: null, categories: [], tags: [], attributes: [] }); }
 function detail(item: ReturnType<typeof summary>) { return frozen({ ...item, aliases: [], catalogUrl: item.url }); }
 function parseGroups(html: string, id: string) {
-  const blocks = playlistBlocks(html); const groups = blocks.map((block, index) => groupFromLinks(block.html, id, block.title || `分组 ${index + 1}`, index)).filter((value) => value.episodes.length > 0);
+  const blocks = playlistBlocks(html).filter((block) => links(block.html).some((entry) => entry.id === id)); const groups = blocks.map((block, index) => groupFromLinks(block.html, id, block.title || `分组 ${index + 1}`, index));
   if (groups.length > 0) return groups; const fallback = groupFromLinks(html, id, '默认分组', 0); if (fallback.episodes.length === 0) throw new Error('No playable episodes found.'); return [fallback];
 }
 function playlistBlocks(html: string) {
