@@ -143,15 +143,20 @@ class LibraryPage extends ConsumerWidget {
     final LibraryBookRefresher? bookRefresher = ref.read(libraryBookRefresherProvider);
     final LibraryCatalogRefreshCoordinator? catalogRefreshCoordinator = ref.read(libraryCatalogRefreshCoordinatorProvider);
     if (catalogRefreshCoordinator != null) {
-      unawaited(
-        catalogRefreshCoordinator.maybeRefresh(
-          bookIds: state.overview!.items.map((item) => item.id),
-          onChanged: (changedBookIds) async {
-            ref.read(libraryCatalogChangeProvider.notifier).publish(changedBookIds);
-            await controller.silentRefresh();
-          },
-        ),
-      );
+      final List<String> bookIds = state.overview!.items.map((item) => item.id).toList(growable: false);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!context.mounted) return;
+        unawaited(
+          catalogRefreshCoordinator.maybeRefresh(
+            bookIds: bookIds,
+            onChanged: (changedBookIds) async {
+              if (!context.mounted) return;
+              ref.read(libraryCatalogChangeProvider.notifier).publish(changedBookIds);
+              await controller.silentRefresh();
+            },
+          ),
+        );
+      });
     }
     final LibraryBookRefreshOperation? bookRefreshOperation = bookRefresher == null
         ? null

@@ -59,15 +59,20 @@ class PrivateLibraryPage extends ConsumerWidget {
     final LibraryCatalogRefreshCoordinator? catalogRefreshCoordinator = ref.read(libraryCatalogRefreshCoordinatorProvider);
     final overview = state.overview;
     if (catalogRefreshCoordinator != null && overview != null) {
-      unawaited(
-        catalogRefreshCoordinator.maybeRefresh(
-          bookIds: overview.items.map((item) => item.id),
-          onChanged: (changedBookIds) async {
-            ref.read(libraryCatalogChangeProvider.notifier).publish(changedBookIds);
-            await controller.silentRefresh();
-          },
-        ),
-      );
+      final List<String> bookIds = overview.items.map((item) => item.id).toList(growable: false);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!context.mounted) return;
+        unawaited(
+          catalogRefreshCoordinator.maybeRefresh(
+            bookIds: bookIds,
+            onChanged: (changedBookIds) async {
+              if (!context.mounted) return;
+              ref.read(libraryCatalogChangeProvider.notifier).publish(changedBookIds);
+              await controller.silentRefresh();
+            },
+          ),
+        );
+      });
     }
 
     return Scaffold(
