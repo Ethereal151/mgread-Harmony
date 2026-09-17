@@ -15,6 +15,7 @@ import 'package:mg_read/app/app_theme_mode_scope.dart';
 import 'package:mg_read/app/data_source_system_error_dialog_host.dart';
 import 'package:mg_read/app/data_source_system_error_reporter.dart';
 import 'package:mg_read/core/errors/app_error.dart';
+import 'package:mg_read/core/settings/settings.dart';
 import 'package:mg_read/features/discovery/application/source_content_gateway.dart';
 import 'package:mg_read/features/lan_sync/application/device_sync_controller.dart';
 import 'package:mg_read/features/library/presentation/library_home_view_data.dart';
@@ -173,6 +174,11 @@ class _MgReadAppState extends ConsumerState<MgReadApp> with WidgetsBindingObserv
 
   @override
   Widget build(BuildContext context) {
+    // SettingsManager keeps a stable identity, so watch its status stream to
+    // rebuild the root when an appearance setting changes.
+    ref.watch(appSettingsStatusProvider);
+    final AppSettingsManager settings = ref.watch(appSettingsProvider);
+    final AppThemeColor themeColor = AppThemeColor.fromId(settings.get(AppSettingKeys.themeColor));
     ref.listen(pluginRuntimeDevelopmentChangesProvider, (_, next) {
       next.whenData(_handleDevelopmentChanges);
     });
@@ -180,7 +186,7 @@ class _MgReadAppState extends ConsumerState<MgReadApp> with WidgetsBindingObserv
     return MaterialApp.router(
       title: 'MgRead',
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.light(),
+      theme: AppTheme.light(color: themeColor),
       themeMode: ThemeMode.light,
       routerConfig: router,
       builder: (BuildContext context, Widget? child) {

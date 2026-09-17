@@ -12,6 +12,19 @@ final class AppSettingKeys {
     validator: _validateThemeMode,
   );
 
+  /// Accent palette for host application surfaces.
+  ///
+  /// Reader packages own their own appearance settings and do not consume
+  /// this value. The host currently exposes this only for light mode; dark
+  /// mode keeps its fixed product accent.
+  static const themeColor = SettingKey<String>(
+    id: 'appearance.themeColor',
+    documentKind: 'settings.appearance',
+    defaultValue: 'warm',
+    codec: SettingCodec<String>(_stringEncode, _stringDecode),
+    validator: _validateThemeColor,
+  );
+
   static const homeLayoutMode = SettingKey<String>(
     id: 'appearance.homeLayoutMode',
     documentKind: 'settings.appearance',
@@ -194,6 +207,7 @@ final class AppSettingKeys {
 
   static const all = <SettingKey<dynamic>>[
     themeMode,
+    themeColor,
     homeLayoutMode,
     blurredCoverBookIds,
     searchHistory,
@@ -243,6 +257,12 @@ int _intDecode(Object? value) {
 
 void _validateThemeMode(String value) {
   if (value != 'system' && value != 'light' && value != 'dark') {
+    throw ArgumentError.value(value);
+  }
+}
+
+void _validateThemeColor(String value) {
+  if (value != 'warm' && value != 'blue' && value != 'green' && value != 'purple' && value != 'rose') {
     throw ArgumentError.value(value);
   }
 }

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mg_read/app/app_theme.dart';
 import 'package:mg_read/app/app_router.dart';
 import 'package:mg_read/app/mg_read_app.dart';
 import 'package:mg_read/core/diagnostics/diagnostics.dart';
@@ -191,6 +192,31 @@ void main() {
     _expectBrightnessForCurrentPage(tester, Brightness.light);
     expect(find.byKey(const Key('theme-mode-toggle')), findsNothing);
     expect(settings.get(AppSettingKeys.themeMode), 'light');
+  });
+
+  testWidgets('applies the host theme color without changing reader themes', (WidgetTester tester) async {
+    final settings = await createTestAppSettings(themeMode: 'light');
+    addTearDown(settings.close);
+    final _ControlledLibraryOverviewLoader loader = _ControlledLibraryOverviewLoader();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          appSettingsProvider.overrideWithValue(settings),
+          libraryOverviewLoaderProvider.overrideWithValue(loader),
+          pluginRuntimeGatewayProvider.overrideWithValue(const TestReadyPluginRuntimeGateway()),
+        ],
+        child: const MgReadApp(),
+      ),
+    );
+    await tester.pump();
+    loader.completeNext(_overview('主题色测试书籍'));
+    await tester.pumpAndSettle();
+
+    await settings.set(AppSettingKeys.themeColor, 'blue');
+    await tester.pumpAndSettle();
+
+    final ThemeData theme = Theme.of(tester.element(find.byType(LibraryPage)));
+    expect(theme.colorScheme.primary, AppThemeColor.blue.accent);
   });
 
   testWidgets('opens the profile route from the shared mobile navigation', (WidgetTester tester) async {

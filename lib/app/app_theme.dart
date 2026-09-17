@@ -13,29 +13,61 @@ library;
 
 import 'package:flutter/material.dart';
 
+/// Preset accent palettes for host application surfaces.
+///
+/// These values intentionally do not flow into the novel, comic, audio, or
+/// video readers. Those packages own their own appearance and reading
+/// controls.
+enum AppThemeColor {
+  warm('warm', '暖光橙', Color(0xFFCC8836)),
+  blue('blue', '海盐蓝', Color(0xFF4F7CAC)),
+  green('green', '竹青绿', Color(0xFF4F8A65)),
+  purple('purple', '雾紫', Color(0xFF7C6DB0)),
+  rose('rose', '樱桃红', Color(0xFFB85C78));
+
+  const AppThemeColor(this.id, this.label, this.accent);
+
+  final String id;
+  final String label;
+  final Color accent;
+
+  static AppThemeColor fromId(String id) {
+    return values.firstWhere((color) => color.id == id, orElse: () => AppThemeColor.warm);
+  }
+}
+
 /// Defines the application-wide visual defaults and semantic UI tokens.
 abstract final class AppTheme {
   /// Temporary product switch while the source-picker visual baseline is light-only.
   static const bool darkModeEnabled = false;
 
-  static ThemeData light() {
-    const AppThemeTokens tokens = AppThemeTokens(
-      pageBackground: Color(0xFFFDFBFA),
-      surface: Color(0xFFFEFDFB),
-      featureSurface: Color(0xFFF9EBDC),
-      mutedSurface: Color(0xFFF7F4EF),
-      divider: Color(0xFFF1ECE5),
-      mutedText: Color(0xFF827D77),
-      accent: Color(0xFFCC8836),
-      dataSourceAccent: Color(0xFFE96A0A),
-      dataSourceCat: Color(0xFFFFC300),
-      dataSourceCommunity: Color(0xFF509B30),
-      accentSoft: Color(0xFFF9EFE2),
-      notification: Color(0xFFE34835),
-      success: Color(0xFF3D8A63),
-      warning: Color(0xFFB56D24),
-      focusRing: Color(0xFF9C5B16),
-      shadow: Color(0x33261C12),
+  static ThemeData light({AppThemeColor color = AppThemeColor.warm}) {
+    const pageBackground = Color(0xFFFDFBFA);
+    const surface = Color(0xFFFEFDFB);
+    final Color featureSurface = color == AppThemeColor.warm
+        ? const Color(0xFFF9EBDC)
+        : Color.alphaBlend(color.accent.withValues(alpha: 0.08), surface);
+    final Color accentSoft = color == AppThemeColor.warm
+        ? const Color(0xFFF9EFE2)
+        : Color.alphaBlend(color.accent.withValues(alpha: 0.11), pageBackground);
+    final Color focusRing = color == AppThemeColor.warm ? const Color(0xFF9C5B16) : color.accent;
+    final AppThemeTokens tokens = AppThemeTokens(
+      pageBackground: pageBackground,
+      surface: surface,
+      featureSurface: featureSurface,
+      mutedSurface: const Color(0xFFF7F4EF),
+      divider: const Color(0xFFF1ECE5),
+      mutedText: const Color(0xFF827D77),
+      accent: color.accent,
+      dataSourceAccent: const Color(0xFFE96A0A),
+      dataSourceCat: const Color(0xFFFFC300),
+      dataSourceCommunity: const Color(0xFF509B30),
+      accentSoft: accentSoft,
+      notification: const Color(0xFFE34835),
+      success: const Color(0xFF3D8A63),
+      warning: const Color(0xFFB56D24),
+      focusRing: focusRing,
+      shadow: const Color(0x33261C12),
       coverDuskStart: Color(0xFF293746),
       coverDuskEnd: Color(0xFF725536),
       coverDawnStart: Color(0xFFE1A15B),
@@ -47,11 +79,12 @@ abstract final class AppTheme {
       coverEmberStart: Color(0xFF5E3527),
       coverEmberEnd: Color(0xFFCA8B40),
     );
-    final ColorScheme colorScheme = ColorScheme.fromSeed(seedColor: tokens.accent, brightness: Brightness.light).copyWith(
+    final ColorScheme seededScheme = ColorScheme.fromSeed(seedColor: tokens.accent, brightness: Brightness.light);
+    final ColorScheme colorScheme = seededScheme.copyWith(
       primary: tokens.accent,
       onPrimary: Colors.white,
       primaryContainer: tokens.accentSoft,
-      onPrimaryContainer: const Color(0xFF472706),
+      onPrimaryContainer: color == AppThemeColor.warm ? const Color(0xFF472706) : seededScheme.onPrimaryContainer,
       surface: tokens.surface,
       onSurface: const Color(0xFF201C18),
       outlineVariant: tokens.divider,
