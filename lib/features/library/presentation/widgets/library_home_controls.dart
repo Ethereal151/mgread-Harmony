@@ -88,7 +88,7 @@ class _SectionButton extends StatelessWidget {
                   style: theme.textTheme.bodyMedium?.copyWith(
                     height: 1.1,
                     fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-                    color: isSelected ? tokens.warning : tokens.mutedText,
+                    color: isSelected ? tokens.accent : tokens.mutedText,
                   ),
                 ),
                 Positioned(

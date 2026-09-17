@@ -77,7 +77,7 @@ class _DocumentIntro extends StatelessWidget {
       decoration: BoxDecoration(
         color: tokens.featureSurface,
         borderRadius: AppRadii.detailCard,
-        border: Border.all(color: tokens.warning.withValues(alpha: 0.16), width: 0.8),
+        border: Border.all(color: tokens.accent.withValues(alpha: 0.16), width: 0.8),
       ),
       child: Padding(
         padding: const EdgeInsets.all(18),
@@ -87,8 +87,8 @@ class _DocumentIntro extends StatelessWidget {
             Container(
               width: 42,
               height: 42,
-              decoration: BoxDecoration(color: tokens.warning.withValues(alpha: 0.12), shape: BoxShape.circle),
-              child: Icon(document.icon, color: tokens.warning, size: 23),
+              decoration: BoxDecoration(color: tokens.accent.withValues(alpha: 0.12), shape: BoxShape.circle),
+              child: Icon(document.icon, color: tokens.accent, size: 23),
             ),
             const SizedBox(width: 14),
             Expanded(

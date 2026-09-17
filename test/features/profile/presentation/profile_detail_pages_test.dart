@@ -105,7 +105,7 @@ void main() {
 
     expect(find.byType(LanSyncPage), findsOneWidget);
     expect(find.text('发送数据'), findsOneWidget);
-    expect(find.text('接收数据'), findsOneWidget);
+    expect(find.byKey(const Key('lan-sync-scan')), findsOneWidget);
     expect(find.textContaining('首版传输不加密'), findsOneWidget);
     expect(find.byKey(const Key('app-bottom-navigation')), findsNothing);
 
@@ -216,7 +216,7 @@ void main() {
     expect(find.byKey(const Key('app-bottom-navigation')), findsNothing);
   });
 
-  testWidgets('profile details stay light-only without header theme actions', (WidgetTester tester) async {
+  testWidgets('profile exposes theme action while detail pages keep their own chrome', (WidgetTester tester) async {
     await _setViewport(tester, const Size(390, 900));
     final settings = await createTestAppSettings(themeMode: 'light');
     addTearDown(settings.close);
@@ -225,7 +225,7 @@ void main() {
 
     await tester.tap(find.byKey(const Key('app-nav-profile')));
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('theme-mode-toggle')), findsNothing);
+    expect(find.byKey(const Key('theme-mode-toggle')), findsOneWidget);
 
     final Finder profileScroll = find.byKey(const Key('profile-page-content'));
     await tester.scrollUntilVisible(

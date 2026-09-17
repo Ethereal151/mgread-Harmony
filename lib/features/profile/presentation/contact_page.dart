@@ -35,7 +35,7 @@ class ContactPage extends StatelessWidget {
                   key: const Key('contact-page-content'),
                   padding: const EdgeInsets.fromLTRB(AppDetailMetrics.horizontalPadding, 24, AppDetailMetrics.horizontalPadding, 32),
                   children: <Widget>[
-                    Icon(Icons.headset_mic_outlined, color: tokens.warning, size: 54),
+                    Icon(Icons.headset_mic_outlined, color: tokens.accent, size: 54),
                     const SizedBox(height: 14),
                     Text(
                       '我们重视每一条反馈',
@@ -68,7 +68,7 @@ class ContactPage extends StatelessWidget {
                       label: const Text('前往意见反馈'),
                       style: FilledButton.styleFrom(
                         minimumSize: const Size.fromHeight(48),
-                        backgroundColor: tokens.warning,
+                        backgroundColor: tokens.accent,
                         foregroundColor: theme.colorScheme.onPrimary,
                         shape: const RoundedRectangleBorder(borderRadius: AppRadii.detailControl),
                       ),
@@ -112,7 +112,7 @@ class _ContactCard extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            Icon(icon, color: tokens.warning, size: 25),
+            Icon(icon, color: tokens.accent, size: 25),
             const SizedBox(width: 14),
             Expanded(
               child: Column(

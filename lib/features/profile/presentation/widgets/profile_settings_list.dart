@@ -115,7 +115,7 @@ class ProfileSettingsRow extends StatelessWidget {
                     Text(
                       item.trailingLabel!,
                       style: theme.textTheme.bodyMedium?.copyWith(
-                        color: item.isAccentTrailingLabel ? tokens.warning : tokens.mutedText,
+                        color: item.isAccentTrailingLabel ? tokens.accent : tokens.mutedText,
                         fontWeight: FontWeight.w400,
                         height: 1.1,
                       ),

@@ -153,13 +153,13 @@ class _AboutAppIcon extends StatelessWidget {
           height: AppDetailMetrics.aboutIconExtent,
           decoration: BoxDecoration(
             borderRadius: AppRadii.detailAppIcon,
-            border: Border.all(color: tokens.warning.withValues(alpha: 0.16), width: 0.8),
+            border: Border.all(color: tokens.accent.withValues(alpha: 0.16), width: 0.8),
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: <Color>[
                 Color.alphaBlend(tokens.featureSurface.withValues(alpha: 0.78), tokens.surface),
-                Color.lerp(tokens.featureSurface, tokens.warning, 0.015)!,
+                Color.lerp(tokens.featureSurface, tokens.accent, 0.015)!,
               ],
             ),
             boxShadow: <BoxShadow>[BoxShadow(color: tokens.shadow.withValues(alpha: 0.14), blurRadius: 15, offset: const Offset(0, 6))],
@@ -238,7 +238,7 @@ class _AboutSettingsRow extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(horizontal: 14),
                   child: Row(
                     children: <Widget>[
-                      SizedBox(width: 24, child: Icon(item.icon, color: tokens.warning, size: 23)),
+                      SizedBox(width: 24, child: Icon(item.icon, color: tokens.accent, size: 23)),
                       const SizedBox(width: 13),
                       Expanded(
                         child: Text(

@@ -103,7 +103,7 @@ class _LicenseList extends StatelessWidget {
             clipBehavior: Clip.antiAlias,
             child: ExpansionTile(
               key: ValueKey<String>('open-source-license-${index - 1}'),
-              iconColor: tokens.warning,
+              iconColor: tokens.accent,
               collapsedIconColor: tokens.mutedText,
               title: Text(license.packages.isEmpty ? '未命名组件' : license.packages, maxLines: 2, overflow: TextOverflow.ellipsis),
               subtitle: Text('${license.paragraphs.length} 段许可文本', style: theme.textTheme.bodySmall?.copyWith(color: tokens.mutedText)),

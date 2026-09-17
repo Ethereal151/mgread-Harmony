@@ -273,7 +273,7 @@ class _FeedbackTypeButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
     final AppThemeTokens tokens = AppThemeTokens.of(context);
-    final Color foreground = selected ? tokens.warning : tokens.mutedText;
+    final Color foreground = selected ? tokens.accent : tokens.mutedText;
     return Semantics(
       button: true,
       selected: selected,
@@ -284,7 +284,7 @@ class _FeedbackTypeButton extends StatelessWidget {
           decoration: BoxDecoration(
             color: selected ? tokens.accentSoft.withValues(alpha: 0.72) : tokens.mutedSurface.withValues(alpha: 0.58),
             borderRadius: AppRadii.detailControl,
-            border: Border.all(color: selected ? tokens.warning : tokens.mutedText.withValues(alpha: 0.17), width: selected ? 0.9 : 0.7),
+            border: Border.all(color: selected ? tokens.accent : tokens.mutedText.withValues(alpha: 0.17), width: selected ? 0.9 : 0.7),
           ),
           child: InkWell(
             key: ValueKey<String>('feedback-type-${type.name}'),
@@ -395,7 +395,7 @@ class _FeedbackContentEditor extends StatelessWidget {
                   maxLines: null,
                   textAlignVertical: TextAlignVertical.top,
                   keyboardType: TextInputType.multiline,
-                  cursorColor: tokens.warning,
+                  cursorColor: tokens.accent,
                   inputFormatters: <TextInputFormatter>[LengthLimitingTextInputFormatter(500)],
                   style: theme.textTheme.bodyMedium?.copyWith(
                     color: theme.colorScheme.onSurface,
@@ -549,7 +549,7 @@ class _FeedbackContactField extends StatelessWidget {
             controller: controller,
             focusNode: focusNode,
             keyboardType: TextInputType.emailAddress,
-            cursorColor: tokens.warning,
+            cursorColor: tokens.accent,
             maxLines: 1,
             style: theme.textTheme.bodyMedium?.copyWith(
               color: theme.colorScheme.onSurface,
@@ -617,7 +617,7 @@ class _FeedbackSubmitButton extends StatelessWidget {
           gradient: LinearGradient(
             begin: Alignment.centerLeft,
             end: Alignment.centerRight,
-            colors: <Color>[Color.lerp(tokens.warning, tokens.surface, 0.075)!, Color.lerp(tokens.warning, tokens.surface, 0.055)!],
+            colors: <Color>[Color.lerp(tokens.accent, tokens.surface, 0.075)!, Color.lerp(tokens.accent, tokens.surface, 0.055)!],
           ),
         ),
         child: Material(

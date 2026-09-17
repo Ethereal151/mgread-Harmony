@@ -115,7 +115,7 @@ class _ProfileAvatar extends StatelessWidget {
             filterQuality: FilterQuality.medium,
             semanticLabel: '本地资料头像',
             errorBuilder: (BuildContext context, Object error, StackTrace? stackTrace) {
-              return const ColoredBox(color: Color(0xFFEDE7DE));
+              return ColoredBox(color: AppThemeTokens.of(context).mutedSurface);
             },
           ),
         ),

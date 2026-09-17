@@ -28,7 +28,7 @@ class FeedbackThanksBanner extends StatelessWidget {
       child: DecoratedBox(
         decoration: BoxDecoration(
           borderRadius: AppRadii.detailCard,
-          border: Border.all(color: tokens.warning.withValues(alpha: 0.17), width: 0.8),
+          border: Border.all(color: tokens.accent.withValues(alpha: 0.17), width: 0.8),
           gradient: LinearGradient(
             begin: Alignment.centerLeft,
             end: Alignment.centerRight,
@@ -100,7 +100,7 @@ class _FeedbackIllustrationPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final Paint shadow = Paint()..color = tokens.warning.withValues(alpha: 0.09);
+    final Paint shadow = Paint()..color = tokens.accent.withValues(alpha: 0.09);
     canvas.drawOval(
       Rect.fromCenter(center: Offset(size.width * 0.49, size.height * 0.84), width: size.width * 0.9, height: size.height * 0.16),
       shadow,

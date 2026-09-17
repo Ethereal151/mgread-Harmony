@@ -17,11 +17,11 @@ class LanSyncOverviewCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final AppThemeTokens tokens = AppThemeTokens.of(context);
-    final statusColor = networkReady ? tokens.dataSourceAccent : tokens.mutedText;
+    final statusColor = networkReady ? tokens.success : tokens.mutedText;
     return DecoratedBox(
       key: const Key('lan-sync-overview'),
       decoration: BoxDecoration(
-        color: const Color(0xFFFFF6EE),
+        color: tokens.featureSurface,
         borderRadius: const BorderRadius.all(Radius.circular(18)),
         border: Border.all(color: tokens.accent.withValues(alpha: 0.18)),
       ),
@@ -73,14 +73,15 @@ class LanSyncRoleChooser extends StatelessWidget {
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (BuildContext context, BoxConstraints constraints) {
+      final AppThemeTokens tokens = AppThemeTokens.of(context);
       final List<Widget> cards = <Widget>[
         _RoleCard(
           key: const Key('lan-sync-send'),
           icon: Icons.file_upload_outlined,
           title: '发送数据',
           description: '将本机的数据源、书架和阅读进度发送到其他设备',
-          tint: const Color(0xFFF47A1F),
-          background: const Color(0xFFFFF8F1),
+          tint: tokens.accent,
+          background: Color.alphaBlend(tokens.accent.withValues(alpha: 0.08), tokens.surface),
           onTap: onSend,
         ),
         _RoleCard(
@@ -88,8 +89,8 @@ class LanSyncRoleChooser extends StatelessWidget {
           icon: Icons.file_download_outlined,
           title: '接收数据',
           description: '从其他设备接收数据，预览版本与冲突后再导入',
-          tint: const Color(0xFF3E82E6),
-          background: const Color(0xFFF4F8FF),
+          tint: tokens.success,
+          background: Color.alphaBlend(tokens.success.withValues(alpha: 0.08), tokens.surface),
           onTap: onReceive,
         ),
       ];
@@ -130,7 +131,7 @@ class LanSyncSectionHeader extends StatelessWidget {
           width: 5,
           height: 32,
           margin: const EdgeInsets.only(top: 2, right: AppSpacing.regular),
-          decoration: BoxDecoration(color: tokens.dataSourceAccent, borderRadius: AppRadii.pill),
+          decoration: BoxDecoration(color: tokens.accent, borderRadius: AppRadii.pill),
         ),
         Expanded(
           child: Column(
@@ -242,7 +243,7 @@ class LanSyncTipsCard extends StatelessWidget {
                             decoration: BoxDecoration(color: tokens.accentSoft, shape: BoxShape.circle),
                             child: SizedBox.square(
                               dimension: 42,
-                              child: Icon(Icons.tips_and_updates_outlined, color: tokens.dataSourceAccent, size: 22),
+                              child: Icon(Icons.tips_and_updates_outlined, color: tokens.accent, size: 22),
                             ),
                           ),
                           const SizedBox(width: AppSpacing.regular),
@@ -289,13 +290,15 @@ class _TipLine extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           DecoratedBox(
-            decoration: BoxDecoration(color: tokens.dataSourceAccent, shape: BoxShape.circle),
+            decoration: BoxDecoration(color: tokens.accent, shape: BoxShape.circle),
             child: SizedBox.square(
               dimension: 24,
               child: Center(
                 child: Text(
                   '$number',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.white, fontWeight: FontWeight.w700),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onPrimary, fontWeight: FontWeight.w700),
                 ),
               ),
             ),
