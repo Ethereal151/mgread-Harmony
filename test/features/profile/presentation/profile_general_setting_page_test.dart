@@ -58,6 +58,11 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('appearance-settings-preview')), findsOneWidget);
+    final Finder scrollable = find.descendant(
+      of: find.byKey(const Key('profile-general-setting-theme-appearance')),
+      matching: find.byType(Scrollable),
+    );
+    await tester.scrollUntilVisible(find.text('卡片'), 200, scrollable: scrollable);
     await tester.tap(find.text('卡片'));
     await tester.pumpAndSettle();
 
@@ -74,6 +79,19 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(settings.get(AppSettingKeys.themeColor), 'blue');
+  });
+
+  testWidgets('appearance settings persists the host day and night mode', (WidgetTester tester) async {
+    final AppSettingsManager settings = await _settings();
+    addTearDown(settings.close);
+    await tester.pumpWidget(_host(settings, settingId: 'theme-appearance'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('appearance-theme-mode')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('appearance-theme-mode-dark')));
+    await tester.pumpAndSettle();
+
+    expect(settings.get(AppSettingKeys.themeMode), 'dark');
   });
 
   testWidgets('privacy settings controls diagnostics and opens the policy', (WidgetTester tester) async {

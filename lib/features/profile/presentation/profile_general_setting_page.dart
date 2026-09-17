@@ -91,8 +91,18 @@ class ProfileGeneralSettingPage extends ConsumerWidget {
 
   List<Widget> _appearanceSections(BuildContext context, AppSettingsManager settings) {
     final String layout = settings.get(AppSettingKeys.homeLayoutMode);
+    final String themeMode = settings.get(AppSettingKeys.themeMode);
     final AppThemeColor themeColor = AppThemeColor.fromId(settings.get(AppSettingKeys.themeColor));
     return <Widget>[
+      const _SectionHeading(title: '界面模式', description: '选择应用界面使用日间、夜间，或跟随系统设置'),
+      const SizedBox(height: AppSpacing.regular),
+      _ThemeModeCard(
+        value: themeMode,
+        onChanged: (String value) async {
+          await settings.set(AppSettingKeys.themeMode, value);
+        },
+      ),
+      const SizedBox(height: AppSpacing.section),
       const _SectionHeading(title: '界面主题色', description: '只影响应用界面；小说、漫画、音频和视频阅读器独立管理主题'),
       const SizedBox(height: AppSpacing.regular),
       _ThemeColorCard(
@@ -460,6 +470,66 @@ class _ThemeColorCardState extends State<_ThemeColorCard> {
                 },
                 selectedColor: tokens.accentSoft,
                 side: BorderSide(color: color == _value ? tokens.accent : tokens.divider),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ThemeModeCard extends StatefulWidget {
+  const _ThemeModeCard({required this.value, required this.onChanged});
+
+  final String value;
+  final ValueChanged<String> onChanged;
+
+  @override
+  State<_ThemeModeCard> createState() => _ThemeModeCardState();
+}
+
+class _ThemeModeCardState extends State<_ThemeModeCard> {
+  late String _value = widget.value;
+
+  @override
+  void didUpdateWidget(covariant _ThemeModeCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.value != widget.value) _value = widget.value;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final AppThemeTokens tokens = AppThemeTokens.of(context);
+    const options = <(String, String, IconData)>[
+      ('system', '跟随系统', Icons.brightness_auto_outlined),
+      ('light', '日间', Icons.light_mode_outlined),
+      ('dark', '夜间', Icons.dark_mode_outlined),
+    ];
+    return DecoratedBox(
+      key: const Key('appearance-theme-mode'),
+      decoration: BoxDecoration(
+        color: tokens.surface,
+        borderRadius: AppRadii.detailCard,
+        border: Border.all(color: tokens.divider),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.regular),
+        child: Wrap(
+          spacing: AppSpacing.compact,
+          runSpacing: AppSpacing.compact,
+          children: <Widget>[
+            for (final (String value, String label, IconData icon) in options)
+              ChoiceChip(
+                key: Key('appearance-theme-mode-$value'),
+                avatar: Icon(icon, size: 18),
+                label: Text(label),
+                selected: value == _value,
+                onSelected: (_) {
+                  setState(() => _value = value);
+                  widget.onChanged(value);
+                },
+                selectedColor: tokens.accentSoft,
+                side: BorderSide(color: value == _value ? tokens.accent : tokens.divider),
               ),
           ],
         ),

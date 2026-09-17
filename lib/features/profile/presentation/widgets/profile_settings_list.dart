@@ -85,7 +85,7 @@ class ProfileSettingsRow extends StatelessWidget {
                     width: AppSpacing.profileSettingsIconSlot,
                     child: Align(
                       alignment: Alignment.centerLeft,
-                      child: Icon(_iconFor(item.icon), color: tokens.warning, size: AppSpacing.profileSettingsIconSize),
+                      child: Icon(_iconFor(item.icon), color: tokens.accent, size: AppSpacing.profileSettingsIconSize),
                     ),
                   ),
                   const SizedBox(width: AppSpacing.profileSettingsIconTextGap),
