@@ -7,6 +7,7 @@
 /// - Sheets issue commands through the public controller and own no media state.
 library;
 
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -146,13 +147,14 @@ class _AudioQueueSheetState extends State<_AudioQueueSheet> {
                               playing: selected && snapshot.playing,
                               onTap: entry.isLocked
                                   ? null
-                                  : () async {
+                                  : () {
+                                      Navigator.of(context).pop();
                                       if (!selected) {
-                                        await widget.controller
-                                            .selectQueueEntry(entry.id);
-                                      }
-                                      if (context.mounted) {
-                                        Navigator.of(context).pop();
+                                        unawaited(
+                                          widget.controller.selectQueueEntry(
+                                            entry.id,
+                                          ),
+                                        );
                                       }
                                     },
                             );

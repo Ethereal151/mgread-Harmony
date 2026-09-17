@@ -416,7 +416,12 @@ class _ComicReaderViewState extends State<ComicReaderView>
                         if (_loading && _window.isNotEmpty)
                           const Align(
                             alignment: Alignment.topCenter,
-                            child: LinearProgressIndicator(minHeight: 2),
+                            child: LinearProgressIndicator(
+                              key: ValueKey<String>(
+                                'comic-reader-chapter-loading',
+                              ),
+                              minHeight: 2,
+                            ),
                           ),
                       ],
                     );

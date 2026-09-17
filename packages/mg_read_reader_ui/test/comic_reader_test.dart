@@ -574,6 +574,52 @@ void main() {
     );
   });
 
+  testWidgets('next comic chapter responds while chapter metadata resolves', (
+    WidgetTester tester,
+  ) async {
+    final source = _DelayedChapterInfoComicSource();
+    final controller = ComicReaderController();
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ComicReaderView(
+          bookId: 'book',
+          dataSource: source,
+          stateStore: _MemoryComicStateStore(),
+          controller: controller,
+        ),
+      ),
+    );
+    for (
+      var frame = 0;
+      frame < 30 && controller.snapshot.chapter?.id != 'chapter-1';
+      frame++
+    ) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    expect(controller.snapshot.chapter?.id, 'chapter-1');
+
+    unawaited(controller.nextChapter());
+    await tester.pump();
+
+    expect(
+      find.byKey(const ValueKey<String>('comic-reader-chapter-loading')),
+      findsOneWidget,
+    );
+    expect(controller.snapshot.isLoading, isTrue);
+
+    source.completeNextChapter();
+    for (
+      var frame = 0;
+      frame < 30 && controller.snapshot.chapter?.id != 'chapter-2';
+      frame++
+    ) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    expect(controller.snapshot.chapter?.id, 'chapter-2');
+    expect(controller.snapshot.isLoading, isFalse);
+  });
+
   testWidgets(
     'opening a saved middle chapter only stitches following chapters',
     (WidgetTester tester) async {
@@ -740,6 +786,43 @@ class _BlockingComicSource extends _FakeComicSource {
       pending.complete(Uint8List.fromList(<int>[1]));
     }
   }
+}
+
+class _DelayedChapterInfoComicSource extends _FakeComicSource {
+  final Completer<ComicChapterInfo> _nextChapter =
+      Completer<ComicChapterInfo>();
+
+  void completeNextChapter() {
+    if (_nextChapter.isCompleted) return;
+    _nextChapter.complete(
+      const ComicChapterInfo(
+        id: 'chapter-2',
+        title: '第二章',
+        index: 1,
+        imageCount: 1,
+      ),
+    );
+  }
+
+  @override
+  Future<ComicChapterCatalogPage> loadChapterCatalog(
+    String bookId, {
+    String? cursor,
+    int pageSize = 50,
+  }) async => ComicChapterCatalogPage(
+    items: const <ComicChapterInfo>[
+      ComicChapterInfo(id: 'chapter-1', title: '第一章', index: 0, imageCount: 1),
+    ],
+    total: 2,
+    nextCursor: 'remaining',
+    hasMore: true,
+  );
+
+  @override
+  Future<ComicChapterInfo> loadChapterAtIndex(String bookId, int index) =>
+      index == 1
+      ? _nextChapter.future
+      : super.loadChapterAtIndex(bookId, index);
 }
 
 class _GatedFirstImageComicSource extends _FakeComicSource {

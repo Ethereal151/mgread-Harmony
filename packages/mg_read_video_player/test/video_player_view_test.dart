@@ -218,6 +218,41 @@ void main() {
     expect(controller.snapshot.activeEpisodeId, 'episode-2');
   });
 
+  testWidgets('episode switch shows loading before progress save finishes', (
+    WidgetTester tester,
+  ) async {
+    final backend = _FakeVideoBackend();
+    final firstSave = Completer<void>();
+    final store = _RecordingStore(firstSave: firstSave);
+    final controller = VideoPlayerController();
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      _playerApp(
+        contentId: 'show',
+        backend: backend,
+        store: store,
+        controller: controller,
+      ),
+    );
+    await tester.pumpAndSettle();
+    backend.emitPosition(const Duration(seconds: 31));
+    await tester.pump();
+
+    unawaited(controller.selectEpisode('season-1', 'episode-2'));
+    await tester.pump();
+
+    expect(controller.snapshot.status, VideoPlayerStatus.loading);
+    expect(find.byKey(const Key('video-player-loading')), findsOneWidget);
+    expect(controller.snapshot.activeEpisodeId, 'episode-1');
+    expect(store.saved.single.episodeId, 'episode-1');
+
+    firstSave.complete();
+    await tester.pumpAndSettle();
+
+    expect(controller.snapshot.status, VideoPlayerStatus.ready);
+    expect(controller.snapshot.activeEpisodeId, 'episode-2');
+  });
+
   testWidgets(
     'episode sheet keeps its glass contrast outside the player theme',
     (WidgetTester tester) async {

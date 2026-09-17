@@ -553,6 +553,10 @@ extension _TextReaderPagination on _TextReaderViewState {
       _showNotice(ReaderStrings.noNextChapter);
       return false;
     }
+    _beginChapterLookup(
+      dismissControls: dismissControls,
+      showLoadingOverlay: showLoadingOverlay,
+    );
     final int operationId = ++_chapterTransitionOperationId;
     final Stopwatch transitionStopwatch = Stopwatch()..start();
     _pendingChapterTransitionOperation = operationId;
@@ -596,6 +600,7 @@ extension _TextReaderPagination on _TextReaderViewState {
         return false;
       }
       _restoreCurrentHorizontalPage();
+      _endChapterLookup(navigation);
       await _reportFailure(_asFailure(error, ReaderFailureKind.data));
       _completeChapterTransition(
         ReaderChapterPerformanceOutcome.error,
@@ -635,6 +640,10 @@ extension _TextReaderPagination on _TextReaderViewState {
       );
       return;
     }
+    _beginChapterLookup(
+      dismissControls: dismissControls,
+      showLoadingOverlay: showLoadingOverlay,
+    );
     try {
       final ReaderChapterInfo previous = await _chapterInfoAtIndex(
         _chapterIndex - 1,
@@ -667,12 +676,30 @@ extension _TextReaderPagination on _TextReaderViewState {
         return;
       }
       _restoreCurrentHorizontalPage();
+      _endChapterLookup(navigation);
       await _reportFailure(_asFailure(error, ReaderFailureKind.data));
       _completeChapterTransition(
         ReaderChapterPerformanceOutcome.error,
         expectedOperationId: operationId,
       );
     }
+  }
+
+  void _beginChapterLookup({
+    required bool dismissControls,
+    required bool showLoadingOverlay,
+  }) {
+    if (dismissControls) _setControlsVisible(false);
+    _changingChapter = true;
+    _chapterLoadingOverlayVisible = showLoadingOverlay;
+    if (mounted) setState(() {});
+  }
+
+  void _endChapterLookup(int navigation) {
+    if (navigation != _navigationGeneration) return;
+    _changingChapter = false;
+    _chapterLoadingOverlayVisible = false;
+    if (mounted) setState(() {});
   }
 
   Future<void> _showBookPreview({bool dismissControls = false}) async {

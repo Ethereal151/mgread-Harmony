@@ -308,25 +308,19 @@ final class _VideoPlayerViewState extends State<VideoPlayerView>
     required bool flushCurrent,
     int? loadGeneration,
   }) async {
+    final int? generation = _actionBeginEpisodeOpening(loadGeneration);
+    if (generation == null) return;
     if (flushCurrent) {
       await _pauseBackend(reportFailure: false);
       await _flushProgress(force: true);
     }
-    if (_disposed ||
+    if (!_isCurrentEpisode(generation) ||
         (loadGeneration != null && !_isCurrentLoad(loadGeneration))) {
       return;
     }
-    final generation = ++_episodeGeneration;
-    _cancelFirstFrameTimeout();
-    _completionGeneration = 0;
-    _reportedFirstFrameSelection = null;
-    _reportedBackendError = null;
     _update(() {
       _group = group;
       _episode = episode;
-      _status = VideoPlayerStatus.loading;
-      _failure = null;
-      _controlsVisible = true;
     });
 
     _notifyStartup(

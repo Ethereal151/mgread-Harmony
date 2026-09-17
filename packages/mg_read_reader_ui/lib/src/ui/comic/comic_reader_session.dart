@@ -257,6 +257,7 @@ extension _ComicReaderSession on _ComicReaderViewState {
   Future<void> _openChapterById(String chapterId) async {
     final String id = chapterId.trim();
     if (id.isEmpty) return;
+    _beginChapterLookup();
     ComicChapterInfo? chapter = _catalogById[id];
     while (chapter == null && _catalogHasMore && !_disposed) {
       final bool loaded = await _loadNextCatalogPage();
@@ -264,6 +265,7 @@ extension _ComicReaderSession on _ComicReaderViewState {
       chapter = _catalogById[id];
     }
     if (chapter == null) {
+      _endChapterLookup();
       unawaited(
         _reportFailure(
           const ReaderFailure(ReaderFailureKind.data, '找不到指定漫画章节'),
@@ -573,9 +575,11 @@ extension _ComicReaderSession on _ComicReaderViewState {
     if (current == null) return;
     final int next = current.index + 1;
     if (_catalogTotal > 0 && next >= _catalogTotal) return;
+    _beginChapterLookup();
     try {
       await _openChapterInfo(await _chapterAtIndex(next), replaceWindow: true);
     } catch (error) {
+      _endChapterLookup();
       unawaited(_reportFailure(_asFailure(error, ReaderFailureKind.data)));
     }
   }
@@ -583,14 +587,31 @@ extension _ComicReaderSession on _ComicReaderViewState {
   Future<void> _previousChapter() async {
     final ComicChapterInfo? current = _currentChapter;
     if (current == null || current.index <= 0) return;
+    _beginChapterLookup();
     try {
       await _openChapterInfo(
         await _chapterAtIndex(current.index - 1),
         replaceWindow: true,
       );
     } catch (error) {
+      _endChapterLookup();
       unawaited(_reportFailure(_asFailure(error, ReaderFailureKind.data)));
     }
+  }
+
+  void _beginChapterLookup() {
+    if (!mounted) return;
+    setState(() {
+      _loading = true;
+      _failure = null;
+    });
+    _publishSnapshot();
+  }
+
+  void _endChapterLookup() {
+    if (!mounted) return;
+    setState(() => _loading = false);
+    _publishSnapshot();
   }
 
   Future<void> _refreshCurrentChapter() async {
