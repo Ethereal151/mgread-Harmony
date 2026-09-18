@@ -79,7 +79,7 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
   }
 
   onMethodCall(call: MethodCall, result: MethodResult): void {
-    const args = call.args as Record<string, Any> | null
+    const args = call.args as Map<string, Object> | null
     switch (call.method) {
       case 'audio.open':
         this.open(args, false, result)
@@ -126,10 +126,10 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
     }
   }
 
-  private async open(args: Record<string, Any> | null, video: boolean, result: MethodResult): Promise<void> {
+  private async open(args: Map<string, Object> | null, video: boolean, result: MethodResult): Promise<void> {
     const sessionId = this.sessionId(args)
-    const url = args?.['url'] as string | undefined
-    if (sessionId.length === 0 || url === undefined || url.length === 0) {
+    const url = this.stringValue(args, 'url')
+    if (sessionId.length === 0 || url.length === 0) {
       result.error('invalid_argument', 'A sessionId and URL are required.', null)
       return
     }
@@ -142,18 +142,20 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
         result.error('surface_unavailable', 'The OHOS texture registry is unavailable.', null)
         return
       }
-      if (texture !== undefined) player.surfaceId = String(texture.getSurfaceId())
-      const headers = (args?.['headers'] as Record<string, string> | undefined) ?? {}
+      const headers = this.headers(args?.get('headers'))
       const source = media.createMediaSourceWithUrl(url, headers)
       const session: MediaSession = {player, texture, video}
       this.sessions.set(sessionId, session)
       this.bind(sessionId, session)
       await player.setMediaSource(source)
+      await this.waitForState(player, 'initialized')
+      if (texture !== undefined) player.surfaceId = String(texture.getSurfaceId())
       await player.prepare()
+      await this.waitForState(player, 'prepared')
       const initialPosition = this.number(args, 'initialPositionMs')
       if (initialPosition > 0) player.seek(initialPosition)
       if (!video) await this.prepareAudioSession(sessionId, args, player.duration)
-      if (args?.['play'] === true) await player.play()
+      if (this.booleanValue(args, 'play')) await player.play()
       result.success({
         sessionId,
         textureId: texture?.getTextureId(),
@@ -208,7 +210,7 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
     })
   }
 
-  private run(args: Record<string, Any> | null, operation: (session: MediaSession) => Promise<void>, result: MethodResult): void {
+  private run(args: Map<string, Object> | null, operation: (session: MediaSession) => Promise<void>, result: MethodResult): void {
     const session = this.sessions.get(this.sessionId(args))
     if (session === undefined) {
       result.error('session_unavailable', 'The OHOS media session is not available.', null)
@@ -244,13 +246,44 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
     await Promise.all(sessionIds.map((sessionId) => this.disposeSession(sessionId)))
   }
 
-  private sessionId(args: Record<string, Any> | null): string {
-    return args?.['sessionId'] as string ?? ''
+  private async waitForState(player: media.AVPlayer, expected: media.AVPlayerState): Promise<void> {
+    const deadline = Date.now() + 30_000
+    while (player.state !== expected) {
+      if (player.state === 'error' || player.state === 'released') {
+        throw new Error(`avplayer_state_${player.state}`)
+      }
+      if (Date.now() >= deadline) throw new Error(`avplayer_state_timeout_${expected}`)
+      await new Promise<void>((resolve): void => {
+        setTimeout((): void => resolve(), 80)
+      })
+    }
   }
 
-  private number(args: Record<string, Any> | null, name: string): number {
-    const value: number | undefined = args?.[name] as number | undefined
-    return value ?? 0
+  private sessionId(args: Map<string, Object> | null): string {
+    return this.stringValue(args, 'sessionId')
+  }
+
+  private number(args: Map<string, Object> | null, name: string): number {
+    const value: Object | undefined = args?.get(name)
+    return typeof value === 'number' ? value : 0
+  }
+
+  private stringValue(args: Map<string, Object> | null, name: string): string {
+    const value: Object | undefined = args?.get(name)
+    return typeof value === 'string' ? value : ''
+  }
+
+  private booleanValue(args: Map<string, Object> | null, name: string): boolean {
+    return args?.get(name) === true
+  }
+
+  private headers(value: Object | undefined): Record<string, string> {
+    const result: Record<string, string> = {}
+    if (!(value instanceof Map)) return result
+    value.forEach((header: Object, name: string): void => {
+      if (typeof name === 'string' && typeof header === 'string') result[name] = header
+    })
+    return result
   }
 
   private errorMessage(error: Object): string {
@@ -259,7 +292,7 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
 
   private async prepareAudioSession(
     sessionId: string,
-    args: Record<string, Any> | null,
+    args: Map<string, Object> | null,
     duration: number,
   ): Promise<void> {
     if (this.context === undefined) {
@@ -281,11 +314,11 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
     this.audioDuration = duration
     this.audioSpeed = 1
     const metadata: avSession.AVMetadata = {
-      assetId: (args?.['trackId'] as string | undefined) ?? sessionId,
-      title: args?.['title'] as string | undefined,
-      artist: args?.['artist'] as string | undefined,
-      avQueueName: args?.['queueTitle'] as string | undefined,
-      mediaImage: args?.['artworkUrl'] as string | undefined,
+      assetId: this.stringValue(args, 'trackId') || sessionId,
+      title: this.stringValue(args, 'title'),
+      artist: this.stringValue(args, 'artist'),
+      avQueueName: this.stringValue(args, 'queueTitle'),
+      mediaImage: this.stringValue(args, 'artworkUrl'),
       duration,
     }
     await this.audioSession.setAVMetadata(metadata)
