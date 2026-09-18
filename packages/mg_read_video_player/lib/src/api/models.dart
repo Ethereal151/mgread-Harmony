@@ -274,6 +274,15 @@ enum VideoFitMode {
   stretch,
 }
 
+/// GPU enhancement profiles supported by the playback backend.
+enum VideoEnhancementMode {
+  /// Use the backend's normal video scaler.
+  off,
+
+  /// Anime4K Mode A (Fast), intended for real-time anime playback.
+  anime4kFast,
+}
+
 /// High-level loading state for [VideoPlayerSnapshot].
 enum VideoPlayerStatus {
   /// Resolving content, progress or a new episode.
@@ -369,6 +378,7 @@ final class VideoPlaybackBackendState {
     this.completed = false,
     this.rate = 1,
     this.volume = 100,
+    this.enhancementMode = VideoEnhancementMode.off,
     this.firstFrameReady = false,
     this.errorMessage,
     this.errorKind,
@@ -398,6 +408,9 @@ final class VideoPlaybackBackendState {
   /// Volume in the MediaKit-compatible 0–100 range.
   final double volume;
 
+  /// Currently selected GPU enhancement profile.
+  final VideoEnhancementMode enhancementMode;
+
   /// Whether this open's first real video frame has reached the surface.
   final bool firstFrameReady;
 
@@ -417,6 +430,7 @@ final class VideoPlaybackBackendState {
     bool? completed,
     double? rate,
     double? volume,
+    VideoEnhancementMode? enhancementMode,
     bool? firstFrameReady,
     String? errorMessage,
     VideoPlaybackBackendErrorKind? errorKind,
@@ -430,6 +444,7 @@ final class VideoPlaybackBackendState {
     completed: completed ?? this.completed,
     rate: rate ?? this.rate,
     volume: volume ?? this.volume,
+    enhancementMode: enhancementMode ?? this.enhancementMode,
     firstFrameReady: firstFrameReady ?? this.firstFrameReady,
     errorMessage: clearError ? null : errorMessage ?? this.errorMessage,
     errorKind: clearError ? null : errorKind ?? this.errorKind,
@@ -463,6 +478,7 @@ final class VideoPlayerSnapshot {
     this.hasNextEpisode = false,
     this.autoAdvance = true,
     this.controlsLocked = false,
+    this.enhancementMode = VideoEnhancementMode.off,
     this.failure,
   }) : groups = List<VideoEpisodeGroup>.unmodifiable(groups);
 
@@ -551,6 +567,9 @@ final class VideoPlayerSnapshot {
 
   /// Whether touch playback controls are locked against accidental input.
   final bool controlsLocked;
+
+  /// Currently selected GPU enhancement profile.
+  final VideoEnhancementMode enhancementMode;
 
   /// Recoverable terminal failure, when present.
   final VideoPlayerFailure? failure;

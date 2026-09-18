@@ -36,6 +36,9 @@ abstract interface class VideoPlayerControllerDelegate {
   /// Changes output volume.
   Future<void> setVolume(double volume);
 
+  /// Changes the package-supported video enhancement profile.
+  Future<void> setEnhancementMode(VideoEnhancementMode mode);
+
   /// Toggles mute while retaining the most recent audible volume.
   Future<void> toggleMute();
 
@@ -100,6 +103,10 @@ final class VideoPlayerController extends ChangeNotifier {
 
   /// Sets playback speed.
   Future<void> setRate(double rate) => _requireDelegate().setRate(rate);
+
+  /// Sets the video enhancement profile.
+  Future<void> setEnhancementMode(VideoEnhancementMode mode) =>
+      _requireDelegate().setEnhancementMode(mode);
 
   /// Sets volume in the 0–100 range.
   Future<void> setVolume(double volume) => _requireDelegate().setVolume(volume);

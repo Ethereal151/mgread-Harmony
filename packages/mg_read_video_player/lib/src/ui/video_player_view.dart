@@ -541,6 +541,13 @@ final class _VideoPlayerViewState extends State<VideoPlayerView>
   Future<void> setVolume(double volume) => _actionSetVolume(volume);
 
   @override
+  Future<void> setEnhancementMode(VideoEnhancementMode mode) async {
+    final backend = _backend;
+    if (backend is! MediaKitVideoPlaybackBackend) return;
+    await backend.setEnhancementMode(mode);
+  }
+
+  @override
   Future<void> toggleMute() => setVolume(
     _backendState.volume > 0 ? 0 : _volumeBeforeMute.clamp(1, 100).toDouble(),
   );
@@ -691,6 +698,7 @@ final class _VideoPlayerViewState extends State<VideoPlayerView>
         null,
     autoAdvance: _autoAdvance,
     controlsLocked: _controlsLocked,
+    enhancementMode: _backendState.enhancementMode,
     failure: _failure,
   );
 
@@ -722,6 +730,7 @@ final class _VideoPlayerViewState extends State<VideoPlayerView>
     onPlayOrPause: playOrPause,
     onSeek: seek,
     onRate: setRate,
+    onEnhancementMode: setEnhancementMode,
     onReplay: replay,
     onPreviousEpisode: playPreviousEpisode,
     onNextEpisode: playNextEpisode,

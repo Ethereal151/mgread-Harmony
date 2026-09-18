@@ -52,6 +52,7 @@ final class VideoPlayerStage extends StatelessWidget {
     required this.onPlayOrPause,
     required this.onSeek,
     required this.onRate,
+    required this.onEnhancementMode,
     required this.onReadSystemVolume,
     required this.onSystemVolume,
     required this.onReplay,
@@ -81,6 +82,7 @@ final class VideoPlayerStage extends StatelessWidget {
   final Future<void> Function() onPlayOrPause;
   final Future<void> Function(Duration) onSeek;
   final Future<void> Function(double) onRate;
+  final Future<void> Function(VideoEnhancementMode) onEnhancementMode;
   final Future<double?> Function() onReadSystemVolume;
   final Future<void> Function(double) onSystemVolume;
   final Future<void> Function() onReplay;
@@ -149,6 +151,7 @@ final class VideoPlayerStage extends StatelessWidget {
                         onPlayOrPause: onPlayOrPause,
                         onSeek: onSeek,
                         onRate: onRate,
+                        onEnhancementMode: onEnhancementMode,
                         onReadSystemVolume: onReadSystemVolume,
                         onSystemVolume: onSystemVolume,
                         onPreviousEpisode: onPreviousEpisode,
@@ -219,6 +222,7 @@ final class _VideoPlayerInteractionLayer extends StatefulWidget {
     required this.onPlayOrPause,
     required this.onSeek,
     required this.onRate,
+    required this.onEnhancementMode,
     required this.onReadSystemVolume,
     required this.onSystemVolume,
     required this.onPreviousEpisode,
@@ -240,6 +244,7 @@ final class _VideoPlayerInteractionLayer extends StatefulWidget {
   final Future<void> Function() onPlayOrPause;
   final Future<void> Function(Duration) onSeek;
   final Future<void> Function(double) onRate;
+  final Future<void> Function(VideoEnhancementMode) onEnhancementMode;
   final Future<double?> Function() onReadSystemVolume;
   final Future<void> Function(double) onSystemVolume;
   final Future<void> Function() onPreviousEpisode;
@@ -329,6 +334,7 @@ final class _VideoPlayerInteractionLayerState
                 unawaited(_commitSeekPreview(position)),
             onSeekPreviewCanceled: _cancelSeekPreview,
             onRate: widget.onRate,
+            onEnhancementMode: widget.onEnhancementMode,
             onFit: widget.onFit,
             onEpisodes: () => unawaited(widget.onEpisodes()),
             onFullscreen: (value) => unawaited(widget.onFullscreen(value)),

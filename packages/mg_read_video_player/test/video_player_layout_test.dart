@@ -105,6 +105,7 @@ void main() {
       );
       expect(find.text('播放设置'), findsOneWidget);
       expect(find.byKey(const Key('video-player-rate-1-5')), findsOneWidget);
+      expect(find.byKey(const Key('video-player-anime4k')), findsOneWidget);
       expect(
         find.byKey(const Key('video-player-fit-default-hint')),
         findsOneWidget,

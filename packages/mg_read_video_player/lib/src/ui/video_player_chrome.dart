@@ -30,6 +30,7 @@ final class VideoPlayerChrome extends StatefulWidget {
     required this.onSeekPreviewEnded,
     required this.onSeekPreviewCanceled,
     required this.onRate,
+    required this.onEnhancementMode,
     required this.onFit,
     required this.onEpisodes,
     required this.onFullscreen,
@@ -49,6 +50,7 @@ final class VideoPlayerChrome extends StatefulWidget {
   final ValueChanged<Duration> onSeekPreviewEnded;
   final VoidCallback onSeekPreviewCanceled;
   final Future<void> Function(double) onRate;
+  final Future<void> Function(VideoEnhancementMode) onEnhancementMode;
   final Future<void> Function() onFit;
   final VoidCallback onEpisodes;
   final ValueChanged<bool> onFullscreen;
@@ -124,6 +126,7 @@ final class _VideoPlayerChromeState extends State<VideoPlayerChrome> {
       context: context,
       snapshot: widget.snapshot,
       onRate: widget.onRate,
+      onEnhancementMode: widget.onEnhancementMode,
       onFit: widget.onFit,
       onPreviousEpisode: widget.onPreviousEpisode,
       onNextEpisode: widget.onNextEpisode,
