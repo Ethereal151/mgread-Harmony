@@ -28,5 +28,13 @@ flutter:
         pluginClass: OhosRuntimePlugin
   assets:
     - assets/runtime/android/runtime-version.txt
+    - assets/runtime/android/dist/
+    - assets/runtime/android/dist/debug-ui/
+    - assets/runtime/windows-x64/node/
+    - assets/runtime/windows-x64/dist/
+    - assets/runtime/windows-x64/dist/debug-ui/
+    - assets/runtime/macos-arm64/node/
+    - assets/runtime/macos-arm64/dist/
+    - assets/runtime/macos-arm64/dist/debug-ui/
     - assets/runtime/ohos/runtime-version.txt
     - assets/runtime/ohos/dist/
