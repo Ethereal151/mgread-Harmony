@@ -27,10 +27,12 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:mg_read/app/app_theme.dart';
 import 'package:mg_read/core/content_library/content_library.dart';
 import 'package:mg_read/core/errors/app_error.dart';
+import 'package:mg_read/features/discovery/application/batch_search.dart';
 import 'package:mg_read/features/discovery/application/source_content_cover_handoff.dart';
 import 'package:mg_read/features/discovery/application/source_content_gateway.dart';
 import 'package:mg_read/features/discovery/presentation/discovery_view_data.dart';
 import 'package:mg_read/features/discovery/presentation/discovery_page.dart';
+import 'package:mg_read/features/discovery/presentation/source_content_detail_variant_picker.dart';
 import 'package:mg_read/features/discovery/presentation/widgets/discovery_book_cover.dart';
 import 'package:mg_read/features/library/presentation/widgets/bookshelf_removal_confirmation.dart';
 import 'package:mg_read/shared/presentation/widgets/app_operation_error_dialog.dart';
@@ -84,6 +86,7 @@ enum SourceShelfAction { refresh, setPrivate, cancelPrivate, toggleCoverBlur, de
 typedef SourceShelfActionRequested = Future<void> Function(SourceShelfAction action);
 typedef SourceStartReadingRequested = Future<void> Function();
 typedef SourceRecommendationRequested = Future<void> Function(PluginContentSummary content);
+typedef SourceSearchVariantRequested = Future<void> Function(SourceSearchHit variant);
 typedef SourceDetailFailureCopy = Future<void> Function(String payload);
 
 /// Whether this detail is being viewed from discovery or the local shelf.
@@ -99,6 +102,8 @@ Future<void> showSourceContentDetailSheet(
   PluginContentDetail? initialDetail,
   PluginChaptersResult? initialCatalog,
   String? initialSourceName,
+  Iterable<SourceSearchHit> sourceVariants = const <SourceSearchHit>[],
+  SourceSearchVariantRequested? onSourceVariantRequested,
   Iterable<PluginContentSummary> relatedContents = const <PluginContentSummary>[],
   SourceTextChapterRequested? onTextChapterRequested,
   SourceComicChapterRequested? onComicChapterRequested,
@@ -124,6 +129,8 @@ Future<void> showSourceContentDetailSheet(
     initialDetail: initialDetail,
     initialCatalog: initialCatalog,
     initialSourceName: initialSourceName,
+    sourceVariants: sourceVariants,
+    onSourceVariantRequested: onSourceVariantRequested,
     relatedContents: relatedContents,
     onTextChapterRequested: onTextChapterRequested,
     onComicChapterRequested: onComicChapterRequested,
@@ -279,7 +286,7 @@ PluginChaptersResult _emptyChapters({required String pluginId, required String? 
     PluginChaptersResult(pluginId: pluginId, sourceName: sourceName ?? '当前来源', items: const <PluginChapterSummary>[]);
 
 class _SourceDetailScreen extends StatefulWidget {
-  const _SourceDetailScreen({
+  _SourceDetailScreen({
     required this.gateway,
     required this.pluginId,
     required this.pluginVersion,
@@ -288,6 +295,8 @@ class _SourceDetailScreen extends StatefulWidget {
     required this.initialDetail,
     required this.initialCatalog,
     required this.initialSourceName,
+    required Iterable<SourceSearchHit> sourceVariants,
+    required this.onSourceVariantRequested,
     required this.relatedContents,
     required this.onTextChapterRequested,
     required this.onComicChapterRequested,
@@ -303,7 +312,7 @@ class _SourceDetailScreen extends StatefulWidget {
     this.onCopyFailure = _copySourceDetailFailure,
     this.isCoverBlurred = false,
     required this.isModalSheet,
-  });
+  }) : sourceVariants = List<SourceSearchHit>.unmodifiable(sourceVariants);
   final SourceContentGateway gateway;
   final String pluginId;
   final String pluginVersion;
@@ -313,6 +322,8 @@ class _SourceDetailScreen extends StatefulWidget {
   final PluginChaptersResult? initialCatalog;
   final String? initialSourceName;
   final Iterable<PluginContentSummary> relatedContents;
+  final List<SourceSearchHit> sourceVariants;
+  final SourceSearchVariantRequested? onSourceVariantRequested;
   final SourceTextChapterRequested? onTextChapterRequested;
   final SourceComicChapterRequested? onComicChapterRequested;
   final SourceAudioChapterRequested? onAudioChapterRequested;
@@ -456,6 +467,8 @@ class _SourceDetailScreenState extends State<_SourceDetailScreen> {
                             bundle: loadingBundle,
                             gateway: widget.gateway,
                             relatedContents: widget.relatedContents,
+                            sourceVariants: widget.sourceVariants,
+                            onSourceVariantRequested: widget.onSourceVariantRequested,
                             isRefreshing: true,
                             onTextChapterRequested: widget.onTextChapterRequested,
                             onComicChapterRequested: widget.onComicChapterRequested,
@@ -515,6 +528,8 @@ class _SourceDetailScreenState extends State<_SourceDetailScreen> {
                                 bundle: previewBundle,
                                 gateway: widget.gateway,
                                 relatedContents: widget.relatedContents,
+                                sourceVariants: widget.sourceVariants,
+                                onSourceVariantRequested: widget.onSourceVariantRequested,
                                 isRefreshing: false,
                                 onTextChapterRequested: widget.onTextChapterRequested,
                                 onComicChapterRequested: widget.onComicChapterRequested,
@@ -553,6 +568,8 @@ class _SourceDetailScreenState extends State<_SourceDetailScreen> {
                         bundle: snapshot.requireData,
                         gateway: widget.gateway,
                         relatedContents: widget.relatedContents,
+                        sourceVariants: widget.sourceVariants,
+                        onSourceVariantRequested: widget.onSourceVariantRequested,
                         isRefreshing: false,
                         onTextChapterRequested: widget.onTextChapterRequested,
                         onComicChapterRequested: widget.onComicChapterRequested,
@@ -584,6 +601,8 @@ class _SourceDetailView extends StatefulWidget {
     required this.bundle,
     required this.gateway,
     required this.relatedContents,
+    required this.sourceVariants,
+    required this.onSourceVariantRequested,
     required this.isRefreshing,
     required this.onTextChapterRequested,
     required this.onComicChapterRequested,
@@ -602,6 +621,8 @@ class _SourceDetailView extends StatefulWidget {
   final _SourceDetailBundle bundle;
   final SourceContentGateway gateway;
   final Iterable<PluginContentSummary> relatedContents;
+  final List<SourceSearchHit> sourceVariants;
+  final SourceSearchVariantRequested? onSourceVariantRequested;
   final bool isRefreshing;
   final SourceTextChapterRequested? onTextChapterRequested;
   final SourceComicChapterRequested? onComicChapterRequested;
@@ -707,6 +728,8 @@ class _SourceDetailViewState extends State<_SourceDetailView> {
     ),
     gateway: widget.gateway,
     relatedContents: widget.relatedContents,
+    sourceVariants: widget.sourceVariants,
+    onSourceVariantRequested: widget.onSourceVariantRequested,
     isRefreshing: widget.isRefreshing,
     onTextChapterRequested: widget.onTextChapterRequested,
     onComicChapterRequested: widget.onComicChapterRequested,
@@ -734,6 +757,8 @@ class _SourceDetailBody extends StatelessWidget {
     required this.bundle,
     required this.gateway,
     required this.relatedContents,
+    required this.sourceVariants,
+    required this.onSourceVariantRequested,
     required this.isRefreshing,
     required this.onTextChapterRequested,
     required this.onComicChapterRequested,
@@ -758,6 +783,8 @@ class _SourceDetailBody extends StatelessWidget {
   final _SourceDetailBundle bundle;
   final SourceContentGateway gateway;
   final Iterable<PluginContentSummary> relatedContents;
+  final List<SourceSearchHit> sourceVariants;
+  final SourceSearchVariantRequested? onSourceVariantRequested;
   final bool isRefreshing;
   final SourceTextChapterRequested? onTextChapterRequested;
   final SourceComicChapterRequested? onComicChapterRequested;
@@ -803,6 +830,21 @@ class _SourceDetailBody extends StatelessWidget {
           labels: labels,
           onCoverTap: content.coverUrl == null ? null : () => unawaited(_openUrl(context, content.coverUrl)),
         ),
+        if (sourceVariants.length > 1 && onSourceVariantRequested != null) ...<Widget>[
+          const SizedBox(height: AppSpacing.compact),
+          OutlinedButton.icon(
+            key: const Key('source-detail-source-variants'),
+            onPressed: () => showSourceContentVariantPicker(
+              context,
+              variants: sourceVariants,
+              selectedPluginId: bundle.detail.pluginId,
+              selectedContentId: bundle.detail.summary.id,
+              onSelected: onSourceVariantRequested!,
+            ),
+            icon: const Icon(Icons.layers_outlined),
+            label: Text('来源版本（${sourceVariants.length}）'),
+          ),
+        ],
         const SizedBox(height: AppSpacing.section),
         if (shelfState != SourceDetailShelfState.canAdd &&
             onShelfAction != null &&

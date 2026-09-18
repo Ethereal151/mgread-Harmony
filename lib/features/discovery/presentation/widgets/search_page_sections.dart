@@ -3,9 +3,11 @@ import 'package:mgread_plugin_runtime/mgread_plugin_runtime.dart';
 
 import 'package:mg_read/app/app_theme.dart';
 import 'package:mg_read/core/errors/app_error.dart';
+import 'package:mg_read/features/discovery/application/batch_search.dart';
 import 'package:mg_read/features/discovery/application/search_page_state.dart';
 import 'package:mg_read/features/discovery/presentation/discovery_view_data.dart';
 import 'package:mg_read/features/discovery/presentation/widgets/discovery_content_list_item.dart';
+import 'package:mg_read/shared/presentation/widgets/async_book_cover_loader.dart';
 
 /// The local interaction-only content above a source search result list.
 class SearchSuggestionSections extends StatelessWidget {
@@ -151,16 +153,18 @@ class SearchResultsSection extends StatelessWidget {
     this.isInBookshelf = _neverInBookshelf,
     required this.onContentPressed,
     required this.onRetry,
+    required this.onLoadMore,
     super.key,
   });
 
-  final PluginSearchResult? result;
+  final AggregatedSearchResult? result;
   final SearchPageStatus status;
   final String query;
   final AppError? error;
-  final bool Function(PluginContentSummary content) isInBookshelf;
-  final ValueChanged<PluginContentSummary> onContentPressed;
+  final bool Function(AggregatedSearchItem item) isInBookshelf;
+  final ValueChanged<AggregatedSearchItem> onContentPressed;
   final VoidCallback onRetry;
+  final VoidCallback onLoadMore;
 
   @override
   Widget build(BuildContext context) {
@@ -208,7 +212,7 @@ class SearchResultsSection extends StatelessWidget {
         AnimatedSize(
           duration: AppMotion.navigationSelection,
           curve: AppMotion.navigationCurve,
-          child: isSearching
+          child: isSearching && searchResult.items.isNotEmpty
               ? Padding(
                   padding: const EdgeInsets.only(top: AppSpacing.compact),
                   child: _RetainedResultsSearchProgress(query: query),
@@ -216,8 +220,14 @@ class SearchResultsSection extends StatelessWidget {
               : const SizedBox.shrink(),
         ),
         if (error != null) ...<Widget>[const SizedBox(height: AppSpacing.compact), _InlineSearchFailure(error: error!, onRetry: onRetry)],
+        if (searchResult.failedSources.isNotEmpty) ...<Widget>[
+          const SizedBox(height: AppSpacing.compact),
+          _PartialSearchFailure(result: searchResult, onRetry: onRetry),
+        ],
         const SizedBox(height: AppSpacing.compact),
-        if (searchResult.items.isEmpty)
+        if (searchResult.items.isEmpty && !searchResult.isComplete)
+          _SearchInProgressState(query: query)
+        else if (searchResult.items.isEmpty)
           const _SearchResultMessage(
             key: Key('search-empty-result'),
             icon: Icons.search_off_rounded,
@@ -230,14 +240,23 @@ class SearchResultsSection extends StatelessWidget {
             children: <Widget>[
               for (var index = 0; index < searchResult.items.length; index++) ...<Widget>[
                 SearchResultTile(
-                  content: searchResult.items[index],
-                  variant: _coverVariantFor(searchResult.items[index], index),
+                  item: searchResult.items[index],
+                  variant: _coverVariantFor(searchResult.items[index].content, index),
                   isInBookshelf: isInBookshelf(searchResult.items[index]),
                   onPressed: () => onContentPressed(searchResult.items[index]),
                 ),
               ],
             ],
           ),
+        if (searchResult.hasMore) ...<Widget>[
+          const SizedBox(height: AppSpacing.compact),
+          OutlinedButton.icon(
+            key: const Key('search-load-more'),
+            onPressed: isSearching ? null : onLoadMore,
+            icon: const Icon(Icons.expand_more_rounded),
+            label: Text(isSearching ? '正在加载更多…' : '加载更多来源结果'),
+          ),
+        ],
       ],
     );
   }
@@ -318,25 +337,56 @@ DiscoveryCoverVariant _coverVariantFor(PluginContentSummary content, int index) 
 
 /// A compact, source-neutral search result. Runtime data populates it later.
 class SearchResultTile extends StatelessWidget {
-  const SearchResultTile({required this.content, required this.variant, required this.onPressed, this.isInBookshelf = false, super.key});
-  final PluginContentSummary content;
+  const SearchResultTile({required this.item, required this.variant, required this.onPressed, this.isInBookshelf = false, super.key});
+  final AggregatedSearchItem item;
   final DiscoveryCoverVariant variant;
   final VoidCallback onPressed;
   final bool isInBookshelf;
 
   @override
   Widget build(BuildContext context) {
-    return DiscoveryContentListItem(
-      item: PluginDiscoveryContentItem(content: content, rank: null, metric: _searchMetric(content), recommendation: null),
-      variant: variant,
-      onPressed: onPressed,
-      isInBookshelf: isInBookshelf,
-      keyPrefix: 'search-result',
+    final primary = item.primary;
+    return BookCoverSourceScope(
+      pluginId: primary.source.id,
+      pluginVersion: primary.source.pluginVersion,
+      child: Stack(
+        children: <Widget>[
+          DiscoveryContentListItem(
+            item: PluginDiscoveryContentItem(
+              content: primary.content,
+              rank: null,
+              metric: _searchMetric(primary.content),
+              recommendation: null,
+            ),
+            variant: variant,
+            onPressed: onPressed,
+            isInBookshelf: isInBookshelf,
+            keyPrefix: 'search-result',
+          ),
+          if (item.sourceCount > 1)
+            Positioned(
+              right: 8,
+              top: 8,
+              child: IgnorePointer(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.surface.withValues(alpha: .92),
+                    borderRadius: BorderRadius.circular(99),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    child: Text('${item.sourceCount} 个来源', style: Theme.of(context).textTheme.labelSmall),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }
 
-bool _neverInBookshelf(PluginContentSummary _) => false;
+bool _neverInBookshelf(AggregatedSearchItem _) => false;
 
 PluginDiscoveryMetric? _searchMetric(PluginContentSummary content) {
   for (final attribute in content.attributes) {
@@ -429,22 +479,47 @@ class _HotSearchItem extends StatelessWidget {
 
 class _ResultHeader extends StatelessWidget {
   const _ResultHeader({required this.result});
-  final PluginSearchResult result;
+  final AggregatedSearchResult result;
   @override
   Widget build(BuildContext context) {
-    final count = result.totalCount ?? result.items.length;
+    final count = result.items.length;
     final tokens = AppThemeTokens.of(context);
     return Row(
       children: <Widget>[
         Text('搜索结果', style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(width: AppSpacing.compact),
-        Text('（共 $count 条）', style: Theme.of(context).textTheme.bodyMedium),
+        Text('（已聚合 $count 条）', style: Theme.of(context).textTheme.bodyMedium),
         const Spacer(),
-        Text('按相关性', style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: tokens.mutedText)),
+        Text(
+          result.isComplete ? '按相关性' : '已完成 ${result.completedSourceCount}/${result.totalSourceCount} 个来源',
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: tokens.mutedText),
+        ),
         Icon(Icons.arrow_drop_down_rounded, color: tokens.mutedText),
       ],
     );
   }
+}
+
+class _PartialSearchFailure extends StatelessWidget {
+  const _PartialSearchFailure({required this.result, required this.onRetry});
+
+  final AggregatedSearchResult result;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) => Material(
+    color: Theme.of(context).colorScheme.errorContainer.withValues(alpha: .72),
+    borderRadius: AppRadii.control,
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.regular, vertical: AppSpacing.compact),
+      child: Row(
+        children: <Widget>[
+          Expanded(child: Text('${result.failedSources.length} 个数据源搜索失败，已展示其他来源结果。', maxLines: 2, overflow: TextOverflow.ellipsis)),
+          TextButton(onPressed: onRetry, child: const Text('重试失败来源')),
+        ],
+      ),
+    ),
+  );
 }
 
 class _InlineSearchFailure extends StatelessWidget {

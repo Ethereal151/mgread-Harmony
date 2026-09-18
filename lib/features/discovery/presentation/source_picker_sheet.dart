@@ -18,6 +18,11 @@ final class DiscoverySourceSelected extends DiscoverySourcePickerResult {
   final String sourceId;
 }
 
+/// The search page selected the application-owned all-source scope.
+final class DiscoveryAllSourcesSelected extends DiscoverySourcePickerResult {
+  const DiscoveryAllSourcesSelected();
+}
+
 /// The user requested the Runtime-owned source management surface.
 final class DiscoverySourceManagementRequested extends DiscoverySourcePickerResult {
   const DiscoverySourceManagementRequested();
@@ -36,7 +41,8 @@ final class DiscoverySourceWebViewActionRequested extends DiscoverySourcePickerR
 Future<DiscoverySourcePickerResult?> showDiscoverySourcePicker(
   BuildContext context, {
   required List<PluginSourceDescriptor> sources,
-  required String selectedSourceId,
+  required String? selectedSourceId,
+  bool allowAllSources = false,
   Iterable<String> pinnedSourceIds = const <String>[],
   Iterable<String> recentSourceIds = const <String>[],
   Future<void> Function(String sourceId, bool pinned)? onPinChanged,
@@ -52,6 +58,7 @@ Future<DiscoverySourcePickerResult?> showDiscoverySourcePicker(
     builder: (context) => _DiscoverySourcePickerSheet(
       sources: sources,
       selectedSourceId: selectedSourceId,
+      allowAllSources: allowAllSources,
       pinnedSourceIds: pinnedSourceIds,
       recentSourceIds: recentSourceIds,
       onPinChanged: onPinChanged,
@@ -65,6 +72,7 @@ class _DiscoverySourcePickerSheet extends StatefulWidget {
   _DiscoverySourcePickerSheet({
     required this.sources,
     required this.selectedSourceId,
+    required this.allowAllSources,
     required Iterable<String> pinnedSourceIds,
     required Iterable<String> recentSourceIds,
     this.onPinChanged,
@@ -72,7 +80,8 @@ class _DiscoverySourcePickerSheet extends StatefulWidget {
        recentSourceIds = List<String>.unmodifiable(recentSourceIds);
 
   final List<PluginSourceDescriptor> sources;
-  final String selectedSourceId;
+  final String? selectedSourceId;
+  final bool allowAllSources;
   final List<String> pinnedSourceIds;
   final List<String> recentSourceIds;
   final Future<void> Function(String sourceId, bool pinned)? onPinChanged;
@@ -240,32 +249,70 @@ class _DiscoverySourcePickerSheetState extends State<_DiscoverySourcePickerSheet
                 ),
                 const SizedBox(height: 6),
                 Expanded(
-                  child: visibleSources.isEmpty
-                      ? Center(child: Text(_filter == _SourceFilter.recent ? '还没有最近使用的数据源' : '没有匹配的数据源'))
-                      : ListView.separated(
-                          key: const Key('discovery-source-picker-list'),
-                          padding: const EdgeInsets.fromLTRB(AppSpacing.comfortable, 0, AppSpacing.comfortable, 0),
-                          itemCount: visibleSources.length,
-                          separatorBuilder: (_, _) => const SizedBox(height: 0.5),
-                          itemBuilder: (context, index) {
-                            final source = visibleSources[index];
-                            return _SourcePickerRow(
-                              source: source,
-                              selected: source.id == widget.selectedSourceId,
-                              pinned: _isPinned(source.id),
-                              onPressed: () => Navigator.of(context).pop(DiscoverySourceSelected(source.id)),
-                              onPinPressed: () => _togglePinned(source.id),
-                              onWebViewAction: (action) =>
-                                  Navigator.of(context).pop(DiscoverySourceWebViewActionRequested(sourceId: source.id, action: action)),
-                            );
-                          },
-                        ),
+                  child: widget.allowAllSources
+                      ? Column(
+                          children: <Widget>[
+                            _AllSourcesPickerRow(
+                              selected: widget.selectedSourceId == null,
+                              onPressed: () => Navigator.of(context).pop(const DiscoveryAllSourcesSelected()),
+                            ),
+                            Expanded(child: _buildSourceList(context, visibleSources)),
+                          ],
+                        )
+                      : _buildSourceList(context, visibleSources),
                 ),
                 _SourcePickerFooter(onManagePressed: () => Navigator.of(context).pop(const DiscoverySourceManagementRequested())),
               ],
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildSourceList(BuildContext context, List<PluginSourceDescriptor> visibleSources) {
+    if (visibleSources.isEmpty) {
+      return Center(child: Text(_filter == _SourceFilter.recent ? '还没有最近使用的数据源' : '没有匹配的数据源'));
+    }
+    return ListView.separated(
+      key: const Key('discovery-source-picker-list'),
+      padding: const EdgeInsets.fromLTRB(AppSpacing.comfortable, 0, AppSpacing.comfortable, 0),
+      itemCount: visibleSources.length,
+      separatorBuilder: (_, _) => const SizedBox(height: 0.5),
+      itemBuilder: (context, index) {
+        final source = visibleSources[index];
+        return _SourcePickerRow(
+          source: source,
+          selected: source.id == widget.selectedSourceId,
+          pinned: _isPinned(source.id),
+          onPressed: () => Navigator.of(context).pop(DiscoverySourceSelected(source.id)),
+          onPinPressed: () => _togglePinned(source.id),
+          onWebViewAction: (action) =>
+              Navigator.of(context).pop(DiscoverySourceWebViewActionRequested(sourceId: source.id, action: action)),
+        );
+      },
+    );
+  }
+}
+
+class _AllSourcesPickerRow extends StatelessWidget {
+  const _AllSourcesPickerRow({required this.selected, required this.onPressed});
+
+  final bool selected;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppThemeTokens.of(context);
+    return Material(
+      color: Colors.transparent,
+      child: ListTile(
+        key: const Key('discovery-source-picker-all'),
+        leading: Icon(Icons.all_inclusive_rounded, color: selected ? tokens.accent : tokens.mutedText),
+        title: const Text('全部数据源'),
+        subtitle: const Text('并行搜索并合并重复结果'),
+        trailing: selected ? Icon(Icons.check_rounded, color: tokens.accent) : null,
+        onTap: onPressed,
       ),
     );
   }

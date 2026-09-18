@@ -81,7 +81,7 @@ void main() {
         ),
         child: MaterialApp(
           theme: AppTheme.light(),
-          home: SearchPage(onDestinationRequested: (_) {}),
+          home: SearchPage(initialSourceId: 'source.first', onDestinationRequested: (_) {}),
         ),
       ),
     );

@@ -67,6 +67,34 @@ void main() {
     expect((result! as DiscoverySourceSelected).sourceId, 'org.example.manga');
   });
 
+  testWidgets('picker exposes the all-source search scope', (tester) async {
+    DiscoverySourcePickerResult? result;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: TextButton(
+              onPressed: () async {
+                result = await showDiscoverySourcePicker(context, sources: sources, selectedSourceId: null, allowAllSources: true);
+              },
+              child: const Text('打开'),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('打开'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('discovery-source-picker-all')), findsOneWidget);
+    expect(find.text('并行搜索并合并重复结果'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('discovery-source-picker-all')));
+    await tester.pumpAndSettle();
+    expect(result, isA<DiscoveryAllSourcesSelected>());
+  });
+
   testWidgets('picker exposes the Runtime-owned management entry point', (tester) async {
     DiscoverySourcePickerResult? result;
     await tester.pumpWidget(

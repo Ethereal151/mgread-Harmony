@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:mgread_plugin_runtime/mgread_plugin_runtime.dart';
 
 import 'package:mg_read/core/errors/app_error.dart';
+import 'package:mg_read/features/discovery/application/batch_search.dart';
 import 'package:mg_read/features/discovery/application/source_content_gateway.dart';
 
 enum SearchPageStatus { loadingSources, ready, searching, loaded, failure }
@@ -46,9 +47,9 @@ final class SearchPageState {
 
   factory SearchPageState.searching({
     required Iterable<PluginSourceDescriptor> sources,
-    required String selectedSourceId,
+    required String? selectedSourceId,
     required String query,
-    PluginSearchResult? retainedResult,
+    AggregatedSearchResult? retainedResult,
     Iterable<PluginSearchSuggestion> hotSearches = const <PluginSearchSuggestion>[],
   }) => SearchPageState._(
     status: SearchPageStatus.searching,
@@ -62,9 +63,9 @@ final class SearchPageState {
 
   factory SearchPageState.loaded({
     required Iterable<PluginSourceDescriptor> sources,
-    required String selectedSourceId,
+    required String? selectedSourceId,
     required String query,
-    required PluginSearchResult result,
+    required AggregatedSearchResult result,
     Iterable<PluginSearchSuggestion> hotSearches = const <PluginSearchSuggestion>[],
   }) => SearchPageState._(
     status: SearchPageStatus.loaded,
@@ -81,7 +82,7 @@ final class SearchPageState {
     required String? selectedSourceId,
     required String query,
     required AppError error,
-    PluginSearchResult? retainedResult,
+    AggregatedSearchResult? retainedResult,
     Iterable<PluginSearchSuggestion> hotSearches = const <PluginSearchSuggestion>[],
   }) => SearchPageState._(
     status: SearchPageStatus.failure,
@@ -97,7 +98,7 @@ final class SearchPageState {
   final List<PluginSourceDescriptor> sources;
   final String? selectedSourceId;
   final String query;
-  final PluginSearchResult? result;
+  final AggregatedSearchResult? result;
   final AppError? error;
   final List<PluginSearchSuggestion> hotSearches;
 
@@ -122,4 +123,15 @@ final class SearchPageState {
     error: error,
     hotSearches: value,
   );
+
+  SearchPageState withResult({required SearchPageStatus nextStatus, required AggregatedSearchResult? nextResult, AppError? nextError}) =>
+      SearchPageState._(
+        status: nextStatus,
+        sources: sources,
+        selectedSourceId: selectedSourceId,
+        query: query,
+        result: nextResult,
+        error: nextError,
+        hotSearches: hotSearches,
+      );
 }
