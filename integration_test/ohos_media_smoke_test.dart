@@ -5,6 +5,7 @@ import 'package:integration_test/integration_test.dart';
 import 'package:mgread_ohos_media/mgread_ohos_media.dart';
 
 const _mediaSmokeUrl = String.fromEnvironment('OHOS_MEDIA_SMOKE_URL', defaultValue: 'https://samplelib.com/lib/preview/mp3/sample-3s.mp3');
+const _mediaSmokeHoldMs = int.fromEnvironment('OHOS_MEDIA_SMOKE_HOLD_MS', defaultValue: 500);
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -30,7 +31,7 @@ void main() {
     await client.command('setRate', sessionId, arguments: const <String, Object?>{'rate': 1.25});
     await client.command('seek', sessionId, arguments: const <String, Object?>{'positionMs': 0});
     await client.command('play', sessionId);
-    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump(Duration(milliseconds: _mediaSmokeHoldMs < 0 ? 0 : _mediaSmokeHoldMs));
     await client.command('pause', sessionId);
   });
 }
