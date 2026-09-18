@@ -172,6 +172,29 @@ void main() {
     await expectLater(service.launchInstaller(package, descriptor), throwsA(isA<StateError>()));
     expect(launched, isFalse);
   });
+
+  test('OHOS update refuses before transfer when only signature install exists', () async {
+    final service = PlatformAppUpdateService(
+      dependencies: PlatformAppUpdateDependencies(
+        isAndroid: false,
+        isWindows: false,
+        isMacOS: false,
+        isOhos: true,
+        isDebug: false,
+        resolvedExecutable: temporary.path,
+        currentDirectory: temporary,
+        processId: 123,
+        startWindowsUpdater: (_, _) async {},
+        exitAfterWindowsUpdater: () async {},
+        createTemporaryDirectory: (prefix) => temporary.createTemp(prefix),
+      ),
+    );
+
+    await expectLater(
+      service.ensureInstallPermission(),
+      throwsA(predicate<Object>((error) => error is StateError && error.toString().contains('app_update_install_unsupported'))),
+    );
+  });
 }
 
 Future<Directory> _writeRunnerBundle(Directory parent) async {
