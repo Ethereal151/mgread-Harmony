@@ -64,6 +64,14 @@ jobs:
           npm ci
           npm run build
 
+      - name: Ensure declared Runtime asset directories exist
+        shell: bash
+        run: |
+          mkdir -p packages/mgread_plugin_runtime/assets/runtime/windows-x64/node
+          mkdir -p packages/mgread_plugin_runtime/assets/runtime/windows-x64/dist/debug-ui
+          mkdir -p packages/mgread_plugin_runtime/assets/runtime/macos-arm64/node
+          mkdir -p packages/mgread_plugin_runtime/assets/runtime/macos-arm64/dist/debug-ui
+
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -112,6 +120,14 @@ jobs:
         run: |
           npm ci
           npm run stage:flutter-windows
+
+      - name: Ensure declared Runtime asset directories exist
+        shell: bash
+        run: |
+          mkdir -p packages/mgread_plugin_runtime/assets/runtime/windows-x64/node
+          mkdir -p packages/mgread_plugin_runtime/assets/runtime/windows-x64/dist/debug-ui
+          mkdir -p packages/mgread_plugin_runtime/assets/runtime/macos-arm64/node
+          mkdir -p packages/mgread_plugin_runtime/assets/runtime/macos-arm64/dist/debug-ui
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
@@ -164,6 +180,14 @@ jobs:
         run: |
           npm ci
           npm run stage:flutter-macos
+
+      - name: Ensure declared Runtime asset directories exist
+        shell: bash
+        run: |
+          mkdir -p packages/mgread_plugin_runtime/assets/runtime/windows-x64/node
+          mkdir -p packages/mgread_plugin_runtime/assets/runtime/windows-x64/dist/debug-ui
+          mkdir -p packages/mgread_plugin_runtime/assets/runtime/macos-arm64/node
+          mkdir -p packages/mgread_plugin_runtime/assets/runtime/macos-arm64/dist/debug-ui
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
