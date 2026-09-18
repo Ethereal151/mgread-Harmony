@@ -50,6 +50,16 @@ void main() {
 
     expect(platform.awake, <bool>[true, false]);
   });
+
+  test('routes video gesture volume through the system-volume platform', () async {
+    final platform = _FakePlaybackPlatform();
+    final controller = SourceVideoPlaybackPlatformController.withPlatform(platform);
+
+    expect(await controller.readSystemVolume(), 50);
+    await controller.setSystemVolume(72);
+
+    expect(platform.systemVolumes, <double>[72]);
+  });
 }
 
 final class _FakePlaybackPlatform implements SourceVideoPlaybackPlatform {
@@ -70,8 +80,16 @@ final class _FakePlaybackPlatform implements SourceVideoPlaybackPlatform {
   Future<void> setApplicationBrightness(double value) async => brightness.add(value);
 
   @override
+  Future<double> readSystemVolume() async => 50;
+
+  @override
+  Future<void> setSystemVolume(double value) async => systemVolumes.add(value);
+
+  @override
   Future<void> setScreenAwake(bool active) async {
     awake.add(active);
     if (active && failEnable) throw StateError('enable failed');
   }
+
+  final List<double> systemVolumes = <double>[];
 }

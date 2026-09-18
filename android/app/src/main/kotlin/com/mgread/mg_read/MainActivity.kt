@@ -4,6 +4,7 @@ import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.Context
 import android.content.Intent
+import android.media.AudioManager
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.Uri
@@ -54,6 +55,27 @@ class MainActivity : AudioServiceActivity() {
                 "getInstalledApkPath" -> installedApkPath(result)
                 "ensureInstallPermission" -> ensureInstallPermission(result)
                 "installApk" -> installApk(call.argument<String>("path"), result)
+                else -> result.notImplemented()
+            }
+        }
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            MEDIA_SYSTEM_VOLUME_CHANNEL,
+        ).setMethodCallHandler { call, result ->
+            val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            when (call.method) {
+                "getSystemVolume" -> {
+                    val maximum = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+                    val current = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
+                    result.success(if (maximum == 0) 0.0 else current * 100.0 / maximum)
+                }
+                "setSystemVolume" -> {
+                    val percent = (call.argument<Number>("volume")?.toDouble() ?: 0.0).coerceIn(0.0, 100.0)
+                    val maximum = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+                    val target = kotlin.math.round(percent * maximum / 100.0).toInt().coerceIn(0, maximum)
+                    audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, target, 0)
+                    result.success(null)
+                }
                 else -> result.notImplemented()
             }
         }
@@ -175,6 +197,7 @@ class MainActivity : AudioServiceActivity() {
         const val DEVICE_IDENTITY_CHANNEL = "mgread/device_identity"
         const val NETWORK_ENVIRONMENT_CHANNEL = "mgread/network_environment"
         const val APP_UPDATE_CHANNEL = "mgread/app_update"
+        const val MEDIA_SYSTEM_VOLUME_CHANNEL = "mgread/media_system_volume"
         const val APK_MIME_TYPE = "application/vnd.android.package-archive"
         const val APP_UPDATE_CACHE_DIRECTORY = "app_updates"
     }

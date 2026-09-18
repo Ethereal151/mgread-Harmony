@@ -278,6 +278,12 @@ final class _VideoEntryObserver extends VideoPlayerObserver {
   FutureOr<void> onBrightnessRequested(double brightness) => delegate.onBrightnessRequested(brightness);
 
   @override
+  FutureOr<double?> onSystemVolumeReadRequested() => delegate.onSystemVolumeReadRequested();
+
+  @override
+  FutureOr<void> onSystemVolumeRequested(double volume) => delegate.onSystemVolumeRequested(volume);
+
+  @override
   FutureOr<void> onExitRequested(VideoPlaybackProgress? progress) => delegate.onExitRequested(progress);
 }
 
@@ -327,6 +333,12 @@ final class _DismissVideoPlayerObserver extends VideoPlayerObserver {
 
   @override
   Future<void> onBrightnessRequested(double brightness) => _playbackPlatformController.setBrightness(brightness);
+
+  @override
+  Future<double?> onSystemVolumeReadRequested() => _playbackPlatformController.readSystemVolume();
+
+  @override
+  Future<void> onSystemVolumeRequested(double volume) => _playbackPlatformController.setSystemVolume(volume);
 
   @override
   Future<void> onExitRequested(VideoPlaybackProgress? progress) async {

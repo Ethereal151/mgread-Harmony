@@ -8,6 +8,7 @@ library;
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:screen_brightness/screen_brightness.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
@@ -20,6 +21,10 @@ abstract interface class SourceVideoPlaybackPlatform {
   Future<void> setApplicationBrightness(double brightness);
 
   Future<void> resetApplicationBrightness();
+
+  Future<double> readSystemVolume();
+
+  Future<void> setSystemVolume(double volume);
 }
 
 final class SystemSourceVideoPlaybackPlatform implements SourceVideoPlaybackPlatform {
@@ -37,6 +42,18 @@ final class SystemSourceVideoPlaybackPlatform implements SourceVideoPlaybackPlat
 
   @override
   Future<void> resetApplicationBrightness() => ScreenBrightness.instance.resetApplicationScreenBrightness();
+
+  @override
+  Future<double> readSystemVolume() async {
+    final value = await _systemVolumeChannel.invokeMethod<num>('getSystemVolume');
+    return (value ?? 0).toDouble().clamp(0, 100);
+  }
+
+  @override
+  Future<void> setSystemVolume(double volume) =>
+      _systemVolumeChannel.invokeMethod<void>('setSystemVolume', <String, Object>{'volume': volume.clamp(0, 100).toDouble()});
+
+  static const MethodChannel _systemVolumeChannel = MethodChannel('mgread/media_system_volume');
 }
 
 final class SourceVideoPlaybackPlatformController {
@@ -54,6 +71,7 @@ final class SourceVideoPlaybackPlatformController {
   double? _desiredBrightness;
   double? _appliedBrightness;
   bool _brightnessResetNeeded = false;
+  double? _desiredSystemVolume;
   bool _closed = false;
 
   Future<void> setPlaybackActive(bool active) {
@@ -74,9 +92,7 @@ final class SourceVideoPlaybackPlatformController {
   Future<double?> readBrightness() async {
     if (_closed) return null;
     try {
-      return (await _platform.readApplicationBrightness())
-          .clamp(0.05, 1)
-          .toDouble();
+      return (await _platform.readApplicationBrightness()).clamp(0.05, 1).toDouble();
     } on Object {
       return _appliedBrightness;
     }
@@ -92,6 +108,26 @@ final class SourceVideoPlaybackPlatformController {
       _brightnessResetNeeded = true;
       await _platform.setApplicationBrightness(target);
       _appliedBrightness = target;
+    });
+  }
+
+  Future<double?> readSystemVolume() async {
+    if (_closed) return null;
+    try {
+      return (await _platform.readSystemVolume()).clamp(0, 100).toDouble();
+    } on Object {
+      return null;
+    }
+  }
+
+  Future<void> setSystemVolume(double volume) {
+    if (_closed) return Future<void>.value();
+    _desiredSystemVolume = volume.clamp(0, 100).toDouble();
+    return _append(() async {
+      if (_closed) return;
+      final target = _desiredSystemVolume;
+      if (target == null) return;
+      await _platform.setSystemVolume(target);
     });
   }
 
@@ -115,6 +151,7 @@ final class SourceVideoPlaybackPlatformController {
         _appliedBrightness = null;
         _desiredBrightness = null;
         _brightnessResetNeeded = false;
+        _desiredSystemVolume = null;
       }
     });
   }

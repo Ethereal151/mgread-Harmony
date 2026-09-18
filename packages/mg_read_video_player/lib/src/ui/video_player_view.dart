@@ -722,7 +722,6 @@ final class _VideoPlayerViewState extends State<VideoPlayerView>
     onPlayOrPause: playOrPause,
     onSeek: seek,
     onRate: setRate,
-    onVolume: setVolume,
     onReplay: replay,
     onPreviousEpisode: playPreviousEpisode,
     onNextEpisode: playNextEpisode,
@@ -735,6 +734,8 @@ final class _VideoPlayerViewState extends State<VideoPlayerView>
     onFullscreen: requestFullscreen,
     onReadBrightness: _hostBridge.readBrightness,
     onBrightness: _hostBridge.setBrightness,
+    onReadSystemVolume: _hostBridge.readSystemVolume,
+    onSystemVolume: _hostBridge.setSystemVolume,
   );
 
   @override

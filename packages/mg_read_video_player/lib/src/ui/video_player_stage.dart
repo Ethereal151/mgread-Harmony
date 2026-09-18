@@ -52,7 +52,8 @@ final class VideoPlayerStage extends StatelessWidget {
     required this.onPlayOrPause,
     required this.onSeek,
     required this.onRate,
-    required this.onVolume,
+    required this.onReadSystemVolume,
+    required this.onSystemVolume,
     required this.onReplay,
     required this.onPreviousEpisode,
     required this.onNextEpisode,
@@ -80,7 +81,8 @@ final class VideoPlayerStage extends StatelessWidget {
   final Future<void> Function() onPlayOrPause;
   final Future<void> Function(Duration) onSeek;
   final Future<void> Function(double) onRate;
-  final Future<void> Function(double) onVolume;
+  final Future<double?> Function() onReadSystemVolume;
+  final Future<void> Function(double) onSystemVolume;
   final Future<void> Function() onReplay;
   final Future<void> Function() onPreviousEpisode;
   final Future<void> Function() onNextEpisode;
@@ -147,7 +149,8 @@ final class VideoPlayerStage extends StatelessWidget {
                         onPlayOrPause: onPlayOrPause,
                         onSeek: onSeek,
                         onRate: onRate,
-                        onVolume: onVolume,
+                        onReadSystemVolume: onReadSystemVolume,
+                        onSystemVolume: onSystemVolume,
                         onPreviousEpisode: onPreviousEpisode,
                         onNextEpisode: onNextEpisode,
                         onAutoAdvance: onAutoAdvance,
@@ -216,7 +219,8 @@ final class _VideoPlayerInteractionLayer extends StatefulWidget {
     required this.onPlayOrPause,
     required this.onSeek,
     required this.onRate,
-    required this.onVolume,
+    required this.onReadSystemVolume,
+    required this.onSystemVolume,
     required this.onPreviousEpisode,
     required this.onNextEpisode,
     required this.onAutoAdvance,
@@ -236,7 +240,8 @@ final class _VideoPlayerInteractionLayer extends StatefulWidget {
   final Future<void> Function() onPlayOrPause;
   final Future<void> Function(Duration) onSeek;
   final Future<void> Function(double) onRate;
-  final Future<void> Function(double) onVolume;
+  final Future<double?> Function() onReadSystemVolume;
+  final Future<void> Function(double) onSystemVolume;
   final Future<void> Function() onPreviousEpisode;
   final Future<void> Function() onNextEpisode;
   final Future<void> Function(bool) onAutoAdvance;
@@ -305,7 +310,8 @@ final class _VideoPlayerInteractionLayerState
               unawaited(_commitSeekPreview(position)),
           onSeekPreviewCanceled: _cancelSeekPreview,
           onRate: (value) => unawaited(widget.onRate(value)),
-          onVolume: (value) => unawaited(widget.onVolume(value)),
+          onReadSystemVolume: widget.onReadSystemVolume,
+          onSystemVolume: widget.onSystemVolume,
           onReadBrightness: widget.onReadBrightness,
           onBrightness: (value) => unawaited(widget.onBrightness(value)),
           locked: snapshot.controlsLocked,

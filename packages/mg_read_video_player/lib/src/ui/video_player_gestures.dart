@@ -2,7 +2,7 @@
 ///
 /// Responsibilities:
 /// - Map horizontal distance to bounded seek previews and commits.
-/// - Adjust left-side brightness, right-side volume, double-tap playback and
+/// - Adjust left-side brightness, right-side system volume, double-tap playback and
 ///   hold-to-2x without owning playback or host platform state.
 ///
 /// Notes:
@@ -30,7 +30,8 @@ final class VideoPlayerGestureLayer extends StatefulWidget {
     required this.onSeekPreviewEnded,
     required this.onSeekPreviewCanceled,
     required this.onRate,
-    required this.onVolume,
+    required this.onReadSystemVolume,
+    required this.onSystemVolume,
     required this.onReadBrightness,
     required this.onBrightness,
     required this.locked,
@@ -46,7 +47,8 @@ final class VideoPlayerGestureLayer extends StatefulWidget {
   final ValueChanged<Duration> onSeekPreviewEnded;
   final VoidCallback onSeekPreviewCanceled;
   final ValueChanged<double> onRate;
-  final ValueChanged<double> onVolume;
+  final Future<double?> Function() onReadSystemVolume;
+  final Future<void> Function(double) onSystemVolume;
   final Future<double?> Function() onReadBrightness;
   final ValueChanged<double> onBrightness;
   final bool locked;
@@ -68,9 +70,9 @@ final class _VideoPlayerGestureLayerState
   bool _brightnessGesture = false;
   bool _verticalGestureActive = false;
   double _verticalDistance = 0;
-  double _volumeBase = 100;
+  double? _systemVolumeBase;
   double? _brightnessBase;
-  int _brightnessReadGeneration = 0;
+  int _verticalReadGeneration = 0;
   bool _longPressActive = false;
   double _rateBeforeLongPress = 1;
 
@@ -145,12 +147,12 @@ final class _VideoPlayerGestureLayerState
     _verticalDistance = 0;
     _brightnessGesture =
         details.localPosition.dx < (context.size?.width ?? 0) / 2;
+    final generation = ++_verticalReadGeneration;
     if (_brightnessGesture) {
-      final generation = ++_brightnessReadGeneration;
       _brightnessBase = null;
       unawaited(
         widget.onReadBrightness().then((value) {
-          if (!mounted || generation != _brightnessReadGeneration) return;
+          if (!mounted || generation != _verticalReadGeneration) return;
           setState(() => _brightnessBase = (value ?? .5).clamp(0.05, 1));
           _applyVertical();
           if (!_verticalGestureActive) _finishHudSoon();
@@ -166,8 +168,23 @@ final class _VideoPlayerGestureLayerState
       );
       return;
     }
-    _volumeBase = widget.snapshot.volume;
-    _applyVertical();
+    _systemVolumeBase = null;
+    unawaited(
+      widget.onReadSystemVolume().then((value) {
+        if (!mounted || generation != _verticalReadGeneration) return;
+        setState(() => _systemVolumeBase = (value ?? 50).clamp(0, 100));
+        _applyVertical();
+        if (!_verticalGestureActive) _finishHudSoon();
+      }),
+    );
+    _showHud(
+      const _GestureHud(
+        icon: Icons.volume_up_rounded,
+        title: '系统音量',
+        detail: '读取中',
+      ),
+      persistent: true,
+    );
   }
 
   void _updateVertical(DragUpdateDetails details) {
@@ -194,14 +211,14 @@ final class _VideoPlayerGestureLayerState
       );
       return;
     }
-    final value = (_volumeBase + normalizedDelta * 100)
-        .clamp(0, 100)
-        .toDouble();
-    widget.onVolume(value);
+    final base = _systemVolumeBase;
+    if (base == null) return;
+    final value = (base + normalizedDelta * 100).clamp(0, 100).toDouble();
+    unawaited(widget.onSystemVolume(value));
     _showHud(
       _GestureHud(
         icon: value == 0 ? Icons.volume_off_rounded : Icons.volume_up_rounded,
-        title: '音量',
+        title: '系统音量',
         detail: '${value.round()}%',
         progress: value / 100,
       ),
@@ -217,7 +234,7 @@ final class _VideoPlayerGestureLayerState
 
   void _cancelVertical() {
     _verticalGestureActive = false;
-    _brightnessReadGeneration++;
+    _verticalReadGeneration++;
     _finishHudSoon();
     widget.onInteractionEnd();
   }
@@ -277,7 +294,7 @@ final class _VideoPlayerGestureLayerState
         label: '视频手势区域',
         hint: widget.locked
             ? '播放器手势已锁定，点击显示解锁按钮'
-            : '双击播放暂停，长按二倍速，横滑快进快退，左侧调亮度，右侧调音量',
+            : '双击播放暂停，长按二倍速，横滑快进快退，左侧调亮度，右侧调系统音量',
         child: GestureDetector(
           key: const Key('video-player-gesture-layer'),
           behavior: HitTestBehavior.opaque,
