@@ -14,6 +14,7 @@ import 'package:mg_read/features/lan_sync/data/lan_sync_http_artifact.dart';
 import 'package:mg_read/features/lan_sync/data/lan_sync_http_client.dart';
 import 'package:mg_read/features/lan_sync/domain/lan_endpoint_policy.dart';
 import 'package:mg_read/features/lan_sync/domain/lan_sync_models.dart';
+import 'package:mgread_ohos_system/mgread_ohos_system.dart';
 
 typedef LanSyncPluginStreamOpener = Future<Stream<List<int>>> Function(LanSyncPluginDescriptor plugin);
 
@@ -385,6 +386,12 @@ bool _requestCoversArtifact(HttpRequest request, int bytes, String etag) {
 }
 
 Future<List<String>> eligibleLanSyncAddresses() async {
+  if (Platform.operatingSystem == 'ohos') {
+    final nativeAddresses = await OhosSystemClient.getLocalNetworkAddresses();
+    return selectLanSyncCandidateAddresses(
+      nativeAddresses.map((address) => LanSyncNetworkAddress(interfaceName: 'ohos-network-kit', address: address)),
+    );
+  }
   final candidates = <LanSyncNetworkAddress>[];
   for (final i in await NetworkInterface.list(type: InternetAddressType.IPv4, includeLoopback: false)) {
     for (final a in i.addresses) {

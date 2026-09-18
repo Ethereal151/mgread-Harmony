@@ -10,6 +10,7 @@ import 'package:flutter/services.dart';
 
 import 'package:mg_read/features/lan_sync/application/lan_sync_network_environment.dart';
 import 'package:mg_read/features/lan_sync/data/lan_sync_transport.dart';
+import 'package:mgread_ohos_system/mgread_ohos_system.dart';
 
 typedef AndroidWifiStatusResolver = Future<bool?> Function();
 typedef LanSyncAddressResolver = Future<List<String>> Function();
@@ -56,6 +57,6 @@ const EventChannel _networkEnvironmentEvents = EventChannel('mgread/network_envi
 
 Future<bool?> _readAndroidWifiStatus() => _networkEnvironmentChannel.invokeMethod<bool>('isWifiConnected');
 
-Future<bool?> _readOhosNetworkStatus() => _networkEnvironmentChannel.invokeMethod<bool>('isLocalNetworkAvailable');
+Future<bool?> _readOhosNetworkStatus() async => (await OhosSystemClient.getLocalNetworkAddresses()).isNotEmpty;
 
 Stream<bool> get _ohosNetworkChanges => _networkEnvironmentEvents.receiveBroadcastStream().where((value) => value is bool).cast<bool>();

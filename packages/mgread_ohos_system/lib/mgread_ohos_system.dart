@@ -58,6 +58,14 @@ final class OhosSystemClient {
     return OhosDeviceInfo(model: model, label: label);
   }
 
+  static Future<List<String>> getLocalNetworkAddresses() async {
+    final value = await _channel.invokeMethod<Object?>(
+      'getLocalNetworkAddresses',
+    );
+    if (value is! List) return const <String>[];
+    return List<String>.unmodifiable(value.whereType<String>());
+  }
+
   /// Returns native OHOS capability probes. The application owns the public
   /// immutable snapshot model; this package only validates the channel shape.
   static Future<Map<String, OhosCapabilityProbe>>

@@ -1,8 +1,11 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
+import 'package:mg_read/features/lan_sync/data/platform_lan_sync_network_environment.dart';
 import 'package:mg_read/platform/platform_capabilities.dart';
+import 'package:mgread_ohos_system/mgread_ohos_system.dart';
 import 'package:mgread_plugin_runtime/mgread_plugin_runtime.dart';
 
 /// OHOS arm64 real-device acceptance for the embedded Node Runtime.
@@ -25,6 +28,10 @@ void main() {
     expect(capabilities.supportsOhosNetworkEvents.available, isTrue);
     expect(capabilities.supportsOhosAppUpdate.available, isFalse);
     expect(capabilities.supportsOhosAppUpdate.reason, 'install_bundle_signature_permission_required');
+    final localAddresses = await OhosSystemClient.getLocalNetworkAddresses();
+    debugPrint('OHOS Network Kit local addresses: $localAddresses');
+    expect(localAddresses, isNotEmpty);
+    expect(await PlatformLanSyncNetworkEnvironment().isLocalNetworkAvailable(), isTrue);
 
     final runtime = PluginRuntime();
     final ping = await runtime.invoke(const RuntimePingInvocation());

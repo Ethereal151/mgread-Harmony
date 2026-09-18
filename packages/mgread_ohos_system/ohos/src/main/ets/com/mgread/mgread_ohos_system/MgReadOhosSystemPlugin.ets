@@ -99,6 +99,9 @@ export default class MgReadOhosSystemPlugin implements FlutterPlugin, MethodCall
       case 'isLocalNetworkAvailable':
         this.isLocalNetworkAvailable(result)
         break
+      case 'getLocalNetworkAddresses':
+        this.getLocalNetworkAddresses(result)
+        break
       case 'getCapabilities':
         this.getCapabilities(result)
         break
@@ -113,6 +116,27 @@ export default class MgReadOhosSystemPlugin implements FlutterPlugin, MethodCall
       result.success(await connection.hasDefaultNet())
     } catch (error) {
       result.error('network_probe_failed', this.errorMessage(error), null)
+    }
+  }
+
+  private async getLocalNetworkAddresses(result: MethodResult): Promise<void> {
+    try {
+      if (!(await connection.hasDefaultNet())) {
+        result.success([])
+        return
+      }
+      const netHandle = await connection.getDefaultNet()
+      const properties = await connection.getConnectionProperties(netHandle)
+      const addresses: string[] = []
+      for (const linkAddress of properties.linkAddresses) {
+        const address = linkAddress.address.address
+        if (linkAddress.address.family === 1 || linkAddress.address.family === undefined) {
+          addresses.push(address)
+        }
+      }
+      result.success(addresses)
+    } catch (error) {
+      result.error('network_address_probe_failed', this.errorMessage(error), null)
     }
   }
 
