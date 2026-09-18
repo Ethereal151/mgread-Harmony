@@ -5,7 +5,7 @@ import 'package:mgread_plugin_runtime/src/ohos_browser_session_host.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   test(
-    'returns a stable unsupported error until ArkWeb registers a native host',
+    'maps a missing native ArkWeb host to stable unsupported',
     () async {
       const channel = MethodChannel(
         'mgread_plugin_runtime/ohos_browser_session',
