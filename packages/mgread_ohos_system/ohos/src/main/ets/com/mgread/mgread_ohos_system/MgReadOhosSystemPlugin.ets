@@ -117,17 +117,18 @@ export default class MgReadOhosSystemPlugin implements FlutterPlugin, MethodCall
   }
 
   private async getCapabilities(result: MethodResult): Promise<void> {
-    const architecture = 'unknown'
+    const architecture = deviceInfo.abiList.trim().length > 0 ? deviceInfo.abiList.trim() : 'unknown'
+    const apiVersion = deviceInfo.sdkApiVersion > 0 ? `API ${deviceInfo.sdkApiVersion}` : 'unknown'
     const networkEventsAvailable = this.networkConnection !== undefined
     const snapshot: OhosCapabilitySnapshotPayload = {
-      supportsOhosRuntime: this.probe(true, 'native_runtime', 'API 8+', architecture),
+      supportsOhosRuntime: this.probe(true, 'native_runtime', apiVersion, architecture),
       supportsOhosWebView: this.probe(false, 'arkweb_host_not_registered', 'unknown', architecture),
-      supportsOhosBackgroundAudio: this.probe(true, 'avsession_native_bridge_registered', '10', architecture),
+      supportsOhosBackgroundAudio: this.probe(true, 'avsession_native_bridge_registered', apiVersion, architecture),
       supportsOhosAppUpdate: this.probe(false, 'install_bundle_signature_permission_required', 'unknown', architecture),
       supportsOhosNetworkEvents: this.probe(
         networkEventsAvailable,
         networkEventsAvailable ? 'network_kit' : 'network_kit_unavailable',
-        'API 8+',
+        apiVersion,
         architecture,
       ),
     }
