@@ -71,6 +71,10 @@ final class OhosAudioPlaybackBackend implements AudioPlaybackBackend {
         headers: _tracks[initialIndex].httpHeaders,
         initialPosition: Duration.zero,
         play: play,
+        trackId: _tracks[initialIndex].id,
+        title: _tracks[initialIndex].title,
+        artist: _tracks[initialIndex].creator,
+        artwork: _tracks[initialIndex].artwork,
       );
       if (!_isCurrent(generation)) return;
       _emit(
@@ -173,6 +177,12 @@ final class OhosAudioPlaybackBackend implements AudioPlaybackBackend {
       case 'interrupted':
         if (value == true) {
           _emit(_snapshot.copyWith(playing: false, buffering: false));
+        }
+      case 'remoteCommand':
+        if (value == 'next') {
+          unawaited(next());
+        } else if (value == 'previous') {
+          unawaited(previous());
         }
       case 'volume':
         _emit(

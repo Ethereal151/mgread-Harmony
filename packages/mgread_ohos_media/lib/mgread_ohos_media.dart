@@ -68,12 +68,22 @@ final class OhosMediaClient {
     required Map<String, String> headers,
     required Duration initialPosition,
     required bool play,
+    String? trackId,
+    String? title,
+    String? artist,
+    String? queueTitle,
+    Uri? artwork,
   }) => _open('audio.open', <String, Object?>{
     'sessionId': sessionId,
     'url': uri.toString(),
     'headers': headers,
     'initialPositionMs': initialPosition.inMilliseconds,
     'play': play,
+    if (trackId != null) 'trackId': trackId,
+    if (title != null) 'title': title,
+    if (artist != null) 'artist': artist,
+    if (queueTitle != null) 'queueTitle': queueTitle,
+    if (artwork != null) 'artworkUrl': artwork.toString(),
   });
 
   Future<OhosMediaOpenResult> openVideo({

@@ -105,6 +105,9 @@ final class PlatformAppUpdateService implements AppUpdateService {
 
   @override
   Future<void> ensureInstallPermission() async {
+    if (_dependencies.isOhos) {
+      throw StateError('app_update_install_unsupported');
+    }
     if (!_dependencies.isAndroid) return;
     try {
       await _appUpdateChannel.invokeMethod<void>('ensureInstallPermission');
@@ -164,8 +167,10 @@ final class PlatformAppUpdateService implements AppUpdateService {
       AppPackageOffer(
         version: current,
         available: current.platform == AppUpdatePlatform.android || current.platform == AppUpdatePlatform.windows,
-        reason: current.platform == AppUpdatePlatform.macos || current.platform == AppUpdatePlatform.ohos
+        reason: current.platform == AppUpdatePlatform.macos
             ? 'app_update_platform_unsupported'
+            : current.platform == AppUpdatePlatform.ohos
+            ? 'app_update_install_unsupported'
             : null,
       ),
     ];

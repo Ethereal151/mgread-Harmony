@@ -7,9 +7,13 @@ import {
   MethodCallHandler,
   MethodChannel,
   MethodResult,
+  AbilityAware,
+  AbilityPluginBinding,
 } from '@ohos/flutter_ohos'
+import common from '@ohos.app.ability.common'
 import media from '@ohos.multimedia.media'
 import audio from '@ohos.multimedia.audio'
+import avSession from '@ohos.multimedia.avsession'
 import { SurfaceTextureEntry, TextureRegistry } from '@ohos/flutter_ohos'
 import OhosMediaEventStreamHandler from './OhosMediaEventStreamHandler'
 
@@ -27,12 +31,20 @@ interface OhosMediaEventPayload {
 }
 
 /** Native AVPlayer owner for OHOS audio and video sessions. */
-export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallHandler {
+export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallHandler, AbilityAware {
   private methodChannel?: MethodChannel
   private eventChannel?: EventChannel
   private readonly events = new OhosMediaEventStreamHandler()
   private sessions: Map<string, MediaSession> = new Map()
   private textures?: TextureRegistry
+  private context?: common.UIAbilityContext
+  private audioSession?: avSession.AVSession
+  private audioSessionId?: string
+  private audioState: avSession.PlaybackState = avSession.PlaybackState.PLAYBACK_STATE_INITIAL
+  private audioPosition = 0
+  private audioDuration = 0
+  private audioSpeed = 1
+  private audioVolume = 1
 
   getUniqueClassName(): string {
     return 'MgReadOhosMediaPlugin'
@@ -46,12 +58,23 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
     this.eventChannel.setStreamHandler(this.events)
   }
 
+  onAttachedToAbility(binding: AbilityPluginBinding): void {
+    this.context = binding.getAbility().context as common.UIAbilityContext
+  }
+
+  onDetachedFromAbility(): void {
+    this.context = undefined
+    this.destroyAudioSession()
+  }
+
   onDetachedFromEngine(binding: FlutterPluginBinding): void {
     this.methodChannel?.setMethodCallHandler(null)
     this.eventChannel?.setStreamHandler(null)
     this.methodChannel = undefined
     this.eventChannel = undefined
     this.disposeAll()
+    this.destroyAudioSession()
+    this.context = undefined
     this.textures = undefined
   }
 
@@ -129,6 +152,7 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
       await player.prepare()
       const initialPosition = this.number(args, 'initialPositionMs')
       if (initialPosition > 0) player.seek(initialPosition)
+      if (!video) await this.prepareAudioSession(sessionId, args, player.duration)
       if (args?.['play'] === true) await player.play()
       result.success({
         sessionId,
@@ -148,9 +172,19 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
       if (state === 'playing') this.emit(sessionId, 'playing', true)
       if (state === 'paused' || state === 'completed' || state === 'stopped') this.emit(sessionId, 'playing', false)
       if (state === 'completed') this.emit(sessionId, 'completed', true)
+      if (!session.video) {
+        const playbackState = this.playbackState(state)
+        if (playbackState !== undefined) this.syncAudioPlaybackState(sessionId, playbackState)
+      }
     })
-    player.on('timeUpdate', (value: number) => this.emit(sessionId, 'position', value))
-    player.on('durationUpdate', (value: number) => this.emit(sessionId, 'duration', value))
+    player.on('timeUpdate', (value: number) => {
+      this.emit(sessionId, 'position', value)
+      if (!session.video) this.syncAudioPlaybackState(sessionId, undefined, value)
+    })
+    player.on('durationUpdate', (value: number) => {
+      this.emit(sessionId, 'duration', value)
+      if (!session.video) this.syncAudioPlaybackState(sessionId, undefined, undefined, value)
+    })
     player.on('bufferingUpdate', (kind: media.BufferingInfoType, value: number) => {
       if (kind === media.BufferingInfoType.BUFFERING_START) {
         this.emit(sessionId, 'buffering', true)
@@ -160,8 +194,14 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
     })
     player.on('startRenderFrame', () => this.emit(sessionId, 'firstFrame', true))
     player.on('endOfStream', () => this.emit(sessionId, 'completed', true))
-    player.on('volumeChange', (value: number) => this.emit(sessionId, 'volume', value))
-    player.on('playbackRateDone', (value: number) => this.emit(sessionId, 'rate', value))
+    player.on('volumeChange', (value: number) => {
+      this.emit(sessionId, 'volume', value)
+      if (!session.video) this.syncAudioPlaybackState(sessionId, undefined, undefined, undefined, undefined, value)
+    })
+    player.on('playbackRateDone', (value: number) => {
+      this.emit(sessionId, 'rate', value)
+      if (!session.video) this.syncAudioPlaybackState(sessionId, undefined, undefined, undefined, value)
+    })
     player.on('error', (error: Error) => this.emit(sessionId, 'error', null, this.errorMessage(error)))
     player.on('audioInterrupt', (event: audio.InterruptEvent) => {
       this.emit(sessionId, 'interrupted', event.eventType === audio.InterruptType.INTERRUPT_TYPE_BEGIN)
@@ -188,6 +228,7 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
     const session = this.sessions.get(sessionId)
     if (session === undefined) return
     this.sessions.delete(sessionId)
+    if (sessionId === this.audioSessionId) this.audioSessionId = undefined
     try {
       await session.player.release()
     } catch (_) {
@@ -214,5 +255,115 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
 
   private errorMessage(error: Object): string {
     return String((error as Record<string, Any>)['message'] ?? error)
+  }
+
+  private async prepareAudioSession(
+    sessionId: string,
+    args: Record<string, Any> | null,
+    duration: number,
+  ): Promise<void> {
+    if (this.context === undefined) {
+      throw new Error('avsession_unavailable: The OHOS ability context is not ready.')
+    }
+    if (this.audioSession === undefined) {
+      const session = await avSession.createAVSession(this.context, 'MgRead', 'audio')
+      session.on('play', () => this.runAudioCommand('play'))
+      session.on('pause', () => this.runAudioCommand('pause'))
+      session.on('playNext', () => this.emitRemoteCommand('next'))
+      session.on('playPrevious', () => this.emitRemoteCommand('previous'))
+      session.on('seek', (position: number) => this.runAudioCommand('seek', position))
+      await session.activate()
+      this.audioSession = session
+    }
+    this.audioSessionId = sessionId
+    this.audioState = avSession.PlaybackState.PLAYBACK_STATE_PREPARE
+    this.audioPosition = 0
+    this.audioDuration = duration
+    this.audioSpeed = 1
+    const metadata: avSession.AVMetadata = {
+      assetId: (args?.['trackId'] as string | undefined) ?? sessionId,
+      title: args?.['title'] as string | undefined,
+      artist: args?.['artist'] as string | undefined,
+      avQueueName: args?.['queueTitle'] as string | undefined,
+      mediaImage: args?.['artworkUrl'] as string | undefined,
+      duration,
+    }
+    await this.audioSession.setAVMetadata(metadata)
+    await this.syncAudioPlaybackState(sessionId)
+  }
+
+  private syncAudioPlaybackState(
+    sessionId: string,
+    state?: avSession.PlaybackState,
+    position?: number,
+    duration?: number,
+    speed?: number,
+    volume?: number,
+  ): void {
+    if (this.audioSessionId !== sessionId || this.audioSession === undefined) return
+    if (state !== undefined) this.audioState = state
+    if (position !== undefined) this.audioPosition = position
+    if (duration !== undefined) this.audioDuration = duration
+    if (speed !== undefined) this.audioSpeed = speed
+    if (volume !== undefined) this.audioVolume = volume
+    this.audioSession.setAVPlaybackState({
+      state: this.audioState,
+      speed: this.audioSpeed,
+      position: { elapsedTime: this.audioPosition, updateTime: Date.now() },
+      duration: this.audioDuration,
+      volume: this.audioVolume,
+    }).catch((error: Error) => {
+      this.emit(sessionId, 'error', null, `avsession_state_failed: ${this.errorMessage(error)}`)
+    })
+  }
+
+  private playbackState(state: media.AVPlayerState): avSession.PlaybackState | undefined {
+    switch (state) {
+      case 'playing':
+        return avSession.PlaybackState.PLAYBACK_STATE_PLAY
+      case 'paused':
+        return avSession.PlaybackState.PLAYBACK_STATE_PAUSE
+      case 'completed':
+        return avSession.PlaybackState.PLAYBACK_STATE_COMPLETED
+      case 'stopped':
+        return avSession.PlaybackState.PLAYBACK_STATE_STOP
+      default:
+        return undefined
+    }
+  }
+
+  private emitRemoteCommand(command: string): void {
+    const sessionId = this.audioSessionId
+    if (sessionId !== undefined) this.emit(sessionId, 'remoteCommand', command)
+  }
+
+  private runAudioCommand(command: string, value?: number): void {
+    const sessionId = this.audioSessionId
+    const session = sessionId === undefined ? undefined : this.sessions.get(sessionId)
+    if (session === undefined) return
+    const activeSessionId = sessionId as string
+    let operation: Promise<void>
+    switch (command) {
+      case 'play':
+        operation = session.player.play()
+        break
+      case 'pause':
+        operation = session.player.pause()
+        break
+      case 'seek':
+        session.player.seek(value ?? 0)
+        operation = Promise.resolve()
+        break
+      default:
+        return
+    }
+    operation.catch((error: Error) => this.emit(activeSessionId, 'error', null, `avsession_control_failed: ${this.errorMessage(error)}`))
+  }
+
+  private destroyAudioSession(): void {
+    const session = this.audioSession
+    this.audioSession = undefined
+    this.audioSessionId = undefined
+    if (session !== undefined) session.destroy().catch(() => {})
   }
 }
