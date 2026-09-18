@@ -30,4 +30,22 @@ void main() {
     expect(await connected.isLocalNetworkAvailable(), isTrue);
     expect(await disconnected.isLocalNetworkAvailable(), isFalse);
   });
+
+  test('OHOS requires Network Kit availability and a local address', () async {
+    final connected = PlatformLanSyncNetworkEnvironment(
+      requiresAndroidWifi: false,
+      requiresOhosNetwork: true,
+      ohosNetworkStatusResolver: () async => true,
+      addressResolver: () async => const <String>['192.168.1.20'],
+    );
+    final cellularOnly = PlatformLanSyncNetworkEnvironment(
+      requiresAndroidWifi: false,
+      requiresOhosNetwork: true,
+      ohosNetworkStatusResolver: () async => true,
+      addressResolver: () async => const <String>[],
+    );
+
+    expect(await connected.isLocalNetworkAvailable(), isTrue);
+    expect(await cellularOnly.isLocalNetworkAvailable(), isFalse);
+  });
 }

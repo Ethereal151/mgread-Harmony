@@ -7,7 +7,60 @@ library;
 
 import 'dart:io';
 
+import 'package:mgread_plugin_runtime/mgread_plugin_runtime.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:mgread_ohos_system/mgread_ohos_system.dart';
+
+/// Immutable result of one native OHOS capability probe.
+final class OhosCapability {
+  const OhosCapability({required this.available, required this.reason, required this.apiVersion, required this.architecture});
+
+  final bool available;
+  final String reason;
+  final String apiVersion;
+  final String architecture;
+
+  factory OhosCapability.unavailable(String reason) => OhosCapability(
+    available: false,
+    reason: reason,
+    apiVersion: 'unknown',
+    architecture: 'unknown',
+  );
+}
+
+/// Native OHOS probes used by feature entry points and diagnostics.
+final class OhosCapabilitySnapshot {
+  const OhosCapabilitySnapshot({
+    required this.supportsOhosRuntime,
+    required this.supportsOhosWebView,
+    required this.supportsOhosBackgroundAudio,
+    required this.supportsOhosAppUpdate,
+    required this.supportsOhosNetworkEvents,
+  });
+
+  factory OhosCapabilitySnapshot.unavailable(String reason) => OhosCapabilitySnapshot(
+    supportsOhosRuntime: OhosCapability.unavailable(reason),
+    supportsOhosWebView: OhosCapability.unavailable(reason),
+    supportsOhosBackgroundAudio: OhosCapability.unavailable(reason),
+    supportsOhosAppUpdate: OhosCapability.unavailable(reason),
+    supportsOhosNetworkEvents: OhosCapability.unavailable(reason),
+  );
+
+  final OhosCapability supportsOhosRuntime;
+  final OhosCapability supportsOhosWebView;
+  final OhosCapability supportsOhosBackgroundAudio;
+  final OhosCapability supportsOhosAppUpdate;
+  final OhosCapability supportsOhosNetworkEvents;
+
+  OhosCapability operator [](String name) => switch (name) {
+    'supportsOhosRuntime' => supportsOhosRuntime,
+    'supportsOhosWebView' => supportsOhosWebView,
+    'supportsOhosBackgroundAudio' => supportsOhosBackgroundAudio,
+    'supportsOhosAppUpdate' => supportsOhosAppUpdate,
+    'supportsOhosNetworkEvents' => supportsOhosNetworkEvents,
+    _ => throw ArgumentError.value(name, 'name', 'Unknown OHOS capability'),
+  };
+}
 
 /// The platform services that the current Flutter host can safely use.
 final class PlatformCapabilities {
@@ -51,10 +104,44 @@ final class PlatformCapabilities {
   /// Whether the Flutter Runtime bridge is registered.
   bool get supportsPluginRuntime => isAndroid || isWindows || isMacOS || isOhos;
 
-  /// Whether a verified executable/embedded Node host is available. The x64
-  /// emulator intentionally uses the native stub; arm64 is enabled only after
-  /// the real-device smoke gate.
-  bool get supportsPluginRuntimeNode => isAndroid || isWindows || isMacOS;
+  /// Whether this platform has a native Node host route. OHOS performs a
+  /// separate ABI probe because the x64 emulator intentionally uses a stub.
+  bool get supportsPluginRuntimeNode => isAndroid || isWindows || isMacOS || isOhos;
+
+  /// Reads all OHOS probes through the native system bridge.
+  Future<OhosCapabilitySnapshot> probe() async {
+    if (!isOhos) return OhosCapabilitySnapshot.unavailable('not_ohos');
+    try {
+      final raw = await OhosSystemClient.getCapabilitySnapshot();
+      OhosCapability read(String key) {
+        final value = raw[key];
+        if (value == null) return OhosCapability.unavailable('probe_missing');
+        return OhosCapability(
+          available: value.available,
+          reason: value.reason,
+          apiVersion: value.apiVersion,
+          architecture: value.architecture,
+        );
+      }
+      final runtimeBridge = read('supportsOhosRuntime');
+      final runtimeAvailable = await PluginRuntime.ohosNodeHostAvailable();
+      final runtime = OhosCapability(
+        available: runtimeBridge.available && runtimeAvailable,
+        reason: runtimeBridge.available && runtimeAvailable ? runtimeBridge.reason : 'native_node_host_unavailable',
+        apiVersion: runtimeBridge.apiVersion,
+        architecture: runtimeBridge.architecture,
+      );
+      return OhosCapabilitySnapshot(
+        supportsOhosRuntime: runtime,
+        supportsOhosWebView: read('supportsOhosWebView'),
+        supportsOhosBackgroundAudio: read('supportsOhosBackgroundAudio'),
+        supportsOhosAppUpdate: read('supportsOhosAppUpdate'),
+        supportsOhosNetworkEvents: read('supportsOhosNetworkEvents'),
+      );
+    } on Object {
+      return OhosCapabilitySnapshot.unavailable('probe_failed');
+    }
+  }
 
   /// Resolves the app-owned persistence directory.
   ///

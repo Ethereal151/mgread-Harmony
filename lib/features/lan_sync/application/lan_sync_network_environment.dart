@@ -9,6 +9,11 @@ abstract interface class LanSyncNetworkEnvironment {
   Future<bool> isLocalNetworkAvailable();
 }
 
+/// Optional event side-channel for native network bridges.
+abstract interface class LanSyncNetworkEvents {
+  Stream<bool> get availabilityChanges;
+}
+
 final lanSyncNetworkEnvironmentProvider = Provider<LanSyncNetworkEnvironment>((ref) => const _UnavailableLanSyncNetworkEnvironment());
 
 final class _UnavailableLanSyncNetworkEnvironment implements LanSyncNetworkEnvironment {

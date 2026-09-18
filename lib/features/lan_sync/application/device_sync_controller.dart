@@ -67,6 +67,8 @@ final class DeviceSyncController extends _DeviceSyncOperationsBase {
   @override
   Timer? _networkProbeTimer;
   @override
+  StreamSubscription<bool>? _networkAvailabilitySubscription;
+  @override
   Timer? _mobileDevelopmentSyncTimer;
   @override
   Future<bool>? _networkRefreshFuture;

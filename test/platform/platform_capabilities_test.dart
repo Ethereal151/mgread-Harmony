@@ -33,4 +33,14 @@ void main() {
     expect(capabilities.supportsVideoPlayback, isTrue);
     expect(capabilities.supportsBarcodeScanning, isTrue);
   });
+
+  test('non-OHOS capability probe is explicit and never touches a channel', () async {
+    final snapshot = await PlatformCapabilities.forOperatingSystem('windows').probe();
+
+    expect(snapshot.supportsOhosRuntime.available, isFalse);
+    expect(snapshot.supportsOhosRuntime.reason, 'not_ohos');
+    expect(snapshot.supportsOhosRuntime.apiVersion, 'unknown');
+    expect(snapshot.supportsOhosRuntime.architecture, 'unknown');
+    expect(snapshot['supportsOhosNetworkEvents'].available, isFalse);
+  });
 }

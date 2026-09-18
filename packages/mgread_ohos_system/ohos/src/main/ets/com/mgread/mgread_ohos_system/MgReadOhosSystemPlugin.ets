@@ -2,6 +2,7 @@ import {
   Any,
   AbilityAware,
   AbilityPluginBinding,
+  EventChannel,
   FlutterPlugin,
   FlutterPluginBinding,
   MethodCall,
@@ -14,12 +15,32 @@ import bundleManager from '@ohos.bundle.bundleManager'
 import filePicker from '@ohos.file.picker'
 import fileUri from '@ohos.file.fileuri'
 import fs from '@ohos.file.fs'
+import connection from '@ohos.net.connection'
 import wantConstant from '@ohos.ability.wantConstant'
+import OhosNetworkEventStreamHandler from './OhosNetworkEventStreamHandler'
+
+interface OhosCapabilityProbePayload {
+  available: boolean
+  reason: string
+  apiVersion: string
+  architecture: string
+}
+
+interface OhosCapabilitySnapshotPayload {
+  supportsOhosRuntime: OhosCapabilityProbePayload
+  supportsOhosWebView: OhosCapabilityProbePayload
+  supportsOhosBackgroundAudio: OhosCapabilityProbePayload
+  supportsOhosAppUpdate: OhosCapabilityProbePayload
+  supportsOhosNetworkEvents: OhosCapabilityProbePayload
+}
 
 /** Owns file picker, package metadata, sharing, and external URI intents on OHOS. */
 export default class MgReadOhosSystemPlugin implements FlutterPlugin, MethodCallHandler, AbilityAware {
   private channel?: MethodChannel
+  private eventChannel?: EventChannel
   private context?: common.UIAbilityContext
+  private readonly networkEvents = new OhosNetworkEventStreamHandler()
+  private networkConnection?: connection.NetConnection
 
   getUniqueClassName(): string {
     return 'MgReadOhosSystemPlugin'
@@ -28,6 +49,9 @@ export default class MgReadOhosSystemPlugin implements FlutterPlugin, MethodCall
   onAttachedToEngine(binding: FlutterPluginBinding): void {
     this.channel = new MethodChannel(binding.getBinaryMessenger(), 'mgread/ohos_system')
     this.channel.setMethodCallHandler(this)
+    this.eventChannel = new EventChannel(binding.getBinaryMessenger(), 'mgread/network_environment/events')
+    this.eventChannel.setStreamHandler(this.networkEvents)
+    this.attachNetworkEvents()
   }
 
   onAttachedToAbility(binding: AbilityPluginBinding): void {
@@ -40,8 +64,15 @@ export default class MgReadOhosSystemPlugin implements FlutterPlugin, MethodCall
 
   onDetachedFromEngine(binding: FlutterPluginBinding): void {
     this.channel?.setMethodCallHandler(null)
+    this.eventChannel?.setStreamHandler(null)
     this.channel = undefined
+    this.eventChannel = undefined
     this.context = undefined
+    const network = this.networkConnection
+    this.networkConnection = undefined
+    if (network !== undefined) {
+      network.unregister((_error: Object | undefined): void => {})
+    }
   }
 
   onMethodCall(call: MethodCall, result: MethodResult): void {
@@ -61,9 +92,58 @@ export default class MgReadOhosSystemPlugin implements FlutterPlugin, MethodCall
       case 'getPackageInfo':
         this.getPackageInfo(result)
         break
+      case 'isLocalNetworkAvailable':
+        this.isLocalNetworkAvailable(result)
+        break
+      case 'getCapabilities':
+        this.getCapabilities(result)
+        break
       default:
         result.notImplemented()
         break
+    }
+  }
+
+  private async isLocalNetworkAvailable(result: MethodResult): Promise<void> {
+    try {
+      result.success(await connection.hasDefaultNet())
+    } catch (error) {
+      result.error('network_probe_failed', this.errorMessage(error), null)
+    }
+  }
+
+  private async getCapabilities(result: MethodResult): Promise<void> {
+    const architecture = 'unknown'
+    const networkEventsAvailable = this.networkConnection !== undefined
+    const snapshot: OhosCapabilitySnapshotPayload = {
+      supportsOhosRuntime: this.probe(true, 'native_runtime', 'API 8+', architecture),
+      supportsOhosWebView: this.probe(false, 'arkweb_host_not_registered', 'unknown', architecture),
+      supportsOhosBackgroundAudio: this.probe(false, 'avsession_host_not_registered', 'unknown', architecture),
+      supportsOhosAppUpdate: this.probe(false, 'system_install_confirmation_not_registered', 'unknown', architecture),
+      supportsOhosNetworkEvents: this.probe(
+        networkEventsAvailable,
+        networkEventsAvailable ? 'network_kit' : 'network_kit_unavailable',
+        'API 8+',
+        architecture,
+      ),
+    }
+    result.success(snapshot)
+  }
+
+  private probe(available: boolean, reason: string, apiVersion: string, architecture: string): OhosCapabilityProbePayload {
+    return {available, reason, apiVersion, architecture}
+  }
+
+  private attachNetworkEvents(): void {
+    try {
+      const network = connection.createNetConnection()
+      network.on('netAvailable', (_handle: connection.NetHandle): void => this.networkEvents.emit(true))
+      network.on('netLost', (_handle: connection.NetHandle): void => this.networkEvents.emit(false))
+      network.on('netUnavailable', (): void => this.networkEvents.emit(false))
+      network.register((_error: Object | undefined): void => {})
+      this.networkConnection = network
+    } catch (_) {
+      this.networkConnection = undefined
     }
   }
 

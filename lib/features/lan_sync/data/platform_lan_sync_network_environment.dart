@@ -14,23 +14,36 @@ import 'package:mg_read/features/lan_sync/data/lan_sync_transport.dart';
 typedef AndroidWifiStatusResolver = Future<bool?> Function();
 typedef LanSyncAddressResolver = Future<List<String>> Function();
 
-final class PlatformLanSyncNetworkEnvironment implements LanSyncNetworkEnvironment {
+final class PlatformLanSyncNetworkEnvironment implements LanSyncNetworkEnvironment, LanSyncNetworkEvents {
   PlatformLanSyncNetworkEnvironment({
     bool? requiresAndroidWifi,
+    bool? requiresOhosNetwork,
     AndroidWifiStatusResolver? androidWifiStatusResolver,
+    AndroidWifiStatusResolver? ohosNetworkStatusResolver,
     LanSyncAddressResolver? addressResolver,
   }) : _requiresAndroidWifi = requiresAndroidWifi ?? Platform.isAndroid,
+       _requiresOhosNetwork = requiresOhosNetwork ?? Platform.operatingSystem == 'ohos',
        _androidWifiStatusResolver = androidWifiStatusResolver ?? _readAndroidWifiStatus,
+       _ohosNetworkStatusResolver = ohosNetworkStatusResolver ?? _readOhosNetworkStatus,
        _addressResolver = addressResolver ?? eligibleLanSyncAddresses;
 
   final bool _requiresAndroidWifi;
+  final bool _requiresOhosNetwork;
   final AndroidWifiStatusResolver _androidWifiStatusResolver;
+  final AndroidWifiStatusResolver _ohosNetworkStatusResolver;
   final LanSyncAddressResolver _addressResolver;
+
+  @override
+  Stream<bool> get availabilityChanges => _requiresOhosNetwork ? _ohosNetworkChanges : const Stream<bool>.empty();
 
   @override
   Future<bool> isLocalNetworkAvailable() async {
     try {
       if (_requiresAndroidWifi) return await _androidWifiStatusResolver() ?? false;
+      if (_requiresOhosNetwork) {
+        final nativeAvailable = await _ohosNetworkStatusResolver() ?? false;
+        return nativeAvailable && (await _addressResolver()).isNotEmpty;
+      }
       return (await _addressResolver()).isNotEmpty;
     } on Object {
       return false;
@@ -39,5 +52,10 @@ final class PlatformLanSyncNetworkEnvironment implements LanSyncNetworkEnvironme
 }
 
 const MethodChannel _networkEnvironmentChannel = MethodChannel('mgread/network_environment');
+const EventChannel _networkEnvironmentEvents = EventChannel('mgread/network_environment/events');
 
 Future<bool?> _readAndroidWifiStatus() => _networkEnvironmentChannel.invokeMethod<bool>('isWifiConnected');
+
+Future<bool?> _readOhosNetworkStatus() => _networkEnvironmentChannel.invokeMethod<bool>('isLocalNetworkAvailable');
+
+Stream<bool> get _ohosNetworkChanges => _networkEnvironmentEvents.receiveBroadcastStream().where((value) => value is bool).cast<bool>();

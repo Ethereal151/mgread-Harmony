@@ -30,6 +30,30 @@ final class OhosSystemClient {
     if (version == null || version.trim().isEmpty || build == null) return null;
     return OhosPackageInfo(version: version, build: build);
   }
+
+  /// Returns native OHOS capability probes. The application owns the public
+  /// immutable snapshot model; this package only validates the channel shape.
+  static Future<Map<String, OhosCapabilityProbe>> getCapabilitySnapshot() async {
+    final value = await _channel.invokeMethod<Object?>('getCapabilities');
+    if (value is! Map) return const <String, OhosCapabilityProbe>{};
+    final result = <String, OhosCapabilityProbe>{};
+    for (final entry in value.entries) {
+      if (entry.key is! String || entry.value is! Map) continue;
+      final map = entry.value as Map;
+      final available = map['available'];
+      final reason = map['reason'];
+      final apiVersion = map['apiVersion'];
+      final architecture = map['architecture'];
+      if (available is! bool || reason is! String || apiVersion is! String || architecture is! String) continue;
+      result[entry.key as String] = OhosCapabilityProbe(
+        available: available,
+        reason: reason,
+        apiVersion: apiVersion,
+        architecture: architecture,
+      );
+    }
+    return Map<String, OhosCapabilityProbe>.unmodifiable(result);
+  }
 }
 
 final class OhosPackageInfo {
@@ -37,4 +61,13 @@ final class OhosPackageInfo {
 
   final String version;
   final int build;
+}
+
+final class OhosCapabilityProbe {
+  const OhosCapabilityProbe({required this.available, required this.reason, required this.apiVersion, required this.architecture});
+
+  final bool available;
+  final String reason;
+  final String apiVersion;
+  final String architecture;
 }

@@ -11,6 +11,8 @@ abstract base class _DeviceSyncNetworkBase extends Notifier<DeviceSyncState> {
   PairedSyncHost? get _host;
   Timer? get _networkProbeTimer;
   set _networkProbeTimer(Timer? value);
+  StreamSubscription<bool>? get _networkAvailabilitySubscription;
+  set _networkAvailabilitySubscription(StreamSubscription<bool>? value);
   Timer? get _mobileDevelopmentSyncTimer;
   set _mobileDevelopmentSyncTimer(Timer? value);
   Future<bool>? get _networkRefreshFuture;
@@ -42,6 +44,13 @@ abstract base class _DeviceSyncNetworkBase extends Notifier<DeviceSyncState> {
 
   void _startNetworkMonitor() {
     if (_networkProbeTimer != null || state.devices.isEmpty) return;
+    final environment = ref.read(lanSyncNetworkEnvironmentProvider);
+    if (environment is LanSyncNetworkEvents) {
+      final events = environment as LanSyncNetworkEvents;
+      _networkAvailabilitySubscription ??= events.availabilityChanges.listen((_) {
+        if (!_disposed && _foregroundDesired) unawaited(_refreshNetworkAvailability());
+      });
+    }
     _networkProbeTimer = Timer.periodic(_networkProbeInterval, (_) {
       if (!_disposed && _foregroundDesired) unawaited(_refreshNetworkAvailability());
     });
@@ -50,6 +59,8 @@ abstract base class _DeviceSyncNetworkBase extends Notifier<DeviceSyncState> {
   void _stopNetworkMonitor() {
     _networkProbeTimer?.cancel();
     _networkProbeTimer = null;
+    unawaited(_networkAvailabilitySubscription?.cancel());
+    _networkAvailabilitySubscription = null;
     _mobileDevelopmentSyncTimer?.cancel();
     _mobileDevelopmentSyncTimer = null;
   }
