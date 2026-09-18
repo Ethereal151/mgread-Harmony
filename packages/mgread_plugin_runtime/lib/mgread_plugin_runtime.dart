@@ -25,6 +25,9 @@ import 'src/browser_session_host.dart';
 import 'src/windows_browser_session_host.dart';
 import 'src/ohos_browser_session_host.dart';
 
+export 'src/ohos_browser_session_surface.dart';
+export 'src/ohos_browser_session_host.dart';
+
 part 'src/windows_system_proxy.dart';
 part 'src/system_proxy.dart';
 part 'src/desktop_supervisor.dart';

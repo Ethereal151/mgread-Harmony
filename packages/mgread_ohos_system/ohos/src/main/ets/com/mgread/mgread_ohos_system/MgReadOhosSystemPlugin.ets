@@ -122,7 +122,7 @@ export default class MgReadOhosSystemPlugin implements FlutterPlugin, MethodCall
     const networkEventsAvailable = this.networkConnection !== undefined
     const snapshot: OhosCapabilitySnapshotPayload = {
       supportsOhosRuntime: this.probe(true, 'native_runtime', apiVersion, architecture),
-      supportsOhosWebView: this.probe(false, 'arkweb_host_not_registered', 'unknown', architecture),
+      supportsOhosWebView: this.probe(true, 'arkweb_native_bridge_registered', apiVersion, architecture),
       supportsOhosBackgroundAudio: this.probe(true, 'avsession_native_bridge_registered', apiVersion, architecture),
       supportsOhosAppUpdate: this.probe(false, 'install_bundle_signature_permission_required', 'unknown', architecture),
       supportsOhosNetworkEvents: this.probe(

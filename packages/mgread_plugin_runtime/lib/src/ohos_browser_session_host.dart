@@ -1,9 +1,9 @@
 /// OHOS owner for browser.session.v1.
 ///
 /// ArkWeb is intentionally kept behind this narrow MethodChannel boundary.
-/// Until the native ArkWeb host is registered, every operation returns the
-/// stable `unsupported` code; it must never silently fall back to HTTP and
-/// leak a source's Cookie/Profile state outside the Runtime session.
+/// The native host owns the WebView and all Cookie/Profile state; a missing
+/// host still maps to the stable `unsupported` code and never falls back to
+/// HTTP outside the Runtime session.
 library;
 
 import 'package:flutter/services.dart';
@@ -15,6 +15,9 @@ final class OhosBrowserSessionException implements BrowserSessionHostException {
 
   @override
   final String code;
+
+  @override
+  String toString() => 'OhosBrowserSessionException($code)';
 }
 
 final class OhosBrowserSessionHost implements BrowserSessionHost {
@@ -46,7 +49,7 @@ final class OhosBrowserSessionHost implements BrowserSessionHost {
         <String, Object?>{
           'jobId': jobId,
           'deadlineUnixMs': deadlineUnixMs,
-          'raw': raw,
+          ...raw,
         },
       );
       if (value is! Map)

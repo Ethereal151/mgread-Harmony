@@ -16,6 +16,7 @@ import common from '@ohos.app.ability.common'
 import { picker } from '@kit.CoreFileKit'
 import mgreadNodeHost from 'libmgread_node_host.so'
 import OhosRuntimeProgressStreamHandler from './OhosRuntimeProgressStreamHandler'
+import OhosArkWebHost from './OhosArkWebHost'
 
 const RUNTIME_ASSET_PATH = 'packages/mgread_plugin_runtime/assets/runtime/ohos'
 const RUNTIME_DIRECTORY = 'mgread-runtime/ohos'
@@ -28,6 +29,9 @@ const RUNTIME_DIRECTORY = 'mgread-runtime/ohos'
 export default class OhosRuntimePlugin implements FlutterPlugin, MethodCallHandler, AbilityAware {
   private channel?: MethodChannel
   private progressChannel?: EventChannel
+  private browserChannel?: MethodChannel
+  private browserEventChannel?: EventChannel
+  private browserHost?: OhosArkWebHost
   private progressHandler = new OhosRuntimeProgressStreamHandler()
   private context?: common.UIAbilityContext
   private assets?: FlutterAssets
@@ -44,6 +48,12 @@ export default class OhosRuntimePlugin implements FlutterPlugin, MethodCallHandl
     this.channel.setMethodCallHandler(this)
     this.progressChannel = new EventChannel(binding.getBinaryMessenger(), 'mgread_plugin_runtime/ohos/progress')
     this.progressChannel.setStreamHandler(this.progressHandler)
+    this.browserHost = new OhosArkWebHost()
+    this.browserHost.register(binding.getPlatformViewRegistry())
+    this.browserChannel = new MethodChannel(binding.getBinaryMessenger(), 'mgread_plugin_runtime/ohos_browser_session')
+    this.browserChannel.setMethodCallHandler(this.browserHost)
+    this.browserEventChannel = new EventChannel(binding.getBinaryMessenger(), 'mgread_plugin_runtime/ohos_browser_session/events')
+    this.browserEventChannel.setStreamHandler(this.browserHost.getStreamHandler())
   }
 
   onAttachedToAbility(binding: AbilityPluginBinding): void {
@@ -59,6 +69,12 @@ export default class OhosRuntimePlugin implements FlutterPlugin, MethodCallHandl
     this.channel = undefined
     this.progressChannel?.setStreamHandler(null)
     this.progressChannel = undefined
+    this.browserChannel?.setMethodCallHandler(null)
+    this.browserChannel = undefined
+    this.browserEventChannel?.setStreamHandler(null)
+    this.browserEventChannel = undefined
+    this.browserHost?.dispose()
+    this.browserHost = undefined
     if (this.runtimeReady) mgreadNodeHost.dispose()
     this.context = undefined
     this.assets = undefined
