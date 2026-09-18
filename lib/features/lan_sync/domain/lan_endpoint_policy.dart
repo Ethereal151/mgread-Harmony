@@ -17,6 +17,11 @@ bool isLanSyncPrivateIpv4(String address) {
   return a == 10 || (a == 172 && b >= 16 && b <= 31) || (a == 192 && b == 168);
 }
 
+/// Allows the desktop test/development host to discover another host running
+/// in the same process environment. Loopback is still excluded from QR and
+/// persisted peer addresses; it is only used by the local transport path.
+bool isLanSyncTransportIpv4(String address) => address == '127.0.0.1' || isLanSyncPrivateIpv4(address);
+
 List<String> normalizeLanSyncAddresses(Iterable<String> addresses) {
   final normalized = addresses.toSet().toList(growable: false);
   if (normalized.isEmpty ||

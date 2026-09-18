@@ -172,8 +172,8 @@ void main() {
     await incoming.close();
     await incoming.close();
     expect(ScreenAwakeCoordinator.instance.holderCount, 1);
-    expect(calls.last, {'keepScreenOn': true, 'immersiveMode': true});
+    expect(calls.last, {'keepScreenOn': true, 'allowScreenDimming': false, 'immersiveMode': true});
     await ScreenAwakeCoordinator.instance.release(reader);
-    expect(calls.last, {'keepScreenOn': false, 'immersiveMode': false});
+    expect(calls.last, {'keepScreenOn': false, 'allowScreenDimming': false, 'immersiveMode': false});
   });
 }

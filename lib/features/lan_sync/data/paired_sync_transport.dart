@@ -150,6 +150,12 @@ final class PairedSyncHost {
         }),
       );
       _socket.send(bytes, InternetAddress('255.255.255.255'), discoveryPort);
+      if (Platform.isWindows) {
+        // Windows commonly suppresses broadcast delivery between two local
+        // sockets. Keep the LAN broadcast for real peers and add a loopback
+        // copy so desktop development hosts retain deterministic discovery.
+        _socket.send(bytes, InternetAddress.loopbackIPv4, discoveryPort);
+      }
     } on Object {
       // A later announcement retries.
     } finally {
@@ -163,7 +169,7 @@ final class PairedSyncHost {
     while ((datagram = _socket.receive()) != null) {
       final packet = datagram!;
       try {
-        if (!isLanSyncPrivateIpv4(packet.address.address)) continue;
+        if (!isLanSyncTransportIpv4(packet.address.address)) continue;
         final raw = jsonDecode(utf8.decode(packet.data));
         if (raw is! Map) continue;
         if (raw['kind'] == 'mgread-paired-sync-wake') {

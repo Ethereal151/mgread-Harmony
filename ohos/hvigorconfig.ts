@@ -20,6 +20,14 @@ function readLocalProperty(name: string): string | undefined {
 
 const nodeHome = readLocalProperty('nodejs.dir') ?? path.dirname(process.execPath)
 const devecoToolsPath = path.dirname(nodeHome)
+const sdkHome = readLocalProperty('hwsdk.dir')
+
+// DevEco may export DEVECO_SDK_HOME with the legacy `sdk\\default` suffix.
+// The project property is the authoritative SDK root for this checkout and
+// must win before Hvigor resolves the HarmonyOS component set.
+if (sdkHome) {
+  process.env.DEVECO_SDK_HOME = sdkHome
+}
 
 // Avoid the recursive DevEco ohpm.bat wrapper when the IDE starts Hvigor by Node.
 process.env.MGREAD_OHPM_NODE = path.join(nodeHome, 'node.exe')

@@ -33,29 +33,4 @@ extension _LanSyncAppTransferActions on _LanSyncPageState {
       await ref.read(appTransferControllerProvider.notifier).install(force: !appState.remoteIsUpgrade);
     }
   }
-
-  Future<void> _confirmPairedAppUpdate(String deviceId, bool force) async {
-    final deviceState = ref.read(deviceSyncControllerProvider);
-    final offer = deviceState.appOffersByDeviceId[deviceId];
-    final local = deviceState.localAppVersion;
-    if (offer == null || local == null) return;
-    final accepted = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(force ? '强制安装此版本？' : '从在线设备升级 App？'),
-        content: AppVersionComparisonCard(local: local, remote: offer.version, pairingCode: null),
-        actions: <Widget>[
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')),
-          FilledButton(
-            key: const Key('paired-app-update-confirm'),
-            onPressed: () => Navigator.pop(context, true),
-            child: Text(force ? '强制安装' : '升级'),
-          ),
-        ],
-      ),
-    );
-    if (accepted == true && mounted) {
-      await ref.read(deviceSyncControllerProvider.notifier).installAppFrom(deviceId, force: force);
-    }
-  }
 }

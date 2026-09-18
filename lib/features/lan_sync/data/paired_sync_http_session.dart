@@ -401,7 +401,7 @@ String? _validDeviceLabel(Object? value) {
 }
 
 bool _eligiblePeer(InternetAddress? address) =>
-    address != null && address.type == InternetAddressType.IPv4 && isLanSyncPrivateIpv4(address.address);
+    address != null && address.type == InternetAddressType.IPv4 && isLanSyncTransportIpv4(address.address);
 
 bool _validNonce(Object? value) =>
     value is String && value.length >= 20 && value.length <= 64 && RegExp(r'^[A-Za-z0-9_-]+$').hasMatch(value);
