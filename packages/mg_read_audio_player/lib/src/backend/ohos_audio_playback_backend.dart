@@ -25,6 +25,7 @@ final class OhosAudioPlaybackBackend implements AudioPlaybackBackend {
   String? _sessionId;
   AudioPlaybackBackendSnapshot _snapshot = const AudioPlaybackBackendSnapshot();
   bool _disposed = false;
+  bool _resumeAfterInterruption = false;
   int _generation = 0;
 
   @override
@@ -176,7 +177,11 @@ final class OhosAudioPlaybackBackend implements AudioPlaybackBackend {
         );
       case 'interrupted':
         if (value == true) {
+          _resumeAfterInterruption = _snapshot.playing;
           _emit(_snapshot.copyWith(playing: false, buffering: false));
+        } else if (_resumeAfterInterruption) {
+          _resumeAfterInterruption = false;
+          unawaited(play());
         }
       case 'remoteCommand':
         if (value == 'next') {
@@ -247,6 +252,7 @@ final class OhosAudioPlaybackBackend implements AudioPlaybackBackend {
     if (_disposed) return;
     _disposed = true;
     _generation++;
+    _resumeAfterInterruption = false;
     final sessionId = _sessionId;
     _sessionId = null;
     await _events?.cancel();
