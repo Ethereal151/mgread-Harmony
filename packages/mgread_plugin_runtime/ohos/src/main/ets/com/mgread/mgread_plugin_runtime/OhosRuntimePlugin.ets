@@ -30,6 +30,7 @@ export default class OhosRuntimePlugin implements FlutterPlugin, MethodCallHandl
   private context?: common.Context
   private assets?: FlutterAssets
   private runtimeReady = false
+  private runtimeInitialization?: Promise<void>
 
   getUniqueClassName(): string {
     return 'OhosRuntimePlugin'
@@ -58,7 +59,7 @@ export default class OhosRuntimePlugin implements FlutterPlugin, MethodCallHandl
   onMethodCall(call: MethodCall, result: MethodResult): void {
     switch (call.method) {
       case 'cancelInvocation':
-        this.cancel(call.argument as Record<string, Any>)
+        this.cancel(call.args as Map<string, Object> | null)
         result.success(null)
         break
       case 'dispose':
@@ -67,27 +68,26 @@ export default class OhosRuntimePlugin implements FlutterPlugin, MethodCallHandl
         result.success(null)
         break
       case 'invoke':
-        this.invoke(call.argument as Record<string, Any>, result)
+        this.invoke(call.args as Map<string, Object> | null, result)
         break
       case 'runtimePaths':
-        try {
-          this.ensureRuntime()
-          result.success(mgreadNodeHost.runtimePaths())
-        } catch (error) {
-          result.error('runtime_start_failed', this.errorMessage(error), null)
-        }
+        this.ensureRuntime()
+          .then(() => result.success(mgreadNodeHost.runtimePaths()))
+          .catch((error: Object) => result.error('runtime_start_failed', this.errorMessage(error), null))
+        break
+      case 'nativeNodeHostAvailable':
+        result.success(mgreadNodeHost.nativeNodeHostAvailable())
         break
       case 'materializeTransfer':
-        try {
-          this.ensureRuntime()
-          const args = call.argument as Record<string, Any>
+        this.ensureRuntime()
+          .then(() => {
+          const args = call.args as Map<string, Object> | null
           result.success(mgreadNodeHost.materializeTransfer(
-            String(args['token'] ?? ''),
-            String(args['destination'] ?? ''),
+            String(args?.get('token') ?? ''),
+            String(args?.get('destination') ?? ''),
           ))
-        } catch (error) {
-          result.error('runtime_transfer_failed', this.errorMessage(error), null)
-        }
+          })
+          .catch((error: Object) => result.error('runtime_transfer_failed', this.errorMessage(error), null))
         break
       case 'restart':
         try {
@@ -105,22 +105,32 @@ export default class OhosRuntimePlugin implements FlutterPlugin, MethodCallHandl
     }
   }
 
-  private cancel(args: Record<string, Any>): void {
-    mgreadNodeHost.cancelInvocation(String(args['requestId'] ?? ''))
+  private cancel(args: Map<string, Object> | null): void {
+    mgreadNodeHost.cancelInvocation(String(args?.get('requestId') ?? ''))
   }
 
-  private invoke(args: Record<string, Any>, result: MethodResult): void {
-    try {
-      this.ensureRuntime()
-      result.success(mgreadNodeHost.invoke(
-         String(args['requestId'] ?? ''),
-         String(args['method'] ?? ''),
-         JSON.stringify(args['params'] ?? {}),
-         Number(args['deadlineUnixMs'] ?? 0),
-      ))
-    } catch (error) {
-      result.error('runtime_invocation_failed', this.errorMessage(error), null)
+  private invoke(args: Map<string, Object> | null, result: MethodResult): void {
+    const invokeNative = (): void => {
+      try {
+        const method = String(args?.get('method') ?? '')
+        const encoded: string = mgreadNodeHost.invoke(
+          String(args?.get('requestId') ?? ''),
+          method,
+          JSON.stringify(args?.get('params') ?? {}),
+          Number(args?.get('deadlineUnixMs') ?? 0),
+        )
+        result.success(encoded)
+      } catch (error) {
+        result.error('runtime_invocation_failed', this.errorMessage(error), null)
+      }
     }
+    if (this.runtimeReady) {
+      invokeNative()
+      return
+    }
+    this.ensureRuntime()
+      .then(invokeNative)
+      .catch((error: Object) => result.error('runtime_invocation_failed', this.errorMessage(error), null))
   }
 
   private async pickLocalPlugin(result: MethodResult): Promise<void> {
@@ -141,7 +151,24 @@ export default class OhosRuntimePlugin implements FlutterPlugin, MethodCallHandl
     }
   }
 
-  private ensureRuntime(): void {
+  private ensureRuntime(): Promise<void> {
+    if (this.runtimeReady) return Promise.resolve()
+    const pending = this.runtimeInitialization
+    if (pending !== undefined) return pending
+    const initialization = Promise.resolve().then(() => this.startRuntime())
+    this.runtimeInitialization = initialization
+    initialization.then(
+      () => {
+        if (this.runtimeInitialization === initialization) this.runtimeInitialization = undefined
+      },
+      () => {
+        if (this.runtimeInitialization === initialization) this.runtimeInitialization = undefined
+      },
+    )
+    return initialization
+  }
+
+  private startRuntime(): void {
     if (this.runtimeReady) return
     const context = this.context
     const assets = this.assets
@@ -163,12 +190,7 @@ export default class OhosRuntimePlugin implements FlutterPlugin, MethodCallHandl
   }
 
   private copyRuntimeAssets(sourceRoot: string, destinationRoot: string): void {
-    try {
-      fs.accessSync(`${destinationRoot}/runtime-version.txt`)
-      return
-    } catch (_) {
-      this.makeDirectory(destinationRoot)
-    }
+    this.makeDirectory(destinationRoot)
     const entries = this.context?.resourceManager.getRawFileListSync(sourceRoot) ?? []
     for (const entry of entries) {
       const source = `${sourceRoot}/${entry}`

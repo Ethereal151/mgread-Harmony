@@ -39,6 +39,7 @@ await rm(assetDist, { force: true, recursive: true });
 await rm(assetNodeModules, { force: true, recursive: true });
 await rm(defaultPluginsRoot, { force: true, recursive: true });
 await mkdir(assetRoot, { recursive: true });
+await writeFile(resolve(assetRoot, "package.json"), '{\n  "type": "module"\n}\n');
 await cp(resolve(runtimeRoot, "dist"), assetDist, { recursive: true });
 const assetFingerprint = await directoryFingerprint(assetDist);
 const runtimeAssetVersion = `${packageJson.version}-${assetFingerprint}`;

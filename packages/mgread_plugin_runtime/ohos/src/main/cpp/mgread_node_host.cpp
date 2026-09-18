@@ -57,7 +57,15 @@ class NodeHost {
       EnqueueLocked([this, runtime_root = std::move(runtime_root), data_root = std::move(data_root),
                      inbox_root = std::move(inbox_root), completion]() mutable {
         try {
-          if (!initialized_) Start(runtime_root, data_root, inbox_root);
+          if (initialization_error_) std::rethrow_exception(initialization_error_);
+          if (!initialized_) {
+            try {
+              Start(runtime_root, data_root, inbox_root);
+            } catch (...) {
+              initialization_error_ = std::current_exception();
+              throw;
+            }
+          }
           completion->set_value();
         } catch (...) {
           try { completion->set_exception(std::current_exception()); } catch (...) {}
@@ -259,7 +267,10 @@ class NodeHost {
     const std::string dist = runtime_root + "/dist/desktop-runtime.js";
     const std::string bootstrap =
       "globalThis.__mgreadStartCoreJson = async (dataRoot, inboxRoot) => {"
-      " const mod = await import(" + Quote(FileUrl(dist)) + ");"
+      " const fs = process.getBuiltinModule('fs');"
+      " let mod; try { mod = process.getBuiltinModule('module').createRequire(" + Quote(dist) + ")(" + Quote(dist) + "); }"
+      " catch (e) { const state = fs.existsSync(" + Quote(dist) + ") ? String(fs.statSync(" + Quote(dist) + ").size) : 'missing';"
+      " throw new Error('runtime_load:' + state + ':' + String(e?.stack ?? e)); }"
       " const core = new mod.DesktopRuntime({dataRoot, pluginImportInboxRoot: inboxRoot, embedded: true, debugHttpAllowed: true, "
       " onProgress: p => globalThis.__mgreadReportProgress(JSON.stringify(p))});"
       " await core.start(); const hello = await core.invokeEmbedded('runtime.hello', {});"
@@ -416,6 +427,7 @@ class NodeHost {
   std::thread thread_;
   bool disposed_ = false;
   bool initialized_ = false;
+  std::exception_ptr initialization_error_;
   std::set<std::string> cancellation_ids_;
   std::string runtime_root_;
   std::string data_root_;
