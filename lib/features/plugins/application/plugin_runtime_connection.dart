@@ -20,6 +20,7 @@ import 'package:mgread_plugin_runtime/mgread_plugin_runtime.dart';
 import 'package:mg_read/core/diagnostics/diagnostics.dart';
 import 'package:mg_read/core/errors/app_error.dart';
 import 'package:mg_read/features/network_proxy/application/flutter_network_proxy_manager.dart';
+import 'package:mg_read/platform/platform_capabilities.dart';
 
 import 'plugin_runtime_catalog_change.dart';
 import 'plugin_runtime_models.dart';
@@ -427,7 +428,10 @@ final pluginRuntimeStatusProvider = FutureProvider<PluginRuntimeStatus>((Ref ref
 /// consumers still share the Runtime Facade's one startup operation.
 final pluginRuntimeConnectionProvider = FutureProvider<PluginRuntimeConnection>((Ref ref) async {
   ref.watch(pluginRuntimeCatalogChangeProvider);
-  if (!PluginRuntime.isPlatformSupported || Platform.operatingSystem == 'ohos' && !await PluginRuntime.ohosNodeHostAvailable()) {
+  if (!PluginRuntime.isPlatformSupported) {
+    return const PluginRuntimeConnection(isHealthy: false, nodeVersion: '', runtimeVersion: '', plugins: <PluginRuntimePlugin>[]);
+  }
+  if (platformCapabilities.isOhos && !(await platformCapabilities.probe()).supportsOhosRuntime.available) {
     return const PluginRuntimeConnection(isHealthy: false, nodeVersion: '', runtimeVersion: '', plugins: <PluginRuntimePlugin>[]);
   }
   final gateway = ref.watch(pluginRuntimeGatewayProvider);
