@@ -42,7 +42,7 @@ final class _WireConnection {
 
   /// Internal loopback socket; package callers never receive this value.
   final WebSocket _socket;
-  final WindowsBrowserSessionHost? _browserSessionHost;
+  final BrowserSessionHost? _browserSessionHost;
   final void Function(DevelopmentPluginChangeBatch) _onDevelopmentChange;
   final Set<String> _hostJobs = <String>{};
 
@@ -82,7 +82,11 @@ final class _WireConnection {
     return _WireConnection._(
       ready,
       socket,
-      Platform.isWindows ? WindowsBrowserSessionHost(dataRoot) : null,
+      Platform.isWindows
+          ? WindowsBrowserSessionHost(dataRoot)
+          : Platform.operatingSystem == 'ohos'
+          ? OhosBrowserSessionHost()
+          : null,
       onDevelopmentChange,
     );
   }
@@ -446,7 +450,7 @@ final class _WireConnection {
         },
       );
       if (_hostJobs.remove(id)) _sendHostResult(id, traceId, result);
-    } on WindowsBrowserSessionException catch (error) {
+    } on BrowserSessionHostException catch (error) {
       if (_hostJobs.remove(id)) _sendHostError(id, traceId, error.code);
     } on Object {
       if (_hostJobs.remove(id))

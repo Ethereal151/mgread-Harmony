@@ -15,6 +15,8 @@ import 'dart:io';
 
 import 'package:flutter/services.dart';
 
+import 'browser_session_host.dart';
+
 part 'windows_webview_page.dart';
 
 const _maximumRequestBytes = 1024 * 1024;
@@ -25,9 +27,11 @@ const _maximumResidentWebViews = 8;
 const _pollDelay = Duration(milliseconds: 100);
 
 /// Stable private-host failure consumed by the reverse Runtime bridge.
-final class WindowsBrowserSessionException implements Exception {
+final class WindowsBrowserSessionException
+    implements BrowserSessionHostException {
   const WindowsBrowserSessionException(this.code);
 
+  @override
   final String code;
 }
 
@@ -213,7 +217,7 @@ final class MethodChannelWindowsBrowserPlatform
 }
 
 /// Bounded Windows browser-session host used only by the desktop Supervisor.
-final class WindowsBrowserSessionHost {
+final class WindowsBrowserSessionHost implements BrowserSessionHost {
   WindowsBrowserSessionHost(
     this._dataRoot, {
     WindowsBrowserPlatform platform =

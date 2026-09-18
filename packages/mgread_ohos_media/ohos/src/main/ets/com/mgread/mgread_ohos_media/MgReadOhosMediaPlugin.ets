@@ -228,7 +228,7 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
     const session = this.sessions.get(sessionId)
     if (session === undefined) return
     this.sessions.delete(sessionId)
-    if (sessionId === this.audioSessionId) this.audioSessionId = undefined
+    if (sessionId === this.audioSessionId) this.destroyAudioSession()
     try {
       await session.player.release()
     } catch (_) {
