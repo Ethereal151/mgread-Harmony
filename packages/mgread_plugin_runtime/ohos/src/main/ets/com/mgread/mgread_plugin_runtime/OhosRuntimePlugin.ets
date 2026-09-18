@@ -125,7 +125,7 @@ export default class OhosRuntimePlugin implements FlutterPlugin, MethodCallHandl
         const encoded: string = mgreadNodeHost.invoke(
           String(args?.get('requestId') ?? ''),
           method,
-          JSON.stringify(args?.get('params') ?? {}),
+          this.encodeParams(args?.get('params')),
           Number(args?.get('deadlineUnixMs') ?? 0),
         )
         result.success(encoded)
@@ -150,7 +150,11 @@ export default class OhosRuntimePlugin implements FlutterPlugin, MethodCallHandl
     }
     try {
       const options = new picker.DocumentSelectOptions()
-      options.fileSuffixFilters = ['.mgplugin.js', '.mgplugin']
+      // HarmonyOS 7 on API 26 treats a multi-dot suffix such as
+      // ".mgplugin.js" as a plain ".js" filter and hides the artifact.
+      // Let the picker show files, then enforce the two accepted artifact
+      // names below before copying the selected document URI.
+      options.fileSuffixFilters = ['All files (.)|.*']
       options.maxSelectNumber = 1
       const pickerView = new picker.DocumentViewPicker(context as common.UIAbilityContext)
       let selected: Array<string>
@@ -166,7 +170,15 @@ export default class OhosRuntimePlugin implements FlutterPlugin, MethodCallHandl
       }
       const selectedUri = selected[0]
       const lowerUri = selectedUri.toLowerCase()
-      const suffix = lowerUri.endsWith('.mgplugin.js') ? '.mgplugin.js' : '.mgplugin'
+      let suffix: string
+      if (lowerUri.endsWith('.mgplugin.js')) {
+        suffix = '.mgplugin.js'
+      } else if (lowerUri.endsWith('.mgplugin')) {
+        suffix = '.mgplugin'
+      } else {
+        result.error('file_name_invalid', 'The selected file is not a MgRead plugin artifact.', null)
+        return
+      }
       const target = `${context.cacheDir}/mgread-plugin-import-${Date.now()}${suffix}`
       try {
         await this.copyFile(selectedUri, target)
@@ -240,6 +252,15 @@ export default class OhosRuntimePlugin implements FlutterPlugin, MethodCallHandl
   private makeDirectory(path: string): void {
     if (path.length === 0) return
     try { fs.mkdirSync(path, true) } catch (_) { /* already exists */ }
+  }
+
+  private encodeParams(value: Any | undefined): string {
+    if (value instanceof Map) {
+      const object: Record<string, Any> = {}
+      value.forEach((entry: Any, key: string): void => { object[key] = entry })
+      return JSON.stringify(object)
+    }
+    return JSON.stringify(value ?? {})
   }
 
   private async copyFile(sourcePath: string, targetPath: string): Promise<void> {
