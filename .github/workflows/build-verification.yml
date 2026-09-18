@@ -47,6 +47,10 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
+          cache: gradle
+          cache-dependency-path: |
+            android/**/*.gradle*
+            android/gradle/wrapper/gradle-wrapper.properties
 
       - name: Set up Node.js
         uses: actions/setup-node@v7
@@ -75,14 +79,16 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
+          flutter-version: "3.47.4"
           channel: stable
           cache: true
+          pub-cache: true
 
       - name: Flutter dependencies
         run: flutter pub get
 
       - name: Build Android APK
-        run: flutter build apk --release
+        run: flutter build apk --release --target-platform android-arm64 --no-pub
 
       - name: Upload Android APK
         uses: actions/upload-artifact@v7
@@ -90,6 +96,7 @@ jobs:
           name: mgread-android-${{ github.sha }}
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
+          compression-level: 0
           retention-days: 7
 
   windows:
@@ -132,14 +139,16 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
+          flutter-version: "3.47.4"
           channel: stable
           cache: true
+          pub-cache: true
 
       - name: Flutter dependencies
         run: flutter pub get
 
       - name: Build Windows
-        run: flutter build windows --release
+        run: flutter build windows --release --no-pub
 
       - name: Package Windows build
         shell: pwsh
@@ -151,6 +160,7 @@ jobs:
           name: mgread-windows-x64-${{ github.sha }}
           path: build/mgread-windows-x64.zip
           if-no-files-found: error
+          compression-level: 0
           retention-days: 7
 
   macos:
@@ -192,14 +202,16 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
+          flutter-version: "3.47.4"
           channel: stable
           cache: true
+          pub-cache: true
 
       - name: Flutter dependencies
         run: flutter pub get
 
       - name: Build macOS
-        run: flutter build macos --release
+        run: flutter build macos --release --no-pub
 
       - name: Package macOS app
         run: ditto -c -k --sequesterRsrc --keepParent "build/macos/Build/Products/Release/MgRead.app" "build/mgread-macos-arm64.zip"
@@ -210,4 +222,5 @@ jobs:
           name: mgread-macos-arm64-${{ github.sha }}
           path: build/mgread-macos-arm64.zip
           if-no-files-found: error
+          compression-level: 0
           retention-days: 7
