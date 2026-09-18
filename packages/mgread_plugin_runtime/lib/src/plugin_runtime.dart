@@ -46,9 +46,10 @@ abstract interface class _RuntimeSupervisor {
 
 /// Keeps unsupported Flutter platforms constructible during staged adoption.
 ///
-/// OHOS currently has no Node Runtime host. The application can still render
-/// local-library pages while Runtime-backed capabilities fail with a typed,
-/// user-facing error instead of throwing during provider construction.
+/// The application can still render local-library pages while Runtime-backed
+/// capabilities fail with a typed, user-facing error instead of throwing
+/// during provider construction. OHOS uses its own supervisor below and is
+/// therefore not routed through this fallback.
 final class _UnsupportedRuntimeSupervisor implements _RuntimeSupervisor {
   const _UnsupportedRuntimeSupervisor();
 
@@ -116,9 +117,25 @@ final class PluginRuntime {
   static PluginRuntime? _androidInstance;
   static PluginRuntime? _ohosInstance;
   static PluginRuntime? _unsupportedInstance;
+  static Future<bool>? _ohosNodeHostAvailability;
 
   /// Whether this platform has a Runtime host implementation.
   static bool get isPlatformSupported => Platform.isAndroid || Platform.isWindows || Platform.isMacOS || Platform.operatingSystem == 'ohos';
+
+  /// Probes the compiled OHOS native host without starting Node.
+  ///
+  /// The x64 emulator ships a deliberate stub so the same HAP can be built
+  /// for both targets; only the arm64 host is allowed to enter Runtime warmup.
+  static Future<bool> ohosNodeHostAvailable() {
+    if (Platform.operatingSystem != 'ohos') return Future<bool>.value(false);
+    return _ohosNodeHostAvailability ??= () async {
+      try {
+        return await _ohosRuntimeChannel.invokeMethod<bool>('nativeNodeHostAvailable') == true;
+      } on Object {
+        return false;
+      }
+    }();
+  }
 
   /// Creates or returns the process-scoped production Facade.
   ///
@@ -225,7 +242,7 @@ final class PluginRuntime {
   /// this package. The application receives only whether the user selected a
   /// file; it never receives or passes a filesystem path to Runtime code.
   Future<bool> importLocalPlugin() async {
-    if (Platform.isAndroid) {
+    if (Platform.isAndroid || Platform.operatingSystem == 'ohos') {
       return _supervisor.pickAndImportLocalPlugin();
     }
     if (!Platform.isWindows && !Platform.isMacOS) {

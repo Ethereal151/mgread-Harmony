@@ -8,6 +8,7 @@ declare const mgreadNodeHost: {
   setProgressCallback(callback: (payload: string) => void): void;
   dispose(): void;
   runtimeVersion(): string;
+  nativeNodeHostAvailable(): boolean;
 };
 
 export default mgreadNodeHost;

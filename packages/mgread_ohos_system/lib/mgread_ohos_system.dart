@@ -8,18 +8,32 @@ final class OhosSystemClient {
 
   static const MethodChannel _channel = MethodChannel('mgread/ohos_system');
 
-  static Future<String?> pickImportFile() => _channel.invokeMethod<String>('pickImportFile');
+  static Future<String?> pickImportFile() =>
+      _channel.invokeMethod<String>('pickImportFile');
 
-  static Future<bool> exportFile({required String path, required String suggestedName}) async {
-    return await _channel.invokeMethod<bool>('exportFile', <String, Object>{'path': path, 'suggestedName': suggestedName}) ?? false;
+  static Future<bool> exportFile({
+    required String path,
+    required String suggestedName,
+  }) async {
+    return await _channel.invokeMethod<bool>('exportFile', <String, Object>{
+          'path': path,
+          'suggestedName': suggestedName,
+        }) ??
+        false;
   }
 
   static Future<bool> shareFile(String path) async {
-    return await _channel.invokeMethod<bool>('shareFile', <String, Object>{'path': path}) ?? false;
+    return await _channel.invokeMethod<bool>('shareFile', <String, Object>{
+          'path': path,
+        }) ??
+        false;
   }
 
   static Future<bool> openUri(Uri uri) async {
-    return await _channel.invokeMethod<bool>('openUri', <String, Object>{'uri': uri.toString()}) ?? false;
+    return await _channel.invokeMethod<bool>('openUri', <String, Object>{
+          'uri': uri.toString(),
+        }) ??
+        false;
   }
 
   static Future<OhosPackageInfo?> getPackageInfo() async {
@@ -31,9 +45,23 @@ final class OhosSystemClient {
     return OhosPackageInfo(version: version, build: build);
   }
 
+  static Future<OhosDeviceInfo?> getDeviceInfo() async {
+    final value = await _channel.invokeMethod<Object?>('getDeviceInfo');
+    if (value is! Map) return null;
+    final model = value['model'];
+    final label = value['label'];
+    if (model is! String ||
+        model.trim().isEmpty ||
+        label is! String ||
+        label.trim().isEmpty)
+      return null;
+    return OhosDeviceInfo(model: model, label: label);
+  }
+
   /// Returns native OHOS capability probes. The application owns the public
   /// immutable snapshot model; this package only validates the channel shape.
-  static Future<Map<String, OhosCapabilityProbe>> getCapabilitySnapshot() async {
+  static Future<Map<String, OhosCapabilityProbe>>
+  getCapabilitySnapshot() async {
     final value = await _channel.invokeMethod<Object?>('getCapabilities');
     if (value is! Map) return const <String, OhosCapabilityProbe>{};
     final result = <String, OhosCapabilityProbe>{};
@@ -44,7 +72,11 @@ final class OhosSystemClient {
       final reason = map['reason'];
       final apiVersion = map['apiVersion'];
       final architecture = map['architecture'];
-      if (available is! bool || reason is! String || apiVersion is! String || architecture is! String) continue;
+      if (available is! bool ||
+          reason is! String ||
+          apiVersion is! String ||
+          architecture is! String)
+        continue;
       result[entry.key as String] = OhosCapabilityProbe(
         available: available,
         reason: reason,
@@ -63,8 +95,20 @@ final class OhosPackageInfo {
   final int build;
 }
 
+final class OhosDeviceInfo {
+  const OhosDeviceInfo({required this.model, required this.label});
+
+  final String model;
+  final String label;
+}
+
 final class OhosCapabilityProbe {
-  const OhosCapabilityProbe({required this.available, required this.reason, required this.apiVersion, required this.architecture});
+  const OhosCapabilityProbe({
+    required this.available,
+    required this.reason,
+    required this.apiVersion,
+    required this.architecture,
+  });
 
   final bool available;
   final String reason;

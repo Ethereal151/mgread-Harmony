@@ -36,6 +36,12 @@ napi_value RuntimeVersion(napi_env env, napi_callback_info) {
   return result;
 }
 
+napi_value NativeNodeHostAvailable(napi_env env, napi_callback_info) {
+  napi_value result;
+  napi_get_boolean(env, false, &result);
+  return result;
+}
+
 napi_value Init(napi_env env, napi_value exports) {
   napi_property_descriptor properties[] = {
       {"initialize", nullptr, ThrowUnavailable, nullptr, nullptr, nullptr,
@@ -56,6 +62,8 @@ napi_value Init(napi_env env, napi_value exports) {
        nullptr},
       {"runtimeVersion", nullptr, RuntimeVersion, nullptr, nullptr, nullptr,
        napi_default, nullptr},
+      {"nativeNodeHostAvailable", nullptr, NativeNodeHostAvailable, nullptr,
+       nullptr, nullptr, napi_default, nullptr},
   };
   napi_define_properties(env, exports, sizeof(properties) / sizeof(properties[0]),
                          properties);

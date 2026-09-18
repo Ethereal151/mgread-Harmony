@@ -34,7 +34,20 @@ if (-not (Test-Path -LiteralPath $v8Headers -PathType Container)) {
 New-Item -ItemType Directory -Force -Path $nodeDestination, $sourceDestination | Out-Null
 $nodeLibraryDestination = Join-Path $nodeDestination 'lib'
 New-Item -ItemType Directory -Force -Path $nodeLibraryDestination | Out-Null
-Copy-Item -LiteralPath $nodeLibrary -Destination (Join-Path $nodeLibraryDestination 'libnode.so') -Force
+$nodeLibraryFile = Join-Path $nodeLibraryDestination 'libnode.so'
+Copy-Item -LiteralPath $nodeLibrary -Destination $nodeLibraryFile -Force
+
+# The shared Node build records the ABI-suffixed SONAME libnode.so.137 while
+# hvigor only packs libraries whose file name ends in .so. Normalize the SONAME
+# so the host's DT_NEEDED matches the packaged libnode.so.
+$python = Get-Command python -ErrorAction SilentlyContinue
+if (-not $python) {
+  throw "Python is required to normalize the staged Node SONAME."
+}
+& $python.Source (Join-Path $PSScriptRoot 'set-elf-soname.py') $nodeLibraryFile 'libnode.so'
+if ($LASTEXITCODE -ne 0) {
+  throw "Failed to normalize the staged Node SONAME."
+}
 Copy-Item -LiteralPath $nodeHeaders -Destination (Join-Path $nodeDestination 'include') -Recurse -Force
 Copy-Item -LiteralPath (Join-Path $SourceRoot 'src') -Destination $sourceDestination -Recurse -Force
 New-Item -ItemType Directory -Force -Path (Join-Path $sourceDestination 'deps\v8') | Out-Null

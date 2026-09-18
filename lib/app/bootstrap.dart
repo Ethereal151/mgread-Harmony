@@ -336,6 +336,10 @@ Future<void> bootstrapMgReadApp({
       ),
     ),
   );
+  // Resolve native capability availability after the plugin graph is mounted.
+  // Feature entry points consume the single-flight result without delaying
+  // the first frame or issuing one channel call per page.
+  unawaited(platformCapabilities.probe());
   final bootstrapStopwatch = Stopwatch()..start();
   final bootstrapSpan = diagnostics.startSpan(
     AppDiagnosticEvents.bootstrap,

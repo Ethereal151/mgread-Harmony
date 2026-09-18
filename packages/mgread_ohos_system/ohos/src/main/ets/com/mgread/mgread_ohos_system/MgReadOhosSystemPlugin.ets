@@ -16,6 +16,7 @@ import filePicker from '@ohos.file.picker'
 import fileUri from '@ohos.file.fileuri'
 import fs from '@ohos.file.fs'
 import connection from '@ohos.net.connection'
+import deviceInfo from '@ohos.deviceInfo'
 import wantConstant from '@ohos.ability.wantConstant'
 import OhosNetworkEventStreamHandler from './OhosNetworkEventStreamHandler'
 
@@ -91,6 +92,9 @@ export default class MgReadOhosSystemPlugin implements FlutterPlugin, MethodCall
         break
       case 'getPackageInfo':
         this.getPackageInfo(result)
+        break
+      case 'getDeviceInfo':
+        this.getDeviceInfo(result)
         break
       case 'isLocalNetworkAvailable':
         this.isLocalNetworkAvailable(result)
@@ -248,6 +252,16 @@ export default class MgReadOhosSystemPlugin implements FlutterPlugin, MethodCall
       result.success({version: info.versionName, build: info.versionCode})
     } catch (error) {
       result.error('package_info_failed', this.errorMessage(error), null)
+    }
+  }
+
+  private getDeviceInfo(result: MethodResult): void {
+    try {
+      const model = deviceInfo.productModel
+      const alias = deviceInfo.productModelAlias
+      result.success({model, label: alias.length > 0 ? alias : model})
+    } catch (error) {
+      result.error('device_info_failed', this.errorMessage(error), null)
     }
   }
 

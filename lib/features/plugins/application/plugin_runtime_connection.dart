@@ -12,6 +12,7 @@
 library;
 
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mgread_plugin_runtime/mgread_plugin_runtime.dart';
@@ -426,7 +427,7 @@ final pluginRuntimeStatusProvider = FutureProvider<PluginRuntimeStatus>((Ref ref
 /// consumers still share the Runtime Facade's one startup operation.
 final pluginRuntimeConnectionProvider = FutureProvider<PluginRuntimeConnection>((Ref ref) async {
   ref.watch(pluginRuntimeCatalogChangeProvider);
-  if (!PluginRuntime.isPlatformSupported) {
+  if (!PluginRuntime.isPlatformSupported || Platform.operatingSystem == 'ohos' && !await PluginRuntime.ohosNodeHostAvailable()) {
     return const PluginRuntimeConnection(isHealthy: false, nodeVersion: '', runtimeVersion: '', plugins: <PluginRuntimePlugin>[]);
   }
   final gateway = ref.watch(pluginRuntimeGatewayProvider);

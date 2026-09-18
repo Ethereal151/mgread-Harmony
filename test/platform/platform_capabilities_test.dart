@@ -16,7 +16,7 @@ void main() {
     expect(capabilities.supportsVideoPlayback, isTrue);
     expect(capabilities.supportsBarcodeScanning, isTrue);
     expect(capabilities.supportsPluginRuntime, isTrue);
-    expect(capabilities.supportsPluginRuntimeNode, isFalse);
+    expect(capabilities.supportsPluginRuntimeNode, isTrue);
     expect(capabilities.supportsApplicationBrightness, isTrue);
   });
 

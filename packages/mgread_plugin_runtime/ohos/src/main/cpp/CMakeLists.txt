@@ -45,7 +45,11 @@ else()
     ace_napi.z
     dl
     pthread)
-  set_target_properties(mgread_node_host PROPERTIES INSTALL_RPATH "$ORIGIN")
+  # HarmonyOS packages the build-tree artifact directly, so the artifact must
+  # resolve libnode.so next to itself on device instead of the host build path.
+  set_target_properties(mgread_node_host PROPERTIES
+    BUILD_WITH_INSTALL_RPATH TRUE
+    INSTALL_RPATH "$ORIGIN")
   add_custom_command(TARGET mgread_node_host POST_BUILD
     COMMAND "${CMAKE_COMMAND}" -E copy_if_different
       "${MGREAD_NODE_ROOT}/lib/libnode.so"

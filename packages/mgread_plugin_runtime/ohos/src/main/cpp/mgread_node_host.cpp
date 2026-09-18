@@ -233,7 +233,11 @@ class NodeHost {
     runtime_root_ = runtime_root;
     data_root_ = data_root;
     inbox_root_ = inbox_root;
-    std::vector<std::string> args = {"mgread-node-host", "--no-warnings"};
+    std::vector<std::string> args = {"mgread-node-host", "--no-warnings",
+      // HarmonyOS enforces W^X and rejects the RWX code range V8 normally
+      // reserves. V8 exposes no runtime toggle for that choice on this version,
+      // so the only supported route is to disable runtime executable memory.
+      "--jitless"};
     initialization_ = node::InitializeOncePerProcess(args, {
       node::ProcessInitializationFlags::kNoInitializeV8,
       node::ProcessInitializationFlags::kNoInitializeNodeV8Platform,
@@ -335,7 +339,15 @@ class NodeHost {
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
       }
-      if (promise->State() == v8::Promise::kRejected) throw std::runtime_error("node_promise_rejected");
+      if (promise->State() == v8::Promise::kRejected) {
+        std::string message = "node_promise_rejected";
+        v8::String::Utf8Value reason(isolate_, promise->Result());
+        if (*reason && reason.length() > 0) {
+          message += ": ";
+          message.append(*reason, reason.length());
+        }
+        throw std::runtime_error(message);
+      }
       value = promise->Result();
     }
     v8::String::Utf8Value text(isolate_, value);
@@ -502,6 +514,11 @@ napi_value Dispose(napi_env env, napi_callback_info) {
 }
 
 napi_value RuntimeVersion(napi_env env, napi_callback_info) { return StringValue(env, kNodeVersion); }
+napi_value NativeNodeHostAvailable(napi_env env, napi_callback_info) {
+  napi_value result;
+  napi_get_boolean(env, true, &result);
+  return result;
+}
 
 napi_value Init(napi_env env, napi_value exports) {
   napi_property_descriptor properties[] = {
@@ -514,6 +531,7 @@ napi_value Init(napi_env env, napi_value exports) {
     {"setProgressCallback", nullptr, SetProgress, nullptr, nullptr, nullptr, napi_default, nullptr},
     {"dispose", nullptr, Dispose, nullptr, nullptr, nullptr, napi_default, nullptr},
     {"runtimeVersion", nullptr, RuntimeVersion, nullptr, nullptr, nullptr, napi_default, nullptr},
+    {"nativeNodeHostAvailable", nullptr, NativeNodeHostAvailable, nullptr, nullptr, nullptr, napi_default, nullptr},
   };
   napi_define_properties(env, exports, sizeof(properties) / sizeof(properties[0]), properties);
   return exports;

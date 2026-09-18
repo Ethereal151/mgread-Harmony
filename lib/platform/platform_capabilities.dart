@@ -20,12 +20,8 @@ final class OhosCapability {
   final String apiVersion;
   final String architecture;
 
-  factory OhosCapability.unavailable(String reason) => OhosCapability(
-    available: false,
-    reason: reason,
-    apiVersion: 'unknown',
-    architecture: 'unknown',
-  );
+  factory OhosCapability.unavailable(String reason) =>
+      OhosCapability(available: false, reason: reason, apiVersion: 'unknown', architecture: 'unknown');
 }
 
 /// Native OHOS probes used by feature entry points and diagnostics.
@@ -74,6 +70,7 @@ final class PlatformCapabilities {
   factory PlatformCapabilities.current() => PlatformCapabilities._(Platform.operatingSystem);
 
   final String operatingSystem;
+  Future<OhosCapabilitySnapshot>? _probeFuture;
 
   bool get isOhos => operatingSystem == 'ohos';
   bool get isAndroid => operatingSystem == 'android';
@@ -109,8 +106,22 @@ final class PlatformCapabilities {
   bool get supportsPluginRuntimeNode => isAndroid || isWindows || isMacOS || isOhos;
 
   /// Reads all OHOS probes through the native system bridge.
-  Future<OhosCapabilitySnapshot> probe() async {
-    if (!isOhos) return OhosCapabilitySnapshot.unavailable('not_ohos');
+  ///
+  /// The first call is single-flight and cached for the lifetime of the
+  /// process. A refresh is available for diagnostics after the app returns
+  /// from background or after the native host has been reattached.
+  Future<OhosCapabilitySnapshot> probe({bool refresh = false}) {
+    if (!isOhos) return Future<OhosCapabilitySnapshot>.value(OhosCapabilitySnapshot.unavailable('not_ohos'));
+    if (!refresh) {
+      final cached = _probeFuture;
+      if (cached != null) return cached;
+    }
+    final future = _readProbe();
+    _probeFuture = future;
+    return future;
+  }
+
+  Future<OhosCapabilitySnapshot> _readProbe() async {
     try {
       final raw = await OhosSystemClient.getCapabilitySnapshot();
       OhosCapability read(String key) {
@@ -123,6 +134,7 @@ final class PlatformCapabilities {
           architecture: value.architecture,
         );
       }
+
       final runtimeBridge = read('supportsOhosRuntime');
       final runtimeAvailable = await PluginRuntime.ohosNodeHostAvailable();
       final runtime = OhosCapability(

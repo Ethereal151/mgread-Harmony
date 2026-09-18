@@ -15,6 +15,7 @@ import 'package:flutter/services.dart';
 import 'package:mg_read/core/persistence/persistence.dart';
 import 'package:mg_read/features/lan_sync/application/device_identity_store.dart';
 import 'package:mg_read/features/lan_sync/domain/paired_device_models.dart';
+import 'package:mgread_ohos_system/mgread_ohos_system.dart';
 
 const String deviceSyncLocalIdentityRecordKind = 'device-sync-local-identity';
 const String deviceSyncPeerSecretRecordKind = 'device-sync-peer-secret';
@@ -170,6 +171,7 @@ const MethodChannel _deviceIdentityChannel = MethodChannel('mgread/device_identi
 
 Future<String?> _readLocalDeviceLabel() async {
   if (Platform.isAndroid) return _deviceIdentityChannel.invokeMethod<String>('getDeviceLabel');
+  if (Platform.operatingSystem == 'ohos') return (await OhosSystemClient.getDeviceInfo())?.label;
   return Platform.localHostname;
 }
 
@@ -179,6 +181,8 @@ String get _fallbackDeviceLabel => Platform.isWindows
     ? 'Mac 设备'
     : Platform.isAndroid
     ? 'Android 设备'
+    : Platform.operatingSystem == 'ohos'
+    ? 'OpenHarmony 设备'
     : '本机设备';
 
 String? _normalizeDeviceLabel(String? value) {

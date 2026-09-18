@@ -94,10 +94,11 @@ class _MgReadAppState extends ConsumerState<MgReadApp> with WidgetsBindingObserv
 
   Future<bool> _warmPluginRuntime() async {
     if (!PluginRuntime.isPlatformSupported || !platformCapabilities.supportsPluginRuntimeNode) {
-      // OHOS has a registered bridge, but no verified Node 24.16.0 host yet.
-      // Keep the unsupported online capability out of startup and preserve
-      // local library access until the native host is implemented.
       return true;
+    }
+    if (platformCapabilities.isOhos) {
+      final capabilities = await platformCapabilities.probe();
+      if (!capabilities.supportsOhosRuntime.available) return true;
     }
     try {
       final connection = await ref.read(pluginRuntimeConnectionProvider.future);
