@@ -622,7 +622,7 @@ void main() {
     semantics.dispose();
   });
 
-  testWidgets('renders the first-run empty bookshelf without preview data', (WidgetTester tester) async {
+  testWidgets('renders the first-run welcome guide without preview data', (WidgetTester tester) async {
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.light(),
@@ -638,10 +638,17 @@ void main() {
 
     expect(find.text('开始你的阅读旅程'), findsNothing);
     expect(find.text('当前还没有阅读记录'), findsNothing);
-    expect(find.text('暂无更新内容'), findsOneWidget);
+    expect(find.text('欢迎来到 MgRead'), findsOneWidget);
+    expect(find.text('从一本书开始，\n发现更大的世界'), findsOneWidget);
+    expect(find.text('三步开启阅读'), findsOneWidget);
+    expect(find.text('添加数据源'), findsOneWidget);
+    expect(find.text('发现作品'), findsOneWidget);
+    expect(find.text('开始阅读'), findsOneWidget);
     expect(find.text('去发现好书'), findsOneWidget);
+    expect(find.text('管理数据源'), findsOneWidget);
+    expect(find.byKey(const Key('first-run-discover-cta')), findsOneWidget);
     expect(find.textContaining('界面预览'), findsNothing);
-    expect(find.text('管理我的数据源'), findsNothing);
+    expect(find.byKey(const Key('library-first-run-welcome')), findsOneWidget);
   });
 
   testWidgets('uses the compact reference font-size and weight hierarchy', (WidgetTester tester) async {
@@ -813,9 +820,9 @@ void main() {
     await tester.pumpAndSettle();
 
     final double expectedWidth = 489 - AppSpacing.compactPagePadding * 2;
-    final Finder emptyUpdatesCard = find.byWidgetPredicate((Widget widget) => widget is Semantics && widget.properties.label == '暂无更新内容');
-    expect(emptyUpdatesCard, findsOneWidget);
-    expect(tester.getRect(emptyUpdatesCard).width, expectedWidth);
+    final Finder welcomeCard = find.byKey(const Key('library-first-run-welcome'));
+    expect(welcomeCard, findsOneWidget);
+    expect(tester.getRect(welcomeCard).width, expectedWidth);
     semantics.dispose();
   });
 
