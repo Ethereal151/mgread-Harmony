@@ -453,13 +453,15 @@ extension _TextReaderPagination on _TextReaderViewState {
     final Size? size = context.size;
     if (size == null || size.width <= 0) return;
     final double fraction = localPosition.dx / size.width;
-    if (_preferences.singleHandMode && (fraction < 0.3 || fraction > 0.7)) {
+    if (_preferences.singleHandMode &&
+        (fraction < _TextReaderViewState._horizontalTapSideBoundary ||
+            fraction > _TextReaderViewState._horizontalTapCenterBoundary)) {
       _pageTurnForward = true;
       unawaited(_nextPage());
-    } else if (fraction < 0.3) {
+    } else if (fraction < _TextReaderViewState._horizontalTapSideBoundary) {
       _pageTurnForward = false;
       unawaited(_previousPage());
-    } else if (fraction > 0.7) {
+    } else if (fraction > _TextReaderViewState._horizontalTapCenterBoundary) {
       _pageTurnForward = true;
       unawaited(_nextPage());
     } else {

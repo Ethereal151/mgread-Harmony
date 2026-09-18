@@ -144,6 +144,10 @@ class _TextReaderViewState extends State<TextReaderView>
   // exactly fits during pagination cannot overflow by a rounding pixel.
   static const double _horizontalPageLayoutSafety = 2;
   static const double _mouseTapSlop = 18;
+  // Keep the centre toolbar toggle zone narrow so taps near the page edges
+  // remain deliberate page-turn actions.
+  static const double _horizontalTapSideBoundary = .4;
+  static const double _horizontalTapCenterBoundary = .6;
   // PointerEvent.buttons uses a bit mask; 1 denotes the primary mouse button.
   static const int _primaryMouseButton = 1;
   static const double _inlineCommentHitSize = 48;
