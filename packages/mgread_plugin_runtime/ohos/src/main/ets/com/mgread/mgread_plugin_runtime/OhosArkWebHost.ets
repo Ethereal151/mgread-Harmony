@@ -17,7 +17,6 @@ import webview from '@ohos.web.webview'
 const VIEW_TYPE = 'mgread_ohos_arkweb'
 const MAX_WAIT_MS = 120_000
 const POLL_MS = 80
-
 interface WebHeaderPayload {
   headerKey: string
   headerValue: string
@@ -338,7 +337,7 @@ export default class OhosArkWebHost implements MethodCallHandler {
     while (true) {
       await this.ensureNotCancelled(jobId, deadline)
       try {
-        const state = await page.script('document.readyState')
+        const state = (await page.script('document.readyState')).replace(/"/g, '')
         if (state === 'interactive' || state === 'complete') return
       } catch (_) {
         // The first controller call can race Web initialization; keep polling.
@@ -413,8 +412,12 @@ export default class OhosArkWebHost implements MethodCallHandler {
 
   private async decode(value: string): Promise<Any | null> {
     try {
-      const decoded: Any = JSON.parse(value)
-       return decoded !== null && typeof decoded === 'object' && !Array.isArray(decoded) ? decoded : null
+      let decoded: Any = JSON.parse(value)
+      if (typeof decoded === 'string') {
+        const nested = decoded.trim()
+        if (nested.startsWith('{') || nested.startsWith('[')) decoded = JSON.parse(nested)
+      }
+      return decoded !== null && typeof decoded === 'object' && !Array.isArray(decoded) ? decoded : null
     } catch (_) {
       return null
     }
@@ -495,14 +498,14 @@ export class OhosArkWebPlatformView extends PlatformView {
 
   async evaluate(source: string): Promise<Any> {
     const value = await this.script(`(async()=>{const AsyncFunction=Object.getPrototypeOf(async function(){}).constructor;const value=await new AsyncFunction(${JSON.stringify(source)}).call(window);return JSON.stringify({value});})()`)
-    const decoded: Any = JSON.parse(value)
+    const decoded: Any = this.parseScriptResult(value)
     if (decoded === null || typeof decoded !== 'object') throw new OhosArkWebError('plugin_execution_failed')
      return decoded
   }
 
   async html(): Promise<Any> {
     const value = await this.script('JSON.stringify({html:document.documentElement?.outerHTML??""})')
-    const decoded: Any = JSON.parse(value)
+    const decoded: Any = this.parseScriptResult(value)
     if (decoded === null || typeof decoded !== 'object') throw new OhosArkWebError('plugin_execution_failed')
      return decoded
   }
@@ -542,6 +545,15 @@ export class OhosArkWebPlatformView extends PlatformView {
 
   dispose(): void {
     this.close()
+  }
+
+  private parseScriptResult(value: string): Any {
+    let decoded: Any = JSON.parse(value)
+    if (typeof decoded === 'string') {
+      const nested = decoded.trim()
+      if (nested.startsWith('{') || nested.startsWith('[')) decoded = JSON.parse(nested)
+    }
+    return decoded
   }
 }
 
