@@ -113,7 +113,7 @@ export default class MgReadOhosSystemPlugin implements FlutterPlugin, MethodCall
 
   private async isLocalNetworkAvailable(result: MethodResult): Promise<void> {
     try {
-      result.success(await connection.hasDefaultNet())
+      result.success((await this.readLocalNetworkAddresses()).length > 0)
     } catch (error) {
       result.error('network_probe_failed', this.errorMessage(error), null)
     }
@@ -121,23 +121,28 @@ export default class MgReadOhosSystemPlugin implements FlutterPlugin, MethodCall
 
   private async getLocalNetworkAddresses(result: MethodResult): Promise<void> {
     try {
-      if (!(await connection.hasDefaultNet())) {
-        result.success([])
-        return
-      }
-      const netHandle = await connection.getDefaultNet()
-      const properties = await connection.getConnectionProperties(netHandle)
-      const addresses: string[] = []
-      for (const linkAddress of properties.linkAddresses) {
-        const address = linkAddress.address.address
-        if (linkAddress.address.family === 1 || linkAddress.address.family === undefined) {
-          addresses.push(address)
-        }
-      }
-      result.success(addresses)
+      result.success(await this.readLocalNetworkAddresses())
     } catch (error) {
       result.error('network_address_probe_failed', this.errorMessage(error), null)
     }
+  }
+
+  private async readLocalNetworkAddresses(): Promise<string[]> {
+    if (!(await connection.hasDefaultNet())) return []
+    const netHandle = await connection.getDefaultNet()
+    const capabilities = await connection.getNetCapabilities(netHandle)
+    const lanBearer = capabilities.bearerTypes.some(
+      (bearer: connection.NetBearType): boolean =>
+        bearer === connection.NetBearType.BEARER_WIFI || bearer === connection.NetBearType.BEARER_ETHERNET,
+    )
+    if (!lanBearer) return []
+    const properties = await connection.getConnectionProperties(netHandle)
+    const addresses: string[] = []
+    for (const linkAddress of properties.linkAddresses) {
+      const address = linkAddress.address.address
+      if (linkAddress.address.family === 1 || linkAddress.address.family === undefined) addresses.push(address)
+    }
+    return addresses
   }
 
   private async getCapabilities(result: MethodResult): Promise<void> {
@@ -166,13 +171,23 @@ export default class MgReadOhosSystemPlugin implements FlutterPlugin, MethodCall
   private attachNetworkEvents(): void {
     try {
       const network = connection.createNetConnection()
-      network.on('netAvailable', (_handle: connection.NetHandle): void => this.networkEvents.emit(true))
+      network.on('netAvailable', (_handle: connection.NetHandle): void => {
+        this.emitLocalNetworkAvailability()
+      })
       network.on('netLost', (_handle: connection.NetHandle): void => this.networkEvents.emit(false))
       network.on('netUnavailable', (): void => this.networkEvents.emit(false))
       network.register((_error: Object | undefined): void => {})
       this.networkConnection = network
     } catch (_) {
       this.networkConnection = undefined
+    }
+  }
+
+  private async emitLocalNetworkAvailability(): Promise<void> {
+    try {
+      this.networkEvents.emit((await this.readLocalNetworkAddresses()).length > 0)
+    } catch (_) {
+      this.networkEvents.emit(false)
     }
   }
 
