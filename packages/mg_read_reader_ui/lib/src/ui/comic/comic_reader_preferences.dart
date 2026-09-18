@@ -490,7 +490,7 @@ extension _ComicReaderPreferences on _ComicReaderViewState {
           (item) => Object.hash(item.info.id, identityHashCode(item.content)),
         ),
       ),
-      Object.hashAll(_boundaryLoads),
+      Object.hashAll(_boundaryLoadOwners.keys),
       Object.hashAll(
         _boundaryFailures.entries.map(
           (entry) => Object.hash(entry.key, identityHashCode(entry.value)),
@@ -519,7 +519,7 @@ extension _ComicReaderPreferences on _ComicReaderViewState {
         result.add(
           _ComicBoundaryEntry(
             index: nextIndex,
-            loading: _boundaryLoads.contains(nextIndex),
+            loading: _boundaryLoadOwners.containsKey(nextIndex),
             failure: _boundaryFailures[nextIndex],
             atEnd: _catalogTotal > 0 && nextIndex >= _catalogTotal,
           ),

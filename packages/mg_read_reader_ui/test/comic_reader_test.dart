@@ -620,6 +620,55 @@ void main() {
     expect(controller.snapshot.isLoading, isFalse);
   });
 
+  testWidgets('retrying a failed next chapter retries that chapter', (
+    WidgetTester tester,
+  ) async {
+    final source = _FailingNextChapterComicSource();
+    final controller = ComicReaderController();
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ComicReaderView(
+          bookId: 'book',
+          dataSource: source,
+          stateStore: _MemoryComicStateStore(),
+          controller: controller,
+        ),
+      ),
+    );
+
+    for (var frame = 0; frame < 60 && source.chapter2Calls < 1; frame++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    expect(source.chapter2Calls, greaterThanOrEqualTo(1));
+    expect(controller.snapshot.chapter?.id, 'chapter-1');
+
+    unawaited(controller.nextChapter());
+    for (
+      var frame = 0;
+      frame < 60 && (source.chapter2Calls < 2 || controller.snapshot.isLoading);
+      frame++
+    ) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    expect(source.chapter2Calls, greaterThanOrEqualTo(2));
+    expect(controller.snapshot.chapter?.id, 'chapter-1');
+    expect(controller.snapshot.failure, isNotNull);
+    expect(controller.snapshot.isLoading, isFalse);
+
+    await controller.refreshCurrentChapter();
+    for (
+      var frame = 0;
+      frame < 60 && controller.snapshot.chapter?.id != 'chapter-2';
+      frame++
+    ) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    expect(source.chapter2Calls, 3);
+    expect(controller.snapshot.chapter?.id, 'chapter-2');
+    expect(controller.snapshot.failure, isNull);
+  });
+
   testWidgets(
     'opening a saved middle chapter only stitches following chapters',
     (WidgetTester tester) async {
@@ -823,6 +872,51 @@ class _DelayedChapterInfoComicSource extends _FakeComicSource {
       index == 1
       ? _nextChapter.future
       : super.loadChapterAtIndex(bookId, index);
+}
+
+class _FailingNextChapterComicSource extends _FakeComicSource {
+  int chapter2Calls = 0;
+
+  @override
+  Future<ComicChapterCatalogPage> loadChapterCatalog(
+    String bookId, {
+    String? cursor,
+    int pageSize = 50,
+  }) async => ComicChapterCatalogPage(
+    items: const <ComicChapterInfo>[
+      ComicChapterInfo(id: 'chapter-1', title: '第一章', index: 0, imageCount: 1),
+      ComicChapterInfo(id: 'chapter-2', title: '第二章', index: 1, imageCount: 1),
+    ],
+    total: 2,
+    hasMore: false,
+  );
+
+  @override
+  Future<ComicChapterInfo> loadChapterAtIndex(String bookId, int index) async =>
+      ComicChapterInfo(
+        id: 'chapter-${index + 1}',
+        title: '第${index + 1}章',
+        index: index,
+        imageCount: 1,
+      );
+
+  @override
+  Future<ComicChapterContent> loadChapterContent(
+    String bookId,
+    String chapterId,
+  ) async {
+    if (chapterId == 'chapter-2') {
+      chapter2Calls++;
+      if (chapter2Calls < 3) throw StateError('temporary next chapter failure');
+    }
+    return ComicChapterContent(
+      chapterId: chapterId,
+      title: chapterId,
+      images: <ComicImageInfo>[
+        ComicImageInfo(id: '$chapterId-image-1', index: 0, width: 1, height: 1),
+      ],
+    );
+  }
 }
 
 class _GatedFirstImageComicSource extends _FakeComicSource {

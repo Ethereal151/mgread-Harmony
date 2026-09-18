@@ -30,7 +30,7 @@ extension _ComicReaderSession on _ComicReaderViewState {
     _catalogByIndex.clear();
     _window.clear();
     _boundaryFailures.clear();
-    _boundaryLoads.clear();
+    _boundaryLoadOwners.clear();
     _catalogCursors.clear();
     _catalogCursor = null;
     _catalogTotal = 0;
@@ -40,6 +40,7 @@ extension _ComicReaderSession on _ComicReaderViewState {
     _afterBoundaryIndex = null;
     _book = null;
     _currentChapter = null;
+    _pendingChapter = null;
     _progress = null;
     _preferences = ComicReaderPreferences.defaults;
     _preferencesAuthoritative = false;
@@ -282,6 +283,7 @@ extension _ComicReaderSession on _ComicReaderViewState {
     required bool replaceWindow,
     bool forceRefresh = false,
   }) async {
+    _pendingChapter = info;
     final ComicReaderProgress? checkpoint = _progress;
     if (checkpoint != null) {
       unawaited(
@@ -301,7 +303,7 @@ extension _ComicReaderSession on _ComicReaderViewState {
         _loading = true;
         _failure = null;
         if (replaceWindow) {
-          _boundaryLoads.clear();
+          _boundaryLoadOwners.clear();
           _boundaryFailures.clear();
           _afterBoundaryIndex = null;
         }
@@ -321,6 +323,7 @@ extension _ComicReaderSession on _ComicReaderViewState {
         ..sort((a, b) => a.info.index.compareTo(b.info.index));
       _trimWindow(aroundIndex: info.index);
       _currentChapter = info;
+      _pendingChapter = null;
       _startChapterPreload();
       final ComicReaderProgress? resolvedRestore = _progressForContent(
         info,
@@ -452,9 +455,11 @@ extension _ComicReaderSession on _ComicReaderViewState {
         (_catalogTotal > 0 && index >= _catalogTotal) ||
         !_isNextBoundaryCursor(index) ||
         _window.any((chapter) => chapter.info.index == index) ||
-        !_boundaryLoads.add(index)) {
+        _boundaryLoadOwners.containsKey(index)) {
       return;
     }
+    final int owner = ++_nextBoundaryLoadOwner;
+    _boundaryLoadOwners[index] = owner;
     if (mounted) setState(() => _boundaryFailures.remove(index));
     final int navigation = _navigationGeneration;
     var scanAdvanced = false;
@@ -503,10 +508,10 @@ extension _ComicReaderSession on _ComicReaderViewState {
       setState(() => _boundaryFailures[index] = failure);
       unawaited(_reportFailure(failure));
     } finally {
-      if (_isNavigation(navigation)) {
-        _boundaryLoads.remove(index);
-        if (mounted) setState(() {});
-        if (scanAdvanced) {
+      if (_boundaryLoadOwners[index] == owner) {
+        _boundaryLoadOwners.remove(index);
+        if (mounted && _isNavigation(navigation)) setState(() {});
+        if (_isNavigation(navigation) && scanAdvanced) {
           unawaited(_loadNextAdjacent(index + 1));
         }
       }
@@ -615,12 +620,12 @@ extension _ComicReaderSession on _ComicReaderViewState {
   }
 
   Future<void> _refreshCurrentChapter() async {
-    final ComicChapterInfo? current = _currentChapter;
-    if (current == null) return;
-    _imageCache.removeChapter(current.id);
+    final ComicChapterInfo? target = _pendingChapter ?? _currentChapter;
+    if (target == null) return;
+    _imageCache.removeChapter(target.id);
     await _openChapterInfo(
-      current,
-      restore: _progress,
+      target,
+      restore: target.id == _currentChapter?.id ? _progress : null,
       replaceWindow: true,
       forceRefresh: true,
     );

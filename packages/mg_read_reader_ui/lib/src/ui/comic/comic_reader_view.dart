@@ -141,7 +141,7 @@ class _ComicReaderViewState extends State<ComicReaderView>
   final Map<String, int> _contentEpochs = <String, int>{};
   final List<_LoadedComicChapter> _window = <_LoadedComicChapter>[];
   final Map<int, ReaderFailure> _boundaryFailures = <int, ReaderFailure>{};
-  final Set<int> _boundaryLoads = <int>{};
+  final Map<int, int> _boundaryLoadOwners = <int, int>{};
   final Set<String> _catalogCursors = <String>{};
   int _catalogPageCoverage = 0;
   int? _afterBoundaryIndex;
@@ -161,6 +161,7 @@ class _ComicReaderViewState extends State<ComicReaderView>
   ReaderPlatformCapabilities _platformCapabilities =
       const ReaderPlatformCapabilities();
   ReaderFailure? _failure;
+  ComicChapterInfo? _pendingChapter;
   String? _catalogCursor;
   int _catalogTotal = 0;
   bool _catalogHasMore = false;
@@ -182,6 +183,7 @@ class _ComicReaderViewState extends State<ComicReaderView>
   double _horizontalInset = 0;
   int _sessionGeneration = 0;
   int _navigationGeneration = 0;
+  int _nextBoundaryLoadOwner = 0;
   ReaderLifecycleState _lifecycleState = ReaderLifecycleState.foreground;
   final Map<_BookStoreKey, Future<void>> _progressWrites =
       <_BookStoreKey, Future<void>>{};
