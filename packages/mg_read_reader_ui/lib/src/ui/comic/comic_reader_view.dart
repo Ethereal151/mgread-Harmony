@@ -126,6 +126,7 @@ class _ComicReaderViewState extends State<ComicReaderView>
   final Object _controllerOwner = Object();
   final Object _awakeHolder = Object();
   final FocusNode _focusNode = FocusNode(debugLabel: 'ComicReader');
+  StreamSubscription<ReaderVolumeKey>? _volumeKeySubscription;
   final ScrollController _scrollController = ScrollController();
   final ComicDecodedImageBudget _decodeBudget = ComicDecodedImageBudget();
   final List<ComicChapterInfo> _catalog = <ComicChapterInfo>[];
@@ -221,6 +222,9 @@ class _ComicReaderViewState extends State<ComicReaderView>
       onDimensionsChanged: _scheduleDimensionsUpdate,
     );
     _bindController();
+    _volumeKeySubscription = ReaderPlatform.volumeKeyEvents.listen(
+      _handleVolumeKey,
+    );
     _scrollController.addListener(_handleScroll);
     WidgetsBinding.instance.addObserver(this);
     _lifecycleListener = AppLifecycleListener(onStateChange: _handleLifecycle);
@@ -322,6 +326,8 @@ class _ComicReaderViewState extends State<ComicReaderView>
       ..removeListener(_handleScroll)
       ..dispose();
     _focusNode.dispose();
+    _volumeKeySubscription?.cancel();
+    unawaited(_disableVolumeKeyHandling());
     _imageCache.dispose();
     _dismissSessionSheet();
     _controller.unbind(_controllerOwner);

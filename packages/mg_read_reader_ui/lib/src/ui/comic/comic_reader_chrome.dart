@@ -3,6 +3,35 @@ part of 'comic_reader_view.dart';
 // ignore_for_file: invalid_use_of_protected_member
 
 extension _ComicReaderChrome on _ComicReaderViewState {
+  void _handleVolumeKey(ReaderVolumeKey key) {
+    if (!_preferences.pageTurnShortcuts ||
+        !_foreground ||
+        _settingsVisible ||
+        _controlsVisible ||
+        _currentChapter == null ||
+        !_scrollController.hasClients) {
+      return;
+    }
+    final double delta = key == ReaderVolumeKey.down
+        ? _viewportHeight * .82
+        : -_viewportHeight * .82;
+    final double target = (_scrollController.offset + delta).clamp(
+      0,
+      _scrollController.position.maxScrollExtent,
+    );
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _scrollController.jumpTo(target);
+    } else {
+      unawaited(
+        _scrollController.animateTo(
+          target,
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOutCubic,
+        ),
+      );
+    }
+  }
+
   Widget _buildReadingSurface(ReaderPalette palette) {
     if (!_loading && _failure == null && _window.isEmpty) {
       return Center(
@@ -476,12 +505,25 @@ extension _ComicReaderChrome on _ComicReaderViewState {
       unawaited(_requestExit());
       return;
     }
-    if (!_scrollController.hasClients) return;
+    if (!_preferences.pageTurnShortcuts ||
+        _settingsVisible ||
+        _controlsVisible ||
+        !_scrollController.hasClients) {
+      return;
+    }
     final double delta = switch (event.logicalKey) {
       LogicalKeyboardKey.arrowDown => 72,
       LogicalKeyboardKey.arrowUp => -72,
+      LogicalKeyboardKey.arrowRight => _viewportHeight * .82,
+      LogicalKeyboardKey.space when !HardwareKeyboard.instance.isShiftPressed =>
+        _viewportHeight * .82,
+      LogicalKeyboardKey.enter => _viewportHeight * .82,
       LogicalKeyboardKey.pageDown => _viewportHeight * .82,
+      LogicalKeyboardKey.arrowLeft => -_viewportHeight * .82,
+      LogicalKeyboardKey.space => -_viewportHeight * .82,
       LogicalKeyboardKey.pageUp => -_viewportHeight * .82,
+      LogicalKeyboardKey.audioVolumeDown => _viewportHeight * .82,
+      LogicalKeyboardKey.audioVolumeUp => -_viewportHeight * .82,
       _ => 0,
     };
     if (delta == 0) return;
@@ -946,12 +988,7 @@ extension _ComicReaderChrome on _ComicReaderViewState {
                                   min: .25,
                                   max: 1,
                                   onChanged: (double value) => update(
-                                    ComicReaderPreferences(
-                                      brightness: value,
-                                      keepScreenOn: _preferences.keepScreenOn,
-                                      immersiveMode: _preferences.immersiveMode,
-                                      imageSpacing: _preferences.imageSpacing,
-                                    ),
+                                    _preferences.copyWith(brightness: value),
                                     persist: false,
                                   ),
                                   onChangeEnd: (double value) => commit(),
@@ -964,15 +1001,23 @@ extension _ComicReaderChrome on _ComicReaderViewState {
                                     ),
                                     value: _preferences.keepScreenOn,
                                     onChanged: (bool value) => update(
-                                      ComicReaderPreferences(
-                                        brightness: _preferences.brightness,
+                                      _preferences.copyWith(
                                         keepScreenOn: value,
-                                        immersiveMode:
-                                            _preferences.immersiveMode,
-                                        imageSpacing: _preferences.imageSpacing,
                                       ),
                                     ),
                                   ),
+                                SwitchListTile.adaptive(
+                                  contentPadding: EdgeInsets.zero,
+                                  title: const Text(
+                                    ComicReaderStrings.pageTurnShortcuts,
+                                  ),
+                                  value: _preferences.pageTurnShortcuts,
+                                  onChanged: (bool value) => update(
+                                    _preferences.copyWith(
+                                      pageTurnShortcuts: value,
+                                    ),
+                                  ),
+                                ),
                                 if (_platformCapabilities.immersiveMode)
                                   SwitchListTile.adaptive(
                                     contentPadding: EdgeInsets.zero,
@@ -981,11 +1026,8 @@ extension _ComicReaderChrome on _ComicReaderViewState {
                                     ),
                                     value: _preferences.immersiveMode,
                                     onChanged: (bool value) => update(
-                                      ComicReaderPreferences(
-                                        brightness: _preferences.brightness,
-                                        keepScreenOn: _preferences.keepScreenOn,
+                                      _preferences.copyWith(
                                         immersiveMode: value,
-                                        imageSpacing: _preferences.imageSpacing,
                                       ),
                                     ),
                                   ),

@@ -11,7 +11,8 @@ extension _ComicReaderPreferences on _ComicReaderViewState {
     final ComicReaderStateStore targetStore = store ?? widget.stateStore;
     final String writeKey =
         '${normalized.brightness}\u0000${normalized.imageSpacing}\u0000'
-        '${normalized.keepScreenOn}\u0000${normalized.immersiveMode}';
+        '${normalized.keepScreenOn}\u0000${normalized.immersiveMode}\u0000'
+        '${normalized.pageTurnShortcuts}';
     if (_lastPreferenceWriteKeys[targetStore] == writeKey) {
       return _preferenceWrites[targetStore] ?? Future<void>.value();
     }
@@ -28,7 +29,8 @@ extension _ComicReaderPreferences on _ComicReaderViewState {
             normalized.brightness == _preferences.brightness &&
             normalized.imageSpacing == _preferences.imageSpacing &&
             normalized.keepScreenOn == _preferences.keepScreenOn &&
-            normalized.immersiveMode == _preferences.immersiveMode) {
+            normalized.immersiveMode == _preferences.immersiveMode &&
+            normalized.pageTurnShortcuts == _preferences.pageTurnShortcuts) {
           _preferencesDirty = true;
         }
         if (!_disposed && identical(targetStore, widget.stateStore)) {
@@ -112,10 +114,39 @@ extension _ComicReaderPreferences on _ComicReaderViewState {
 
   Future<void> _syncAwake() {
     _awakeWrite = _awakeWrite.then(
-      (_) => _reconcileAwake(),
-      onError: (_) => _reconcileAwake(),
+      (_) async {
+        await _reconcileAwake();
+        await _syncVolumeKeyHandling();
+      },
+      onError: (_) async {
+        await _reconcileAwake();
+        await _syncVolumeKeyHandling();
+      },
     );
     return _awakeWrite;
+  }
+
+  Future<void> _syncVolumeKeyHandling() async {
+    final bool enabled =
+        !_disposed &&
+        _foreground &&
+        _currentChapter != null &&
+        !_settingsVisible &&
+        !_controlsVisible &&
+        _preferences.pageTurnShortcuts;
+    try {
+      await ReaderPlatform.instance.setVolumeKeyPageTurningEnabled(enabled);
+    } catch (_) {
+      // Hosts without the optional native volume bridge keep desktop input.
+    }
+  }
+
+  Future<void> _disableVolumeKeyHandling() async {
+    try {
+      await ReaderPlatform.instance.setVolumeKeyPageTurningEnabled(false);
+    } catch (_) {
+      // Test hosts and older embedders may not expose the optional method.
+    }
   }
 
   Future<void> _reconcileAwake() async {
@@ -183,13 +214,14 @@ extension _ComicReaderPreferences on _ComicReaderViewState {
   Future<void> _setSettingsVisible(bool value) async {
     if (_disposed || _settingsVisible == value) return;
     _settingsVisible = value;
+    final Future<void> sync = _syncAwake();
     if (!_preferences.immersiveMode ||
         !_platformCapabilities.immersiveMode ||
         !_foreground ||
         _currentChapter == null) {
       return;
     }
-    await _syncAwake();
+    await sync;
   }
 
   void _setControlsVisible(bool value) {

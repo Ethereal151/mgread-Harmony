@@ -5,6 +5,7 @@ import android.content.Context
 import android.os.Build
 import android.os.PowerManager
 import android.util.Log
+import android.view.KeyEvent
 import android.view.View
 import android.view.WindowInsets
 import android.view.WindowInsetsController
@@ -38,6 +39,7 @@ class NovelReaderUiPlugin :
     private var keepScreenOnActivity: Activity? = null
     private var keepScreenOnAddedByPlugin = false
     private var screenDimWakeLock: PowerManager.WakeLock? = null
+    private var volumeKeyPageTurningEnabled = false
 
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         channel = MethodChannel(binding.binaryMessenger, "novel_reader_ui/system")
@@ -66,12 +68,18 @@ class NovelReaderUiPlugin :
                     commitRequestedState = true,
                 )
             }
+            "setVolumeKeyPageTurningEnabled" -> {
+                volumeKeyPageTurningEnabled =
+                    (call.arguments as? Map<*, *>)?.get("enabled") as? Boolean ?: false
+                result.success(null)
+            }
             else -> result.notImplemented()
         }
     }
 
     override fun onAttachedToActivity(binding: ActivityPluginBinding) {
         activity = binding.activity
+        activeInstance = this
         if (keepScreenOn || immersiveMode) {
             updateReaderSystemUi(activity, keepScreenOn, allowScreenDimming, immersiveMode)
         }
@@ -84,10 +92,12 @@ class NovelReaderUiPlugin :
             immersive = false,
         )
         activity = null
+        if (activeInstance === this) activeInstance = null
     }
 
     override fun onReattachedToActivityForConfigChanges(binding: ActivityPluginBinding) {
         activity = binding.activity
+        activeInstance = this
         if (keepScreenOn || immersiveMode) {
             updateReaderSystemUi(activity, keepScreenOn, allowScreenDimming, immersiveMode)
         }
@@ -100,9 +110,11 @@ class NovelReaderUiPlugin :
             immersive = false,
         )
         activity = null
+        if (activeInstance === this) activeInstance = null
         keepScreenOn = false
         allowScreenDimming = false
         immersiveMode = false
+        volumeKeyPageTurningEnabled = false
     }
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
@@ -115,7 +127,31 @@ class NovelReaderUiPlugin :
         keepScreenOn = false
         allowScreenDimming = false
         immersiveMode = false
+        volumeKeyPageTurningEnabled = false
         channel.setMethodCallHandler(null)
+    }
+
+    private fun dispatchVolumeKey(
+        keyCode: Int,
+        action: Int,
+        repeatCount: Int,
+    ): Boolean {
+        if (!volumeKeyPageTurningEnabled ||
+            (keyCode != KeyEvent.KEYCODE_VOLUME_UP &&
+                keyCode != KeyEvent.KEYCODE_VOLUME_DOWN)
+        ) {
+            return false
+        }
+        if (action == KeyEvent.ACTION_DOWN && repeatCount == 0) {
+            channel.invokeMethod(
+                "volumeKey",
+                mapOf(
+                    "direction" to
+                        if (keyCode == KeyEvent.KEYCODE_VOLUME_UP) "up" else "down",
+                ),
+            )
+        }
+        return true
     }
 
     private fun updateReaderSystemUi(
@@ -304,7 +340,11 @@ class NovelReaderUiPlugin :
         }
     }
 
-    private companion object {
-        const val TAG = "NovelReaderUiPlugin"
+    companion object {
+        private const val TAG = "NovelReaderUiPlugin"
+        private var activeInstance: NovelReaderUiPlugin? = null
+
+        fun dispatchVolumeKey(keyCode: Int, action: Int, repeatCount: Int): Boolean =
+            activeInstance?.dispatchVolumeKey(keyCode, action, repeatCount) == true
     }
 }

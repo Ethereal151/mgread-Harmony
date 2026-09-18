@@ -273,6 +273,7 @@ class TextReaderPreferences {
     this.brightness = 1,
     this.navigationMode = ReaderNavigationMode.horizontalPages,
     this.singleHandMode = false,
+    this.pageTurnShortcuts = true,
     this.keepScreenOn = true,
     this.pageAnimation = ReaderPageAnimation.slide,
     this.immersiveMode = false,
@@ -351,6 +352,12 @@ class TextReaderPreferences {
   /// This affects horizontal reading tap zones only. Swipe direction and
   /// vertical scrolling retain their normal behavior.
   final bool singleHandMode;
+
+  /// Whether volume keys and common hardware keyboard shortcuts turn pages.
+  ///
+  /// The default preserves the reader's existing keyboard behavior while
+  /// adding volume-key support on hosts that expose it.
+  final bool pageTurnShortcuts;
 
   /// Requests display-awake while an active reader is in the foreground.
   final bool keepScreenOn;
@@ -477,6 +484,7 @@ class TextReaderPreferences {
     double? brightness,
     ReaderNavigationMode? navigationMode,
     bool? singleHandMode,
+    bool? pageTurnShortcuts,
     bool? keepScreenOn,
     ReaderPageAnimation? pageAnimation,
     bool? immersiveMode,
@@ -504,6 +512,7 @@ class TextReaderPreferences {
       brightness: brightness ?? this.brightness,
       navigationMode: navigationMode ?? this.navigationMode,
       singleHandMode: singleHandMode ?? this.singleHandMode,
+      pageTurnShortcuts: pageTurnShortcuts ?? this.pageTurnShortcuts,
       keepScreenOn: keepScreenOn ?? this.keepScreenOn,
       pageAnimation: pageAnimation ?? this.pageAnimation,
       immersiveMode: immersiveMode ?? this.immersiveMode,
@@ -534,6 +543,7 @@ class TextReaderPreferences {
       brightness == other.brightness &&
       navigationMode == other.navigationMode &&
       singleHandMode == other.singleHandMode &&
+      pageTurnShortcuts == other.pageTurnShortcuts &&
       keepScreenOn == other.keepScreenOn &&
       pageAnimation == other.pageAnimation &&
       immersiveMode == other.immersiveMode &&
@@ -560,6 +570,7 @@ class TextReaderPreferences {
     brightness,
     navigationMode,
     singleHandMode,
+    pageTurnShortcuts,
     keepScreenOn,
     pageAnimation,
     immersiveMode,

@@ -401,6 +401,16 @@ void main() {
     );
   });
 
+  test('comic reader keeps page-turn shortcut preference in copies', () {
+    expect(ComicReaderPreferences.defaults.pageTurnShortcuts, isTrue);
+    expect(
+      ComicReaderPreferences.defaults
+          .copyWith(pageTurnShortcuts: false)
+          .pageTurnShortcuts,
+      isFalse,
+    );
+  });
+
   testWidgets(
     'comic images use decoded dimensions and meet without fixed-extent gaps',
     (WidgetTester tester) async {

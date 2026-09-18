@@ -393,6 +393,7 @@ class ComicReaderPreferences {
     this.brightness = 1,
     this.keepScreenOn = true,
     this.immersiveMode = false,
+    this.pageTurnShortcuts = true,
     this.imageSpacing = 0,
   });
 
@@ -408,6 +409,9 @@ class ComicReaderPreferences {
   /// Requests immersive mode on supported platforms.
   final bool immersiveMode;
 
+  /// Whether volume keys and common hardware keyboard shortcuts turn pages.
+  final bool pageTurnShortcuts;
+
   /// Legacy setting retained for persistence compatibility. Comic pages always
   /// render edge-to-edge, so normalized values are zero.
   final double imageSpacing;
@@ -419,6 +423,7 @@ class ComicReaderPreferences {
         : ComicReaderPreferences.defaults.brightness,
     keepScreenOn: keepScreenOn,
     immersiveMode: immersiveMode,
+    pageTurnShortcuts: pageTurnShortcuts,
     imageSpacing: 0,
   );
 
@@ -427,11 +432,13 @@ class ComicReaderPreferences {
     double? brightness,
     bool? keepScreenOn,
     bool? immersiveMode,
+    bool? pageTurnShortcuts,
     double? imageSpacing,
   }) => ComicReaderPreferences(
     brightness: brightness ?? this.brightness,
     keepScreenOn: keepScreenOn ?? this.keepScreenOn,
     immersiveMode: immersiveMode ?? this.immersiveMode,
+    pageTurnShortcuts: pageTurnShortcuts ?? this.pageTurnShortcuts,
     imageSpacing: imageSpacing ?? this.imageSpacing,
   );
 
@@ -441,11 +448,18 @@ class ComicReaderPreferences {
       brightness == other.brightness &&
       keepScreenOn == other.keepScreenOn &&
       immersiveMode == other.immersiveMode &&
+      pageTurnShortcuts == other.pageTurnShortcuts &&
       imageSpacing == other.imageSpacing;
 
   @override
   int get hashCode =>
-      Object.hash(brightness, keepScreenOn, immersiveMode, imageSpacing);
+      Object.hash(
+        brightness,
+        keepScreenOn,
+        immersiveMode,
+        pageTurnShortcuts,
+        imageSpacing,
+      );
 }
 
 @immutable

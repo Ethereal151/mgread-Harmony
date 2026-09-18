@@ -10,6 +10,7 @@ import android.net.NetworkCapabilities
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import android.view.KeyEvent
 import androidx.core.content.FileProvider
 import com.ryanheise.audioservice.AudioServiceActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -24,6 +25,18 @@ import java.io.File
  * silent install: Android owns the confirmation and the update-signature validation.
  */
 class MainActivity : AudioServiceActivity() {
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (com.example.novel_reader_ui.NovelReaderUiPlugin.dispatchVolumeKey(
+                event.keyCode,
+                event.action,
+                event.repeatCount,
+            )
+        ) {
+            return true
+        }
+        return super.dispatchKeyEvent(event)
+    }
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         if (!flutterEngine.plugins.has(AudioBackgroundPlatformBridge::class.java)) {

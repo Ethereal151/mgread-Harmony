@@ -537,6 +537,7 @@ final class ContentLibraryComicReaderStateStore implements ComicReaderStateStore
             brightness: (raw['brightness'] as num?)?.toDouble() ?? 1,
             keepScreenOn: raw['keepScreenOn'] as bool? ?? true,
             immersiveMode: raw['immersiveMode'] as bool? ?? false,
+            pageTurnShortcuts: raw['pageTurnShortcuts'] as bool? ?? true,
             imageSpacing: (raw['imageSpacing'] as num?)?.toDouble() ?? 0,
           ).normalized();
   }
@@ -549,6 +550,7 @@ final class ContentLibraryComicReaderStateStore implements ComicReaderStateStore
       'brightness': p.brightness,
       'keepScreenOn': p.keepScreenOn,
       'immersiveMode': p.immersiveMode,
+      'pageTurnShortcuts': p.pageTurnShortcuts,
       'imageSpacing': p.imageSpacing,
     });
     await s.flush();

@@ -16,6 +16,7 @@ abstract final class ComicReaderStrings {
   static const spacing = '图片间距';
   static const keepAwake = '屏幕常亮';
   static const immersive = '沉浸阅读';
+  static const pageTurnShortcuts = '音量键与快捷键翻页';
   static const previousChapter = '上一章';
   static const nextChapter = '下一章';
   static const endOfBook = '已经是最后一章';

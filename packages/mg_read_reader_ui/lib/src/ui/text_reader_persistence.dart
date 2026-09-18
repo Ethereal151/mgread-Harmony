@@ -232,10 +232,39 @@ extension _TextReaderPersistence on _TextReaderViewState {
 
   Future<void> _syncAwake() {
     _awakeWrite = _awakeWrite.then(
-      (_) => _reconcileAwake(),
-      onError: (_) => _reconcileAwake(),
+      (_) async {
+        await _reconcileAwake();
+        await _syncVolumeKeyHandling();
+      },
+      onError: (_) async {
+        await _reconcileAwake();
+        await _syncVolumeKeyHandling();
+      },
     );
     return _awakeWrite;
+  }
+
+  Future<void> _syncVolumeKeyHandling() async {
+    final bool enabled =
+        !_disposed &&
+        _foreground &&
+        _content != null &&
+        !_readerInteractionBlocked &&
+        _preferences.pageTurnShortcuts;
+    try {
+      await ReaderPlatform.instance.setVolumeKeyPageTurningEnabled(enabled);
+    } catch (_) {
+      // A host without the optional native volume bridge keeps normal reader
+      // shortcuts; volume-key support is best effort at this boundary.
+    }
+  }
+
+  Future<void> _disableVolumeKeyHandling() async {
+    try {
+      await ReaderPlatform.instance.setVolumeKeyPageTurningEnabled(false);
+    } catch (_) {
+      // Test hosts and older embedders may not expose the optional method.
+    }
   }
 
   Future<void> _reconcileAwake() async {
@@ -313,13 +342,14 @@ extension _TextReaderPersistence on _TextReaderViewState {
   Future<void> _setReaderSettingsVisible(bool value) async {
     if (_readerSettingsVisible == value || !mounted) return;
     setState(() => _readerSettingsVisible = value);
+    final Future<void> sync = _syncAwake();
     if (!_preferences.immersiveMode ||
         !_platformCapabilities.immersiveMode ||
         !_foreground ||
         _content == null) {
       return;
     }
-    await _syncAwake();
+    await sync;
   }
 
   bool get _readerInteractionBlocked =>

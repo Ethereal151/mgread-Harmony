@@ -32,6 +32,16 @@ void main() {
     expect(const TextReaderPreferences(fontSize: 40).normalized().fontSize, 32);
   });
 
+  test('enables common page-turn shortcuts by default and can disable them', () {
+    expect(TextReaderPreferences.defaults.pageTurnShortcuts, isTrue);
+    expect(
+      TextReaderPreferences.defaults
+          .copyWith(pageTurnShortcuts: false)
+          .pageTurnShortcuts,
+      isFalse,
+    );
+  });
+
   testWidgets(
     'places default text content eight dp after the Android safe area',
     (WidgetTester tester) async {

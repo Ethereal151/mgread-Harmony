@@ -158,6 +158,7 @@ class _TextReaderViewState extends State<TextReaderView>
   final Object _awakeHolder = Object();
   final Object _controllerBindingOwner = Object();
   final FocusNode _focusNode = FocusNode(debugLabel: 'TextReader');
+  StreamSubscription<ReaderVolumeKey>? _volumeKeySubscription;
   final ScrollController _verticalController = ScrollController();
   final ScrollController _catalogScrollController = ScrollController(
     keepScrollOffset: true,
@@ -360,6 +361,9 @@ class _TextReaderViewState extends State<TextReaderView>
     );
     _configureChapterAccessCoordinator();
     _bindController();
+    _volumeKeySubscription = ReaderPlatform.volumeKeyEvents.listen(
+      _handleVolumeKey,
+    );
     _verticalController.addListener(_handleVerticalScroll);
     _lifecycleListener = AppLifecycleListener(onStateChange: _handleLifecycle);
     _clockTimer = Timer.periodic(const Duration(minutes: 1), (_) {
@@ -584,6 +588,8 @@ class _TextReaderViewState extends State<TextReaderView>
     _noticeTimer?.cancel();
     _clockTimer?.cancel();
     _wheelResetTimer?.cancel();
+    _volumeKeySubscription?.cancel();
+    unawaited(_disableVolumeKeyHandling());
     _adjacentQuietTimer?.cancel();
     unawaited(_releaseAwake());
     unawaited(_notify(() => observer.onSessionEnded(bookId, progress)));

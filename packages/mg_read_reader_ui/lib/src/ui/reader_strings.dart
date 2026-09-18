@@ -124,6 +124,7 @@ abstract final class ReaderStrings {
   static const stopAutoReading = '停止自动阅读';
   static const autoReadingSpeed = '自动阅读速度';
   static const singleHandMode = '单手模式';
+  static const pageTurnShortcuts = '音量键与快捷键翻页';
   static const slow = '慢';
   static const fast = '快';
   static const bookComments = '书籍评论';

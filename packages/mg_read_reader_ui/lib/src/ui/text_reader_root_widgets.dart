@@ -4,8 +4,51 @@ part of 'text_reader_view.dart';
 ///
 /// 固定背景与正文分属不同重绘边界；只有覆盖/仿真翻页把背景交给移动页片。
 extension _TextReaderRootWidgets on _TextReaderViewState {
+  void _handleVolumeKey(ReaderVolumeKey key) {
+    if (!_preferences.pageTurnShortcuts ||
+        _readerInteractionBlocked ||
+        !_foreground ||
+        _content == null) {
+      return;
+    }
+    unawaited(
+      key == ReaderVolumeKey.down ? _nextPage() : _previousPage(),
+    );
+  }
+
   Widget _buildReaderRoot(BuildContext context) {
     final ReaderPalette palette = _palette;
+    final Map<ShortcutActivator, VoidCallback> shortcuts =
+        <ShortcutActivator, VoidCallback>{
+          const SingleActivator(LogicalKeyboardKey.escape): () =>
+              unawaited(_requestExit()),
+        };
+    if (_preferences.pageTurnShortcuts) {
+      shortcuts.addAll(<ShortcutActivator, VoidCallback>{
+        const SingleActivator(LogicalKeyboardKey.arrowRight): () =>
+            unawaited(_nextPage()),
+        const SingleActivator(LogicalKeyboardKey.arrowDown): () =>
+            unawaited(_nextPage()),
+        const SingleActivator(LogicalKeyboardKey.pageDown): () =>
+            unawaited(_nextPage()),
+        const SingleActivator(LogicalKeyboardKey.space): () =>
+            unawaited(_nextPage()),
+        const SingleActivator(LogicalKeyboardKey.audioVolumeDown): () =>
+            unawaited(_nextPage()),
+        const SingleActivator(LogicalKeyboardKey.arrowLeft): () =>
+            unawaited(_previousPage()),
+        const SingleActivator(LogicalKeyboardKey.arrowUp): () =>
+            unawaited(_previousPage()),
+        const SingleActivator(LogicalKeyboardKey.pageUp): () =>
+            unawaited(_previousPage()),
+        const SingleActivator(
+          LogicalKeyboardKey.space,
+          shift: true,
+        ): () => unawaited(_previousPage()),
+        const SingleActivator(LogicalKeyboardKey.audioVolumeUp): () =>
+            unawaited(_previousPage()),
+      });
+    }
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value:
           (palette.systemBrightness == Brightness.dark
@@ -28,25 +71,7 @@ extension _TextReaderRootWidgets on _TextReaderViewState {
           child: Material(
             color: palette.background,
             child: CallbackShortcuts(
-              bindings: <ShortcutActivator, VoidCallback>{
-                const SingleActivator(LogicalKeyboardKey.arrowRight): () =>
-                    unawaited(_nextPage()),
-                const SingleActivator(LogicalKeyboardKey.pageDown): () =>
-                    unawaited(_nextPage()),
-                const SingleActivator(LogicalKeyboardKey.space): () =>
-                    unawaited(_nextPage()),
-                const SingleActivator(LogicalKeyboardKey.arrowLeft): () =>
-                    unawaited(_previousPage()),
-                const SingleActivator(LogicalKeyboardKey.pageUp): () =>
-                    unawaited(_previousPage()),
-                const SingleActivator(
-                  LogicalKeyboardKey.space,
-                  shift: true,
-                ): () =>
-                    unawaited(_previousPage()),
-                const SingleActivator(LogicalKeyboardKey.escape): () =>
-                    unawaited(_requestExit()),
-              },
+              bindings: shortcuts,
               child: Focus(
                 focusNode: _focusNode,
                 autofocus: true,
