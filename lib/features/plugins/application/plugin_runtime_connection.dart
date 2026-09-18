@@ -340,6 +340,8 @@ AppError normalizePluginRuntimeError(PluginRuntimeException error, {String? loca
     'runtime_http_readiness_failed' || 'runtime_invalid_ready_signal' || 'runtime_ready_timeout' => AppErrorCode.runtimeNotReady,
     'invalid_response' || 'plugin_invalid_response' => AppErrorCode.invalidFormat,
     'file_name_invalid' => AppErrorCode.fileNameInvalid,
+    'not_found' => AppErrorCode.fileUnavailable,
+    'picker_failed' => AppErrorCode.fileReadFailed,
     'file_unavailable' => AppErrorCode.fileUnavailable,
     'file_unreadable' => AppErrorCode.fileUnreadable,
     'file_too_large' => AppErrorCode.fileTooLarge,

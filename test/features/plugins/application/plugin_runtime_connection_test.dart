@@ -97,6 +97,17 @@ void main() {
     expect(error.toString(), contains('selected path'));
   });
 
+  test('OHOS picker and missing-file failures use stable import UI codes', () {
+    expect(
+      normalizePluginRuntimeError(const PluginRuntimeException('not_found', 'The selected plugin artifact is unavailable.')).code,
+      AppErrorCode.fileUnavailable,
+    );
+    expect(
+      normalizePluginRuntimeError(const PluginRuntimeException('picker_failed', 'The OHOS file picker failed.')).code,
+      AppErrorCode.fileReadFailed,
+    );
+  });
+
   test('plugin execution failures remain non-fatal and safely classified', () {
     final error = normalizePluginRuntimeError(
       const PluginRuntimeException('plugin_execution_failed', 'Plugin source exception details must not escape.'),

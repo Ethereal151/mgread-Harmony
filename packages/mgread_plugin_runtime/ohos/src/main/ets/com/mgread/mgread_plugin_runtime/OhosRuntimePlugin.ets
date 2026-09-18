@@ -1,5 +1,7 @@
 import {
   Any,
+  AbilityAware,
+  AbilityPluginBinding,
   FlutterAssets,
   FlutterPlugin,
   FlutterPluginBinding,
@@ -23,11 +25,11 @@ const RUNTIME_DIRECTORY = 'mgread-runtime/ohos'
  *
  * The bridge keeps all Node VM/process ownership inside the native host.
  */
-export default class OhosRuntimePlugin implements FlutterPlugin, MethodCallHandler {
+export default class OhosRuntimePlugin implements FlutterPlugin, MethodCallHandler, AbilityAware {
   private channel?: MethodChannel
   private progressChannel?: EventChannel
   private progressHandler = new OhosRuntimeProgressStreamHandler()
-  private context?: common.Context
+  private context?: common.UIAbilityContext
   private assets?: FlutterAssets
   private runtimeReady = false
   private runtimeInitialization?: Promise<void>
@@ -37,12 +39,19 @@ export default class OhosRuntimePlugin implements FlutterPlugin, MethodCallHandl
   }
 
   onAttachedToEngine(binding: FlutterPluginBinding): void {
-    this.context = binding.getApplicationContext()
     this.assets = binding.getFlutterAssets()
     this.channel = new MethodChannel(binding.getBinaryMessenger(), 'mgread_plugin_runtime/ohos')
     this.channel.setMethodCallHandler(this)
     this.progressChannel = new EventChannel(binding.getBinaryMessenger(), 'mgread_plugin_runtime/ohos/progress')
     this.progressChannel.setStreamHandler(this.progressHandler)
+  }
+
+  onAttachedToAbility(binding: AbilityPluginBinding): void {
+    this.context = binding.getAbility().context as common.UIAbilityContext
+  }
+
+  onDetachedFromAbility(): void {
+    this.context = undefined
   }
 
   onDetachedFromEngine(binding: FlutterPluginBinding): void {
@@ -144,8 +153,28 @@ export default class OhosRuntimePlugin implements FlutterPlugin, MethodCallHandl
       options.fileSuffixFilters = ['.mgplugin.js', '.mgplugin']
       options.maxSelectNumber = 1
       const pickerView = new picker.DocumentViewPicker(context as common.UIAbilityContext)
-      const selected = await pickerView.select(options)
-      result.success(selected.length === 0 ? '' : selected[0])
+      let selected: Array<string>
+      try {
+        selected = await pickerView.select(options)
+      } catch (error) {
+        result.error('picker_failed', this.errorMessage(error), null)
+        return
+      }
+      if (selected.length === 0) {
+        result.success('')
+        return
+      }
+      const selectedUri = selected[0]
+      const lowerUri = selectedUri.toLowerCase()
+      const suffix = lowerUri.endsWith('.mgplugin.js') ? '.mgplugin.js' : '.mgplugin'
+      const target = `${context.cacheDir}/mgread-plugin-import-${Date.now()}${suffix}`
+      try {
+        await this.copyFile(selectedUri, target)
+      } catch (error) {
+        result.error('file_read_failed', this.errorMessage(error), null)
+        return
+      }
+      result.success(target)
     } catch (error) {
       result.error('picker_failed', this.errorMessage(error), null)
     }
@@ -211,6 +240,24 @@ export default class OhosRuntimePlugin implements FlutterPlugin, MethodCallHandl
   private makeDirectory(path: string): void {
     if (path.length === 0) return
     try { fs.mkdirSync(path, true) } catch (_) { /* already exists */ }
+  }
+
+  private async copyFile(sourcePath: string, targetPath: string): Promise<void> {
+    let source: fs.File | undefined
+    let target: fs.File | undefined
+    try {
+      source = await fs.open(sourcePath, fs.OpenMode.READ_ONLY)
+      target = await fs.open(targetPath, fs.OpenMode.READ_WRITE | fs.OpenMode.CREATE | fs.OpenMode.TRUNC)
+      const buffer = new ArrayBuffer(64 * 1024)
+      let read = await fs.read(source.fd, buffer)
+      while (read > 0) {
+        await fs.write(target.fd, buffer.slice(0, read))
+        read = await fs.read(source.fd, buffer)
+      }
+    } finally {
+      if (source !== undefined) await fs.close(source.fd)
+      if (target !== undefined) await fs.close(target.fd)
+    }
   }
 
   private errorMessage(error: Object): string {

@@ -313,10 +313,14 @@ final class _OhosRuntimeSupervisor implements _RuntimeSupervisor {
   }
 
   Future<bool> _pickAndImportLocalPlugin() async {
-    final encoded = await _ohosRuntimeChannel.invokeMethod<String>('pickLocalPlugin');
-    if (encoded == null || encoded.isEmpty) return false;
-    await _importLocalPlugin(encoded);
-    return true;
+    try {
+      final encoded = await _ohosRuntimeChannel.invokeMethod<String>('pickLocalPlugin');
+      if (encoded == null || encoded.isEmpty) return false;
+      await _importLocalPlugin(encoded);
+      return true;
+    } on PlatformException catch (error) {
+      throw PluginRuntimeException(error.code, error.message ?? 'The OHOS file picker failed.');
+    }
   }
 
   Future<MaterializedPluginArtifact> _materializePluginArtifact(PluginTransferOffer offer) async {
