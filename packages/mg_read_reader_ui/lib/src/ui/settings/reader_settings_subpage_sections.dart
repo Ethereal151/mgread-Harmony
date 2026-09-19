@@ -263,6 +263,14 @@ extension _ReaderSettingsSubpageSections on _ReaderSettingsSheetState {
             onChanged: (bool value) =>
                 _commit(_preferences.copyWith(immersiveMode: value)),
           ),
+        _settingsSwitch(
+          title: ReaderStrings.layoutDebugMode,
+          value: _layoutDebugMode,
+          onChanged: (bool value) {
+            _updateState(() => _layoutDebugMode = value);
+            widget.onLayoutDebugModeChanged(value);
+          },
+        ),
       ],
     );
   }

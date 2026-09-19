@@ -120,6 +120,7 @@ abstract final class ReaderStrings {
   static const spacingSettings = '间距设置';
   static const commentSettings = '评论设置';
   static const moreSettings = '更多';
+  static const layoutDebugMode = '排版调试模式';
   static const autoReading = '自动阅读';
   static const startAutoReading = '开启自动阅读';
   static const stopAutoReading = '停止自动阅读';

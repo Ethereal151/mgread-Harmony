@@ -8,6 +8,7 @@ Future<void> showReaderSettingsSheet({
   required bool commentsAvailable,
   required bool autoReading,
   required ReaderAutoReadingPace autoReadingPace,
+  required bool layoutDebugMode,
   required ReaderThemePreset lastNonNightTheme,
   required ReaderFontRepository? fontRepository,
   required FutureOr<void> Function(
@@ -20,6 +21,7 @@ Future<void> showReaderSettingsSheet({
   required ValueChanged<TextReaderPreferences> onPreferencesCommit,
   required ValueChanged<bool> onAutoReadingChanged,
   required ValueChanged<ReaderAutoReadingPace> onAutoReadingPaceChanged,
+  required ValueChanged<bool> onLayoutDebugModeChanged,
   required VoidCallback onCatalogPressed,
   required VoidCallback onBookmarksPressed,
   VoidCallback? onDismissed,
@@ -56,6 +58,7 @@ Future<void> showReaderSettingsSheet({
           commentsAvailable: commentsAvailable,
           autoReading: autoReading,
           autoReadingPace: autoReadingPace,
+          layoutDebugMode: layoutDebugMode,
           lastNonNightTheme: lastNonNightTheme,
           fontRepository: fontRepository,
           onCustomFontSelected: onCustomFontSelected,
@@ -72,6 +75,7 @@ Future<void> showReaderSettingsSheet({
           },
           onAutoReadingChanged: onAutoReadingChanged,
           onAutoReadingPaceChanged: onAutoReadingPaceChanged,
+          onLayoutDebugModeChanged: onLayoutDebugModeChanged,
           onCatalogPressed: onCatalogPressed,
           onBookmarksPressed: onBookmarksPressed,
         ),
@@ -95,6 +99,7 @@ class ReaderSettingsSheet extends StatefulWidget {
     required this.commentsAvailable,
     required this.autoReading,
     required this.autoReadingPace,
+    required this.layoutDebugMode,
     required this.lastNonNightTheme,
     required this.fontRepository,
     required this.onCustomFontSelected,
@@ -103,6 +108,7 @@ class ReaderSettingsSheet extends StatefulWidget {
     required this.onPreferencesCommit,
     required this.onAutoReadingChanged,
     required this.onAutoReadingPaceChanged,
+    required this.onLayoutDebugModeChanged,
     required this.onCatalogPressed,
     required this.onBookmarksPressed,
   });
@@ -113,6 +119,7 @@ class ReaderSettingsSheet extends StatefulWidget {
   final bool commentsAvailable;
   final bool autoReading;
   final ReaderAutoReadingPace autoReadingPace;
+  final bool layoutDebugMode;
   final ReaderThemePreset lastNonNightTheme;
   final ReaderFontRepository? fontRepository;
   final FutureOr<void> Function(
@@ -125,6 +132,7 @@ class ReaderSettingsSheet extends StatefulWidget {
   final ValueChanged<TextReaderPreferences> onPreferencesCommit;
   final ValueChanged<bool> onAutoReadingChanged;
   final ValueChanged<ReaderAutoReadingPace> onAutoReadingPaceChanged;
+  final ValueChanged<bool> onLayoutDebugModeChanged;
   final VoidCallback onCatalogPressed;
   final VoidCallback onBookmarksPressed;
 

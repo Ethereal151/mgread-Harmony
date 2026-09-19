@@ -251,6 +251,7 @@ class _TextReaderViewState extends State<TextReaderView>
   bool _loading = true;
   bool _controlsVisible = false;
   bool _bookRefreshLoading = false;
+  bool _layoutDebugMode = false;
   bool _readerSettingsVisible = false;
   bool _readerOverflowMenuExpanded = false;
   bool _foreground = true;
@@ -663,6 +664,7 @@ class _TextReaderViewState extends State<TextReaderView>
         commentsAvailable: widget.extensions.commentFeed != null,
         autoReading: _autoReadingCoordinator.isRunning,
         autoReadingPace: _autoReadingPace,
+        layoutDebugMode: _layoutDebugMode,
         lastNonNightTheme: _lastNonNightTheme,
         fontRepository: widget.extensions.fontRepository,
         onCustomFontSelected:
@@ -699,6 +701,10 @@ class _TextReaderViewState extends State<TextReaderView>
           if (_autoReadingCoordinator.isRunning) {
             unawaited(_startAutoReading());
           }
+        },
+        onLayoutDebugModeChanged: (bool enabled) {
+          if (!routeIsCurrent() || _layoutDebugMode == enabled) return;
+          setState(() => _layoutDebugMode = enabled);
         },
         onCatalogPressed: () {
           if (!routeIsCurrent()) return;
