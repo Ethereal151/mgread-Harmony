@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 
 import 'package:mg_read/app/app_theme.dart';
 
-/// Low-contrast, tab-specific atmosphere behind a primary navigation page.
+/// Theme-colored surface behind a primary navigation page.
 ///
-/// It is deliberately a visual-only layer: it has no semantics, input, or
-/// layout ownership, and keeps the feature body fully interactive above it.
+/// The style is retained as part of the shared page contract so each primary
+/// page can keep its semantic composition, but decorative image backdrops are
+/// intentionally not rendered. This keeps every theme's page background
+/// faithful to its configured surface color.
 enum AppPageBackdropStyle { home, search, discover, profile }
 
 class AppPageBackdrop extends StatelessWidget {
@@ -17,46 +19,6 @@ class AppPageBackdrop extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final AppThemeTokens tokens = AppThemeTokens.of(context);
-    final bool isLight = Theme.of(context).brightness == Brightness.light;
-    final double opacity = isLight
-        ? style == AppPageBackdropStyle.profile
-              ? 0.16
-              : 0.32
-        : 0.08;
-
-    return ColoredBox(
-      color: tokens.pageBackground,
-      child: Stack(
-        fit: StackFit.expand,
-        children: <Widget>[
-          ExcludeSemantics(
-            child: IgnorePointer(
-              child: Opacity(
-                opacity: opacity,
-                child: Image.asset(
-                  _assetPathFor(style),
-                  fit: BoxFit.cover,
-                  alignment: Alignment.topCenter,
-                ),
-              ),
-            ),
-          ),
-          child,
-        ],
-      ),
-    );
-  }
-
-  static String _assetPathFor(AppPageBackdropStyle style) {
-    return switch (style) {
-      AppPageBackdropStyle.home =>
-        'assets/illustrations/page_backdrops/home_paper.png',
-      AppPageBackdropStyle.search =>
-        'assets/illustrations/page_backdrops/search_index.png',
-      AppPageBackdropStyle.discover =>
-        'assets/illustrations/page_backdrops/discover_horizon.png',
-      AppPageBackdropStyle.profile =>
-        'assets/illustrations/page_backdrops/profile_bookmark.png',
-    };
+    return ColoredBox(key: const Key('app-page-backdrop-surface'), color: tokens.pageBackground, child: child);
   }
 }

@@ -673,7 +673,6 @@ abstract final class AppMotion {
   static const Duration bottomNavigationLabelResponse = Duration(milliseconds: 190);
   static const Duration bottomNavigationPillMinimumTravel = Duration(milliseconds: 180);
   static const Duration bottomNavigationPillTravel = Duration(milliseconds: 300);
-  static const Duration bottomNavigationTextureDrift = Duration(seconds: 8);
   static const Duration privacyModeReveal = Duration(milliseconds: 520);
   static const Duration destinationTransition = short;
   static const Duration destinationReverseTransition = shortReverse;
@@ -689,7 +688,6 @@ abstract final class AppMotion {
   static const Curve navigationCurve = Curves.easeOutCubic;
   static const Curve navigationReverseCurve = Curves.easeInCubic;
   static const Curve standardCurve = Curves.easeInOutCubic;
-  static const Curve bottomNavigationTextureCurve = Curves.easeInOutSine;
 
   /// Returns whether the platform asks the app to avoid non-essential motion.
   static bool disablesAnimations(BuildContext context) {

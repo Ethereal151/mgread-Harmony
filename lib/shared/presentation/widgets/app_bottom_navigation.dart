@@ -1,4 +1,4 @@
-/// MgRead 底部导航的静态外观与短时选中反馈。
+/// MgRead 底部导航的悬浮式外观与短时选中反馈。
 ///
 /// 职责：
 /// - 渲染四个主目的地与共享胶囊。
@@ -52,7 +52,6 @@ class AppBottomNavigation extends StatelessWidget {
     if (motion == null) {
       return AppBottomNavigationMotionScope(
         initialDestination: selected,
-        animateTexture: false,
         child: _AppBottomNavigationContent(
           selected: selected,
           onSelected: onSelected,
@@ -107,101 +106,73 @@ class _AppBottomNavigationContent extends StatelessWidget {
           return AnimatedBuilder(
             animation: motion.animation,
             builder: (BuildContext context, Widget? child) {
-              final double itemWidth = constraints.maxWidth / AppNavigationDestination.values.length;
+              final double innerWidth = constraints.maxWidth - AppSpacing.regular * 2;
+              final double innerHeight = constraints.maxHeight - AppSpacing.compact * 2;
+              final double itemWidth = innerWidth / AppNavigationDestination.values.length;
               final double position = motion.positionFor(selected).clamp(0, AppNavigationDestination.values.length - 1);
               final double indicatorWidth = AppSpacing.bottomNavigationIndicatorWidth * motion.pillWidthScale;
               final double indicatorHeight = AppSpacing.bottomNavigationIndicatorHeight * motion.pillHeightScale;
               final double indicatorLeft = itemWidth * (position + 0.5) - indicatorWidth / 2;
-              final double indicatorTop = (constraints.maxHeight - indicatorHeight) / 2;
+              final double indicatorTop = (innerHeight - indicatorHeight) / 2;
               final AppNavigationDestination visualSelection = motion.visualSelectionFor(selected);
 
-              return ClipRect(
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: <Widget>[
-                    DecoratedBox(
-                      key: const Key('app-bottom-navigation-backdrop'),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: <Color>[tokens.surface, Color.alphaBlend(tokens.accentSoft.withValues(alpha: 0.32), tokens.surface)],
-                        ),
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.regular, vertical: AppSpacing.compact),
+                child: DecoratedBox(
+                  key: const Key('app-bottom-navigation-backdrop'),
+                  decoration: BoxDecoration(
+                    color: tokens.surface,
+                    border: Border.all(color: tokens.divider),
+                    borderRadius: AppRadii.card,
+                    boxShadow: <BoxShadow>[
+                      BoxShadow(
+                        color: tokens.shadow.withValues(alpha: 0.22),
+                        blurRadius: AppSpacing.comfortable,
+                        offset: const Offset(0, 3),
                       ),
-                    ),
-                    IgnorePointer(
-                      key: const Key('app-bottom-navigation-texture'),
-                      child: RepaintBoundary(
-                        child: AnimatedBuilder(
-                          animation: motion.textureAnimation,
-                          builder: (BuildContext context, Widget? child) {
-                            return CustomPaint(
-                              key: const Key('app-bottom-navigation-texture-paint'),
-                              painter: _AppBottomNavigationTexturePainter(
-                                lineColor: tokens.accent.withValues(alpha: 0.04),
-                                washColor: tokens.featureSurface.withValues(alpha: 0.12),
-                                phase: motion.texturePhase,
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                    ),
-                    Positioned(
-                      left: indicatorLeft,
-                      top: indicatorTop,
-                      width: indicatorWidth,
-                      height: indicatorHeight,
-                      child: DecoratedBox(
-                        key: const Key('app-bottom-navigation-moving-indicator'),
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: <Color>[
-                              tokens.accentSoft,
-                              Color.alphaBlend(tokens.featureSurface.withValues(alpha: 0.5), tokens.accentSoft),
-                            ],
+                    ],
+                  ),
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: <Widget>[
+                      Positioned(
+                        left: indicatorLeft,
+                        top: indicatorTop,
+                        width: indicatorWidth,
+                        height: indicatorHeight,
+                        child: DecoratedBox(
+                          key: const Key('app-bottom-navigation-moving-indicator'),
+                          decoration: BoxDecoration(
+                            color: tokens.accentSoft,
+                            border: Border.all(color: tokens.accent.withValues(alpha: 0.12)),
+                            borderRadius: AppRadii.pill,
                           ),
-                          border: Border.all(color: tokens.accent.withValues(alpha: 0.12)),
-                          borderRadius: AppRadii.pill,
-                          boxShadow: <BoxShadow>[
-                            BoxShadow(
-                              color: tokens.shadow.withValues(alpha: 0.1),
-                              blurRadius: AppSpacing.compact,
-                              offset: const Offset(0, 1),
-                            ),
-                          ],
                         ),
                       ),
-                    ),
-                    Align(
-                      alignment: Alignment.topCenter,
-                      child: Divider(height: 1, thickness: 1, color: tokens.divider),
-                    ),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: AppNavigationDestination.values
-                          .map(
-                            (AppNavigationDestination destination) => Expanded(
-                              child: _AppNavigationItem(
-                                destination: destination,
-                                visuallySelected: destination == visualSelection,
-                                semanticallySelected: destination == selected,
-                                onSelected: (value) {
-                                  motion.animateTo(value);
-                                  onSelected(value);
-                                },
-                                onLongPressed: onLongPressed,
-                                iconOverride: iconOverrides[destination],
-                                theme: theme,
-                                tokens: tokens,
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: AppNavigationDestination.values
+                            .map(
+                              (AppNavigationDestination destination) => Expanded(
+                                child: _AppNavigationItem(
+                                  destination: destination,
+                                  visuallySelected: destination == visualSelection,
+                                  semanticallySelected: destination == selected,
+                                  onSelected: (value) {
+                                    motion.animateTo(value);
+                                    onSelected(value);
+                                  },
+                                  onLongPressed: onLongPressed,
+                                  iconOverride: iconOverrides[destination],
+                                  theme: theme,
+                                  tokens: tokens,
+                                ),
                               ),
-                            ),
-                          )
-                          .toList(growable: false),
-                    ),
-                  ],
+                            )
+                            .toList(growable: false),
+                      ),
+                    ],
+                  ),
                 ),
               );
             },
@@ -209,74 +180,6 @@ class _AppBottomNavigationContent extends StatelessWidget {
         },
       ),
     );
-  }
-}
-
-class _AppBottomNavigationTexturePainter extends CustomPainter {
-  const _AppBottomNavigationTexturePainter({required this.lineColor, required this.washColor, required this.phase});
-
-  final Color lineColor;
-  final Color washColor;
-  final double phase;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final double horizontalDrift = (phase - 0.5) * AppSpacing.unit;
-    final double verticalDrift = (0.5 - phase) * (AppSpacing.unit / 2);
-    final Paint wash = Paint()
-      ..color = washColor
-      ..style = PaintingStyle.fill;
-    final Paint secondaryWash = Paint()
-      ..color = washColor.withValues(alpha: washColor.a * 0.58)
-      ..style = PaintingStyle.fill;
-    final Paint line = Paint()
-      ..color = lineColor
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = AppSpacing.unit / 4
-      ..strokeCap = StrokeCap.round;
-
-    canvas.save();
-    canvas.translate(horizontalDrift, verticalDrift);
-    canvas.drawOval(
-      Rect.fromCenter(center: Offset(size.width * 0.12, size.height * 1.08), width: size.width * 0.58, height: size.height * 1.28),
-      wash,
-    );
-    canvas.drawOval(
-      Rect.fromCenter(center: Offset(size.width * 0.92, -size.height * 0.08), width: size.width * 0.42, height: size.height * 1.08),
-      secondaryWash,
-    );
-
-    for (final double offset in <double>[0, 0.08, 0.16]) {
-      final Path leftPage = Path()
-        ..moveTo(-size.width * 0.04, size.height * (0.58 + offset))
-        ..cubicTo(
-          size.width * 0.12,
-          size.height * (0.28 + offset),
-          size.width * 0.29,
-          size.height * (0.22 + offset),
-          size.width * 0.47,
-          size.height * (0.42 + offset),
-        );
-      final Path rightPage = Path()
-        ..moveTo(size.width * 1.04, size.height * (0.42 + offset))
-        ..cubicTo(
-          size.width * 0.86,
-          size.height * (0.68 + offset),
-          size.width * 0.69,
-          size.height * (0.68 + offset),
-          size.width * 0.53,
-          size.height * (0.42 + offset),
-        );
-      canvas
-        ..drawPath(leftPage, line)
-        ..drawPath(rightPage, line);
-    }
-    canvas.restore();
-  }
-
-  @override
-  bool shouldRepaint(covariant _AppBottomNavigationTexturePainter oldDelegate) {
-    return oldDelegate.lineColor != lineColor || oldDelegate.washColor != washColor || oldDelegate.phase != phase;
   }
 }
 
