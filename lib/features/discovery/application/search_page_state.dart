@@ -29,7 +29,7 @@ final class SearchPageState {
     result: null,
     error: null,
     hotSearches: const <PluginSearchSuggestion>[],
-    sortOrder: SearchResultSortOrder.pluginReturnOrder,
+    sortOrder: SearchResultSortOrder.defaultForSourceScope(null),
   );
 
   factory SearchPageState.ready({
@@ -37,7 +37,7 @@ final class SearchPageState {
     required String? selectedSourceId,
     String query = '',
     Iterable<PluginSearchSuggestion> hotSearches = const <PluginSearchSuggestion>[],
-    SearchResultSortOrder sortOrder = SearchResultSortOrder.pluginReturnOrder,
+    SearchResultSortOrder? sortOrder,
   }) => SearchPageState._(
     status: SearchPageStatus.ready,
     sources: sources,
@@ -46,7 +46,7 @@ final class SearchPageState {
     result: null,
     error: null,
     hotSearches: hotSearches,
-    sortOrder: sortOrder,
+    sortOrder: sortOrder ?? SearchResultSortOrder.defaultForSourceScope(selectedSourceId),
   );
 
   factory SearchPageState.searching({
@@ -55,7 +55,7 @@ final class SearchPageState {
     required String query,
     AggregatedSearchResult? retainedResult,
     Iterable<PluginSearchSuggestion> hotSearches = const <PluginSearchSuggestion>[],
-    SearchResultSortOrder sortOrder = SearchResultSortOrder.pluginReturnOrder,
+    SearchResultSortOrder? sortOrder,
   }) => SearchPageState._(
     status: SearchPageStatus.searching,
     sources: sources,
@@ -64,7 +64,7 @@ final class SearchPageState {
     result: retainedResult,
     error: null,
     hotSearches: hotSearches,
-    sortOrder: sortOrder,
+    sortOrder: sortOrder ?? SearchResultSortOrder.defaultForSourceScope(selectedSourceId),
   );
 
   factory SearchPageState.loaded({
@@ -73,7 +73,7 @@ final class SearchPageState {
     required String query,
     required AggregatedSearchResult result,
     Iterable<PluginSearchSuggestion> hotSearches = const <PluginSearchSuggestion>[],
-    SearchResultSortOrder sortOrder = SearchResultSortOrder.pluginReturnOrder,
+    SearchResultSortOrder? sortOrder,
   }) => SearchPageState._(
     status: SearchPageStatus.loaded,
     sources: sources,
@@ -82,7 +82,7 @@ final class SearchPageState {
     result: result,
     error: null,
     hotSearches: hotSearches,
-    sortOrder: sortOrder,
+    sortOrder: sortOrder ?? SearchResultSortOrder.defaultForSourceScope(selectedSourceId),
   );
 
   factory SearchPageState.failure({
@@ -92,7 +92,7 @@ final class SearchPageState {
     required AppError error,
     AggregatedSearchResult? retainedResult,
     Iterable<PluginSearchSuggestion> hotSearches = const <PluginSearchSuggestion>[],
-    SearchResultSortOrder sortOrder = SearchResultSortOrder.pluginReturnOrder,
+    SearchResultSortOrder? sortOrder,
   }) => SearchPageState._(
     status: SearchPageStatus.failure,
     sources: sources,
@@ -101,7 +101,7 @@ final class SearchPageState {
     result: retainedResult,
     error: error,
     hotSearches: hotSearches,
-    sortOrder: sortOrder,
+    sortOrder: sortOrder ?? SearchResultSortOrder.defaultForSourceScope(selectedSourceId),
   );
 
   final SearchPageStatus status;

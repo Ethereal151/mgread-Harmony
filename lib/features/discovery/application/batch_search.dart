@@ -30,6 +30,8 @@ enum SearchResultSortOrder {
   const SearchResultSortOrder(this.label);
 
   final String label;
+
+  static SearchResultSortOrder defaultForSourceScope(String? pluginId) => pluginId == null ? relevance : pluginReturnOrder;
 }
 
 enum BatchSearchSourceStatus { pending, loading, success, failure }

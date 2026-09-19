@@ -87,7 +87,12 @@ class SearchPageController extends Notifier<SearchPageState> {
     _cancelSearch();
     _cancelSuggestions();
     final query = state.query;
-    state = SearchPageState.ready(sources: state.sources, selectedSourceId: pluginId, query: query, sortOrder: state.sortOrder);
+    state = SearchPageState.ready(
+      sources: state.sources,
+      selectedSourceId: pluginId,
+      query: query,
+      sortOrder: SearchResultSortOrder.defaultForSourceScope(pluginId),
+    );
     state = state.withHotSearches(const <PluginSearchSuggestion>[]);
     if (pluginId != null) {
       try {
@@ -204,7 +209,7 @@ class SearchPageController extends Notifier<SearchPageState> {
     try {
       final sources = await ref.read(availablePluginSourcesProvider.future);
       if (!_isCurrent(generation)) return;
-      state = SearchPageState.ready(sources: sources, selectedSourceId: null, sortOrder: state.sortOrder);
+      state = SearchPageState.ready(sources: sources, selectedSourceId: null);
       if (sources.isNotEmpty) unawaited(_loadSuggestions(null, ++_latestSuggestionGeneration));
     } on Object catch (error) {
       if (!_isCurrent(generation)) return;

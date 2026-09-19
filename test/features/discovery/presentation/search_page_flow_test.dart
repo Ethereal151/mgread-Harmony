@@ -46,6 +46,7 @@ void main() {
     expect(find.text('热门搜索'), findsNothing);
     expect(find.text('（已聚合 1 条）'), findsOneWidget);
     expect(find.text('已完成 1/1 个来源'), findsOneWidget);
+    expect(find.text('相关性'), findsOneWidget);
     expect(find.byKey(const Key('search-result-sort')), findsOneWidget);
   });
 
@@ -69,6 +70,12 @@ void main() {
 
     expect(gateway.pluginIds, isEmpty);
     expect(find.text('第二个数据源'), findsOneWidget);
+
+    await tester.tap(find.text('诡秘之主').first);
+    await tester.pumpAndSettle();
+
+    expect(gateway.pluginIds, <String>['source.second']);
+    expect(find.text('默认插件返回顺序'), findsOneWidget);
   });
 
   testWidgets('catalog change replaces a removed selected source immediately', (tester) async {
