@@ -582,6 +582,7 @@ class DiscoveryHeroCard extends StatelessWidget {
                     top: 10,
                     child: DiscoveryBookCover(
                       title: data.title,
+                      contentKind: data.contentKind,
                       variant: data.coverVariant,
                       coverBytes: data.coverBytes,
                       remoteContentId: data.remoteContentId,

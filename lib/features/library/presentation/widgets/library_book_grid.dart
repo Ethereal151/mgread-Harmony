@@ -147,6 +147,7 @@ class LibraryBookGridItem extends StatelessWidget {
                       ),
                       child: LibraryBookCover(
                         title: data.title,
+                        contentKind: data.contentKind,
                         variant: data.coverVariant,
                         coverBytes: data.coverBytes,
                         coverRequest: data.coverRequest,

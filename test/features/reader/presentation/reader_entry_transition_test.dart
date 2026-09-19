@@ -59,6 +59,7 @@ void main() {
     expect(systemUi.first['immersiveMode'], isTrue);
     expect(systemUi.last['immersiveMode'], isTrue);
     expect(find.byType(AnnotatedRegion<SystemUiOverlayStyle>), findsWidgets);
+    expect(find.byKey(const ValueKey<String>('default-cover-kind-novel')), findsOneWidget);
 
     dataSource.complete();
     await _pumpReader(tester);
@@ -75,6 +76,7 @@ void main() {
     expect(systemUi.first['immersiveMode'], isTrue);
     expect(systemUi.last['immersiveMode'], isTrue);
     expect(find.byType(AnnotatedRegion<SystemUiOverlayStyle>), findsWidgets);
+    expect(find.byKey(const ValueKey<String>('default-cover-kind-manga')), findsOneWidget);
 
     dataSource.completeImage();
     await tester.pumpAndSettle();

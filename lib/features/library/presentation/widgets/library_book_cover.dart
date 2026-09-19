@@ -16,8 +16,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:mg_read/app/app_theme.dart';
+import 'package:mg_read/core/content_library/content_library.dart';
 import 'package:mg_read/features/library/presentation/library_book_list_view_data.dart';
-import 'package:mg_read/shared/presentation/widgets/default_book_cover_artwork.dart';
+import 'package:mg_read/shared/presentation/widgets/default_content_cover_artwork.dart';
 import 'package:mg_read/shared/presentation/widgets/async_book_cover_loader.dart';
 
 /// 独立于书架概览加载的本地书籍封面。
@@ -28,6 +29,7 @@ class LibraryBookCover extends ConsumerWidget {
     required this.variant,
     required this.width,
     required this.height,
+    this.contentKind = ContentKind.novel,
     this.assetPath,
     this.coverBytes,
     this.coverRequest,
@@ -41,6 +43,7 @@ class LibraryBookCover extends ConsumerWidget {
   });
 
   final String title;
+  final ContentKind contentKind;
   final LibraryCoverVariant variant;
   final double width;
   final double height;
@@ -172,7 +175,8 @@ class LibraryBookCover extends ConsumerWidget {
     return Stack(
       fit: StackFit.expand,
       children: <Widget>[
-        DefaultBookCoverArtwork(
+        DefaultContentCoverArtwork(
+          kind: _defaultCoverKind(contentKind),
           title: title,
           width: width,
           height: height,
@@ -217,3 +221,10 @@ class LibraryBookCover extends ConsumerWidget {
     };
   }
 }
+
+DefaultCoverKind _defaultCoverKind(ContentKind kind) => switch (kind) {
+  ContentKind.novel => DefaultCoverKind.novel,
+  ContentKind.manga => DefaultCoverKind.manga,
+  ContentKind.audio => DefaultCoverKind.audio,
+  ContentKind.video => DefaultCoverKind.video,
+};

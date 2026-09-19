@@ -428,6 +428,7 @@ class _CoverTile extends StatelessWidget {
               children: <Widget>[
                 DiscoveryBookCover(
                   title: content.title,
+                  contentKind: content.contentKind,
                   coverBytes: content.coverBytes,
                   remoteContentId: content.id,
                   coverUrl: content.coverUrl,

@@ -68,6 +68,19 @@ void main() {
     expect(find.byKey(const Key('media-entry-cover-transition')), findsNothing);
   });
 
+  testWidgets('uses the audio fallback artwork when no player cover is available', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: MediaEntryCoverSurface(kind: MediaEntryKind.audio, title: '没有封面的听书', coverBytes: null, onExit: () {}),
+      ),
+    );
+
+    expect(find.byKey(const ValueKey<String>('default-cover-kind-audio')), findsOneWidget);
+    expect(find.text('音频'), findsOneWidget);
+    expect(find.text('没有封面的听书'), findsOneWidget);
+  });
+
   testWidgets('allows returning from the preparation cover transition', (tester) async {
     var exits = 0;
     await tester.pumpWidget(
@@ -122,6 +135,8 @@ void main() {
     );
 
     expect(find.text('视频暂时无法打开'), findsOneWidget);
+    expect(find.byKey(const ValueKey<String>('default-cover-kind-video')), findsOneWidget);
+    expect(find.text('视频'), findsOneWidget);
     expect(find.text('初始化失败'), findsOneWidget);
     expect(find.text('发生位置：后台播放服务初始化  ·  诊断编号：audio_service_setup_failed'), findsOneWidget);
     expect(find.text('技术原因：AudioService init rejected'), findsOneWidget);

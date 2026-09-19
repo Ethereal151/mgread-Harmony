@@ -64,6 +64,7 @@ class LibraryHomeTopVisual extends StatelessWidget {
                                   child: LibraryBookCover(
                                     key: const Key('library-home-top-backdrop-cover'),
                                     title: data.title,
+                                    contentKind: data.contentKind,
                                     variant: data.coverVariant,
                                     coverBytes: data.coverBytes,
                                     coverRequest: data.coverRequest,

@@ -312,6 +312,7 @@ class LibraryBookListItem extends StatelessWidget {
               children: <Widget>[
                 LibraryBookCover(
                   title: data.title,
+                  contentKind: data.contentKind,
                   variant: data.coverVariant,
                   coverBytes: data.coverBytes,
                   coverRequest: data.coverRequest,

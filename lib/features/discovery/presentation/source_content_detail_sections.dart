@@ -134,6 +134,7 @@ class _DetailCoverLink extends StatelessWidget {
     child: DiscoveryBookCover(
       key: const Key('source-detail-cover'),
       title: content.title,
+      contentKind: content.contentKind,
       coverBytes: content.coverBytes,
       remoteContentId: content.id,
       coverUrl: content.coverUrl,
@@ -572,6 +573,7 @@ class _RecommendationCard extends StatelessWidget {
           children: <Widget>[
             DiscoveryBookCover(
               title: content.title,
+              contentKind: content.contentKind,
               coverBytes: content.coverBytes,
               remoteContentId: content.id,
               coverUrl: content.coverUrl,

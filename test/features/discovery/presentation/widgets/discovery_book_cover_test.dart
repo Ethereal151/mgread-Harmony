@@ -5,34 +5,46 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mgread_plugin_runtime/mgread_plugin_runtime.dart';
 import 'package:mg_read/app/app_theme.dart';
+import 'package:mg_read/core/content_library/content_library.dart';
 import 'package:mg_read/features/discovery/presentation/discovery_view_data.dart';
 import 'package:mg_read/features/discovery/presentation/widgets/discovery_book_cover.dart';
 import 'package:mg_read/features/library/presentation/library_book_list_view_data.dart';
 import 'package:mg_read/features/library/presentation/widgets/library_book_cover.dart';
 import 'package:mg_read/shared/presentation/source_branding.dart';
-import 'package:mg_read/shared/presentation/widgets/default_book_cover_artwork.dart';
+import 'package:mg_read/shared/presentation/widgets/default_content_cover_artwork.dart';
 import 'package:mg_read/shared/presentation/widgets/async_book_cover_loader.dart';
 
 void main() {
-  testWidgets('uses the neutral book artwork when discovery cover is missing', (WidgetTester tester) async {
+  testWidgets('uses the compact novel artwork when discovery cover is missing', (WidgetTester tester) async {
     await tester.pumpWidget(
       _host(const DiscoveryBookCover(title: '没有封面的书', variant: DiscoveryCoverVariant.gothic, width: 112, height: 174)),
     );
 
-    expect(find.byType(DefaultBookCoverArtwork), findsOneWidget);
+    expect(find.byType(DefaultContentCoverArtwork), findsOneWidget);
     expect(find.byIcon(Icons.menu_book_rounded), findsOneWidget);
-    expect(find.text('没有封面的书'), findsOneWidget);
+    expect(find.text('小说'), findsOneWidget);
+    expect(find.text('没有封面的书'), findsNothing);
   });
 
   testWidgets('uses the same artwork when a stored library cover cannot decode', (WidgetTester tester) async {
     await tester.pumpWidget(
-      _host(const LibraryBookCover(title: '损坏封面的书', variant: LibraryCoverVariant.dusk, width: 80, height: 120, coverBytes: <int>[0])),
+      _host(
+        const LibraryBookCover(
+          title: '损坏封面的漫画',
+          contentKind: ContentKind.manga,
+          variant: LibraryCoverVariant.dusk,
+          width: 80,
+          height: 120,
+          coverBytes: <int>[0],
+        ),
+      ),
     );
     await tester.pumpAndSettle();
 
-    expect(find.byType(DefaultBookCoverArtwork), findsOneWidget);
-    expect(find.byIcon(Icons.menu_book_rounded), findsOneWidget);
+    expect(find.byType(DefaultContentCoverArtwork), findsOneWidget);
+    expect(find.byIcon(Icons.photo_library_rounded), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -58,15 +70,72 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.byType(DefaultBookCoverArtwork), findsOneWidget);
+    expect(find.byType(DefaultContentCoverArtwork), findsOneWidget);
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
     expect(tester.getSemantics(find.byType(DiscoveryBookCover)).label, '异步封面 的封面加载中');
 
     completion.complete(null);
     await tester.pump();
 
-    expect(find.byType(DefaultBookCoverArtwork), findsOneWidget);
+    expect(find.byType(DefaultContentCoverArtwork), findsOneWidget);
     expect(find.byType(CircularProgressIndicator), findsNothing);
+  });
+
+  testWidgets('draws distinct compact artwork for every content kind without repeating titles', (WidgetTester tester) async {
+    await tester.pumpWidget(
+      _host(
+        Wrap(
+          children: <Widget>[
+            for (final kind in DefaultCoverKind.values)
+              SizedBox(
+                width: 80,
+                height: 120,
+                child: DefaultContentCoverArtwork(
+                  kind: kind,
+                  title: '不应显示-${kind.name}',
+                  width: 80,
+                  height: 120,
+                  startColor: const Color(0xFF263B63),
+                  endColor: const Color(0xFF6E4D82),
+                  foregroundColor: Colors.white,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+
+    for (final kind in DefaultCoverKind.values) {
+      expect(find.byKey(ValueKey<String>('default-cover-kind-${kind.name}')), findsOneWidget);
+      expect(find.byKey(ValueKey<String>('default-cover-label-${kind.name}')), findsOneWidget);
+      expect(find.text('不应显示-${kind.name}'), findsNothing);
+    }
+  });
+
+  testWidgets('shows at most two title lines on large fallback artwork', (WidgetTester tester) async {
+    await tester.pumpWidget(
+      _host(
+        const SizedBox(
+          width: 168,
+          height: 248,
+          child: DefaultContentCoverArtwork(
+            kind: DefaultCoverKind.audio,
+            title: '这是一个大封面上显示的很长作品标题',
+            width: 168,
+            height: 248,
+            startColor: Color(0xFF263B63),
+            endColor: Color(0xFF6E4D82),
+            foregroundColor: Colors.white,
+            borderRadius: BorderRadius.all(Radius.circular(12)),
+          ),
+        ),
+      ),
+    );
+
+    final title = tester.widget<Text>(find.byKey(const Key('default-cover-title')));
+    expect(title.maxLines, 2);
+    expect(title.overflow, TextOverflow.ellipsis);
   });
 
   testWidgets('uses the generic landscape cover presentation when requested', (WidgetTester tester) async {
@@ -74,6 +143,7 @@ void main() {
       _host(
         const DiscoveryBookCover(
           title: '视频海报',
+          contentKind: PluginContentKind.video,
           variant: DiscoveryCoverVariant.gothic,
           width: 112,
           height: 74,
@@ -83,6 +153,7 @@ void main() {
     );
 
     expect(tester.getSize(find.byType(DiscoveryBookCover)), const Size(112, 74));
+    expect(find.byIcon(Icons.play_circle_fill_rounded), findsOneWidget);
     final cover = tester.widget<DecoratedBox>(find.byType(DecoratedBox).first);
     expect((cover.decoration as BoxDecoration).borderRadius, BorderRadius.circular(10));
   });

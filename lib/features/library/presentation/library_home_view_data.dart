@@ -70,6 +70,7 @@ final class LibraryHomeViewData {
         (entry) => LibraryBookListItemViewData(
           id: entry.value.id,
           title: entry.value.title,
+          contentKind: entry.value.contentKind,
           subtitle: _librarySubtitle(entry.value),
           coverUrl: entry.value.coverUrl,
           coverBytes: entry.value.coverBytes,
@@ -95,6 +96,7 @@ final class LibraryHomeViewData {
         return LibraryBookListItemViewData(
           id: item.id,
           title: item.title,
+          contentKind: item.contentKind,
           subtitle: _librarySubtitle(item),
           activityLabel: _readingHistoryLabel(item.lastReadAtUtc!),
           coverUrl: item.coverUrl,

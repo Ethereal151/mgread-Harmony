@@ -22,7 +22,7 @@ import 'package:novel_reader_ui/novel_reader_ui.dart';
 import 'package:mg_read/app/app_theme.dart';
 import 'package:mg_read/features/reader/application/reader_launch_request.dart';
 import 'package:mg_read/features/reader/presentation/reader_host_page.dart';
-import 'package:mg_read/shared/presentation/widgets/default_book_cover_artwork.dart';
+import 'package:mg_read/shared/presentation/widgets/default_content_cover_artwork.dart';
 
 const SystemUiOverlayStyle _readerEntrySystemUiStyle = SystemUiOverlayStyle(
   statusBarColor: Colors.transparent,
@@ -149,6 +149,7 @@ class _ReaderEntryPreparationSurfaceState extends State<ReaderEntryPreparationSu
             _ReaderEntryCover(
               progress: progress,
               disappearance: 0,
+              kind: DefaultCoverKind.novel,
               coverImage: null,
               failed: widget.failed ? const ReaderFailure(ReaderFailureKind.data, 'route_failure') : null,
               onRetry: widget.onRetry,
@@ -375,6 +376,10 @@ class _ReaderEntryTransitionState extends State<ReaderEntryTransition> with Tick
                 child: _ReaderEntryCover(
                   progress: entryCurve.value,
                   disappearance: handoff,
+                  kind: switch (_boundRequest) {
+                    NovelReaderLaunchRequest() => DefaultCoverKind.novel,
+                    ComicReaderLaunchRequest() => DefaultCoverKind.manga,
+                  },
                   coverImage: _entryCoverImage,
                   failed: _failure,
                   onRetry: _failure == null ? null : _retry,
@@ -415,6 +420,7 @@ class _ReaderEntryCover extends StatelessWidget {
   const _ReaderEntryCover({
     required this.progress,
     required this.disappearance,
+    required this.kind,
     required this.failed,
     required this.coverImage,
     required this.onRetry,
@@ -423,6 +429,7 @@ class _ReaderEntryCover extends StatelessWidget {
 
   final double progress;
   final double disappearance;
+  final DefaultCoverKind kind;
   final ImageProvider<Object>? coverImage;
   final ReaderFailure? failed;
   final VoidCallback? onRetry;
@@ -454,7 +461,13 @@ class _ReaderEntryCover extends StatelessWidget {
                   rect: rect,
                   child: ClipRRect(
                     borderRadius: radius,
-                    child: _ReaderEntryArtwork(width: rect.width, height: rect.height, borderRadius: radius, coverImage: coverImage),
+                    child: _ReaderEntryArtwork(
+                      width: rect.width,
+                      height: rect.height,
+                      borderRadius: radius,
+                      coverImage: coverImage,
+                      kind: kind,
+                    ),
                   ),
                 ),
                 SafeArea(
@@ -479,12 +492,19 @@ class _ReaderEntryCover extends StatelessWidget {
 }
 
 class _ReaderEntryArtwork extends StatelessWidget {
-  const _ReaderEntryArtwork({required this.width, required this.height, required this.borderRadius, required this.coverImage});
+  const _ReaderEntryArtwork({
+    required this.width,
+    required this.height,
+    required this.borderRadius,
+    required this.coverImage,
+    required this.kind,
+  });
 
   final double width;
   final double height;
   final BorderRadius borderRadius;
   final ImageProvider<Object>? coverImage;
+  final DefaultCoverKind kind;
 
   @override
   Widget build(BuildContext context) {
@@ -507,8 +527,9 @@ class _ReaderEntryArtwork extends StatelessWidget {
   }
 
   Widget _entryFallback(AppThemeTokens tokens) {
-    return DefaultBookCoverArtwork(
-      title: '阅读',
+    return DefaultContentCoverArtwork(
+      kind: kind,
+      title: '',
       width: width,
       height: height,
       startColor: tokens.coverIndigoStart,

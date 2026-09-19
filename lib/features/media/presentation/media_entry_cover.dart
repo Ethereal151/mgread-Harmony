@@ -18,7 +18,7 @@ import 'package:flutter/services.dart';
 
 import 'package:mg_read/app/app_theme.dart';
 import 'package:mg_read/features/media/application/source_media_system_ui_controller.dart';
-import 'package:mg_read/shared/presentation/widgets/default_book_cover_artwork.dart';
+import 'package:mg_read/shared/presentation/widgets/default_content_cover_artwork.dart';
 
 enum MediaEntryKind {
   audio,
@@ -229,7 +229,8 @@ final class MediaEntryCoverSurface extends StatelessWidget {
                               child: ClipRRect(
                                 borderRadius: BorderRadius.circular(22),
                                 child: bytes == null || bytes.isEmpty
-                                    ? DefaultBookCoverArtwork(
+                                    ? DefaultContentCoverArtwork(
+                                        kind: _defaultCoverKind(kind),
                                         title: title,
                                         width: coverWidth,
                                         height: coverHeight,
@@ -245,7 +246,8 @@ final class MediaEntryCoverSurface extends StatelessWidget {
                                         height: coverHeight,
                                         fit: BoxFit.cover,
                                         gaplessPlayback: true,
-                                        errorBuilder: (_, _, _) => DefaultBookCoverArtwork(
+                                        errorBuilder: (_, _, _) => DefaultContentCoverArtwork(
+                                          kind: _defaultCoverKind(kind),
                                           title: title,
                                           width: coverWidth,
                                           height: coverHeight,
@@ -342,6 +344,11 @@ final class MediaEntryCoverSurface extends StatelessWidget {
     );
   }
 }
+
+DefaultCoverKind _defaultCoverKind(MediaEntryKind kind) => switch (kind) {
+  MediaEntryKind.audio => DefaultCoverKind.audio,
+  MediaEntryKind.video => DefaultCoverKind.video,
+};
 
 /// Presents media artwork inside the whole player viewport without changing
 /// its intrinsic aspect ratio. A black background naturally creates the

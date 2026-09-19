@@ -219,7 +219,8 @@ void main() {
     expect(size.height, closeTo(size.width * 9 / 16, 0.01));
     expect(tester.widget<DiscoveryBookCover>(cover).presentation, DiscoveryCoverPresentation.landscape);
     expect(find.byIcon(Icons.play_arrow_rounded), findsNothing);
-    expect(find.text('视频'), findsNothing);
+    expect(find.byKey(const ValueKey<String>('default-cover-kind-video')), findsOneWidget);
+    expect(find.text('视频'), findsOneWidget);
     expect(find.byType(DiscoveryCoverGrid), findsNothing);
     await expectLater(find.byType(MaterialApp), matchesGoldenFile('goldens/runtime_discovery_video_grid_phone_light.png'));
   });
@@ -248,7 +249,8 @@ void main() {
     expect(find.byType(DiscoveryLandscapeContentListItem), findsOneWidget);
     expect(find.byType(DiscoveryNovelListItem), findsNothing);
     expect(find.byIcon(Icons.play_arrow_rounded), findsNothing);
-    expect(find.text('视频'), findsNothing);
+    expect(find.byKey(const ValueKey<String>('default-cover-kind-video')), findsOneWidget);
+    expect(find.text('视频'), findsOneWidget);
     final cover = tester.widget<DiscoveryBookCover>(find.byType(DiscoveryBookCover));
     expect(cover.presentation, DiscoveryCoverPresentation.landscape);
     expect(

@@ -19,7 +19,7 @@ import 'package:mgread_plugin_runtime/mgread_plugin_runtime.dart';
 
 import 'package:mg_read/app/app_theme.dart';
 import 'package:mg_read/features/discovery/presentation/discovery_view_data.dart';
-import 'package:mg_read/shared/presentation/widgets/default_book_cover_artwork.dart';
+import 'package:mg_read/shared/presentation/widgets/default_content_cover_artwork.dart';
 import 'package:mg_read/shared/presentation/widgets/async_book_cover_loader.dart';
 
 /// Host rendering shape selected from the source's cover-orientation contract.
@@ -33,6 +33,7 @@ class DiscoveryBookCover extends ConsumerWidget {
   const DiscoveryBookCover({
     required this.title,
     required this.variant,
+    this.contentKind = PluginContentKind.novel,
     this.width,
     this.height,
     this.presentation = DiscoveryCoverPresentation.portrait,
@@ -44,6 +45,7 @@ class DiscoveryBookCover extends ConsumerWidget {
 
   final String title;
   final DiscoveryCoverVariant variant;
+  final PluginContentKind contentKind;
 
   /// A fixed presentation width for constrained placements such as grids.
   ///
@@ -146,13 +148,11 @@ class DiscoveryBookCover extends ConsumerWidget {
   };
 
   Widget _placeholder(Color foreground, Color start, Color end, {required bool isLoading}) {
-    if (presentation == DiscoveryCoverPresentation.landscape) {
-      return _LandscapeCoverPlaceholder(foreground: foreground, start: start, end: end, width: _visualWidth, isLoading: isLoading);
-    }
     return Stack(
       fit: StackFit.expand,
       children: <Widget>[
-        DefaultBookCoverArtwork(
+        DefaultContentCoverArtwork(
+          kind: _defaultCoverKind(contentKind),
           title: title,
           width: _visualWidth,
           height: _placeholderHeight,
@@ -190,6 +190,13 @@ class DiscoveryBookCover extends ConsumerWidget {
   BorderRadius get _borderRadius =>
       presentation == DiscoveryCoverPresentation.landscape ? BorderRadius.circular(10) : AppRadii.discoveryCover;
 }
+
+DefaultCoverKind _defaultCoverKind(PluginContentKind kind) => switch (kind) {
+  PluginContentKind.novel => DefaultCoverKind.novel,
+  PluginContentKind.manga => DefaultCoverKind.manga,
+  PluginContentKind.audio => DefaultCoverKind.audio,
+  PluginContentKind.video => DefaultCoverKind.video,
+};
 
 /// Renders a decoded cover at its intrinsic ratio after reserving fallback space.
 class _IntrinsicCoverImage extends StatefulWidget {
@@ -255,53 +262,3 @@ DiscoveryCoverPresentation discoveryCoverPresentation(PluginCoverOrientation ori
   PluginCoverOrientation.square => DiscoveryCoverPresentation.square,
   PluginCoverOrientation.landscape => DiscoveryCoverPresentation.landscape,
 };
-
-class _LandscapeCoverPlaceholder extends StatelessWidget {
-  const _LandscapeCoverPlaceholder({
-    required this.foreground,
-    required this.start,
-    required this.end,
-    required this.width,
-    required this.isLoading,
-  });
-
-  final Color foreground;
-  final Color start;
-  final Color end;
-  final double width;
-  final bool isLoading;
-
-  @override
-  Widget build(BuildContext context) => Stack(
-    fit: StackFit.expand,
-    children: <Widget>[
-      DecoratedBox(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: <Color>[start.withValues(alpha: 0.88), end],
-          ),
-        ),
-        child: Padding(
-          padding: EdgeInsets.symmetric(horizontal: width >= 180 ? 18 : 12, vertical: width >= 180 ? 14 : 9),
-          child: Align(
-            alignment: Alignment.bottomLeft,
-            child: Icon(Icons.movie_rounded, size: width >= 180 ? 28 : 21, color: foreground.withValues(alpha: 0.86)),
-          ),
-        ),
-      ),
-      if (isLoading)
-        ColoredBox(
-          color: Colors.black.withValues(alpha: 0.14),
-          child: Center(
-            child: SizedBox(
-              width: width >= 180 ? 22 : 16,
-              height: width >= 180 ? 22 : 16,
-              child: CircularProgressIndicator(strokeWidth: 2, color: foreground),
-            ),
-          ),
-        ),
-    ],
-  );
-}

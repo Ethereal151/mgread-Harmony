@@ -64,6 +64,7 @@ class LibraryContinueReadingCard extends StatelessWidget {
                             opacity: 0.46,
                             child: LibraryBookCover(
                               title: data.title,
+                              contentKind: data.contentKind,
                               variant: data.coverVariant,
                               coverBytes: data.coverBytes,
                               coverRequest: data.coverRequest,
@@ -109,6 +110,7 @@ class LibraryContinueReadingCard extends StatelessWidget {
                   child: LibraryBookCover(
                     key: const Key('continue-reading-flat-cover'),
                     title: data.title,
+                    contentKind: data.contentKind,
                     variant: data.coverVariant,
                     coverBytes: data.coverBytes,
                     coverRequest: data.coverRequest,
