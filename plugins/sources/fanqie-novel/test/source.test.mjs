@@ -29,6 +29,30 @@ test('Fanqie source keeps book/item IDs and formats paragraphs', async () => {
   assert.match(proxied[0].url, /p6-novel\.byteimg\.com/u);
 });
 
+test('Fanqie bookshelf opens the official page in a visible WebView', async () => {
+  const calls = [];
+  const page = {
+    async navigate(url, options) { calls.push(['navigate', url, options]); },
+    async show(options) { calls.push(['show', options]); },
+  };
+  await plugin.activate({
+    log: { info() {}, warn() {} },
+    resource: { proxy(value) { return value.url; } },
+    http: { async fetch() { throw new Error('unexpected HTTP request'); } },
+    webview: { async open(options) { calls.push(['open', options]); return page; } },
+  });
+  const home = await plugin.discover({ target: null, cursor: null, collectionId: null, pageSize: 10 });
+  const action = home.document.components[1].children[0].categories[0];
+  assert.deepEqual(action, { id: 'bookshelf', title: '查看书架', target: 'bookshelf', count: null, url: null, icon: 'books' });
+
+  const result = await plugin.discover({ target: action.target, cursor: null, collectionId: null, pageSize: 10 });
+  assert.equal(result.document.components[0].title, '番茄书架已打开');
+  assert.equal(calls[0][0], 'open');
+  assert.deepEqual(calls[0][1], { visible: true, timeoutMs: 30_000 });
+  assert.deepEqual(calls[1], ['navigate', 'https://fanqienovel.com/bookshelf?enter_from=menu', { timeoutMs: 45_000 }]);
+  assert.deepEqual(calls[2], ['show', { timeoutMs: 15_000 }]);
+});
+
 test('Fanqie source migrates legacy search payloads and web detail fallback', async () => {
   const resources = [];
   await plugin.activate({

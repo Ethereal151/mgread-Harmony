@@ -1,9 +1,9 @@
 /**
  * 番茄小说原生数据源。
  *
- * 职责：迁移旧书源中可落到公开 Source API 的搜索、分类、详情、目录、正文和封面。
+ * 职责：迁移旧书源中可落到公开 Source API 的搜索、分类、详情、目录、正文、封面和官方书架入口。
  * 生命周期：activate 只保存 Runtime 上下文；不注册设备、不保存登录凭据、不创建后台任务。
- * IO：公开 HTTP 接口统一经 ctx.http；封面经 ctx.resource.proxy 交给 Runtime 数据面。
+ * IO：公开 HTTP 接口统一经 ctx.http；封面经 ctx.resource.proxy 交给 Runtime 数据面；登录书架只经可见 WebView。
  * 稳定标识：作品使用 book_id，章节使用 item_id，均不会用标题或数组位置替代。
  * 边界：旧版 legado 设置页、设备签名、段评回调没有对应公开 Source API，因此不在本插件伪造。
  */
@@ -15,6 +15,7 @@ type Channel = readonly [id: string, title: string, gender: number];
 
 const NOVEL_HOST = 'https://novel.snssdk.com';
 const WEB_HOST = 'https://fanqienovel.com';
+const BOOKSHELF_URL = `${WEB_HOST}/bookshelf?enter_from=menu`;
 const BOOK_HOST = 'https://fq-book.netsite.cc';
 const CONTENT_HOSTS = ['https://gofq.52dns.cc', 'https://pyfq.52dns.cc', BOOK_HOST] as const;
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36';
@@ -37,9 +38,11 @@ const CHANNELS: readonly Channel[] = [
 ] as const;
 
 let context: Context | undefined;
+let pageQueue: Promise<void> = Promise.resolve();
 
 export async function activate(next: Context) {
   context = next;
+  pageQueue = Promise.resolve();
   next.log.info('source_activated');
 }
 
@@ -89,10 +92,19 @@ export async function discover(request: {
             id: 'fanqie-channel-list', layout: 'chips' as const,
             categories: CHANNELS.map(([id, title]) => ({ id, title, target: `channel:${id}`, count: null, url: null, icon: 'book' })),
           }],
+        }, {
+          type: 'section' as const,
+          id: 'fanqie-account', title: '账号功能', subtitle: '登录后查看番茄官方书架', icon: 'books',
+          children: [{
+            type: 'categoryCollection' as const,
+            id: 'fanqie-account-actions', layout: 'chips' as const,
+            categories: [{ id: 'bookshelf', title: '查看书架', target: 'bookshelf', count: null, url: null, icon: 'books' }],
+          }],
         }],
       },
     });
   }
+  if (request.target === 'bookshelf') return openBookshelf();
   const channel = CHANNELS.find(([id]) => request.target === `channel:${id}`);
   if (!channel) throw new Error('Discovery target is invalid.');
   const page = cursorPage(request.cursor, request.target);
@@ -113,6 +125,24 @@ export async function discover(request: {
       type: 'section' as const, id: `${collectionId}:section`, title: channel[1], subtitle: null, icon: 'book',
       children: [{ type: 'contentCollection' as const, id: collectionId, layout: 'coverGrid' as const, items, continuation }],
     }] },
+  });
+}
+
+async function openBookshelf() {
+  await withPage(async (page) => {
+    await page.navigate(BOOKSHELF_URL, { timeoutMs: 45_000 });
+    await page.show({ timeoutMs: 15_000 });
+  });
+  requireContext().log.info('bookshelf_page_opened');
+  return frozen({
+    kind: 'document' as const,
+    document: {
+      components: [{
+        type: 'section' as const,
+        id: 'fanqie-bookshelf-opened', title: '番茄书架已打开',
+        subtitle: '请在打开的官方 WebView 中完成登录；登录后即可查看书架。', icon: 'books', children: [],
+      }],
+    },
   });
 }
 
@@ -308,6 +338,11 @@ function plainText(value: string): string {
 function stripHtml(value: string): string { return plainText(value); }
 function decode(value: string): string { return value.replaceAll('&nbsp;', ' ').replaceAll('&lt;', '<').replaceAll('&gt;', '>').replaceAll('&amp;', '&').replaceAll('&quot;', '"').replaceAll('&#39;', "'").replaceAll('&apos;', "'"); }
 function replaceCover(value: string): string { if (!safeUrl(value)) return ''; const url = new URL(value); return `https://p6-novel.byteimg.com/origin${url.pathname.replace(/~.*$/u, '')}`; }
+function withPage<T>(action: (page: import('@mgread/source-api').PluginWebViewPage) => Promise<T>): Promise<T> {
+  const run = pageQueue.then(async () => action(await requireContext().webview.open({ visible: true, timeoutMs: 30_000 })));
+  pageQueue = run.then(() => undefined, () => undefined);
+  return run;
+}
 function contentId(id: string): string { const value = /^novel:(\d+)$/u.exec(id)?.[1]; if (!value) throw new Error('Content ID is invalid.'); return value; }
 function chapterNative(id: string, bookId: string): string { const value = new RegExp(`^novel:${bookId}:(\\d+)$`, 'u').exec(id)?.[1]; if (!value) throw new Error('Chapter ID is invalid.'); return value; }
 function cursorPage(cursor: string | null, target: string): number { if (cursor === null) return 1; const page = Number(cursor.startsWith(`${target}:`) ? cursor.slice(target.length + 1) : ''); if (!Number.isSafeInteger(page) || page < 2) throw new Error('Cursor is invalid.'); return page; }

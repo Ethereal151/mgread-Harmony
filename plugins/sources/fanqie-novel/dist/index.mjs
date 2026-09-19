@@ -1,5 +1,6 @@
 const NOVEL_HOST = 'https://novel.snssdk.com';
 const WEB_HOST = 'https://fanqienovel.com';
+const BOOKSHELF_URL = `${WEB_HOST}/bookshelf?enter_from=menu`;
 const BOOK_HOST = 'https://fq-book.netsite.cc';
 const CONTENT_HOSTS = ['https://gofq.52dns.cc', 'https://pyfq.52dns.cc', BOOK_HOST];
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36';
@@ -21,8 +22,10 @@ const CHANNELS = [
     ['26', '幻想言情', 2], ['27', '悬疑推理', 2], ['28', '武侠', 2], ['29', '短篇', 1], ['30', '全本', 1],
 ];
 let context;
+let pageQueue = Promise.resolve();
 export async function activate(next) {
     context = next;
+    pageQueue = Promise.resolve();
     next.log.info('source_activated');
 }
 export async function search(request) {
@@ -66,10 +69,20 @@ export async function discover(request) {
                                 id: 'fanqie-channel-list', layout: 'chips',
                                 categories: CHANNELS.map(([id, title]) => ({ id, title, target: `channel:${id}`, count: null, url: null, icon: 'book' })),
                             }],
+                    }, {
+                        type: 'section',
+                        id: 'fanqie-account', title: '账号功能', subtitle: '登录后查看番茄官方书架', icon: 'books',
+                        children: [{
+                                type: 'categoryCollection',
+                                id: 'fanqie-account-actions', layout: 'chips',
+                                categories: [{ id: 'bookshelf', title: '查看书架', target: 'bookshelf', count: null, url: null, icon: 'books' }],
+                            }],
                     }],
             },
         });
     }
+    if (request.target === 'bookshelf')
+        return openBookshelf();
     const channel = CHANNELS.find(([id]) => request.target === `channel:${id}`);
     if (!channel)
         throw new Error('Discovery target is invalid.');
@@ -92,6 +105,23 @@ export async function discover(request) {
                     type: 'section', id: `${collectionId}:section`, title: channel[1], subtitle: null, icon: 'book',
                     children: [{ type: 'contentCollection', id: collectionId, layout: 'coverGrid', items, continuation }],
                 }] },
+    });
+}
+async function openBookshelf() {
+    await withPage(async (page) => {
+        await page.navigate(BOOKSHELF_URL, { timeoutMs: 45_000 });
+        await page.show({ timeoutMs: 15_000 });
+    });
+    requireContext().log.info('bookshelf_page_opened');
+    return frozen({
+        kind: 'document',
+        document: {
+            components: [{
+                    type: 'section',
+                    id: 'fanqie-bookshelf-opened', title: '番茄书架已打开',
+                    subtitle: '请在打开的官方 WebView 中完成登录；登录后即可查看书架。', icon: 'books', children: [],
+                }],
+        },
     });
 }
 export async function getDetail(request) {
@@ -315,6 +345,11 @@ function stripHtml(value) { return plainText(value); }
 function decode(value) { return value.replaceAll('&nbsp;', ' ').replaceAll('&lt;', '<').replaceAll('&gt;', '>').replaceAll('&amp;', '&').replaceAll('&quot;', '"').replaceAll('&#39;', "'").replaceAll('&apos;', "'"); }
 function replaceCover(value) { if (!safeUrl(value))
     return ''; const url = new URL(value); return `https://p6-novel.byteimg.com/origin${url.pathname.replace(/~.*$/u, '')}`; }
+function withPage(action) {
+    const run = pageQueue.then(async () => action(await requireContext().webview.open({ visible: true, timeoutMs: 30_000 })));
+    pageQueue = run.then(() => undefined, () => undefined);
+    return run;
+}
 function contentId(id) { const value = /^novel:(\d+)$/u.exec(id)?.[1]; if (!value)
     throw new Error('Content ID is invalid.'); return value; }
 function chapterNative(id, bookId) { const value = new RegExp(`^novel:${bookId}:(\\d+)$`, 'u').exec(id)?.[1]; if (!value)
