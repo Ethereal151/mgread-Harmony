@@ -307,6 +307,42 @@ void main() {
     },
   );
 
+  test('chapter preload reports image-level cache progress', () async {
+    final source = _FakeComicSource();
+    final cache = ComicImageByteCache(bookId: 'book', dataSource: source);
+    final progress = <(int, int)>[];
+    final preloader = ComicChapterPreloader(
+      cache,
+      onProgress: (chapter, cached, failed) {
+        progress.add((cached, failed));
+      },
+    );
+    addTearDown(cache.dispose);
+
+    preloader.start(
+      ComicChapterContent(
+        chapterId: 'chapter-1',
+        title: '第一章',
+        images: <ComicImageInfo>[
+          _image('one', null),
+          ComicImageInfo(id: 'two', index: 1),
+        ],
+      ),
+      followingChapterCount: 0,
+      followingChapter: (_) async => null,
+    );
+    for (
+      var attempt = 0;
+      attempt < 20 && (progress.isEmpty || progress.last != (2, 0));
+      attempt++
+    ) {
+      await Future<void>.delayed(Duration.zero);
+    }
+
+    expect(progress.first, (0, 0));
+    expect(progress.last, (2, 0));
+  });
+
   test(
     'cancelling chapter preload stops replenishment and preserves visible work',
     () async {
@@ -629,7 +665,7 @@ void main() {
     expect(
       find.descendant(
         of: currentChapter,
-        matching: find.text('1 张 · 未读 · 已缓存'),
+        matching: find.text('1 张 · 未读 · 已缓存 1/1'),
       ),
       findsOneWidget,
     );

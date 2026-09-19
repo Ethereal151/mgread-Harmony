@@ -5,6 +5,7 @@
 /// budget, without scanning or encoding text on the first-content path.
 library;
 
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:mgread_plugin_runtime/mgread_plugin_runtime.dart';
@@ -160,7 +161,7 @@ final class ContentLibrarySourceTextReader implements LibraryReaderLauncher, Loc
         if (remote.contentKind != PluginContentKind.novel || remote.text == null) {
           throw _failure(ReaderLaunchFailureReason.sourceContentKind, AppErrorCode.unsupported);
         }
-        initialWrite = session.cacheChapter(entry: target, text: remote.text!).then<void>((_) {}, onError: (Object _, StackTrace stack) {});
+        initialWrite = session.cacheChapter(entry: target, text: remote.text!);
         content = NovelChapterContent(text: remote.text!);
       }
       preparationKind = ReaderLaunchPreparationKind.network;
@@ -228,9 +229,7 @@ final class ContentLibrarySourceTextReader implements LibraryReaderLauncher, Loc
       throw _failure(ReaderLaunchFailureReason.sourceContentKind, AppErrorCode.unsupported);
     }
     networkStopwatch.stop();
-    final initialWrite = localSession
-        .cacheChapter(entry: initialEntry, text: initialContent.text!)
-        .then<void>((_) {}, onError: (Object _, StackTrace stack) {});
+    final initialWrite = localSession.cacheChapter(entry: initialEntry, text: initialContent.text!);
     return _buildSessionRequest(
       item: item,
       source: source,
@@ -376,13 +375,15 @@ final class _SessionNovelChapterAccess
     required NovelChapterContent initialContent,
     Future<void>? initialWrite,
   }) {
-    // The launch path has already obtained usable content, either from the
-    // durable object store or a remote response being persisted in the background.
-    // Keep this dynamic state correct even when the immutable catalog entry
-    // was cached before that content write completed.
-    _cachedChapterIds.add(initialEntry.remoteIdentity);
+    // Remote content remains immediately readable from session memory, but it
+    // is only reported as cached after the background object-store write has
+    // actually succeeded.
+    if (initialWrite == null) {
+      _cachedChapterIds.add(initialEntry.remoteIdentity);
+    } else {
+      _trackInitialWrite(initialEntry.remoteIdentity, initialWrite);
+    }
     _memoryByRemoteId[initialEntry.remoteIdentity] = initialContent.text;
-    if (initialWrite != null) _trackWrite(initialEntry.remoteIdentity, initialWrite);
   }
 
   final ContentLibrary library;
@@ -506,6 +507,22 @@ final class _SessionNovelChapterAccess
     });
   }
 
+  void _trackInitialWrite(String chapterId, Future<void> write) {
+    final tracked = _trackWrite(chapterId, write);
+    unawaited(
+      tracked.then<void>(
+        (_) {
+          _cachedChapterIds.add(chapterId);
+          _failedChapterIds.remove(chapterId);
+        },
+        onError: (Object error, StackTrace stack) {
+          _cachedChapterIds.remove(chapterId);
+          _failedChapterIds.add(chapterId);
+        },
+      ),
+    );
+  }
+
   PluginChapterContent _pluginContent(CatalogEntry entry, String text) => PluginChapterContent(
     pluginId: source.pluginId,
     sourceName: item.sourceName ?? '书架缓存',
@@ -614,6 +631,9 @@ final class _SessionNovelChapterAccess
       return ReaderChapterAvailability.downloaded;
     }
     if (_loading.containsKey(entry.remoteIdentity)) {
+      return ReaderChapterAvailability.downloading;
+    }
+    if (_writing.containsKey(entry.remoteIdentity)) {
       return ReaderChapterAvailability.downloading;
     }
     if (_failedChapterIds.contains(entry.remoteIdentity)) {

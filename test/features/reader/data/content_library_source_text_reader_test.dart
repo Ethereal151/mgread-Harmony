@@ -175,7 +175,7 @@ void main() {
       'chapter-1',
     ]);
     expect(chapterStates.keys, containsAll(<String>['chapter-1', 'chapter-2']));
-    expect(chapterStates['chapter-1']?.availability, ReaderChapterAvailability.downloaded);
+    expect(chapterStates['chapter-1']?.availability, ReaderChapterAvailability.downloading);
     expect(chapterStates['chapter-2']?.availability, ReaderChapterAvailability.notDownloaded);
     final bookInfo = await firstRequest.dataSource.loadBookInfo(item.id.value);
     expect(bookInfo.description, '测试简介');
@@ -200,6 +200,10 @@ void main() {
       }
     })().timeout(const Duration(seconds: 5));
     expect((await library.listAllCatalog(item.id)).first.contentStatus, 'ready');
+    final persistedStates = await firstRequest.extensions.chapterStateCapability!.loadChapterStates(item.id.value, const <String>[
+      'chapter-1',
+    ]);
+    expect(persistedStates['chapter-1']?.availability, ReaderChapterAvailability.downloaded);
     final warmCatalogCount = gateway.requestedCatalogCount;
     final warmDetailCount = gateway.requestedDetailCount;
     final warm = await reader.warmLocal(item.id.value);
@@ -279,10 +283,7 @@ void main() {
     final capability = request.extensions.chapterCacheCapability;
 
     expect(capability, isNotNull);
-    await capability!.startCaching(
-      item.id.value,
-      const ReaderChapterCacheRequest(chapterCount: 2, concurrency: 1, delay: Duration(seconds: 1)),
-    );
+    await capability!.startCaching(item.id.value, const ReaderChapterCacheRequest(chapterCount: 2, concurrency: 1, delay: Duration.zero));
     for (var attempt = 0; attempt < 100; attempt += 1) {
       if (container.read(chapterCacheTaskControllerProvider)?.status == ChapterCacheTaskStatus.completed) break;
       await Future<void>.delayed(const Duration(milliseconds: 2));

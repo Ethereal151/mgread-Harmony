@@ -48,6 +48,19 @@ abstract interface class ComicReaderDataSource {
   );
 }
 
+/// Optional host capability for distinguishing readable bytes from a durable
+/// image-cache hit. A reader still displays valid bytes when persistence fails,
+/// but does not report that image as cached.
+abstract interface class ComicReaderImageCacheStateDataSource {
+  /// Returns whether the exact image bytes loaded in this session are present
+  /// in the host's persistent cache.
+  Future<bool> isImagePersistentlyCached(
+    String bookId,
+    String chapterId,
+    String imageId,
+  );
+}
+
 /// Persists comic-specific state without reusing text position models.
 abstract interface class ComicReaderStateStore {
   /// Loads the latest semantic comic progress, or null when none exists.

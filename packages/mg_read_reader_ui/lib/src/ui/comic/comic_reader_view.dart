@@ -185,6 +185,7 @@ class _ComicReaderViewState extends State<ComicReaderView>
   bool _preferencesAuthoritative = false;
   bool _firstContentPresented = false;
   ComicChapterPreloader? _preloader;
+  ValueNotifier<int>? _activeCatalogRevision;
   bool _dimensionsUpdateScheduled = false;
   double _viewportWidth = 0;
   double _viewportHeight = 0;

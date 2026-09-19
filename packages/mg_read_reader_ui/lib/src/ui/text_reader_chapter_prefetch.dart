@@ -217,6 +217,8 @@ extension _TextReaderChapterPrefetch on _TextReaderViewState {
 
     final int currentIndex = _chapterIndex;
     final int fastCount = widget.chapterPreloadCount;
+    // Keep the deliberately wider idle window: the user explicitly requested
+    // slow caching to maximize advance preparation beyond the fast window.
     final int lastIndex =
         currentIndex + fastCount * _TextReaderViewState._slowPreloadMultiplier;
     _slowPreloadAttemptedIndexes.removeWhere(

@@ -24,6 +24,7 @@ extension _ComicReaderCatalog on _ComicReaderViewState {
     final int sheetGeneration = _beginSheet();
     final ScrollController catalogScrollController = ScrollController();
     final ValueNotifier<int> catalogRevision = ValueNotifier<int>(0);
+    _activeCatalogRevision = catalogRevision;
     var catalogCompletionStarted = false;
     _setControlsVisible(false);
     final Future<void> sheet = showModalBottomSheet<void>(
@@ -140,6 +141,9 @@ extension _ComicReaderCatalog on _ComicReaderViewState {
       sheet.whenComplete(() {
         _finishSheet(sheetGeneration);
         catalogScrollController.dispose();
+        if (identical(_activeCatalogRevision, catalogRevision)) {
+          _activeCatalogRevision = null;
+        }
         catalogRevision.dispose();
       }),
     );
@@ -502,17 +506,37 @@ extension _ComicReaderCatalog on _ComicReaderViewState {
     final String read = chapter.hasBeenRead
         ? ComicReaderStrings.read
         : ComicReaderStrings.unread;
+    final int? cachedImageCount = chapter.cachedImageCount;
+    final int totalImageCount = chapter.imageCount ?? 0;
+    final String progress =
+        cachedImageCount == null || chapter.imageCount == null
+        ? ''
+        : '$cachedImageCount/$totalImageCount';
     final String availability = switch (chapter.availability) {
-      ReaderChapterAvailability.downloaded => ComicReaderStrings.cached,
-      ReaderChapterAvailability.downloading => ComicReaderStrings.loadingStatus,
+      ReaderChapterAvailability.downloaded =>
+        progress.isEmpty
+            ? ComicReaderStrings.cached
+            : '${ComicReaderStrings.cached} $progress',
+      ReaderChapterAvailability.downloading =>
+        progress.isEmpty
+            ? ComicReaderStrings.cachingStatus
+            : '${ComicReaderStrings.cachingStatus} $progress',
       ReaderChapterAvailability.notDownloaded => ComicReaderStrings.notCached,
-      ReaderChapterAvailability.failed => ComicReaderStrings.failedStatus,
-      ReaderChapterAvailability.unknown => '',
+      ReaderChapterAvailability.failed =>
+        progress.isEmpty
+            ? ComicReaderStrings.cacheFailedStatus
+            : '${ComicReaderStrings.cacheFailedStatus} $progress',
+      ReaderChapterAvailability.unknown =>
+        chapter.manifestCached ? ComicReaderStrings.manifestCached : '',
     };
+    final String failures = chapter.failedImageCount > 0
+        ? ComicReaderStrings.failedImageCount(chapter.failedImageCount)
+        : '';
     return <String>[
       count,
       read,
       availability,
+      failures,
     ].where((value) => value.isNotEmpty).join(' · ');
   }
 }

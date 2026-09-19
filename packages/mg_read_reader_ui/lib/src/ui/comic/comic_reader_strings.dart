@@ -23,6 +23,9 @@ abstract final class ComicReaderStrings {
   static const readerProblem = '漫画阅读遇到问题';
   static const loadMore = '加载更多';
   static const cached = '已缓存';
+  static const manifestCached = '清单已缓存';
+  static const cachingStatus = '缓存中';
+  static const cacheFailedStatus = '缓存失败';
   static const notCached = '未缓存';
   static const read = '已读';
   static const unread = '未读';
@@ -31,6 +34,7 @@ abstract final class ComicReaderStrings {
   static const imageCommentLoading = '漫画图片评论正在加载';
   static const imageCommentFailed = '漫画图片评论加载失败，点击重试';
   static String imageCount(int count) => '$count 张';
+  static String failedImageCount(int count) => '$count 张失败';
   static String chapterCount(int count) => '共 $count 话';
   static String imageSemantics(int number) => '漫画图片 $number';
   static String imageProgress(String id, int percent) => '图片 $id · $percent%';

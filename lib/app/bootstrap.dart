@@ -232,7 +232,7 @@ Future<void> bootstrapMgReadApp({
     return persistence;
   }
 
-  final sourcePrefetchers = AppContentLibrarySourcePrefetcherCoordinator(diagnostics);
+  final sourcePrefetchers = AppContentLibrarySourcePrefetcherCoordinator(diagnostics, settings: resolvedManager);
   startup.recordStage('composition', resultState: 'mounted');
   // Do this before any application-support lookup and first-run database open.
   appRunner(
@@ -279,6 +279,7 @@ Future<void> bootstrapMgReadApp({
         if (contentLibrary != null || contentLibraryFactory != null)
           discoveryBookshelfSaverProvider.overrideWith((ref) {
             final membership = ref.read(bookshelfMembershipProvider.notifier);
+            sourcePrefetchers.configureProxyManager(ref.read(configuredFlutterNetworkProxyManagerProvider));
             return DeferredDiscoveryBookshelfSaver(
               getLibrary,
               ref.read(sourceContentGatewayProvider),
@@ -315,16 +316,18 @@ Future<void> bootstrapMgReadApp({
         if (contentLibrary != null || contentLibraryFactory != null)
           mangaImageCacheGatewayProvider.overrideWithValue(ContentLibraryMangaImageCacheGateway(getLibrary)),
         if (contentLibrary != null || contentLibraryFactory != null)
-          libraryReaderLauncherProvider.overrideWith(
-            (ref) => DeferredLibraryReaderLauncher(
+          libraryReaderLauncherProvider.overrideWith((ref) {
+            final proxyManager = ref.read(configuredFlutterNetworkProxyManagerProvider);
+            sourcePrefetchers.configureProxyManager(proxyManager);
+            return DeferredLibraryReaderLauncher(
               getLibrary,
               ref.read(sourceContentGatewayProvider),
               sourcePrefetchers,
               resolvedManager,
               ref.read(chapterCacheTaskControllerProvider.notifier),
-              ref.read(configuredFlutterNetworkProxyManagerProvider),
-            ),
-          ),
+              proxyManager,
+            );
+          }),
       ],
       child: AppSettingsLifecycleHost(
         manager: resolvedManager,

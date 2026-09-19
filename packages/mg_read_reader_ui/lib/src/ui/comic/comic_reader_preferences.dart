@@ -318,8 +318,9 @@ extension _ComicReaderPreferences on _ComicReaderViewState {
           (byIndex != null && byIndex.id != info.id)) {
         throw StateError('Comic catalog identifiers are inconsistent.');
       }
-      nextById[info.id] = info;
-      nextByIndex[info.index] = info;
+      final merged = _preserveMeasuredCacheProgress(info, byId ?? byIndex);
+      nextById[info.id] = merged;
+      nextByIndex[info.index] = merged;
     }
     final int knownCount = nextByIndex.keys.fold<int>(0, (count, index) {
       final int candidate = index + 1;
@@ -360,15 +361,34 @@ extension _ComicReaderPreferences on _ComicReaderViewState {
         (byIndex != null && byIndex.id != info.id)) {
       throw StateError('Comic catalog identifiers are inconsistent.');
     }
-    _catalogById[info.id] = info;
-    _catalogByIndex[info.index] = info;
+    final merged = _preserveMeasuredCacheProgress(info, byId ?? byIndex);
+    _catalogById[info.id] = merged;
+    _catalogByIndex[info.index] = merged;
     final int existing = _catalog.indexWhere((entry) => entry.id == info.id);
     if (existing < 0) {
-      _catalog.add(info);
+      _catalog.add(merged);
     } else {
-      _catalog[existing] = info;
+      _catalog[existing] = merged;
     }
     _catalog.sort((a, b) => a.index.compareTo(b.index));
+  }
+
+  ComicChapterInfo _preserveMeasuredCacheProgress(
+    ComicChapterInfo incoming,
+    ComicChapterInfo? current,
+  ) {
+    if (current?.cachedImageCount == null) return incoming;
+    return ComicChapterInfo(
+      id: incoming.id,
+      title: incoming.title,
+      index: incoming.index,
+      availability: current!.availability,
+      imageCount: current.imageCount ?? incoming.imageCount,
+      cachedImageCount: current.cachedImageCount,
+      failedImageCount: current.failedImageCount,
+      manifestCached: current.manifestCached || incoming.manifestCached,
+      hasBeenRead: current.hasBeenRead || incoming.hasBeenRead,
+    );
   }
 
   void _validateBook(ComicBookInfo book, String expectedId) {
@@ -382,7 +402,13 @@ extension _ComicReaderPreferences on _ComicReaderViewState {
         info.title.trim().isEmpty ||
         info.index < 0 ||
         (expectedIndex != null && info.index != expectedIndex) ||
-        (info.imageCount != null && info.imageCount! < 0)) {
+        (info.imageCount != null && info.imageCount! < 0) ||
+        (info.cachedImageCount != null && info.cachedImageCount! < 0) ||
+        info.failedImageCount < 0 ||
+        (info.imageCount != null &&
+            info.cachedImageCount != null &&
+            info.cachedImageCount! + info.failedImageCount >
+                info.imageCount!)) {
       throw StateError('Comic chapter metadata is invalid.');
     }
   }

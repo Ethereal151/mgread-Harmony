@@ -746,7 +746,10 @@ extension _ComicReaderSession on _ComicReaderViewState {
     if (chapters.isEmpty) return;
     final chapter = chapters.first;
     final int navigation = _navigationGeneration;
-    (_preloader ??= ComicChapterPreloader(_imageCache)).start(
+    (_preloader ??= ComicChapterPreloader(
+      _imageCache,
+      onProgress: _updateChapterCacheProgress,
+    )).start(
       chapter.content,
       followingChapterCount: widget.chapterPreloadCount,
       followingChapter: (int offset) async {
@@ -769,6 +772,54 @@ extension _ComicReaderSession on _ComicReaderViewState {
         return _isNavigation(navigation) ? content : null;
       },
     );
+  }
+
+  void _updateChapterCacheProgress(
+    ComicChapterContent content,
+    int cachedImageCount,
+    int failedImageCount,
+  ) {
+    if (_disposed) return;
+    final ComicChapterInfo? existing = _catalogById[content.chapterId];
+    if (existing == null) return;
+    final int imageCount = content.images.length;
+    final bool finished = cachedImageCount + failedImageCount >= imageCount;
+    final ReaderChapterAvailability availability =
+        failedImageCount > 0 && finished
+        ? ReaderChapterAvailability.failed
+        : cachedImageCount == imageCount
+        ? ReaderChapterAvailability.downloaded
+        : ReaderChapterAvailability.downloading;
+    final updated = ComicChapterInfo(
+      id: existing.id,
+      title: existing.title,
+      index: existing.index,
+      availability: availability,
+      imageCount: imageCount,
+      cachedImageCount: cachedImageCount,
+      failedImageCount: failedImageCount,
+      manifestCached: true,
+      hasBeenRead: existing.hasBeenRead,
+    );
+    _catalogById[updated.id] = updated;
+    _catalogByIndex[updated.index] = updated;
+    final int catalogIndex = _catalog.indexWhere(
+      (ComicChapterInfo chapter) => chapter.id == updated.id,
+    );
+    if (catalogIndex >= 0) _catalog[catalogIndex] = updated;
+    for (var index = 0; index < _window.length; index++) {
+      final loaded = _window[index];
+      if (loaded.info.id == updated.id) {
+        _window[index] = _LoadedComicChapter(updated, loaded.content);
+      }
+    }
+    if (_pendingChapter?.id == updated.id) _pendingChapter = updated;
+    if (_currentChapter?.id == updated.id) {
+      _currentChapter = updated;
+      if (finished || cachedImageCount == 0) _scheduleSnapshotPublish();
+    }
+    final revision = _activeCatalogRevision;
+    if (revision != null) revision.value++;
   }
 
   double _takeLayoutCorrection() {

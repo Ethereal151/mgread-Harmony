@@ -135,6 +135,10 @@ class _TextReaderViewState extends State<TextReaderView>
   static const int _verticalRestoreMeasureBatchSize = 128;
   static const int _progressiveParagraphBatchSize = 8;
   static const Duration _adjacentQuietDelay = Duration(milliseconds: 350);
+  // Product requirement explicitly confirmed by the user: the configured
+  // chapter count is the fast window, while idle slow preloading intentionally
+  // reaches ten times farther so the reader prepares as much future text as
+  // practical. This is not a storage-cap calculation.
   static const int _slowPreloadMultiplier = 10;
   static const int _slowPreloadMinimumDelaySeconds = 10;
   static const int _slowPreloadDelayRangeSeconds = 21;

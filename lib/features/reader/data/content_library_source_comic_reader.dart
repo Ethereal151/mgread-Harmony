@@ -40,7 +40,7 @@ final class ComicImageHttpStatusException extends HttpException {
 
 /// Content Library adapter for a source-backed comic session.
 final class ContentLibraryComicReaderDataSource
-    implements ComicReaderDataSource, DisposableReaderDataSource, ReaderCatalogRefreshDataSource {
+    implements ComicReaderDataSource, ComicReaderImageCacheStateDataSource, DisposableReaderDataSource, ReaderCatalogRefreshDataSource {
   ContentLibraryComicReaderDataSource({
     required this.library,
     required this.gateway,
@@ -193,6 +193,15 @@ final class ContentLibraryComicReaderDataSource
     return task.whenComplete(() {
       if (identical(_imageLoads[key], task)) _imageLoads.remove(key);
     });
+  }
+
+  @override
+  Future<bool> isImagePersistentlyCached(String bookId, String chapterId, String imageId) async {
+    _checkBook(bookId);
+    final manifest = _manifests[chapterId] ?? await _persistedManifest(chapterId);
+    final page = manifest?.page(imageId);
+    if (page == null) return false;
+    return await _readCachedImage(chapterId, page) != null;
   }
 
   @override
@@ -429,7 +438,8 @@ final class ContentLibraryComicReaderDataSource
     id: entry.remoteIdentity,
     title: entry.title,
     index: entry.index,
-    availability: entry.contentStatus == 'ready' ? ReaderChapterAvailability.downloaded : ReaderChapterAvailability.notDownloaded,
+    availability: entry.contentStatus == 'ready' ? ReaderChapterAvailability.unknown : ReaderChapterAvailability.notDownloaded,
+    manifestCached: entry.contentStatus == 'ready',
   );
 
   ComicChapterContent _readerContent(_ChapterManifest manifest) => ComicChapterContent(

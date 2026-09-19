@@ -72,8 +72,23 @@ class ComicChapterInfo {
     required this.index,
     this.availability = ReaderChapterAvailability.unknown,
     this.imageCount,
+    this.cachedImageCount,
+    this.failedImageCount = 0,
+    this.manifestCached = false,
     this.hasBeenRead = false,
-  });
+  }) : assert(cachedImageCount == null || cachedImageCount >= 0),
+       assert(failedImageCount >= 0),
+       assert(
+         imageCount == null ||
+             cachedImageCount == null ||
+             cachedImageCount <= imageCount,
+       ),
+       assert(imageCount == null || failedImageCount <= imageCount),
+       assert(
+         imageCount == null ||
+             cachedImageCount == null ||
+             cachedImageCount + failedImageCount <= imageCount,
+       );
 
   /// Stable chapter identifier.
   final String id;
@@ -90,6 +105,18 @@ class ComicChapterInfo {
   /// Optional total number of images.
   final int? imageCount;
 
+  /// Number of image bodies confirmed in the host cache for this session.
+  ///
+  /// Null means the host has not measured image-level progress yet. Zero is a
+  /// measured value and is distinct from a cached chapter manifest.
+  final int? cachedImageCount;
+
+  /// Number of image cache attempts that failed in the latest preload pass.
+  final int failedImageCount;
+
+  /// Whether the ordered image manifest is cached independently of bodies.
+  final bool manifestCached;
+
   /// Whether the host considers this chapter read.
   final bool hasBeenRead;
 
@@ -101,11 +128,23 @@ class ComicChapterInfo {
       index == other.index &&
       availability == other.availability &&
       imageCount == other.imageCount &&
+      cachedImageCount == other.cachedImageCount &&
+      failedImageCount == other.failedImageCount &&
+      manifestCached == other.manifestCached &&
       hasBeenRead == other.hasBeenRead;
 
   @override
-  int get hashCode =>
-      Object.hash(id, title, index, availability, imageCount, hasBeenRead);
+  int get hashCode => Object.hash(
+    id,
+    title,
+    index,
+    availability,
+    imageCount,
+    cachedImageCount,
+    failedImageCount,
+    manifestCached,
+    hasBeenRead,
+  );
 }
 
 @immutable
@@ -452,14 +491,13 @@ class ComicReaderPreferences {
       imageSpacing == other.imageSpacing;
 
   @override
-  int get hashCode =>
-      Object.hash(
-        brightness,
-        keepScreenOn,
-        immersiveMode,
-        pageTurnShortcuts,
-        imageSpacing,
-      );
+  int get hashCode => Object.hash(
+    brightness,
+    keepScreenOn,
+    immersiveMode,
+    pageTurnShortcuts,
+    imageSpacing,
+  );
 }
 
 @immutable

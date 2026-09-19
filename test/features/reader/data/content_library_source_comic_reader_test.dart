@@ -169,10 +169,12 @@ void main() {
     final first = ContentLibraryComicReaderDataSource(library: fixture.library, gateway: gateway, item: fixture.manga, fetcher: fetch);
     await first.loadChapterContent(fixture.manga.id.value, 'chapter-1');
     await first.loadImageBytes(fixture.manga.id.value, 'chapter-1', 'image-1');
+    expect(await first.isImagePersistentlyCached(fixture.manga.id.value, 'chapter-1', 'image-1'), isTrue);
     expect(gateway.contentCalls, 1);
 
     final rebuilt = ContentLibraryComicReaderDataSource(library: fixture.library, gateway: gateway, item: fixture.manga, fetcher: fetch);
     expect(await rebuilt.loadImageBytes(fixture.manga.id.value, 'chapter-1', 'image-1'), <int>[1, 2, 3]);
+    expect(await rebuilt.isImagePersistentlyCached(fixture.manga.id.value, 'chapter-1', 'image-1'), isTrue);
     expect(gateway.contentCalls, 1, reason: 'the persisted first image must not refresh its session-only URL');
     await rebuilt.loadImageBytes(fixture.manga.id.value, 'chapter-1', 'image-2');
     expect(gateway.contentCalls, 2);
@@ -235,15 +237,23 @@ void main() {
     final fixture = await _LibraryFixture.open(withSettings: true);
     addTearDown(fixture.close);
     final gateway = _Gateway(pages: <PluginMangaPage>[_page(policy: PluginMangaPageResourcePolicy.durable)]);
-    final adapter = ContentLibraryComicReaderDataSource(library: fixture.library, gateway: gateway, item: fixture.manga);
+    final adapter = ContentLibraryComicReaderDataSource(
+      library: fixture.library,
+      gateway: gateway,
+      item: fixture.manga,
+      fetcher: (_) async => Uint8List.fromList(<int>[1, 2, 3]),
+    );
 
     await adapter.loadChapterCatalog(fixture.manga.id.value);
     await fixture.persistence!.contentObjects.close();
 
     final content = await adapter.loadChapterContent(fixture.manga.id.value, 'chapter-1');
+    await fixture.persistence!.fileObjects.close();
+    await adapter.loadImageBytes(fixture.manga.id.value, 'chapter-1', 'image-1');
 
     expect(content.images.single.id, 'image-1');
     expect(gateway.contentCalls, 1);
+    expect(await adapter.isImagePersistentlyCached(fixture.manga.id.value, 'chapter-1', 'image-1'), isFalse);
   });
 
   test('refreshes an expired refreshable URL before downloading', () async {

@@ -6,13 +6,20 @@ library;
 
 import 'dart:async';
 
+import '../../api/comic_contracts.dart';
 import '../../api/comic_models.dart';
 import 'comic_image_cache.dart';
 
 class ComicChapterPreloader {
-  ComicChapterPreloader(this.cache);
+  ComicChapterPreloader(this.cache, {this.onProgress});
 
   final ComicImageByteCache cache;
+  final void Function(
+    ComicChapterContent chapter,
+    int cachedImageCount,
+    int failedImageCount,
+  )?
+  onProgress;
   ComicChapterContent? _current;
   int _followingChapterCount = 0;
   int _generation = 0;
@@ -59,14 +66,38 @@ class ComicChapterPreloader {
 
   Future<void> _loadChapter(ComicChapterContent chapter, int generation) async {
     var cursor = 0;
+    var cachedImageCount = 0;
+    var failedImageCount = 0;
+    if (generation == _generation) {
+      onProgress?.call(chapter, cachedImageCount, failedImageCount);
+    }
     Future<void> worker() async {
       while (generation == _generation && cursor < chapter.images.length) {
         final image = chapter.images[cursor++];
         try {
           await cache.load(chapter.chapterId, image, visiblePriority: false);
+          final source = cache.dataSource;
+          var persisted = true;
+          if (source is ComicReaderImageCacheStateDataSource) {
+            persisted = await (source as ComicReaderImageCacheStateDataSource)
+                .isImagePersistentlyCached(
+                  cache.bookId,
+                  chapter.chapterId,
+                  image.id,
+                );
+          }
+          if (persisted) {
+            cachedImageCount++;
+          } else {
+            failedImageCount++;
+          }
         } on Object {
+          failedImageCount++;
           // A failed page never prevents later pages from loading. Transport
           // retries belong to the host; the visible tile retains manual retry.
+        }
+        if (generation == _generation) {
+          onProgress?.call(chapter, cachedImageCount, failedImageCount);
         }
       }
     }
@@ -79,6 +110,29 @@ class ComicChapterPreloader {
       )
         worker(),
     ]);
+    if (generation != _generation) return;
+    final source = cache.dataSource;
+    if (source is ComicReaderImageCacheStateDataSource) {
+      cachedImageCount = 0;
+      failedImageCount = 0;
+      for (final image in chapter.images) {
+        try {
+          final persisted =
+              await (source as ComicReaderImageCacheStateDataSource)
+                  .isImagePersistentlyCached(
+                    cache.bookId,
+                    chapter.chapterId,
+                    image.id,
+                  );
+          persisted ? cachedImageCount++ : failedImageCount++;
+        } on Object {
+          failedImageCount++;
+        }
+      }
+      if (generation == _generation) {
+        onProgress?.call(chapter, cachedImageCount, failedImageCount);
+      }
+    }
   }
 
   void cancel() {
