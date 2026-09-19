@@ -676,7 +676,9 @@ Future<Uint8List> _fetchComicImageAttempt(Uri uri, {HttpClient? client}) async {
         throw ComicImageHttpStatusException(response.statusCode, current);
       }
       final mime = response.headers.contentType?.mimeType ?? '';
-      if (!RegExp(r'^image/[^\s/]+$', caseSensitive: false).hasMatch(mime)) {
+      final declaredAsImage = RegExp(r'^image/[^\s/]+$', caseSensitive: false).hasMatch(mime);
+      final declaredAsGenericBinary = mime.toLowerCase() == 'application/octet-stream';
+      if (!declaredAsImage && !declaredAsGenericBinary) {
         throw _ComicImageValidationException('Image MIME is invalid.');
       }
       if (response.contentLength > maximumBytes) throw StateError('Image exceeds 8 MiB.');
@@ -690,6 +692,9 @@ Future<Uint8List> _fetchComicImageAttempt(Uri uri, {HttpClient? client}) async {
           })
           .then((b) => b.takeBytes());
       if (bytes.isEmpty) throw StateError('Image is empty.');
+      if (declaredAsGenericBinary && !_hasKnownImageSignature(bytes)) {
+        throw _ComicImageValidationException('Generic binary response is not an image.');
+      }
       activeRequest = null;
       return Uint8List.fromList(bytes);
     }
@@ -701,6 +706,26 @@ Future<Uint8List> _fetchComicImageAttempt(Uri uri, {HttpClient? client}) async {
     activeRequest?.abort();
     if (client == null) ownedClient.close(force: true);
   }
+}
+
+bool _hasKnownImageSignature(Uint8List bytes) {
+  bool startsWith(List<int> signature) {
+    if (bytes.length < signature.length) return false;
+    for (var index = 0; index < signature.length; index += 1) {
+      if (bytes[index] != signature[index]) return false;
+    }
+    return true;
+  }
+
+  if (startsWith(<int>[0xff, 0xd8, 0xff]) ||
+      startsWith(<int>[0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]) ||
+      startsWith(<int>[0x47, 0x49, 0x46, 0x38, 0x37, 0x61]) ||
+      startsWith(<int>[0x47, 0x49, 0x46, 0x38, 0x39, 0x61]) ||
+      startsWith(<int>[0x42, 0x4d])) {
+    return true;
+  }
+  if (bytes.length < 12 || !startsWith(<int>[0x52, 0x49, 0x46, 0x46])) return false;
+  return bytes[8] == 0x57 && bytes[9] == 0x45 && bytes[10] == 0x42 && bytes[11] == 0x50;
 }
 
 Future<HttpClient> _createSystemComicHttpClient() => FlutterNetworkProxyManager().createHttpClient(NetworkProxyTraffic.manga);

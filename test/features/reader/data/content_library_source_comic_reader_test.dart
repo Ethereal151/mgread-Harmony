@@ -94,6 +94,21 @@ void main() {
     expect(calls, 3);
   });
 
+  test('accepts a valid image whose CDN declares application/octet-stream', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => server.close(force: true));
+    server.listen((request) async {
+      request.response.headers.contentType = ContentType('application', 'octet-stream');
+      request.response.add(<int>[0xff, 0xd8, 0xff, 0xd9]);
+      await request.response.close();
+    });
+    final client = HttpClient()..findProxy = (_) => 'DIRECT';
+    addTearDown(() => client.close(force: true));
+
+    final uri = Uri.parse('http://${server.address.address}:${server.port}/image');
+    expect(await fetchComicImage(uri, client: client), <int>[0xff, 0xd8, 0xff, 0xd9]);
+  });
+
   test('syncs the full catalog and round-trips a session manifest', () async {
     final fixture = await _LibraryFixture.open();
     addTearDown(fixture.close);
@@ -469,6 +484,10 @@ void main() {
     },
     'non-image': (response) async {
       response.headers.contentType = ContentType.text;
+      response.write('not an image');
+    },
+    'generic binary without an image signature': (response) async {
+      response.headers.contentType = ContentType('application', 'octet-stream');
       response.write('not an image');
     },
     'empty': (response) async {
