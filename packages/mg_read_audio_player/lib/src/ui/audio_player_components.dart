@@ -361,10 +361,13 @@ final class AudioTransportControls extends StatelessWidget {
           disableAnimations: disableAnimations,
           onPressed: onBackFifteen,
         ),
-        AudioAnimatedPlayPauseButton(
-          snapshot: snapshot,
-          disableAnimations: disableAnimations,
-          onPressed: onToggle,
+        Transform.translate(
+          offset: const Offset(0, 6),
+          child: AudioAnimatedPlayPauseButton(
+            snapshot: snapshot,
+            disableAnimations: disableAnimations,
+            onPressed: onToggle,
+          ),
         ),
         AudioAnimatedSeekButton(
           key: const Key('audio-seek-forward'),
