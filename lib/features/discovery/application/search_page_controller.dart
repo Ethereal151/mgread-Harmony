@@ -106,6 +106,25 @@ class SearchPageController extends Notifier<SearchPageState> {
     state = SearchPageState.ready(sources: state.sources, selectedSourceId: state.selectedSourceId, hotSearches: state.hotSearches);
   }
 
+  /// Stops the active all-source or selected-source search while preserving
+  /// results that have already arrived.
+  void cancelSearch() {
+    if (state.status != SearchPageStatus.searching && _searchCancellation == null) return;
+    _latestGeneration += 1;
+    _cancelSearch();
+    final result = state.result;
+    if (result == null) {
+      state = SearchPageState.ready(
+        sources: state.sources,
+        selectedSourceId: state.selectedSourceId,
+        query: state.query,
+        hotSearches: state.hotSearches,
+      );
+    } else {
+      state = state.withResult(nextStatus: SearchPageStatus.loaded, nextResult: result);
+    }
+  }
+
   Future<void> search(String rawQuery) async {
     final query = rawQuery.trim();
     if (query.isEmpty) {

@@ -173,6 +173,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                     queryFocusNode: _queryFocusNode,
                     isSearching: state.status == SearchPageStatus.searching,
                     onSearch: () => _search(controller),
+                    onCancel: controller.cancelSearch,
                     onClear: _clearQuery,
                   ),
                   const SizedBox(height: AppSpacing.compact),
@@ -336,6 +337,7 @@ class _SearchTopBar extends StatelessWidget {
     required this.queryFocusNode,
     required this.isSearching,
     required this.onSearch,
+    required this.onCancel,
     required this.onClear,
   });
 
@@ -343,6 +345,7 @@ class _SearchTopBar extends StatelessWidget {
   final FocusNode queryFocusNode;
   final bool isSearching;
   final VoidCallback onSearch;
+  final VoidCallback onCancel;
   final VoidCallback onClear;
 
   @override
@@ -400,7 +403,11 @@ class _SearchTopBar extends StatelessWidget {
             ),
           ),
           const SizedBox(width: AppSpacing.unit),
-          TextButton(key: const Key('source-search-submit'), onPressed: isSearching ? null : onSearch, child: const Text('搜索')),
+          TextButton(
+            key: const Key('source-search-submit'),
+            onPressed: isSearching ? onCancel : onSearch,
+            child: Text(isSearching ? '取消搜索' : '搜索'),
+          ),
         ],
       ),
     );

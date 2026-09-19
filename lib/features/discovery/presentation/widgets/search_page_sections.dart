@@ -225,8 +225,15 @@ class SearchResultsSection extends StatelessWidget {
           _PartialSearchFailure(result: searchResult, onRetry: onRetry),
         ],
         const SizedBox(height: AppSpacing.compact),
-        if (searchResult.items.isEmpty && !searchResult.isComplete)
+        if (searchResult.items.isEmpty && isSearching && !searchResult.isComplete)
           _SearchInProgressState(query: query)
+        else if (searchResult.items.isEmpty && !searchResult.isComplete)
+          const _SearchResultMessage(
+            key: Key('search-cancelled'),
+            icon: Icons.cancel_outlined,
+            title: '搜索已取消',
+            message: '已停止搜索。再次点击“搜索”即可重新开始。',
+          )
         else if (searchResult.items.isEmpty)
           const _SearchResultMessage(
             key: Key('search-empty-result'),
