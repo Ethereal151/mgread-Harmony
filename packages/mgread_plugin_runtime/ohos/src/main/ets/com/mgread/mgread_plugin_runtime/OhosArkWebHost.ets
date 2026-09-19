@@ -75,7 +75,6 @@ export class OhosArkWebSessionStreamHandler implements StreamHandler {
  */
 export default class OhosArkWebHost implements MethodCallHandler {
   private readonly sessions = new Map<string, OhosArkWebPlatformView>()
-  private readonly waiting = new Map<string, Array<(page: OhosArkWebPlatformView) => void>>()
   private readonly pendingPluginIds = new Array<string>()
   private readonly cancelled = new Set<string>()
   private readonly stream = new OhosArkWebSessionStreamHandler()
@@ -132,11 +131,6 @@ export default class OhosArkWebHost implements MethodCallHandler {
     this.sessions.set(pluginId, page)
     const pendingIndex = this.pendingPluginIds.indexOf(pluginId)
     if (pendingIndex >= 0) this.pendingPluginIds.splice(pendingIndex, 1)
-    const listeners = this.waiting.get(pluginId)
-    if (listeners !== undefined) {
-      this.waiting.delete(pluginId)
-      listeners.forEach((listener: (page: OhosArkWebPlatformView) => void): void => listener(page))
-    }
   }
 
   detach(pluginId: string, page: OhosArkWebPlatformView): void {
@@ -157,7 +151,8 @@ export default class OhosArkWebHost implements MethodCallHandler {
     if (pluginId.length === 0 || (operation.startsWith('page.') && pluginName.length === 0)) {
       throw new OhosArkWebError('plugin_execution_failed')
     }
-    const page = await this.pageFor(pluginId, pluginName)
+    const deadline = this.deadline(raw)
+    const page = await this.pageFor(pluginId, pluginName, jobId, deadline)
     if (operation === 'debug') {
       await page.setVisible(true)
       return {version: 1, accepted: true, action: this.stringValue(raw, 'action')}
@@ -181,14 +176,11 @@ export default class OhosArkWebHost implements MethodCallHandler {
     return await this.request(value as Map<string, Any>)
   }
 
-  private async pageFor(pluginId: string, pluginName: string): Promise<OhosArkWebPlatformView> {
+  private async pageFor(pluginId: string, pluginName: string, jobId: string, deadline: number): Promise<OhosArkWebPlatformView> {
     const existing = this.sessions.get(pluginId)
     if (existing !== undefined) return existing
-    return await new Promise<OhosArkWebPlatformView>((resolve, reject): void => {
-      const listeners = this.waiting.get(pluginId) ?? []
-      listeners.push(resolve)
-      this.waiting.set(pluginId, listeners)
-      if (!this.pendingPluginIds.includes(pluginId)) this.pendingPluginIds.push(pluginId)
+    if (!this.pendingPluginIds.includes(pluginId)) {
+      this.pendingPluginIds.push(pluginId)
       const event: Map<string, Any> = new Map<string, Any>()
       event.set('type', 'session')
       event.set('action', 'upsert')
@@ -196,15 +188,17 @@ export default class OhosArkWebHost implements MethodCallHandler {
       event.set('pluginName', pluginName)
       event.set('visible', false)
       this.stream.emit(event)
-      setTimeout((): void => {
-        const current = this.sessions.get(pluginId)
-        if (current !== undefined) return
-        const pending = this.waiting.get(pluginId)
-        if (pending === undefined) return
-        this.waiting.delete(pluginId)
-        reject(new OhosArkWebError('unsupported'))
-      }, 5_000)
-    })
+    }
+    // Waiting for Flutter to mount the platform view is part of the browser
+    // request. Polling keeps cancellation and the caller deadline visible;
+    // the former fixed five-second timer could outlive a canceled Runtime job.
+    while (Date.now() < deadline) {
+      this.ensureNotCancelled(jobId, deadline)
+      const page = this.sessions.get(pluginId)
+      if (page !== undefined) return page
+      await this.delay(POLL_MS)
+    }
+    throw new OhosArkWebError('timeout')
   }
 
   resolvePluginId(args: Any): string {
@@ -392,7 +386,6 @@ export default class OhosArkWebHost implements MethodCallHandler {
 
   dispose(): void {
     this.cancelled.clear()
-    this.waiting.clear()
     this.sessions.forEach((page: OhosArkWebPlatformView, pluginId: string): void => {
       page.close()
     })

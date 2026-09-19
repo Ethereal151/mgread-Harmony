@@ -45,6 +45,7 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
   private audioDuration = 0
   private audioSpeed = 1
   private audioVolume = 1
+  private audioWasPlayingBeforeInterrupt = false
 
   getUniqueClassName(): string {
     return 'MgReadOhosMediaPlugin'
@@ -63,8 +64,10 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
   }
 
   onDetachedFromAbility(): void {
+    // The AVSession belongs to the process-scoped media host. An Ability can
+    // detach while the app is backgrounded; destroying it here would make
+    // lock-screen and Bluetooth controls stop the track mid-session.
     this.context = undefined
-    this.destroyAudioSession()
   }
 
   onDetachedFromEngine(binding: FlutterPluginBinding): void {
@@ -220,7 +223,17 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
     })
     player.on('error', (error: Error) => this.emit(sessionId, 'error', null, this.errorMessage(error)))
     player.on('audioInterrupt', (event: audio.InterruptEvent) => {
-      this.emit(sessionId, 'interrupted', event.eventType === audio.InterruptType.INTERRUPT_TYPE_BEGIN)
+      const interrupted = event.eventType === audio.InterruptType.INTERRUPT_TYPE_BEGIN
+      if (interrupted) {
+        this.audioWasPlayingBeforeInterrupt = player.state === 'playing'
+        if (this.audioWasPlayingBeforeInterrupt) {
+          player.pause().catch((error: Error) => this.emit(sessionId, 'error', null, `audio_interrupt_pause_failed: ${this.errorMessage(error)}`))
+        }
+      } else if (this.audioWasPlayingBeforeInterrupt) {
+        this.audioWasPlayingBeforeInterrupt = false
+        player.play().catch((error: Error) => this.emit(sessionId, 'error', null, `audio_interrupt_resume_failed: ${this.errorMessage(error)}`))
+      }
+      this.emit(sessionId, 'interrupted', interrupted)
     })
   }
 
@@ -412,6 +425,7 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
     const session = this.audioSession
     this.audioSession = undefined
     this.audioSessionId = undefined
+    this.audioWasPlayingBeforeInterrupt = false
     if (session !== undefined) session.destroy().catch(() => {})
   }
 }

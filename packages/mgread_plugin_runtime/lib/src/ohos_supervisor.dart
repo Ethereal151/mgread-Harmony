@@ -238,7 +238,6 @@ final class _OhosRuntimeSupervisor implements _RuntimeSupervisor {
 
   @override
   Future<void> configurePluginHttpProxy(Uri? proxyUri) async {
-    if (proxyUri == null) return;
     final result = await invoke<_OhosProxyResult>(_OhosProxyInvocation(proxyUri));
     if (result.enabled != (proxyUri != null)) {
       throw const PluginRuntimeException('invalid_response', 'The OHOS Runtime returned an invalid plugin HTTP proxy result.');

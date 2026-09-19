@@ -27,6 +27,7 @@ const int _windowsBundleMaxFiles = 4096;
 
 typedef WindowsUpdaterStarter = Future<void> Function(String executable, List<String> arguments);
 typedef AppUpdateTemporaryDirectory = Future<Directory> Function(String prefix);
+typedef ExternalUriOpener = Future<bool> Function(Uri uri);
 
 /// Platform effects are injectable so tests never start PowerShell or exit Dart.
 final class PlatformAppUpdateDependencies {
@@ -42,6 +43,7 @@ final class PlatformAppUpdateDependencies {
     required this.startWindowsUpdater,
     required this.exitAfterWindowsUpdater,
     required this.createTemporaryDirectory,
+    this.openExternalUri,
   });
 
   factory PlatformAppUpdateDependencies.platform() => PlatformAppUpdateDependencies(
@@ -61,6 +63,7 @@ final class PlatformAppUpdateDependencies {
       exit(0);
     },
     createTemporaryDirectory: Directory.systemTemp.createTemp,
+    openExternalUri: OhosSystemClient.openUri,
   );
 
   final bool isAndroid;
@@ -74,6 +77,7 @@ final class PlatformAppUpdateDependencies {
   final WindowsUpdaterStarter startWindowsUpdater;
   final Future<void> Function() exitAfterWindowsUpdater;
   final AppUpdateTemporaryDirectory createTemporaryDirectory;
+  final ExternalUriOpener? openExternalUri;
 }
 
 final class PlatformAppUpdateService implements AppUpdateService {
@@ -138,7 +142,12 @@ final class PlatformAppUpdateService implements AppUpdateService {
       if (info == null || info.packageName != descriptor.packageName) {
         throw StateError('app_update_package_name_mismatch');
       }
-      throw StateError('app_update_market_fallback_required');
+      await _verifyDownloadedPackage(package, descriptor);
+      final opener = _dependencies.openExternalUri;
+      if (opener == null) throw StateError('app_update_market_fallback_required');
+      final opened = await opener(Uri.parse('market://details?id=${Uri.encodeComponent(descriptor.packageName)}'));
+      if (!opened) throw StateError('app_update_market_unavailable');
+      return;
     }
     throw StateError('app_update_platform_mismatch');
   }
@@ -271,6 +280,15 @@ final class PlatformAppUpdateService implements AppUpdateService {
     if (!descriptor.fileName.toLowerCase().endsWith('.zip') || !package.uri.pathSegments.last.toLowerCase().endsWith('.zip')) {
       throw StateError('app_update_windows_package_invalid');
     }
+    if (!await package.exists() || await package.length() != descriptor.bytes) {
+      throw StateError('app_update_package_size_invalid');
+    }
+    if (await _checksumFile(package) != descriptor.checksum) {
+      throw StateError('app_update_hash_mismatch');
+    }
+  }
+
+  Future<void> _verifyDownloadedPackage(File package, AppPackageDescriptor descriptor) async {
     if (!await package.exists() || await package.length() != descriptor.bytes) {
       throw StateError('app_update_package_size_invalid');
     }

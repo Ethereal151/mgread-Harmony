@@ -1,6 +1,6 @@
 # OHOS 构建基线
 
-本文记录 MgRead 鸿蒙适配阶段 1～6 的源代码、工具链和构建验证结果。当前已完成签名 HAP 构建、模拟器安装启动、arm64 真机启动、ScanKit 真机扫码界面和原生 AVPlayer/窗口亮度 bridge 的编译接入；在线 Runtime 和真实媒体会话仍未宣称完成。
+本文记录 MgRead 鸿蒙适配阶段 1～6 的源代码、工具链和构建验证结果。当前已完成签名 HAP 构建、arm64 真机启动、Node Runtime/ArkWeb fixture、AVPlayer 音视频 smoke 和窗口亮度 bridge 验证；真实来源、系统媒体控制、跨设备互通和有效扫码业务仍未宣称完成。
 
 ## 源代码基线
 
@@ -9,7 +9,7 @@
 - 上游基线 commit：`d61464b6dbbd268eed0681ede1a776a51e9832b3`
 - 目标仓库 `main` 当前 commit：`d8c014d11007efe78982b8166dc4cd2aada2677f`
 - 工作分支：`oh-3.44.9-dev3.12.2`
-- 根应用版本：`0.9.201+319`
+- 根应用版本：`0.9.205+323`
 
 工作区已配置以下 remote：
 
@@ -81,6 +81,17 @@ hdc install build/ohos/hap/entry-default-signed.hap
 
 ## 当前验证结果
 
+2026-09-19 使用 DevEco IP 设备 `192.168.3.48:45975`（`PLA-AL10`、HarmonyOS `7.0.0.105`、API 26、`arm64-v8a`）完成以下直接验收：
+
+- `integration_test/ohos_runtime_smoke_test.dart`：Node 24.16.0 arm64 host、Runtime ping、Network Kit 地址和能力降级通过；
+- `integration_test/ohos_browser_session_smoke_test.dart`：ArkWeb 页面打开、导航和 HTML 获取通过；
+- `integration_test/ohos_stage2_runtime_arkweb_test.dart`：5 个本地 fixture 的安装、发现、搜索、详情、目录、正文、资源代理、Cookie/JS 和 `interaction_required` 恢复通过；这不是 5 个真实外部数据源的替代证据；
+- `integration_test/ohos_media_smoke_test.dart`、`integration_test/ohos_video_smoke_test.dart`：音频控制、视频 Texture/首帧/窗口恢复通过；
+- `integration_test/library_first_run_test.dart`：首次启动首页和空书架通过；
+- HAP 使用 `flutter build hap --debug --target-platform ohos-arm64 --no-pub` 成功签名并通过 `hdc install -r` 安装启动。
+
+以下门禁仍需保留为未完成：真实来源至少 5 个全链路、锁屏/蓝牙/焦点与中断恢复、三组跨设备双向同步、有效二维码载荷路由、HAP 市场跳转真机确认和本地阅读完整迁移回归。
+
 最近一次 VM 验证使用 `127.0.0.1:5555` API 26 x86_64 模拟器：
 
 - `flutter build hap --debug --target-platform ohos-x64 --no-pub` 成功生成签名 HAP；
@@ -90,13 +101,13 @@ hdc install build/ohos/hap/entry-default-signed.hap
 
 ## 已知限制
 
-上游 commit 使用 Git LFS 管理 Node Runtime。当前远端对 Darwin arm64 和 Windows x64 runtime 二进制返回缺失对象（404），因此拉取基线时使用了 `GIT_LFS_SKIP_SMUDGE=1`。本次阶段 4 已加入 OHOS Flutter MethodChannel/EventChannel 宿主边界和 typed 错误映射，但没有把未经验证的 Node 24.16.0 OHOS arm64 二进制伪装成可用能力；在线数据源在 OHOS 上继续显示 `unsupported`，不阻塞本地书架和阅读。
+上游 commit 使用 Git LFS 管理 Node Runtime。当前远端对 Darwin arm64 和 Windows x64 runtime 二进制返回缺失对象（404），因此拉取基线时使用了 `GIT_LFS_SKIP_SMUDGE=1`。OHOS arm64 Node 24.16.0 宿主已在当前受控设备完成 ping 和 fixture 链路验证；x86_64 仍保留明确 stub，真实外部数据源验收前不能把 OHOS 在线能力标为发布完成。
 
 ## 阶段 2～4 代码适配记录
 
 - 阶段 2：主应用的 metadata/content/file 三类持久化继续由 `AppPersistence`/`ContentLibrary` 拥有；OHOS 使用 EL2 `files/persistence` 沙箱目录，HAP 内置由 OHOS clang 编译的 `libsqlite3.so`（`x86_64` 与 `arm64-v8a`），避免 Linux 动态库和后台 isolate 假设。启动、路由、书架、历史、小说/漫画进度恢复仍复用现有业务实现。
 - 阶段 3：新增 `lib/platform/platform_capabilities.dart`，集中描述 OHOS 文件选择、分享、包信息、外部链接、亮度、常亮、窗口和 Runtime 宿主能力；导入导出、版本展示、视频亮度/常亮和窗口初始化均按能力降级。
-- 阶段 4：`mgread_plugin_runtime` 增加 OHOS 插件声明、MethodChannel、进度 EventChannel 和单例 supervisor。Native bridge 当前对 Runtime invoke 返回稳定 `unsupported`，待 Node 24.16.0 OHOS arm64 PoC 后只需替换 package 内宿主实现，不改变 Dart Facade/wire protocol。
+- 阶段 4：`mgread_plugin_runtime` 增加 OHOS 插件声明、MethodChannel、进度 EventChannel 和单例 supervisor；x86_64 返回稳定 `runtime_architecture_unavailable`，arm64 已接入 Node 24.16.0 native host，Dart Facade/wire protocol 不变。
 - 阶段 4/5：新增 `mgread_ohos_media` 包，以 OHOS `AVPlayer` 承载音频和视频；音频、视频 package 仅通过 backend adapter 使用它，视频通过 Flutter Texture 输出 Surface。阶段 3 的 `screen_brightness_ohos` 已改为 `@ohos.window` 应用窗口亮度控制；全局系统亮度仍返回明确错误。
 - 阶段 6：新增 `mgread_ohos_scanner` 包，使用 HMS ScanKit 默认系统 UI；Dart 页面只负责调用、取消/错误反馈和现有四类载荷校验路由，原生层不复制同步业务。真机已确认系统扫码 UI、后置相机预览和取消返回；有效载荷路由仍需准备配对二维码后继续做业务闭环。
 

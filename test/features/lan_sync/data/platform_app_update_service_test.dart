@@ -10,12 +10,13 @@ import 'dart:io';
 
 import 'package:crypto/crypto.dart';
 import 'package:archive/archive.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mg_read/features/lan_sync/data/platform_app_update_service.dart';
-import 'package:mg_read/features/lan_sync/data/lan_sync_checksum.dart';
 import 'package:mg_read/features/lan_sync/domain/app_update_models.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   late Directory temporary;
 
   setUp(() async {
@@ -194,6 +195,52 @@ void main() {
     );
 
     await service.ensureInstallPermission();
+  });
+
+  test('OHOS verifies the received HAP and opens the application market', () async {
+    final package = File('${temporary.path}${Platform.pathSeparator}received.hap');
+    final bytes = <int>[1, 2, 3, 4];
+    await package.writeAsBytes(bytes);
+    Uri? openedUri;
+    final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    const channel = MethodChannel('mgread/ohos_system');
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      if (call.method == 'getPackageInfo') {
+        return <String, Object?>{'version': '3.2.0', 'build': 43, 'packageName': 'com.ohos.mgread'};
+      }
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+    final service = PlatformAppUpdateService(
+      dependencies: PlatformAppUpdateDependencies(
+        isAndroid: false,
+        isWindows: false,
+        isMacOS: false,
+        isOhos: true,
+        isDebug: false,
+        resolvedExecutable: temporary.path,
+        currentDirectory: temporary,
+        processId: 123,
+        startWindowsUpdater: (_, _) async {},
+        exitAfterWindowsUpdater: () async {},
+        createTemporaryDirectory: (prefix) => temporary.createTemp(prefix),
+        openExternalUri: (uri) async {
+          openedUri = uri;
+          return true;
+        },
+      ),
+    );
+    final descriptor = AppPackageDescriptor(
+      version: const AppVersionInfo(platform: AppUpdatePlatform.ohos, version: '3.2.1', buildNumber: 44),
+      packageName: 'com.ohos.mgread',
+      bytes: bytes.length,
+      checksum: sha256.convert(bytes).toString(),
+      fileName: 'received.hap',
+    );
+
+    await service.launchInstaller(package, descriptor);
+
+    expect(openedUri.toString(), 'market://details?id=com.ohos.mgread');
   });
 }
 
