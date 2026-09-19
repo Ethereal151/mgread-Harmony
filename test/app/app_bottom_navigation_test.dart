@@ -50,6 +50,10 @@ void main() {
 
     expect(find.byType(BackdropFilter), findsOneWidget);
     expect(tester.getRect(find.byKey(const Key('app-bottom-navigation'))).width, lessThanOrEqualTo(AppSpacing.bottomNavigationMaxWidth));
+    expect(
+      tester.getRect(find.byKey(const Key('app-bottom-navigation'))).bottom,
+      closeTo(tester.getRect(find.byType(Scaffold)).bottom, 0.1),
+    );
     expect(initialIndicator.width, lessThan(tester.getSize(homeItem).width));
     expect(backdropDecoration.gradient, isNull);
     expect(backdropDecoration.color!.a, lessThan(1));

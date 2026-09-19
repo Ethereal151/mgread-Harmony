@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
+import 'package:screen_brightness/screen_brightness.dart';
 
 abstract class ReaderPlatform extends PlatformInterface {
   ReaderPlatform() : super(token: _token);
@@ -35,6 +36,15 @@ abstract class ReaderPlatform extends PlatformInterface {
   /// Hosts without a native reader bridge can keep the default no-op. The
   /// Flutter keyboard path still handles desktop and hardware-key events.
   Future<void> setVolumeKeyPageTurningEnabled(bool enabled) async {}
+
+  /// Whether this host can override the application's screen brightness.
+  bool get supportsApplicationBrightness => false;
+
+  /// Sets the application's display brightness for the active reader route.
+  Future<void> setApplicationBrightness(double brightness) async {}
+
+  /// Releases the application's display brightness override.
+  Future<void> resetApplicationBrightness() async {}
 
   bool get supportsKeepScreenOn => false;
 
@@ -89,6 +99,12 @@ class MethodChannelReaderPlatform extends ReaderPlatform {
           defaultTargetPlatform == TargetPlatform.windows);
 
   @override
+  bool get supportsApplicationBrightness =>
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.windows);
+
+  @override
   Future<ReaderPlatformCapabilities> capabilities() async {
     if (kIsWeb ||
         (defaultTargetPlatform != TargetPlatform.android &&
@@ -125,6 +141,17 @@ class MethodChannelReaderPlatform extends ReaderPlatform {
       'enabled': enabled,
     });
   }
+
+  @override
+  Future<void> setApplicationBrightness(double brightness) {
+    return ScreenBrightness.instance.setApplicationScreenBrightness(
+      brightness.clamp(0.05, 1).toDouble(),
+    );
+  }
+
+  @override
+  Future<void> resetApplicationBrightness() =>
+      ScreenBrightness.instance.resetApplicationScreenBrightness();
 
   @override
   Future<void> setKeepScreenOn(bool enabled) =>

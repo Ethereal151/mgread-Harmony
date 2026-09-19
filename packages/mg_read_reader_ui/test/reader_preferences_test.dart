@@ -60,6 +60,23 @@ void main() {
     },
   );
 
+  test('defaults display brightness to the system and keeps manual values', () {
+    expect(
+      TextReaderPreferences.defaults.brightnessMode,
+      ReaderBrightnessMode.system,
+    );
+    expect(
+      const TextReaderPreferences(
+        brightness: .01,
+        brightnessMode: ReaderBrightnessMode.manual,
+      ).normalized(),
+      const TextReaderPreferences(
+        brightness: .05,
+        brightnessMode: ReaderBrightnessMode.manual,
+      ),
+    );
+  });
+
   testWidgets('labels the bottom margin and page footer debug regions', (
     WidgetTester tester,
   ) async {

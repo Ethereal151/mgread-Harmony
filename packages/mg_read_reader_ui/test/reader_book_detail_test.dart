@@ -29,10 +29,6 @@ void main() {
 
     await tester.tap(find.text('目录'));
     await tester.pumpAndSettle();
-    expect(find.text('已下载'), findsWidgets);
-    expect(find.text('已读'), findsWidgets);
-    expect(find.text('未下载'), findsOneWidget);
-    expect(find.text('未读'), findsOneWidget);
     expect(find.text('1200 字'), findsOneWidget);
     final ListTile readTile = tester.widget<ListTile>(
       find.byKey(const ValueKey<String>('reader-catalog-chapter-chapter-3')),
@@ -47,6 +43,38 @@ void main() {
     expect(unreadTile.tileColor, isNull);
     expect(readTile.hoverColor, isNotNull);
     expect(unreadTile.hoverColor, isNotNull);
+    expect(
+      find.descendant(
+        of: readTileFinder,
+        matching: find.byIcon(Icons.done_rounded),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: readTileFinder,
+        matching: find.byIcon(Icons.download_done_rounded),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(
+          const ValueKey<String>('reader-catalog-chapter-chapter-2'),
+        ),
+        matching: find.byIcon(Icons.radio_button_unchecked_rounded),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(
+          const ValueKey<String>('reader-catalog-chapter-chapter-2'),
+        ),
+        matching: find.byIcon(Icons.cloud_download_outlined),
+      ),
+      findsOneWidget,
+    );
     expect(tester.getSize(readTileFinder).height, 54);
     await tester.tap(find.text('书籍详情'));
     await tester.pumpAndSettle();

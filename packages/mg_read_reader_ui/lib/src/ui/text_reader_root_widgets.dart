@@ -13,9 +13,7 @@ extension _TextReaderRootWidgets on _TextReaderViewState {
         _content == null) {
       return;
     }
-    unawaited(
-      key == ReaderVolumeKey.down ? _nextPage() : _previousPage(),
-    );
+    unawaited(key == ReaderVolumeKey.down ? _nextPage() : _previousPage());
   }
 
   Widget _buildReaderRoot(BuildContext context) {
@@ -43,10 +41,8 @@ extension _TextReaderRootWidgets on _TextReaderViewState {
             unawaited(_previousPage()),
         const SingleActivator(LogicalKeyboardKey.pageUp): () =>
             unawaited(_previousPage()),
-        const SingleActivator(
-          LogicalKeyboardKey.space,
-          shift: true,
-        ): () => unawaited(_previousPage()),
+        const SingleActivator(LogicalKeyboardKey.space, shift: true): () =>
+            unawaited(_previousPage()),
         const SingleActivator(LogicalKeyboardKey.audioVolumeUp): () =>
             unawaited(_previousPage()),
       });
@@ -131,13 +127,6 @@ extension _TextReaderRootWidgets on _TextReaderViewState {
             ),
           ),
         _buildContent(),
-        IgnorePointer(
-          child: ColoredBox(
-            color: Colors.black.withValues(
-              alpha: (1 - _preferences.brightness) * 0.65,
-            ),
-          ),
-        ),
       ],
     );
   }

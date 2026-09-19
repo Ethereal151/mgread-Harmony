@@ -69,34 +69,33 @@ class ReaderChapterStateBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final (String?, IconData?, Color) availabilityStyle =
-        switch (availability) {
-          ReaderChapterAvailability.downloaded => (
-            ReaderChapterStateStrings.downloaded,
-            Icons.download_done_rounded,
-            palette.accent,
-          ),
-          ReaderChapterAvailability.notDownloaded => (
-            ReaderChapterStateStrings.notDownloaded,
-            Icons.cloud_download_outlined,
-            palette.secondaryText,
-          ),
-          ReaderChapterAvailability.downloading => (
-            ReaderChapterStateStrings.downloading,
-            Icons.downloading_rounded,
-            palette.accent,
-          ),
-          ReaderChapterAvailability.failed => (
-            ReaderChapterStateStrings.failed,
-            Icons.error_outline_rounded,
-            palette.accent,
-          ),
-          ReaderChapterAvailability.unknown => (
-            null,
-            null,
-            palette.secondaryText,
-          ),
-        };
+    final (String?, IconData, Color) availabilityStyle = switch (availability) {
+      ReaderChapterAvailability.downloaded => (
+        ReaderChapterStateStrings.downloaded,
+        Icons.download_done_rounded,
+        palette.accent,
+      ),
+      ReaderChapterAvailability.notDownloaded => (
+        ReaderChapterStateStrings.notDownloaded,
+        Icons.cloud_download_outlined,
+        palette.secondaryText,
+      ),
+      ReaderChapterAvailability.downloading => (
+        ReaderChapterStateStrings.downloading,
+        Icons.downloading_rounded,
+        palette.accent,
+      ),
+      ReaderChapterAvailability.failed => (
+        ReaderChapterStateStrings.failed,
+        Icons.error_outline_rounded,
+        palette.accent,
+      ),
+      ReaderChapterAvailability.unknown => (
+        null,
+        Icons.cloud_download_outlined,
+        palette.secondaryText,
+      ),
+    };
     final List<String> semantics = <String>[
       if (loading) ReaderChapterStateStrings.loading,
       if (!loading && availabilityStyle.$1 != null) availabilityStyle.$1!,
@@ -110,55 +109,26 @@ class ReaderChapterStateBadge extends StatelessWidget {
     final Color readingStateColor = hasBeenRead
         ? palette.secondaryText
         : palette.accent;
-    final Widget readingState = Row(
+    final Widget content = Row(
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
         Icon(
-          hasBeenRead ? Icons.done_rounded : Icons.fiber_new_rounded,
-          size: 12,
+          hasBeenRead
+              ? Icons.done_rounded
+              : Icons.radio_button_unchecked_rounded,
+          size: 15,
           color: readingStateColor,
         ),
-        const SizedBox(width: 3),
-        Text(
-          hasBeenRead
-              ? ReaderChapterStateStrings.read
-              : ReaderChapterStateStrings.unread,
-          style: TextStyle(
-            color: readingStateColor,
-            fontSize: 10.5,
-            fontWeight: hasBeenRead ? FontWeight.w500 : FontWeight.w700,
-            height: 1.05,
-          ),
-        ),
-      ],
-    );
-    final Widget content = Wrap(
-      spacing: 6,
-      runSpacing: 2,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      children: <Widget>[
-        if (loading)
-          const SizedBox.square(
-            dimension: 14,
-            child: CircularProgressIndicator(strokeWidth: 1.6),
-          )
-        else if (availabilityStyle.$2 != null)
-          Icon(availabilityStyle.$2, size: 15, color: availabilityStyle.$3),
-        if (!loading && availabilityStyle.$1 != null)
-          Text(
-            availabilityStyle.$1!,
-            style: TextStyle(
-              color: availabilityStyle.$3,
-              fontSize: 11.5,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        if (wordCount != null && wordCount! >= 0)
-          Text(
-            ReaderChapterStateStrings.wordCount(wordCount!),
-            style: TextStyle(color: palette.secondaryText, fontSize: 11.5),
-          ),
-        readingState,
+        const SizedBox(width: 6),
+        loading
+            ? SizedBox.square(
+                dimension: 15,
+                child: CircularProgressIndicator(
+                  strokeWidth: 1.7,
+                  color: availabilityStyle.$3,
+                ),
+              )
+            : Icon(availabilityStyle.$2, size: 16, color: availabilityStyle.$3),
       ],
     );
     if (availability != ReaderChapterAvailability.failed || onRetry == null) {
@@ -177,10 +147,7 @@ class ReaderChapterStateBadge extends StatelessWidget {
         child: InkWell(
           borderRadius: BorderRadius.circular(10),
           onTap: onRetry,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: content,
-          ),
+          child: SizedBox(width: 32, height: 32, child: Center(child: content)),
         ),
       ),
     );

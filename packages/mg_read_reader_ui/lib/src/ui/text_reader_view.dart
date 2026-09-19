@@ -259,6 +259,9 @@ class _TextReaderViewState extends State<TextReaderView>
   ReaderPlatformCapabilities _platformCapabilities =
       const ReaderPlatformCapabilities();
   Future<void> _awakeWrite = Future<void>.value();
+  Future<void> _brightnessWrite = Future<void>.value();
+  int _brightnessGeneration = 0;
+  bool _applicationBrightnessOwned = false;
   Future<void> _bookmarkWrite = Future<void>.value();
   final Map<TextReaderStateStore, Future<void>> _preferenceWritesByStore =
       Map<TextReaderStateStore, Future<void>>.identity();
@@ -601,6 +604,7 @@ class _TextReaderViewState extends State<TextReaderView>
     unawaited(_disableVolumeKeyHandling());
     _adjacentQuietTimer?.cancel();
     unawaited(_releaseAwake());
+    unawaited(_releaseApplicationBrightness());
     unawaited(_notify(() => observer.onSessionEnded(bookId, progress)));
     _lifecycleListener.dispose();
     _verticalController

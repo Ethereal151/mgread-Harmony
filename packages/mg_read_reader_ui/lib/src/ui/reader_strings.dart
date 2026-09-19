@@ -47,6 +47,8 @@ abstract final class ReaderStrings {
   static const topMargin = '顶部边距';
   static const bottomMargin = '底部边距';
   static const brightness = '亮度';
+  static const manualBrightness = '手动';
+  static const systemBrightness = '系统';
   static const eyeCareMode = '护眼模式';
   static const themeTitle = '主题';
   static const keepScreenOn = '阅读时屏幕常亮';

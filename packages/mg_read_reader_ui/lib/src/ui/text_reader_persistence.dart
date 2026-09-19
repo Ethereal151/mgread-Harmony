@@ -179,6 +179,7 @@ extension _TextReaderPersistence on _TextReaderViewState {
     });
     _preferencesPreviewDirty = !persist;
     final Future<void> awakeUpdate = _syncAwake();
+    unawaited(_syncApplicationBrightness());
     if (normalized.navigationMode == ReaderNavigationMode.verticalScroll) {
       _scheduleVerticalRestore(paragraphId: anchor?.paragraphId);
     }
@@ -215,9 +216,11 @@ extension _TextReaderPersistence on _TextReaderViewState {
       _stopAutoReading();
       _commitPreferencePreview();
       unawaited(_releaseAwake());
+      unawaited(_releaseApplicationBrightness());
       unawaited(_flushProgress());
     } else {
       unawaited(_syncAwake());
+      unawaited(_syncApplicationBrightness());
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!_disposed && _chapterIndex >= 0) {
           unawaited(_prefetchNext(_chapterIndex));
@@ -241,6 +244,64 @@ extension _TextReaderPersistence on _TextReaderViewState {
       },
     );
     return _awakeWrite;
+  }
+
+  Future<void> _syncApplicationBrightness() {
+    final int generation = ++_brightnessGeneration;
+    _brightnessWrite = _brightnessWrite.then<void>(
+      (_) => generation == _brightnessGeneration
+          ? _applyApplicationBrightness()
+          : Future<void>.value(),
+      onError: (_) => generation == _brightnessGeneration
+          ? _applyApplicationBrightness()
+          : Future<void>.value(),
+    );
+    return _brightnessWrite;
+  }
+
+  Future<void> _applyApplicationBrightness() async {
+    if (!_foreground || _disposed) {
+      await _releaseApplicationBrightnessNow();
+      return;
+    }
+    final ReaderPlatform platform = ReaderPlatform.instance;
+    if (!platform.supportsApplicationBrightness) return;
+    try {
+      if (_preferences.brightnessMode == ReaderBrightnessMode.manual) {
+        _applicationBrightnessOwned = true;
+        await platform.setApplicationBrightness(_preferences.brightness);
+      } else {
+        await platform.resetApplicationBrightness();
+        _applicationBrightnessOwned = false;
+      }
+    } catch (error) {
+      await _reportFailure(_asFailure(error, ReaderFailureKind.platform));
+    }
+  }
+
+  Future<void> _releaseApplicationBrightness() {
+    final int generation = ++_brightnessGeneration;
+    _brightnessWrite = _brightnessWrite.then<void>(
+      (_) => generation == _brightnessGeneration
+          ? _releaseApplicationBrightnessNow()
+          : Future<void>.value(),
+      onError: (_) => generation == _brightnessGeneration
+          ? _releaseApplicationBrightnessNow()
+          : Future<void>.value(),
+    );
+    return _brightnessWrite;
+  }
+
+  Future<void> _releaseApplicationBrightnessNow() async {
+    if (!_applicationBrightnessOwned) return;
+    final ReaderPlatform platform = ReaderPlatform.instance;
+    if (!platform.supportsApplicationBrightness) return;
+    try {
+      await platform.resetApplicationBrightness();
+      _applicationBrightnessOwned = false;
+    } catch (error) {
+      await _reportFailure(_asFailure(error, ReaderFailureKind.platform));
+    }
   }
 
   Future<void> _syncVolumeKeyHandling() async {

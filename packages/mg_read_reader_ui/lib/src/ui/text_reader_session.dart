@@ -149,6 +149,7 @@ extension _TextReaderSession on _TextReaderViewState {
           ? _defaultChapterProgress()
           : loadedProgress;
       _preferences = results[3] as TextReaderPreferences;
+      unawaited(_syncApplicationBrightness());
       unawaited(_loadPersistedCustomFont());
       // Bookmark/state/comment work is deliberately deferred until after the
       // first real text frame so it cannot compete with first-page layout.

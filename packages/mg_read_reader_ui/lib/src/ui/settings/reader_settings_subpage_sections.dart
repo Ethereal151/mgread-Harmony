@@ -338,23 +338,25 @@ extension _ReaderSettingsSubpageSections on _ReaderSettingsSheetState {
   Widget _buildFontSizeControl(
     ReaderPalette palette, {
     required bool showProgress,
+    bool showLabel = true,
   }) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
+      padding: EdgeInsets.only(bottom: showLabel ? 6 : 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Padding(
-            padding: const EdgeInsets.fromLTRB(6, 0, 6, 4),
-            child: Text(
-              ReaderStrings.fontSize,
-              style: TextStyle(
-                color: palette.secondaryText,
-                fontSize: ReaderSettingsTokens.controlTextSize,
-                fontWeight: FontWeight.w600,
+          if (showLabel)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(6, 0, 6, 4),
+              child: Text(
+                ReaderStrings.fontSize,
+                style: TextStyle(
+                  color: palette.secondaryText,
+                  fontSize: ReaderSettingsTokens.controlTextSize,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
-          ),
           ReaderSettingsFontSizeControl(
             value: _preferences.fontSize,
             min: _fontSizeMin,
@@ -382,20 +384,37 @@ extension _ReaderSettingsSubpageSections on _ReaderSettingsSheetState {
     required bool value,
     required ValueChanged<bool> onChanged,
   }) {
-    return SwitchListTile(
-      dense: true,
-      visualDensity: const VisualDensity(vertical: -4),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-      title: Text(
-        title,
-        style: const TextStyle(
-          fontSize: ReaderSettingsTokens.subpageLabelFontSize,
+    final ReaderPalette palette = widget.palette;
+    return Material(
+      type: MaterialType.transparency,
+      borderRadius: BorderRadius.circular(ReaderSettingsTokens.smallRadius),
+      clipBehavior: Clip.antiAlias,
+      child: SwitchListTile(
+        // Keep the switch rows on the same 48dp rhythm as the segmented
+        // controls above. The previous dense tile compressed the rows while the
+        // control itself kept its full size, which made the right edge feel
+        // uneven and left the off state to the app's default grey styling.
+        dense: false,
+        minTileHeight: ReaderSettingsTokens.touchTarget,
+        visualDensity: VisualDensity.standard,
+        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+        title: Text(
+          title,
+          style: const TextStyle(
+            fontSize: ReaderSettingsTokens.subpageLabelFontSize,
+          ),
         ),
-      ),
-      value: value,
-      onChanged: onChanged,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(ReaderSettingsTokens.smallRadius),
+        value: value,
+        onChanged: onChanged,
+        activeThumbColor: palette.panel,
+        activeTrackColor: palette.accent,
+        inactiveThumbColor: palette.panel,
+        inactiveTrackColor: ReaderSettingsTokens.mutedControl(palette),
+        trackOutlineColor: WidgetStatePropertyAll<Color?>(palette.divider),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(ReaderSettingsTokens.smallRadius),
+        ),
       ),
     );
   }

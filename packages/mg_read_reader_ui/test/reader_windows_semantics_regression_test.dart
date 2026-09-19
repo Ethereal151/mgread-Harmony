@@ -115,7 +115,12 @@ void main() {
         await tester.tap(find.text('目录'));
         await tester.pumpAndSettle();
 
-        final Finder failedState = find.text('下载失败').first;
+        final Finder failedState = find.descendant(
+          of: find.byKey(
+            const ValueKey<String>('reader-catalog-chapter-chapter-1'),
+          ),
+          matching: find.byIcon(Icons.error_outline_rounded),
+        );
         expect(failedState, findsOneWidget);
         await mouse.moveTo(tester.getCenter(failedState));
         await tester.pumpAndSettle();

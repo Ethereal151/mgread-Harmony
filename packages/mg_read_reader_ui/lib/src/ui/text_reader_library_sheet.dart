@@ -6,6 +6,9 @@ const double _catalogChapterItemExtent = 54;
 const double _catalogListTopPadding = 8;
 const double _catalogScrollbarThickness = 18;
 const double _catalogScrollbarMinThumbLength = 52;
+const double _catalogListHorizontalPadding = 8;
+const double _catalogScrollbarSafetyPadding = 20;
+const double _catalogTileHorizontalPadding = 6;
 
 extension _TextReaderLibrarySheet on _TextReaderViewState {
   void _showLibrarySheet({int initialIndex = 1}) {
@@ -517,6 +520,10 @@ extension _TextReaderLibrarySheet on _TextReaderViewState {
           mainAxisMargin: 8,
           crossAxisMargin: 2,
           thumbColor: _palette.secondaryText.withValues(alpha: .82),
+          // RawScrollbar paints over the scrollable instead of reserving a
+          // layout column. Keep only a small safety gutter so the trailing
+          // word count stays clear of the thumb while the title gets the
+          // remaining width.
           child: ScrollConfiguration(
             behavior: ScrollConfiguration.of(
               context,
@@ -524,7 +531,12 @@ extension _TextReaderLibrarySheet on _TextReaderViewState {
             child: ListView.builder(
               key: PageStorageKey<String>('reader-catalog-scroll-$routeBookId'),
               controller: _catalogScrollController,
-              padding: const EdgeInsets.fromLTRB(12, 8, 34, 20),
+              padding: const EdgeInsets.fromLTRB(
+                _catalogListHorizontalPadding,
+                _catalogListTopPadding,
+                _catalogScrollbarSafetyPadding,
+                20,
+              ),
               itemExtent: _catalogChapterItemExtent,
               itemCount: _catalog.length + (_catalogHasMore ? 1 : 0),
               itemBuilder: (BuildContext context, int index) {
@@ -584,112 +596,122 @@ extension _TextReaderLibrarySheet on _TextReaderViewState {
                     : hasBeenRead
                     ? _palette.secondaryText
                     : _palette.text;
-                return Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 560),
-                    child: ListTile(
-                      key: ValueKey<String>(
-                        'reader-catalog-chapter-${chapter.id}',
-                      ),
-                      dense: true,
-                      visualDensity: const VisualDensity(vertical: -2),
-                      minVerticalPadding: 0,
-                      titleAlignment: ListTileTitleAlignment.center,
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 2,
-                      ),
-                      tileColor: chapterBackground,
-                      hoverColor: _palette.accent.withValues(alpha: .08),
-                      selected: isCurrentChapter,
-                      selectedColor: _palette.accent,
-                      selectedTileColor: _palette.accent.withValues(alpha: .15),
-                      shape: const RoundedRectangleBorder(
-                        borderRadius: BorderRadius.all(Radius.circular(14)),
-                      ),
-                      leading: SizedBox(
-                        width: 34,
-                        child: Text(
-                          '${chapter.index + 1}',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: chapterTextColor,
-                            fontSize: isCurrentChapter ? 12.5 : 12,
-                            fontWeight: isCurrentChapter || !hasBeenRead
-                                ? FontWeight.w700
-                                : FontWeight.w500,
-                          ),
+                return Material(
+                  type: MaterialType.transparency,
+                  borderRadius: const BorderRadius.all(Radius.circular(14)),
+                  clipBehavior: Clip.antiAlias,
+                  child: ListTile(
+                    key: ValueKey<String>(
+                      'reader-catalog-chapter-${chapter.id}',
+                    ),
+                    dense: true,
+                    visualDensity: const VisualDensity(vertical: -2),
+                    minTileHeight: _catalogChapterItemExtent,
+                    minVerticalPadding: 0,
+                    titleAlignment: ListTileTitleAlignment.center,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: _catalogTileHorizontalPadding,
+                      vertical: 2,
+                    ),
+                    tileColor: chapterBackground,
+                    hoverColor: _palette.accent.withValues(alpha: .08),
+                    selected: isCurrentChapter,
+                    selectedColor: _palette.accent,
+                    selectedTileColor: _palette.accent.withValues(alpha: .15),
+                    shape: const RoundedRectangleBorder(
+                      borderRadius: BorderRadius.all(Radius.circular(14)),
+                    ),
+                    leading: SizedBox(
+                      width: 30,
+                      child: Text(
+                        '${chapter.index + 1}',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: chapterTextColor,
+                          fontSize: isCurrentChapter ? 12.5 : 12,
+                          fontWeight: isCurrentChapter || !hasBeenRead
+                              ? FontWeight.w700
+                              : FontWeight.w500,
                         ),
                       ),
-                      title: Text(
-                        chapter.title,
+                    ),
+                    title: Row(
+                      children: <Widget>[
+                        Expanded(
+                          child: Text(
+                            chapter.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: isCurrentChapter ? 14.5 : 14,
+                              fontWeight: isCurrentChapter
+                                  ? FontWeight.w700
+                                  : hasBeenRead
+                                  ? FontWeight.w400
+                                  : FontWeight.w600,
+                              color: chapterTextColor,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        ReaderChapterStateBadge(
+                          availability: availability,
+                          wordCount: wordCount,
+                          hasBeenRead: hasBeenRead,
+                          loading: stateLoading && refreshedState == null,
+                          palette: _palette,
+                          onRetry:
+                              availability == ReaderChapterAvailability.failed
+                              ? () => unawaited(
+                                  _refreshLoadedChapterStates(
+                                    chapterId: chapter.id,
+                                    force: true,
+                                  ),
+                                )
+                              : null,
+                        ),
+                      ],
+                    ),
+                    // Keep the word count in a fixed trailing slot so it
+                    // stays aligned at the far right while chapter titles
+                    // of different lengths share the same rhythm.
+                    trailing: SizedBox(
+                      width: 54,
+                      child: Text(
+                        wordCount != null && wordCount >= 0
+                            ? ReaderChapterStateStrings.wordCount(wordCount)
+                            : '—',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.right,
                         style: TextStyle(
-                          fontSize: isCurrentChapter ? 14.5 : 14,
+                          color: isCurrentChapter
+                              ? chapterTextColor
+                              : _palette.secondaryText,
+                          fontSize: 11.5,
                           fontWeight: isCurrentChapter
-                              ? FontWeight.w700
-                              : hasBeenRead
-                              ? FontWeight.w400
-                              : FontWeight.w600,
-                          color: chapterTextColor,
+                              ? FontWeight.w600
+                              : FontWeight.w500,
                         ),
                       ),
-                      // Keep the trailing slot for every row so the title
-                      // column and the current-chapter arrow share one
-                      // horizontal rhythm.
-                      trailing: SizedBox(
-                        width: 28,
-                        child: isCurrentChapter
-                            ? Center(
-                                child: Icon(
-                                  Icons.play_arrow_rounded,
-                                  size: 16,
-                                  color: _palette.accent,
-                                ),
-                              )
-                            : const SizedBox.shrink(),
-                      ),
-                      subtitle: ReaderChapterStateBadge(
-                        availability: availability,
-                        // Catalog metadata is already durable and available
-                        // in the first frame. Do not hide it while the
-                        // optional read/download-state enrichment runs.
-                        wordCount:
-                            availability == ReaderChapterAvailability.downloaded
-                            ? wordCount
-                            : null,
-                        hasBeenRead: hasBeenRead,
-                        loading: stateLoading && refreshedState == null,
-                        palette: _palette,
-                        onRetry:
-                            availability == ReaderChapterAvailability.failed
-                            ? () => unawaited(
-                                _refreshLoadedChapterStates(
-                                  chapterId: chapter.id,
-                                  force: true,
-                                ),
-                              )
-                            : null,
-                      ),
-                      onTap: () {
-                        if (!_isRouteSessionCurrent(
-                          routeSession,
-                          routeBookId,
-                          store: routeStore,
-                        )) {
-                          return;
-                        }
-                        Navigator.of(sheetContext).pop();
-                        unawaited(
-                          _openChapter(
-                            chapter.id,
-                            dismissControls: true,
-                            showLoadingOverlay: true,
-                          ),
-                        );
-                      },
                     ),
+                    onTap: () {
+                      if (!_isRouteSessionCurrent(
+                        routeSession,
+                        routeBookId,
+                        store: routeStore,
+                      )) {
+                        return;
+                      }
+                      Navigator.of(sheetContext).pop();
+                      unawaited(
+                        _openChapter(
+                          chapter.id,
+                          dismissControls: true,
+                          showLoadingOverlay: true,
+                        ),
+                      );
+                    },
                   ),
                 );
               },

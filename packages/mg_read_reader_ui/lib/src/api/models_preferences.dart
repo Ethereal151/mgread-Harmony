@@ -85,6 +85,15 @@ enum ReaderFontPreset {
   serif,
 }
 
+/// Selects whether the host system or the reader controls display brightness.
+enum ReaderBrightnessMode {
+  /// Leave the display brightness under the operating system's control.
+  system,
+
+  /// Apply [TextReaderPreferences.brightness] while reading.
+  manual,
+}
+
 @immutable
 /// Host-provided metadata for an optional downloadable reader font.
 class ReaderFontDescriptor {
@@ -290,6 +299,7 @@ class TextReaderPreferences {
     this.topPadding = 8,
     this.bottomPadding = 32,
     this.brightness = 1,
+    this.brightnessMode = ReaderBrightnessMode.system,
     this.navigationMode = ReaderNavigationMode.horizontalPages,
     this.singleHandMode = false,
     this.pageTurnShortcuts = true,
@@ -368,8 +378,11 @@ class TextReaderPreferences {
   /// beneath the footer.
   final double bottomPadding;
 
-  /// Reader overlay brightness from 0.25 to 1.0.
+  /// Application screen brightness used by manual mode, from 0.05 to 1.0.
   final double brightness;
+
+  /// Whether application screen brightness follows the system or this reader.
+  final ReaderBrightnessMode brightnessMode;
 
   /// Horizontal pagination or vertical scrolling.
   final ReaderNavigationMode navigationMode;
@@ -481,7 +494,7 @@ class TextReaderPreferences {
         64,
       ], fallback: fallback.bottomPadding),
       brightness: brightness.isFinite
-          ? brightness.clamp(0.25, 1).toDouble()
+          ? brightness.clamp(0.05, 1).toDouble()
           : fallback.brightness,
     );
   }
@@ -519,6 +532,7 @@ class TextReaderPreferences {
     double? topPadding,
     double? bottomPadding,
     double? brightness,
+    ReaderBrightnessMode? brightnessMode,
     ReaderNavigationMode? navigationMode,
     bool? singleHandMode,
     bool? pageTurnShortcuts,
@@ -548,6 +562,7 @@ class TextReaderPreferences {
       topPadding: topPadding ?? this.topPadding,
       bottomPadding: bottomPadding ?? this.bottomPadding,
       brightness: brightness ?? this.brightness,
+      brightnessMode: brightnessMode ?? this.brightnessMode,
       navigationMode: navigationMode ?? this.navigationMode,
       singleHandMode: singleHandMode ?? this.singleHandMode,
       pageTurnShortcuts: pageTurnShortcuts ?? this.pageTurnShortcuts,
@@ -580,6 +595,7 @@ class TextReaderPreferences {
       topPadding == other.topPadding &&
       bottomPadding == other.bottomPadding &&
       brightness == other.brightness &&
+      brightnessMode == other.brightnessMode &&
       navigationMode == other.navigationMode &&
       singleHandMode == other.singleHandMode &&
       pageTurnShortcuts == other.pageTurnShortcuts &&
@@ -608,6 +624,7 @@ class TextReaderPreferences {
     topPadding,
     bottomPadding,
     brightness,
+    brightnessMode,
     navigationMode,
     singleHandMode,
     pageTurnShortcuts,
