@@ -358,7 +358,7 @@ class _LibraryHomeShellState extends State<LibraryHomeShell> {
   }
 
   List<LibraryBookListAction> get _bookActions => <LibraryBookListAction>[
-    if (widget.callbacks.onOpenBook != null) _openBookDetailAction,
+    if (widget.callbacks.onBookDetail != null) _openBookDetailAction,
     if (widget.callbacks.onRefreshBook != null) _refreshBookAction,
     if (widget.callbacks.onSetBookPrivate != null) _setBookPrivateAction,
     if (widget.callbacks.onToggleBookCoverBlur != null) _toggleBookCoverBlurAction,
@@ -463,6 +463,15 @@ class _LibraryHomeShellState extends State<LibraryHomeShell> {
     _showUnavailableMessage();
   }
 
+  void _handleBookDetail(LibraryBookListItemViewData book) {
+    final ValueChanged<LibraryBookListItemViewData>? callback = widget.callbacks.onBookDetail;
+    if (callback != null) {
+      callback(book);
+      return;
+    }
+    _showUnavailableMessage();
+  }
+
   void _handleBookMore(LibraryBookListItemViewData book) {
     final ValueChanged<LibraryBookListItemViewData>? callback = widget.callbacks.onBookMore;
     if (callback != null) {
@@ -484,7 +493,7 @@ class _LibraryHomeShellState extends State<LibraryHomeShell> {
   void _handleBookAction(LibraryBookListItemViewData book, LibraryBookListAction action) {
     switch (action.id) {
       case 'detail':
-        _handleOpenBook(book);
+        _handleBookDetail(book);
         return;
       case 'refresh':
         final refreshBook = widget.callbacks.onRefreshBook;

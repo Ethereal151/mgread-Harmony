@@ -265,6 +265,7 @@ final class LibraryHomeCallbacks {
     this.onReadingHistory,
     this.onContinueReading,
     this.onOpenBook,
+    this.onBookDetail,
     this.onBookLongPress,
     this.onBookMore,
     this.onRefreshBook,
@@ -283,6 +284,7 @@ final class LibraryHomeCallbacks {
   final VoidCallback? onReadingHistory;
   final VoidCallback? onContinueReading;
   final ValueChanged<LibraryBookListItemViewData>? onOpenBook;
+  final ValueChanged<LibraryBookListItemViewData>? onBookDetail;
   final ValueChanged<LibraryBookListItemViewData>? onBookLongPress;
   final ValueChanged<LibraryBookListItemViewData>? onBookMore;
   final Future<void> Function(LibraryBookListItemViewData)? onRefreshBook;
@@ -304,6 +306,7 @@ final class LibraryHomeCallbacks {
     VoidCallback? onReadingHistory,
     VoidCallback? onContinueReading,
     ValueChanged<LibraryBookListItemViewData>? onOpenBook,
+    ValueChanged<LibraryBookListItemViewData>? onBookDetail,
     ValueChanged<LibraryBookListItemViewData>? onBookLongPress,
     ValueChanged<LibraryBookListItemViewData>? onBookMore,
     Future<void> Function(LibraryBookListItemViewData)? onRefreshBook,
@@ -322,6 +325,7 @@ final class LibraryHomeCallbacks {
       onReadingHistory: onReadingHistory ?? this.onReadingHistory,
       onContinueReading: onContinueReading ?? this.onContinueReading,
       onOpenBook: onOpenBook ?? this.onOpenBook,
+      onBookDetail: onBookDetail ?? this.onBookDetail,
       onBookLongPress: onBookLongPress ?? this.onBookLongPress,
       onBookMore: onBookMore ?? this.onBookMore,
       onRefreshBook: onRefreshBook ?? this.onRefreshBook,

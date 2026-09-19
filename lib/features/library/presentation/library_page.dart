@@ -29,6 +29,7 @@ import 'package:mg_read/features/library/application/library_book_refresh_operat
 import 'package:mg_read/features/library/application/library_book_removal_operation.dart';
 import 'package:mg_read/features/library/application/library_book_visibility_changer.dart';
 import 'package:mg_read/features/library/application/library_catalog_refresh_coordinator.dart';
+import 'package:mg_read/features/library/application/library_entry_destination.dart';
 import 'package:mg_read/features/library/application/library_page_controller.dart';
 import 'package:mg_read/features/library/application/library_page_state.dart';
 import 'package:mg_read/features/library/domain/library_item_summary.dart';
@@ -306,6 +307,90 @@ class LibraryPage extends ConsumerWidget {
       unawaited(openBookDetail(book));
     }
 
+    Future<void> openShelfAudio(LibraryBookListItemViewData book) async {
+      final callback = onAudioChapterRequested;
+      if (callback == null || detailLauncher == null) {
+        await openBookDetail(book);
+        return;
+      }
+      try {
+        final item = state.overview!.items.cast<LibraryItemSummary?>().firstWhere(
+          (candidate) => candidate?.id == book.id,
+          orElse: () => null,
+        );
+        final immediateEntry = immediateLibraryMediaEntry(item, book);
+        if (immediateEntry != null) {
+          await callback(
+            detail: immediateEntry.detail,
+            firstCatalogPage: immediateEntry.catalog,
+            chapter: immediateEntry.chapter,
+            pluginVersion: item?.coverPluginVersion ?? book.coverRequest?.pluginVersion ?? 'unknown',
+            libraryItemId: book.id,
+          );
+          return;
+        }
+        final seed = await detailLauncher.load(book.id);
+        final entry = persistedLibraryMediaEntry(detail: seed.initialDetail, catalog: seed.initialCatalog, book: book);
+        await callback(
+          detail: entry.detail,
+          firstCatalogPage: entry.catalog,
+          chapter: entry.chapter,
+          pluginVersion: item?.coverPluginVersion ?? book.coverRequest?.pluginVersion ?? 'unknown',
+          libraryItemId: book.id,
+        );
+      } on Object catch (error) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_shelfMediaFailureMessage('无法打开上次的听书进度，请检查网络后重试。', error))));
+        }
+      }
+    }
+
+    Future<void> openShelfVideo(LibraryBookListItemViewData book) async {
+      final callback = onVideoEpisodeRequested;
+      if (callback == null || detailLauncher == null) {
+        await openBookDetail(book);
+        return;
+      }
+      try {
+        final item = state.overview!.items.cast<LibraryItemSummary?>().firstWhere(
+          (candidate) => candidate?.id == book.id,
+          orElse: () => null,
+        );
+        final immediateEntry = immediateLibraryMediaEntry(item, book);
+        if (immediateEntry != null) {
+          await callback(
+            detail: immediateEntry.detail,
+            firstCatalogPage: immediateEntry.catalog,
+            chapter: immediateEntry.chapter,
+            libraryItemId: book.id,
+          );
+          return;
+        }
+        final seed = await detailLauncher.load(book.id);
+        final entry = persistedLibraryMediaEntry(detail: seed.initialDetail, catalog: seed.initialCatalog, book: book);
+        await callback(detail: entry.detail, firstCatalogPage: entry.catalog, chapter: entry.chapter, libraryItemId: book.id);
+      } on Object catch (error) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_shelfMediaFailureMessage('无法打开上次的视频进度，请检查网络后重试。', error))));
+        }
+      }
+    }
+
+    void openShelfEntry(LibraryBookListItemViewData book) {
+      final item = state.overview!.items.cast<LibraryItemSummary?>().firstWhere(
+        (candidate) => candidate?.id == book.id,
+        orElse: () => null,
+      );
+      switch (libraryEntryDestination(item?.contentKind ?? ContentKind.novel)) {
+        case LibraryEntryDestination.reader:
+          prepareAndOpen(book.id);
+        case LibraryEntryDestination.audioPlayer:
+          unawaited(openShelfAudio(book));
+        case LibraryEntryDestination.videoPlayer:
+          unawaited(openShelfVideo(book));
+      }
+    }
+
     resolvedCallbacks = callbacks.copyWith(
       onNavigationSelected: destinationRequested == null
           ? callbacks.onNavigationSelected
@@ -319,8 +404,19 @@ class LibraryPage extends ConsumerWidget {
               callbacks.onDiscover?.call();
               destinationRequested(AppNavigationDestination.discover);
             },
-      onOpenBook: (book) {
-        callbacks.onOpenBook?.call(book);
+      onOpenBook: bookDetailRequested == null
+          ? readerRequested == null
+                ? callbacks.onOpenBook
+                : (book) {
+                    callbacks.onOpenBook?.call(book);
+                    openShelfEntry(book);
+                  }
+          : (book) {
+              callbacks.onOpenBook?.call(book);
+              requestBookDetail(book);
+            },
+      onBookDetail: (book) {
+        callbacks.onBookDetail?.call(book);
         requestBookDetail(book);
       },
       onBookLongPress: callbacks.onBookLongPress ?? openBookDetail,
@@ -340,9 +436,9 @@ class LibraryPage extends ConsumerWidget {
                 orElse: () => null,
               );
               if (book != null) {
-                requestBookDetail(book);
-              } else if (bookDetailRequested != null) {
-                bookDetailRequested(bookId);
+                openShelfEntry(book);
+              } else {
+                prepareAndOpen(bookId);
               }
             },
       onDeleteBook: removalOperation == null
@@ -418,6 +514,16 @@ class LibraryPage extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// Preserves an actual source/runtime reason at the shelf media entry point.
+/// The fallback is retained only when the producing layer supplied no detail.
+String _shelfMediaFailureMessage(String fallback, Object error) {
+  final AppError normalized = AppError.fromUnknown(error);
+  final String? detail = normalized.detail?.trim();
+  if (detail != null && detail.isNotEmpty) return detail;
+  final String? location = normalized.location?.trim();
+  return <String>[fallback, '错误码：${normalized.code.wireValue}', if (location != null && location.isNotEmpty) '失败位置：$location'].join('\n');
 }
 
 final class _LibraryTerminalFrameSignal extends StatefulWidget {
