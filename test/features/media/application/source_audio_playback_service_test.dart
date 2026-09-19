@@ -93,6 +93,39 @@ void main() {
     await service.stop();
     await secondPlayback;
   });
+
+  test('reveals the active shelf playback without replacing or reloading it', () async {
+    final settings = AppSettingsManager(store: FakeSettingsStore(), registry: AppSettingKeys.registry);
+    await settings.initialize();
+    addTearDown(settings.close);
+    final request = _request();
+    final gateway = _AudioGateway(request);
+    final backend = _RecordingBackend();
+    final container = ProviderContainer(
+      overrides: [
+        appSettingsProvider.overrideWithValue(settings),
+        sourceContentGatewayProvider.overrideWithValue(gateway),
+        sourceAudioPlaybackBackendFactoryProvider.overrideWithValue(() => backend),
+      ],
+    );
+    addTearDown(container.dispose);
+    final service = container.read(sourceAudioPlaybackServiceProvider.notifier);
+
+    final playback = service.open(request);
+    await _waitUntil(() => service.controller?.snapshot.status == AudioPlayerStatus.ready && service.controller!.snapshot.playing);
+    final originalController = service.controller;
+    final sessionId = container.read(sourceAudioPlaybackServiceProvider).sessionId!;
+    service.minimize(sessionId);
+
+    expect(service.revealExistingForShelfItem(libraryItemId: 'shelf-audio-1', contentId: request.detail.summary.id), isTrue);
+    expect(container.read(sourceAudioPlaybackServiceProvider).presentation, SourceAudioPresentation.expanded);
+    expect(service.controller, same(originalController));
+    expect(backend.openCalls, 1);
+    expect(gateway.loadedChapterIds, <String>['chapter-1']);
+
+    await service.stop();
+    await playback;
+  });
 }
 
 Future<void> _waitUntil(bool Function() condition) async {

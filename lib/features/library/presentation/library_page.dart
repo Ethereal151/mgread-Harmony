@@ -37,6 +37,7 @@ import 'package:mg_read/features/library/presentation/library_home_view_data.dar
 import 'package:mg_read/features/library/presentation/library_book_list_view_data.dart';
 import 'package:mg_read/features/library/presentation/library_media_entry_data.dart';
 import 'package:mg_read/features/library/presentation/widgets/library_home_shell.dart';
+import 'package:mg_read/features/media/application/source_audio_playback_service.dart';
 import 'package:mg_read/features/discovery/application/source_content_gateway.dart';
 import 'package:mg_read/features/discovery/presentation/source_content_detail_sheet.dart';
 import 'package:mg_read/features/reader/application/shelf_reader_launch_coordinator.dart';
@@ -124,6 +125,7 @@ class LibraryPage extends ConsumerWidget {
     final DiagnosticsManager diagnostics = ref.read(diagnosticsManagerProvider);
     final ShelfReaderLaunchState readerLaunch = ref.watch(shelfReaderLaunchCoordinatorProvider);
     final ShelfReaderLaunchCoordinator readerCoordinator = ref.read(shelfReaderLaunchCoordinatorProvider.notifier);
+    final SourceAudioPlaybackService audioPlayback = ref.read(sourceAudioPlaybackServiceProvider.notifier);
     final AppStartupController startup = ref.read(appStartupControllerProvider);
 
     if (state.status == LibraryPageStatus.initialLoading) {
@@ -308,16 +310,19 @@ class LibraryPage extends ConsumerWidget {
     }
 
     Future<void> openShelfAudio(LibraryBookListItemViewData book) async {
+      final item = state.overview!.items.cast<LibraryItemSummary?>().firstWhere(
+        (candidate) => candidate?.id == book.id,
+        orElse: () => null,
+      );
+      if (audioPlayback.revealExistingForShelfItem(libraryItemId: book.id, contentId: item?.coverRemoteContentId ?? book.id)) {
+        return;
+      }
       final callback = onAudioChapterRequested;
       if (callback == null || detailLauncher == null) {
         await openBookDetail(book);
         return;
       }
       try {
-        final item = state.overview!.items.cast<LibraryItemSummary?>().firstWhere(
-          (candidate) => candidate?.id == book.id,
-          orElse: () => null,
-        );
         final immediateEntry = immediateLibraryMediaEntry(item, book);
         if (immediateEntry != null) {
           await callback(
