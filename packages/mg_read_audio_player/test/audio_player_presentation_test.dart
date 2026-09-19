@@ -8,6 +8,32 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mg_read_audio_player/mg_read_audio_player.dart';
 
 void main() {
+  testWidgets('top glass actions stay circular on portrait phones', (
+    tester,
+  ) async {
+    _setPortraitView(tester);
+    await tester.pumpWidget(_host(backend: _PresentationBackend()));
+    await tester.pump();
+    await tester.pump();
+
+    final backSize = tester.getSize(
+      find.descendant(
+        of: find.byKey(const Key('audio-back')),
+        matching: find.byType(ClipRRect),
+      ),
+    );
+    final queueSize = tester.getSize(
+      find.descendant(
+        of: find.byKey(const Key('audio-queue')),
+        matching: find.byType(ClipRRect),
+      ),
+    );
+    expect(backSize.width, closeTo(backSize.height, 0.001));
+    expect(queueSize.width, closeTo(queueSize.height, 0.001));
+    expect(backSize, const Size.square(44));
+    expect(queueSize, const Size.square(44));
+  });
+
   testWidgets('shows a dedicated empty queue recovery state', (tester) async {
     await tester.pumpWidget(
       _host(

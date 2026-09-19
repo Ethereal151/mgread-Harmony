@@ -117,19 +117,26 @@ class _TopBarButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AudioGlassPanel(
-      borderRadius: BorderRadius.circular(999),
-      blur: 16,
-      shadow: false,
-      child: IconButton(
-        tooltip: tooltip,
-        onPressed: onPressed,
-        style: IconButton.styleFrom(
-          fixedSize: const Size.square(44),
-          foregroundColor: AudioPlayerColors.ink,
-          shape: const CircleBorder(),
+    return SizedBox.square(
+      dimension: AudioPlayerMetrics.minimumTapTarget,
+      child: AudioGlassPanel(
+        borderRadius: BorderRadius.circular(999),
+        blur: 16,
+        shadow: false,
+        child: IconButton(
+          tooltip: tooltip,
+          onPressed: onPressed,
+          constraints: const BoxConstraints.tightFor(
+            width: AudioPlayerMetrics.minimumTapTarget,
+            height: AudioPlayerMetrics.minimumTapTarget,
+          ),
+          style: IconButton.styleFrom(
+            fixedSize: const Size.square(AudioPlayerMetrics.minimumTapTarget),
+            foregroundColor: AudioPlayerColors.ink,
+            shape: const CircleBorder(),
+          ),
+          icon: Icon(icon, size: 18),
         ),
-        icon: Icon(icon, size: 18),
       ),
     );
   }
