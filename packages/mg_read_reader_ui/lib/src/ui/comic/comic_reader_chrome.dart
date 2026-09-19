@@ -149,7 +149,7 @@ extension _ComicReaderChrome on _ComicReaderViewState {
             itemBuilder: (BuildContext context, int index) {
               final _ComicListEntry entry = entries[index];
               return switch (entry) {
-                _ComicHeaderEntry() => _buildChapterHeader(entry, palette),
+                _ComicHeaderEntry() => _buildChapterHeader(entry),
                 _ComicImageEntry() => _buildImageTile(entry, palette),
                 _ComicBoundaryEntry() => _buildBoundary(entry, palette),
               };
@@ -191,18 +191,19 @@ extension _ComicReaderChrome on _ComicReaderViewState {
     );
   }
 
-  Widget _buildChapterHeader(_ComicHeaderEntry entry, ReaderPalette palette) {
+  Widget _buildChapterHeader(_ComicHeaderEntry entry) {
     return SizedBox(
       height: _ComicReaderViewState._chapterHeaderExtent,
       child: ColoredBox(
-        color: const Color(0xFF151719),
+        key: const ValueKey<String>('comic-reader-chapter-header'),
+        color: Colors.white,
         child: Center(
           child: Text(
             entry.chapter.info.title,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              color: palette.text,
+              color: const Color(0xFF242424),
               fontSize: 15,
               fontWeight: FontWeight.w600,
             ),

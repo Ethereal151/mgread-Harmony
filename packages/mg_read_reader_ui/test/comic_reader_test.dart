@@ -34,6 +34,55 @@ void main() {
     expect(region.value.systemStatusBarContrastEnforced, isFalse);
   });
 
+  testWidgets('uses a light chapter header for comic chapter transitions', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ComicReaderView(
+          bookId: 'book',
+          dataSource: _FakeComicSource(),
+          stateStore: _MemoryComicStateStore(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final ScrollPosition position = tester
+        .state<ScrollableState>(find.byType(Scrollable).first)
+        .position;
+    position.jumpTo(0);
+    await tester.pump();
+
+    final List<ColoredBox> headers = tester
+        .widgetList<ColoredBox>(
+          find.byKey(const ValueKey<String>('comic-reader-chapter-header')),
+        )
+        .toList();
+    final List<Text> titles = tester
+        .widgetList<Text>(
+          find.descendant(
+            of: find.byKey(
+              const ValueKey<String>('comic-reader-chapter-header'),
+            ),
+            matching: find.byType(Text),
+          ),
+        )
+        .toList();
+
+    expect(headers, isNotEmpty);
+    expect(
+      headers.every((ColoredBox header) => header.color == Colors.white),
+      isTrue,
+    );
+    expect(titles, isNotEmpty);
+    expect(
+      titles.every(
+        (Text title) => title.style?.color == const Color(0xFF242424),
+      ),
+      isTrue,
+    );
+  });
+
   test('comic progress is anchored by chapter, image and fraction', () {
     const progress = ComicReaderProgress(
       chapterId: 'chapter-1',
