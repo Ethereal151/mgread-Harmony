@@ -27,10 +27,42 @@ test('audio fixture covers search, catalog, locked items and proxy playback meta
   const chapters = await plugin.getChapters({ id: detail.id });
   assert.equal(chapters.items.length, 2); assert.equal(chapters.items[1].isLocked, true);
   const content = await plugin.getContent({ id: detail.id, chapterId: chapters.items[0].id });
-  assert.equal(content.media.resourceType, 'audio'); assert.equal(content.media.resourcePolicy, 'sessionOnly');
+  assert.equal(content.media.resourceType, 'audio'); assert.equal(content.media.resourcePolicy, 'refreshable');
   assert.equal(content.media.url.startsWith('http://127.0.0.1:'), true);
+  assert.equal(content.media.expiresAt, '2100-01-01T00:00:00.000Z');
   assert.equal(resources[0].kind, 'audio'); assert.equal(resources[0].headers.Range, undefined);
+  const cached = await plugin.getContent({ id: detail.id, chapterId: chapters.items[0].id });
+  assert.equal(cached.media.resourcePolicy, 'refreshable'); assert.equal(resources.length, 2);
+  assert.equal(calls.filter(({ url }) => url.includes('AppGetChapterUrl2023')).length, 1);
+  assert.equal(calls.filter(({ init }) => init.method === 'HEAD').length, 1);
   await assert.rejects(plugin.getContent({ id: detail.id, chapterId: chapters.items[1].id }), /paid audio chapter/u);
   assert.deepEqual(logs.slice(-3), ['info:audio_playback_resource_resolved', 'info:audio_playback_resource_requested', 'warn:audio_playback_resource_failed']);
   assert.ok(calls.every(({ init }) => init.headers.cookie === undefined));
+});
+
+test('re-resolves a cached playback URL after the fast probe rejects it', async () => {
+  let playCalls = 0; let probeCalls = 0; const proxied = [];
+  await plugin.activate({ log: { info() {}, warn() {} }, resource: { proxy(value) { proxied.push(value); return `http://127.0.0.1:9000/v1/source-resource/token${proxied.length}`; } }, http: { async fetch(input, init = {}) {
+    const url = String(input);
+    if (init.method === 'HEAD') { probeCalls += 1; return new Response(null, { status: 403 }); }
+    if (url.includes('AppGetChapterUrl2023')) { playCalls += 1; return Response.json({ status: 0, src: `https://audio.tingshijie.com/reconnected-${playCalls}.mp3?expires=4102444800` }); }
+    return Response.json({ data: { count: 1, list: [{ chapterId: 'c-1', title: 'Episode one', price: 0 }] } });
+  } } });
+  const contentRequest = { id: 'audio:book-reconnect', chapterId: 'audio:book-reconnect:c-1' };
+  const first = await plugin.getContent(contentRequest); const second = await plugin.getContent(contentRequest);
+  assert.equal(first.media.resourcePolicy, 'refreshable'); assert.equal(second.media.resourcePolicy, 'refreshable');
+  assert.equal(playCalls, 2); assert.equal(probeCalls, 1); assert.equal(proxied[1].url.endsWith('reconnected-2.mp3?expires=4102444800'), true);
+});
+
+test('drops an expired playback URL without probing it', async () => {
+  let playCalls = 0; let probeCalls = 0;
+  await plugin.activate({ log: { info() {}, warn() {} }, resource: { proxy() { return 'http://127.0.0.1:9000/v1/source-resource/token123456789012'; } }, http: { async fetch(input, init = {}) {
+    const url = String(input);
+    if (init.method === 'HEAD') { probeCalls += 1; return new Response(null, { status: 200 }); }
+    if (url.includes('AppGetChapterUrl2023')) { playCalls += 1; return Response.json({ status: 0, src: `https://audio.tingshijie.com/expired-${playCalls}.mp3?expires=1` }); }
+    return Response.json({ data: { count: 1, list: [{ chapterId: 'c-1', title: 'Episode one', price: 0 }] } });
+  } } });
+  const contentRequest = { id: 'audio:book-expired', chapterId: 'audio:book-expired:c-1' };
+  await plugin.getContent(contentRequest); await plugin.getContent(contentRequest);
+  assert.equal(playCalls, 2); assert.equal(probeCalls, 0);
 });

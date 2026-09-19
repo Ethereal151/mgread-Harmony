@@ -1,4 +1,11 @@
-/** Ting China audio source: JSON API projection and Runtime-owned media proxy. */
+/**
+ * 听中国听书原生数据源。
+ *
+ * 职责：调用听中国 JSON API，解析专辑、目录和播放地址，并把音频交给 Runtime 代理。
+ * 生命周期：activate 保存当前 Runtime 上下文；播放地址只在当前插件进程内按书籍/章节缓存。
+ * IO：来源请求和快速音频探测都走 ctx.http；媒体地址只经 ctx.resource.proxy 输出，不缓存媒体主体。
+ * 缓存：签名地址按上游失效时间（无法解析时使用短 TTL）管理；未过期的地址每次播放前用 HEAD 快速探测。
+ */
 import { createHash } from 'node:crypto';
 import type { MgReadPluginContext } from '@mgread/source-api';
 
@@ -11,10 +18,23 @@ const appHeaders = { Accept: 'application/json,text/html,*/*', 'User-Agent': 'Ti
 const audioHeaders = { Accept: '*/*', 'User-Agent': 'okhttp/4.9.3' };
 const playKey = 'J9gSpfUlzYxE8Hn5IXiGaD2jVMrwAm0K';
 const categories = Object.freeze([['popular', '热门', null], ['6', '玄幻', '6'], ['7', '奇幻', '7'], ['8', '武侠', '8'], ['13', '历史', '13'], ['14', '恐怖', '14'], ['31', '评书', '31'], ['50', '儿童', '50']] as const);
+const playbackCacheTtlMs = 10 * 60 * 1000;
+const playbackExpirySafetyMs = 5 * 1000;
+const playbackProbeTimeoutMs = 1500;
+const playbackCacheMaxEntries = 256;
 let context: Context | undefined;
 const chapterLocks = new Map<string, boolean>();
+const playbackCache = new Map<string, CachedPlayback>();
+const playbackLocks = new Map<string, Promise<CachedPlayback>>();
 
-export async function activate(next: Context): Promise<void> { context = next; next.log.info('source_activated'); }
+type CachedPlayback = { url: string; expiresAt: number; mediaExpiresAt: number | null; headers: Readonly<Record<string, string>> };
+
+export async function activate(next: Context): Promise<void> {
+  context = next;
+  playbackCache.clear();
+  playbackLocks.clear();
+  next.log.info('source_activated');
+}
 
 export async function search(request: { query: string; cursor: string | null; pageSize: number }) {
   if (request.cursor !== null) throw new Error('Search cursor is unsupported.');
@@ -68,13 +88,9 @@ export async function getContent(request: { id: string; chapterId: string }) {
   try {
     const bookId = contentId(request.id); const chapterId = chapterIdFrom(request.chapterId, bookId);
     if (chapterLocks.get(request.chapterId) === true) throw new Error('unsupported: paid audio chapter requires an account.');
-    const timestamp = Date.now().toString(); const signature = md5(`${md5(`${timestamp}${playKey}`)}${playKey}`);
-    const endpoint = `${api}AppGetChapterUrl2023?timeStamp=${encodeURIComponent(timestamp)}&uid=&chapterId=${encodeURIComponent(chapterId)}&addItParapet=${encodeURIComponent(signature)}&bookId=${encodeURIComponent(bookId)}`;
-    const payload = await fetchJson(endpoint); const upstream = text(payload.src);
-    if (!trustedAudio(upstream)) throw new Error('Playback address is unavailable.');
-    const referer = base + '/'; const headers = { ...audioHeaders, Origin: base, Referer: referer };
+    const playback = await getPlayback(bookId, chapterId);
     const result = frozen({ chapterId: request.chapterId, contentKind: 'audio', title: null, updatedAt: null, text: null, pages: [], media: {
-      url: ctx.resource.proxy({ kind: 'audio', url: upstream, headers }), resourceType: 'audio', resourcePolicy: 'sessionOnly', expiresAt: null, mimeType: mime(upstream), headers,
+      url: ctx.resource.proxy({ kind: 'audio', url: playback.url, headers: playback.headers }), resourceType: 'audio', resourcePolicy: playback.mediaExpiresAt === null ? 'sessionOnly' : 'refreshable', expiresAt: playback.mediaExpiresAt === null ? null : new Date(playback.mediaExpiresAt).toISOString(), mimeType: mime(playback.url), headers: playback.headers,
     } });
     ctx.log.info('audio_playback_resource_resolved');
     return result;
@@ -82,6 +98,83 @@ export async function getContent(request: { id: string; chapterId: string }) {
     ctx.log.warn('audio_playback_resource_failed');
     throw error;
   }
+}
+
+async function getPlayback(bookId: string, chapterId: string): Promise<CachedPlayback> {
+  const key = `${bookId}:${chapterId}`;
+  const pending = playbackLocks.get(key);
+  if (pending !== undefined) return pending;
+  const task = resolvePlayback(key, bookId, chapterId);
+  playbackLocks.set(key, task);
+  try { return await task; } finally { if (playbackLocks.get(key) === task) playbackLocks.delete(key); }
+}
+
+async function resolvePlayback(key: string, bookId: string, chapterId: string): Promise<CachedPlayback> {
+  const ctx = requireContext();
+  const cached = playbackCache.get(key);
+  if (cached !== undefined) {
+    if (cached.expiresAt <= Date.now() + playbackExpirySafetyMs) {
+      playbackCache.delete(key);
+      ctx.log.info('audio_playback_cache_expired');
+    } else if (await probePlayback(cached)) {
+      ctx.log.info('audio_playback_cache_hit');
+      return cached;
+    } else {
+      playbackCache.delete(key);
+      ctx.log.info('audio_playback_cache_probe_failed');
+    }
+  }
+  const timestamp = Date.now().toString(); const signature = md5(`${md5(`${timestamp}${playKey}`)}${playKey}`);
+  const endpoint = `${api}AppGetChapterUrl2023?timeStamp=${encodeURIComponent(timestamp)}&uid=&chapterId=${encodeURIComponent(chapterId)}&addItParapet=${encodeURIComponent(signature)}&bookId=${encodeURIComponent(bookId)}`;
+  const payload = await fetchJson(endpoint); const upstream = text(payload.src);
+  if (!trustedAudio(upstream)) throw new Error('Playback address is unavailable.');
+  const headers = { ...audioHeaders, Origin: base, Referer: `${base}/` };
+  const expiry = playbackExpiry(payload, upstream);
+  const resolved = { url: upstream, expiresAt: expiry.cacheExpiresAt, mediaExpiresAt: expiry.mediaExpiresAt, headers };
+  if (!playbackCache.has(key) && playbackCache.size >= playbackCacheMaxEntries) {
+    const oldest = playbackCache.keys().next().value;
+    if (typeof oldest === 'string') playbackCache.delete(oldest);
+  }
+  playbackCache.set(key, resolved);
+  return resolved;
+}
+
+async function probePlayback(playback: CachedPlayback): Promise<boolean> {
+  try {
+    const response = await requireContext().http.fetch(playback.url, { method: 'HEAD', headers: playback.headers, signal: AbortSignal.timeout(playbackProbeTimeoutMs) });
+    return response.ok;
+  } catch { return false; }
+}
+
+function playbackExpiry(payload: Json, url: string): { cacheExpiresAt: number; mediaExpiresAt: number | null } {
+  const now = Date.now();
+  const explicit = ['expiresAt', 'expireAt', 'expires', 'expireTime', 'expiration'].map((key) => timestamp(payload[key])).find((value) => value !== null);
+  const mediaExpiresAt = explicit ?? urlExpiresAt(url);
+  return { cacheExpiresAt: mediaExpiresAt ?? now + playbackCacheTtlMs, mediaExpiresAt };
+}
+
+function urlExpiresAt(value: string): number | null {
+  try {
+    const parsed = new URL(value);
+    for (const key of ['expiresAt', 'expireAt', 'expires', 'expireTime', 'expiration', 'e']) {
+      const result = timestamp(parsed.searchParams.get(key));
+      if (result !== null) return result;
+    }
+    const authKey = parsed.searchParams.get('auth_key');
+    const embedded = authKey?.split('-')[1];
+    return timestamp(embedded);
+  } catch { return null; }
+}
+
+function timestamp(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null;
+  const numeric = typeof value === 'number' ? value : Number(value);
+  if (Number.isFinite(numeric) && numeric > 0) {
+    const milliseconds = numeric < 100_000_000_000 ? numeric * 1000 : numeric;
+    return milliseconds;
+  }
+  const parsed = Date.parse(String(value));
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 async function fetchJson(url: string): Promise<Json> {
