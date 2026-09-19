@@ -225,6 +225,7 @@ class DiscoveryTopBar extends StatelessWidget {
     this.onBackPressed,
     this.showSourceSelector = true,
     this.showSearchAction = true,
+    this.showThemeToggle = true,
     this.trailingActions = const <Widget>[],
     this.backButtonKey,
     this.barKey,
@@ -241,6 +242,7 @@ class DiscoveryTopBar extends StatelessWidget {
   final VoidCallback? onBackPressed;
   final bool showSourceSelector;
   final bool showSearchAction;
+  final bool showThemeToggle;
   final List<Widget> trailingActions;
   final Key? backButtonKey;
   final Key? barKey;
@@ -283,7 +285,7 @@ class DiscoveryTopBar extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: <Widget>[
                 ...trailingActions,
-                if (AppTheme.darkModeEnabled) ...<Widget>[
+                if (AppTheme.darkModeEnabled && showThemeToggle) ...<Widget>[
                   DiscoveryTopAction(
                     key: const Key('theme-mode-toggle'),
                     tooltip: theme.brightness == Brightness.dark ? '切换至浅色模式' : '切换至深色模式',

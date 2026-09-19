@@ -93,6 +93,9 @@ typedef SourceDetailFailureCopy = Future<void> Function(String payload);
 /// Whether this detail is being viewed from discovery or the local shelf.
 enum SourceDetailShelfState { canAdd, alreadyAdded, private }
 
+bool _usesReaderOwnedTheme(PluginContentKind contentKind) =>
+    contentKind == PluginContentKind.novel || contentKind == PluginContentKind.manga;
+
 Future<void> showSourceContentDetailSheet(
   BuildContext context, {
   required SourceContentGateway gateway,
@@ -424,7 +427,8 @@ class _SourceDetailScreenState extends State<_SourceDetailScreen> {
             chapters:
                 _loadedChapters ?? widget.initialCatalog ?? _emptyChapters(pluginId: widget.pluginId, sourceName: widget.initialSourceName),
           );
-    return BookCoverSourceScope(
+    final bool readerOwnedTheme = previewDetail != null && _usesReaderOwnedTheme(previewDetail.summary.contentKind);
+    final Widget detailScreen = BookCoverSourceScope(
       pluginId: widget.pluginId,
       pluginVersion: widget.pluginVersion,
       child: Scaffold(
@@ -449,7 +453,7 @@ class _SourceDetailScreenState extends State<_SourceDetailScreen> {
                   AppSpacing.discoveryPagePadding,
                   AppSpacing.pageHeaderTopPadding,
                 ),
-                child: _DetailHeader(isModalSheet: widget.isModalSheet),
+                child: _DetailHeader(isModalSheet: widget.isModalSheet, readerOwnedTheme: readerOwnedTheme),
               ),
               Expanded(
                 child: FutureBuilder<_SourceDetailBundle>(
@@ -594,6 +598,7 @@ class _SourceDetailScreenState extends State<_SourceDetailScreen> {
         ),
       ),
     );
+    return readerOwnedTheme ? Theme(data: AppTheme.novelReader(), child: detailScreen) : detailScreen;
   }
 }
 

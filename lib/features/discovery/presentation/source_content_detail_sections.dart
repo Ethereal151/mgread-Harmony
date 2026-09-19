@@ -1,9 +1,10 @@
 part of 'source_content_detail_sheet.dart';
 
 class _DetailHeader extends StatelessWidget {
-  const _DetailHeader({required this.isModalSheet});
+  const _DetailHeader({required this.isModalSheet, required this.readerOwnedTheme});
 
   final bool isModalSheet;
+  final bool readerOwnedTheme;
 
   @override
   Widget build(BuildContext context) => DiscoveryTopBar(
@@ -18,6 +19,7 @@ class _DetailHeader extends StatelessWidget {
     titleKey: const Key('source-detail-header-title'),
     showSourceSelector: false,
     showSearchAction: false,
+    showThemeToggle: !readerOwnedTheme,
     trailingActions: const <Widget>[],
   );
 }

@@ -66,6 +66,17 @@ void main() {
     expect(systemUi.last['immersiveMode'], isFalse);
   });
 
+  testWidgets('reader entry keeps its baseline outside the application theme', (WidgetTester tester) async {
+    final _ControlledDataSource dataSource = _ControlledDataSource();
+    await tester.pumpWidget(_readerApp(_request(dataSource: dataSource), appTheme: AppTheme.dark()));
+    await tester.pump();
+
+    final BuildContext entryContext = tester.element(find.byKey(const Key('reader-entry-back')));
+    expect(Theme.of(entryContext).brightness, Brightness.light);
+    expect(Theme.of(entryContext).colorScheme.primary, AppThemeColor.warm.accent);
+    dataSource.complete();
+  });
+
   testWidgets('comic loading holds immersion until the first image handoff', (WidgetTester tester) async {
     final systemUi = _recordReaderSystemUi();
     final dataSource = _ControlledComicDataSource();
@@ -325,8 +336,8 @@ List<Map<Object?, Object?>> _recordReaderSystemUi() {
   return calls;
 }
 
-Widget _readerApp(ReaderLaunchRequest request, {bool reduceMotion = false}) => MaterialApp(
-  theme: AppTheme.light(),
+Widget _readerApp(ReaderLaunchRequest request, {bool reduceMotion = false, ThemeData? appTheme}) => MaterialApp(
+  theme: appTheme ?? AppTheme.light(),
   builder: (BuildContext context, Widget? child) => MediaQuery(
     data: MediaQuery.of(context).copyWith(disableAnimations: reduceMotion),
     child: child!,

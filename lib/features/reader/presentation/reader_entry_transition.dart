@@ -135,27 +135,30 @@ class _ReaderEntryPreparationSurfaceState extends State<ReaderEntryPreparationSu
   @override
   Widget build(BuildContext context) {
     final double progress = Curves.easeOutCubic.transform(_entryController.value);
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: _readerEntrySystemUiStyle,
-      child: PopScope<void>(
-        canPop: false,
-        onPopInvokedWithResult: (bool didPop, void result) {
-          if (!didPop) widget.onExit();
-        },
-        child: Stack(
-          fit: StackFit.expand,
-          children: <Widget>[
-            _ReaderEntryBackdrop(progress: progress),
-            _ReaderEntryCover(
-              progress: progress,
-              disappearance: 0,
-              kind: DefaultCoverKind.novel,
-              coverImage: null,
-              failed: widget.failed ? const ReaderFailure(ReaderFailureKind.data, 'route_failure') : null,
-              onRetry: widget.onRetry,
-              onExit: widget.onExit,
-            ),
-          ],
+    return Theme(
+      data: AppTheme.novelReader(),
+      child: AnnotatedRegion<SystemUiOverlayStyle>(
+        value: _readerEntrySystemUiStyle,
+        child: PopScope<void>(
+          canPop: false,
+          onPopInvokedWithResult: (bool didPop, void result) {
+            if (!didPop) widget.onExit();
+          },
+          child: Stack(
+            fit: StackFit.expand,
+            children: <Widget>[
+              _ReaderEntryBackdrop(progress: progress),
+              _ReaderEntryCover(
+                progress: progress,
+                disappearance: 0,
+                kind: DefaultCoverKind.novel,
+                coverImage: null,
+                failed: widget.failed ? const ReaderFailure(ReaderFailureKind.data, 'route_failure') : null,
+                onRetry: widget.onRetry,
+                onExit: widget.onExit,
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -349,44 +352,47 @@ class _ReaderEntryTransitionState extends State<ReaderEntryTransition> with Tick
     final Animation<double> entryCurve = CurvedAnimation(parent: _entryController, curve: Curves.easeOutCubic);
     final Animation<double> handoffCurve = CurvedAnimation(parent: _handoffController, curve: Curves.easeOutQuart);
     final double handoff = handoffCurve.value;
-    return PopScope<void>(
-      canPop: false,
-      onPopInvokedWithResult: (bool didPop, void result) {
-        if (!didPop) _requestExit();
-      },
-      child: Semantics(
-        container: true,
-        child: Stack(
-          fit: StackFit.expand,
-          children: <Widget>[
-            _ReaderEntryBackdrop(progress: entryCurve.value),
-            Transform.translate(
-              offset: Offset(0, (1 - handoff) * 7),
-              child: Opacity(
-                opacity: _firstContentPresented ? handoff : 0,
-                child: KeyedSubtree(
-                  key: ValueKey<int>(_readerEpoch),
-                  child: ReaderHostPage(request: _boundRequest, catalogRefreshToken: widget.catalogRefreshToken),
+    return Theme(
+      data: AppTheme.novelReader(),
+      child: PopScope<void>(
+        canPop: false,
+        onPopInvokedWithResult: (bool didPop, void result) {
+          if (!didPop) _requestExit();
+        },
+        child: Semantics(
+          container: true,
+          child: Stack(
+            fit: StackFit.expand,
+            children: <Widget>[
+              _ReaderEntryBackdrop(progress: entryCurve.value),
+              Transform.translate(
+                offset: Offset(0, (1 - handoff) * 7),
+                child: Opacity(
+                  opacity: _firstContentPresented ? handoff : 0,
+                  child: KeyedSubtree(
+                    key: ValueKey<int>(_readerEpoch),
+                    child: ReaderHostPage(request: _boundRequest, catalogRefreshToken: widget.catalogRefreshToken),
+                  ),
                 ),
               ),
-            ),
-            if (!_handoffComplete)
-              AnnotatedRegion<SystemUiOverlayStyle>(
-                value: _readerEntrySystemUiStyle,
-                child: _ReaderEntryCover(
-                  progress: entryCurve.value,
-                  disappearance: handoff,
-                  kind: switch (_boundRequest) {
-                    NovelReaderLaunchRequest() => DefaultCoverKind.novel,
-                    ComicReaderLaunchRequest() => DefaultCoverKind.manga,
-                  },
-                  coverImage: _entryCoverImage,
-                  failed: _failure,
-                  onRetry: _failure == null ? null : _retry,
-                  onExit: _requestExit,
+              if (!_handoffComplete)
+                AnnotatedRegion<SystemUiOverlayStyle>(
+                  value: _readerEntrySystemUiStyle,
+                  child: _ReaderEntryCover(
+                    progress: entryCurve.value,
+                    disappearance: handoff,
+                    kind: switch (_boundRequest) {
+                      NovelReaderLaunchRequest() => DefaultCoverKind.novel,
+                      ComicReaderLaunchRequest() => DefaultCoverKind.manga,
+                    },
+                    coverImage: _entryCoverImage,
+                    failed: _failure,
+                    onRetry: _failure == null ? null : _retry,
+                    onExit: _requestExit,
+                  ),
                 ),
-              ),
-          ],
+            ],
+          ),
         ),
       ),
     );

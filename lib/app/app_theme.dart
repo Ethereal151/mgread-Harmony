@@ -40,6 +40,14 @@ enum AppThemeColor {
 abstract final class AppTheme {
   /// Temporary product switch while the source-picker visual baseline is light-only.
   static const bool darkModeEnabled = false;
+  static final ThemeData _novelReaderTheme = light(color: AppThemeColor.warm);
+
+  /// Stable host baseline for novel and comic reading surfaces.
+  ///
+  /// Reading surfaces have their own visual language and preferences, so the
+  /// selected application accent and dark-mode setting must not flow into
+  /// their entry, detail, or catalog UI.
+  static ThemeData novelReader() => _novelReaderTheme;
 
   static ThemeData light({AppThemeColor color = AppThemeColor.warm}) {
     const pageBackground = Color(0xFFFDFBFA);
