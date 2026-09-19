@@ -522,6 +522,79 @@ void main() {
     expect(observer.firstContentCount, 1);
   });
 
+  testWidgets('comic catalog completes pages and centers the current chapter', (
+    WidgetTester tester,
+  ) async {
+    tester.view
+      ..physicalSize = const Size(400, 700)
+      ..devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final source = _PagedComicCatalogSource();
+    final controller = ComicReaderController();
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ComicReaderView(
+          bookId: 'book',
+          dataSource: source,
+          controller: controller,
+          stateStore: _MemoryComicStateStore(
+            progress: const ComicReaderProgress(
+              chapterId: 'chapter-76',
+              imageId: 'image-1',
+              chapterIndex: 75,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(controller.snapshot.chapter?.id, 'chapter-76');
+
+    await tester.tap(
+      find.byKey(const ValueKey<String>('comic-reader-content-surface')),
+    );
+    await tester.pump();
+    await tester.tap(
+      find.byKey(const ValueKey<String>('comic-reader-catalog')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(source.catalogCursors, <String?>[null, '50', '100']);
+    expect(find.text('共 120 话'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey<String>('comic-reader-catalog-scrollbar')),
+      findsOneWidget,
+    );
+    final ScrollableState catalogScrollable = tester.state<ScrollableState>(
+      find
+          .descendant(
+            of: find.byKey(
+              const ValueKey<String>('comic-reader-catalog-scrollbar'),
+            ),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+    expect(catalogScrollable.position.pixels, greaterThan(0));
+    final Finder currentChapter = find.byKey(
+      const ValueKey<String>('comic-reader-catalog-chapter-chapter-76'),
+    );
+    expect(currentChapter, findsOneWidget);
+    expect(tester.widget<ListTile>(currentChapter).selected, isTrue);
+    expect(
+      find.descendant(
+        of: currentChapter,
+        matching: find.text('1 张 · 未读 · 已缓存'),
+      ),
+      findsOneWidget,
+    );
+    final Rect chapterRect = tester.getRect(currentChapter);
+    expect(chapterRect.top, greaterThan(100));
+    expect(chapterRect.bottom, lessThan(700));
+  });
+
   testWidgets('tapping the comic reader middle area closes visible controls', (
     WidgetTester tester,
   ) async {
@@ -1099,6 +1172,60 @@ class _MemoryComicStateStore implements ComicReaderStateStore {
   Future<void> addBookmark(ComicReaderBookmark bookmark) async {}
   @override
   Future<void> removeBookmark(String bookId, String bookmarkId) async {}
+}
+
+class _PagedComicCatalogSource extends _FakeComicSource {
+  static const int chapterTotal = 120;
+
+  final List<String?> catalogCursors = <String?>[];
+
+  ComicChapterInfo _chapter(int index) => ComicChapterInfo(
+    id: 'chapter-${index + 1}',
+    title: '第 ${index + 1} 话',
+    index: index,
+    availability: ReaderChapterAvailability.downloaded,
+    imageCount: 1,
+    hasBeenRead: index < 75,
+  );
+
+  @override
+  Future<ComicChapterCatalogPage> loadChapterCatalog(
+    String bookId, {
+    String? cursor,
+    int pageSize = 50,
+  }) async {
+    catalogCursors.add(cursor);
+    final int start = cursor == null ? 0 : int.parse(cursor);
+    final int requestedEnd = start + pageSize;
+    final int end = requestedEnd < chapterTotal ? requestedEnd : chapterTotal;
+    return ComicChapterCatalogPage(
+      items: <ComicChapterInfo>[
+        for (int index = start; index < end; index++) _chapter(index),
+      ],
+      total: chapterTotal,
+      hasMore: end < chapterTotal,
+      nextCursor: end < chapterTotal ? '$end' : null,
+    );
+  }
+
+  @override
+  Future<ComicChapterInfo> loadChapterAtIndex(String bookId, int index) async =>
+      _chapter(index);
+
+  @override
+  Future<ComicChapterContent> loadChapterContent(
+    String bookId,
+    String chapterId,
+  ) async {
+    final int index = int.parse(chapterId.substring('chapter-'.length)) - 1;
+    return ComicChapterContent(
+      chapterId: chapterId,
+      title: _chapter(index).title,
+      images: const <ComicImageInfo>[
+        ComicImageInfo(id: 'image-1', index: 0, width: 1, height: 1),
+      ],
+    );
+  }
 }
 
 class _RecordingComicObserver extends ComicReaderObserver {

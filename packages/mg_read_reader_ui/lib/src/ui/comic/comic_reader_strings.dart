@@ -31,6 +31,7 @@ abstract final class ComicReaderStrings {
   static const imageCommentLoading = '漫画图片评论正在加载';
   static const imageCommentFailed = '漫画图片评论加载失败，点击重试';
   static String imageCount(int count) => '$count 张';
+  static String chapterCount(int count) => '共 $count 话';
   static String imageSemantics(int number) => '漫画图片 $number';
   static String imageProgress(String id, int percent) => '图片 $id · $percent%';
   static String imageCommentCount(int count) => '漫画图片评论，$count条评论';
