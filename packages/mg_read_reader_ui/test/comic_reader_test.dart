@@ -8,6 +8,7 @@ import 'package:novel_reader_ui/novel_reader_ui.dart';
 import 'package:novel_reader_ui/src/ui/comic/comic_image_cache.dart';
 import 'package:novel_reader_ui/src/ui/comic/comic_image_tile.dart';
 import 'package:novel_reader_ui/src/ui/comic/comic_chapter_preloader.dart';
+import 'package:novel_reader_ui/src/ui/reader_theme.dart';
 
 void main() {
   testWidgets('owns transparent system bars while the comic chapter loads', (
@@ -491,6 +492,49 @@ void main() {
   });
 
   testWidgets(
+    'visible comic images automatically retry transient load failures',
+    (WidgetTester tester) async {
+      final source = _RetryingComicSource(failures: 2);
+      final cache = ComicImageByteCache(bookId: 'book', dataSource: source);
+      addTearDown(cache.dispose);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ComicProgressiveImageTile(
+            cache: cache,
+            chapterId: 'chapter-1',
+            image: _image('image-1', null),
+            width: 320,
+            placeholderHeight: 240,
+            palette: ReaderPalette.fromPreset(ReaderThemePreset.day),
+            onFailure: (_) {},
+            decodeBudget: ComicDecodedImageBudget(),
+          ),
+        ),
+      );
+
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump(const Duration(milliseconds: 900));
+      await tester.pumpAndSettle();
+
+      expect(source.imageCalls, 3);
+      expect(
+        find.byKey(
+          const ValueKey<String>('comic-reader-image-chapter-1-image-1'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(
+          const ValueKey<String>('comic-reader-image-retry-chapter-1-image-1'),
+        ),
+        findsNothing,
+      );
+    },
+  );
+
+  testWidgets(
     'comic images use decoded dimensions and meet without fixed-extent gaps',
     (WidgetTester tester) async {
       tester.view
@@ -965,6 +1009,29 @@ class _FakeComicSource implements ComicReaderDataSource {
       );
     }
     return Uint8List(size);
+  }
+}
+
+class _RetryingComicSource extends _FakeComicSource {
+  _RetryingComicSource({required this.failures});
+
+  final int failures;
+
+  @override
+  Future<Uint8List> loadImageBytes(
+    String bookId,
+    String chapterId,
+    String imageId,
+  ) async {
+    imageCalls++;
+    if (imageCalls <= failures) {
+      throw StateError('temporary comic image failure');
+    }
+    return Uint8List.fromList(
+      base64Decode(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+      ),
+    );
   }
 }
 

@@ -73,6 +73,12 @@ class ComicProgressiveImageTile extends StatefulWidget {
 }
 
 class _ComicProgressiveImageTileState extends State<ComicProgressiveImageTile> {
+  static const int _automaticRetryCount = 2;
+  static const List<Duration> _automaticRetryDelays = <Duration>[
+    Duration(milliseconds: 300),
+    Duration(milliseconds: 900),
+  ];
+
   late Future<Uint8List> _future;
   Uint8List? _decodedBytes;
   ImageProvider<Object>? _decodedProvider;
@@ -82,12 +88,13 @@ class _ComicProgressiveImageTileState extends State<ComicProgressiveImageTile> {
   bool _reportedError = false;
   bool _presented = false;
   late bool _cacheHit;
+  int _loadGeneration = 0;
 
   @override
   void initState() {
     super.initState();
     _cacheHit = widget.cache.contains(widget.chapterId, widget.image);
-    _future = widget.cache.load(widget.chapterId, widget.image);
+    _future = _loadWithAutomaticRetry();
   }
 
   @override
@@ -102,12 +109,13 @@ class _ComicProgressiveImageTileState extends State<ComicProgressiveImageTile> {
       _reportedError = false;
       _presented = false;
       _cacheHit = widget.cache.contains(widget.chapterId, widget.image);
-      _future = widget.cache.load(widget.chapterId, widget.image);
+      _future = _loadWithAutomaticRetry();
     }
   }
 
   @override
   void dispose() {
+    _loadGeneration++;
     widget.decodeBudget.release(this);
     _evictDecodedImage();
     super.dispose();
@@ -127,12 +135,40 @@ class _ComicProgressiveImageTileState extends State<ComicProgressiveImageTile> {
     setState(() {
       _evictDecodedImage();
       _reportedError = false;
-      _future = widget.cache.load(
-        widget.chapterId,
-        widget.image,
-        forceRefresh: true,
-      );
+      _future = _loadWithAutomaticRetry(forceRefresh: true);
     });
+  }
+
+  /// Retries visible image work after short bounded delays. The host's HTTP
+  /// transport already retries transient network failures; this second layer
+  /// covers a failed visible cache request without retrying background
+  /// prefetches or creating an unbounded source loop.
+  Future<Uint8List> _loadWithAutomaticRetry({bool forceRefresh = false}) async {
+    final int generation = ++_loadGeneration;
+    Object? lastError;
+    StackTrace? lastStack;
+    for (var attempt = 0; attempt <= _automaticRetryCount; attempt++) {
+      if (attempt > 0) {
+        await Future<void>.delayed(_automaticRetryDelays[attempt - 1]);
+        if (generation != _loadGeneration) {
+          throw lastError ?? StateError('Comic image load was superseded.');
+        }
+      }
+      try {
+        return await widget.cache.load(
+          widget.chapterId,
+          widget.image,
+          forceRefresh: forceRefresh && attempt == 0,
+        );
+      } catch (error, stackTrace) {
+        lastError = error;
+        lastStack = stackTrace;
+        if (attempt == _automaticRetryCount) {
+          Error.throwWithStackTrace(error, stackTrace);
+        }
+      }
+    }
+    Error.throwWithStackTrace(lastError!, lastStack!);
   }
 
   @override
