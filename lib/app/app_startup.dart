@@ -14,6 +14,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mgread_plugin_runtime/mgread_plugin_runtime.dart';
+import 'package:novel_reader_ui/novel_reader_ui.dart';
 
 import 'package:mg_read/app/app_content_library_source_prefetcher_coordinator.dart';
 import 'package:mg_read/core/content_library/content_library.dart';
@@ -672,6 +673,7 @@ final class DeferredLibraryReaderLauncher implements LibraryReaderLauncher, Loca
     this._settings,
     this._chapterCacheTasks,
     this._proxyManager,
+    this._bookRefreshCapability,
   ]);
   final ContentLibraryGetter _get;
   final SourceContentGateway _gateway;
@@ -679,6 +681,7 @@ final class DeferredLibraryReaderLauncher implements LibraryReaderLauncher, Loca
   final AppSettingsManager? _settings;
   final ChapterCacheTaskController? _chapterCacheTasks;
   final FlutterNetworkProxyManager? _proxyManager;
+  final ReaderBookRefreshCapability? _bookRefreshCapability;
   @override
   Future<ReaderLaunchRequest> launch(String libraryItemId) async {
     final library = await _get();
@@ -705,8 +708,14 @@ final class DeferredLibraryReaderLauncher implements LibraryReaderLauncher, Loca
     };
   }
 
-  ContentLibrarySourceTextReader _textReader(ContentLibrary library) =>
-      ContentLibrarySourceTextReader(library, _gateway, _prefetchers.resolve(library, _gateway), _settings, _chapterCacheTasks);
+  ContentLibrarySourceTextReader _textReader(ContentLibrary library) => ContentLibrarySourceTextReader(
+    library,
+    _gateway,
+    _prefetchers.resolve(library, _gateway),
+    _settings,
+    _chapterCacheTasks,
+    _bookRefreshCapability,
+  );
 
   ContentLibrarySourceComicReader _comicReader(ContentLibrary library) => ContentLibrarySourceComicReader(
     library,
@@ -714,5 +723,6 @@ final class DeferredLibraryReaderLauncher implements LibraryReaderLauncher, Loca
     prefetcher: _prefetchers.resolve(library, _gateway),
     settings: _settings,
     httpClientFactory: _proxyManager == null ? null : createProxyAwareComicHttpClientFactory(_proxyManager),
+    bookRefreshCapability: _bookRefreshCapability,
   );
 }

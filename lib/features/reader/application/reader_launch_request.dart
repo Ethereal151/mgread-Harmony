@@ -121,6 +121,7 @@ final class ComicReaderLaunchRequest extends ReaderLaunchRequest {
     this.observer,
     this.controller,
     this.commentFeed,
+    this.bookRefreshCapability,
     super.estimatedWarmBytes,
     super.preparationKind,
     super.networkPreparationElapsed,
@@ -136,6 +137,7 @@ final class ComicReaderLaunchRequest extends ReaderLaunchRequest {
   final ComicReaderObserver? observer;
   final ComicReaderController? controller;
   final ReaderCommentFeed? commentFeed;
+  final ReaderBookRefreshCapability? bookRefreshCapability;
 
   /// Rebinds route-lifetime comic-reader callbacks without rebuilding data.
   ComicReaderLaunchRequest withObserver(ComicReaderObserver? observer) => ComicReaderLaunchRequest(
@@ -147,6 +149,7 @@ final class ComicReaderLaunchRequest extends ReaderLaunchRequest {
     observer: observer,
     controller: controller,
     commentFeed: commentFeed,
+    bookRefreshCapability: bookRefreshCapability,
     estimatedWarmBytes: estimatedWarmBytes,
     preparationKind: preparationKind,
     networkPreparationElapsed: networkPreparationElapsed,

@@ -40,12 +40,14 @@ final class SourceAudioPlaybackRequest {
     required this.firstCatalogPage,
     required this.chapter,
     required this.libraryItemId,
+    this.pluginVersion = 'unknown',
   });
 
   final PluginContentDetail detail;
   final PluginChaptersResult firstCatalogPage;
   final PluginChapterSummary chapter;
   final String? libraryItemId;
+  final String pluginVersion;
 }
 
 enum SourceAudioPresentation { inactive, expanded, minimized }

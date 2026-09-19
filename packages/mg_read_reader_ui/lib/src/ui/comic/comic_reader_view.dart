@@ -85,6 +85,7 @@ class ComicReaderView extends StatefulWidget {
     this.observer,
     this.controller,
     this.commentFeed,
+    this.bookRefreshCapability,
     this.catalogRefreshToken = 0,
   }) : assert(chapterPreloadCount >= 0 && chapterPreloadCount <= 5);
 
@@ -113,6 +114,9 @@ class ComicReaderView extends StatefulWidget {
   ///
   /// The reader never reserves image layout space when this is null.
   final ReaderCommentFeed? commentFeed;
+
+  /// Optional host-owned full book refresh. The action is hidden when absent.
+  final ReaderBookRefreshCapability? bookRefreshCapability;
 
   /// Monotonic host signal for an already-open background catalog append.
   final int catalogRefreshToken;
@@ -180,6 +184,7 @@ class _ComicReaderViewState extends State<ComicReaderView>
   bool _catalogLoading = false;
   bool _loading = true;
   bool _controlsVisible = false;
+  bool _bookRefreshLoading = false;
   bool _settingsVisible = false;
   bool _foreground = true;
   bool _disposed = false;
@@ -216,6 +221,10 @@ class _ComicReaderViewState extends State<ComicReaderView>
     debugLabel: 'ComicReaderContentSurface',
   );
   final Map<String, GlobalKey> _imageKeys = <String, GlobalKey>{};
+  final GlobalKey<PopupMenuButtonState<_ComicOverflowAction>>
+  _comicOverflowMenuKey = GlobalKey<PopupMenuButtonState<_ComicOverflowAction>>(
+    debugLabel: 'comic-reader-overflow-menu',
+  );
   int _entryCacheSignature = 0;
   int _layoutDimensionsRevision = 0;
   double _layoutCorrection = 0;

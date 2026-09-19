@@ -602,13 +602,17 @@ final class _SourceAudioMiniPlayerState extends State<_SourceAudioMiniPlayer> {
 }
 
 Widget _sourceAudioArtwork(BuildContext context, AudioTrack track, SourceAudioPlaybackRequest request) {
+  final localBytes = request.detail.summary.coverBytes;
+  if (localBytes != null && localBytes.isNotEmpty) {
+    return Image.memory(Uint8List.fromList(localBytes), key: const Key('source-audio-artwork'), fit: BoxFit.cover, gaplessPlayback: true);
+  }
   final artwork = track.artwork;
   if (artwork == null || (artwork.scheme != 'http' && artwork.scheme != 'https')) {
     return const _SourceAudioArtworkFallback();
   }
   final coverRequest = BookCoverRequest(
     pluginId: request.detail.pluginId,
-    pluginVersion: 'unknown',
+    pluginVersion: request.pluginVersion,
     remoteContentId: request.detail.summary.id,
     coverUrl: artwork,
   );
@@ -618,7 +622,7 @@ Widget _sourceAudioArtwork(BuildContext context, AudioTrack track, SourceAudioPl
         .when(
           data: (bytes) => bytes == null || bytes.isEmpty
               ? const _SourceAudioArtworkFallback()
-              : Image.memory(Uint8List.fromList(bytes), fit: BoxFit.cover, gaplessPlayback: true),
+              : Image.memory(Uint8List.fromList(bytes), key: const Key('source-audio-artwork'), fit: BoxFit.cover, gaplessPlayback: true),
           error: (_, _) => const _SourceAudioArtworkFallback(),
           loading: () => const _SourceAudioArtworkFallback(),
         ),

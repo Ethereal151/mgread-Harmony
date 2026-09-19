@@ -87,10 +87,40 @@ extension _ComicReaderSession on _ComicReaderViewState {
       if (current != null && !_catalogById.containsKey(current.id)) {
         _rememberChapter(current);
       }
+      if (current != null) {
+        _currentChapter = _catalogById[current.id] ?? current;
+      }
       if (mounted) setState(() {});
       _publishSnapshot();
     } on Object {
       // A silent background signal must never interrupt an active chapter.
+    }
+  }
+
+  Future<void> _refreshBookFromHost() async {
+    final ReaderBookRefreshCapability? capability =
+        widget.bookRefreshCapability;
+    if (capability == null || _bookRefreshLoading) return;
+    if (mounted) setState(() => _bookRefreshLoading = true);
+    _activeCatalogRevision?.value++;
+    try {
+      await capability.refresh(widget.bookId);
+      await _refreshCatalogFromHost();
+      final int generation = _sessionGeneration;
+      final ComicBookInfo book = await widget.dataSource.loadBookInfo(
+        widget.bookId,
+      );
+      if (!_isSessionForSource(generation, widget.bookId, widget.dataSource) ||
+          !mounted) {
+        return;
+      }
+      setState(() => _book = book);
+      _publishSnapshot();
+    } catch (error) {
+      await _reportFailure(_asFailure(error, ReaderFailureKind.data));
+    } finally {
+      if (mounted) setState(() => _bookRefreshLoading = false);
+      _activeCatalogRevision?.value++;
     }
   }
 

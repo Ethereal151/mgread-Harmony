@@ -49,6 +49,7 @@ typedef LibraryAudioChapterRequested =
       required PluginContentDetail detail,
       required PluginChaptersResult firstCatalogPage,
       required PluginChapterSummary chapter,
+      required String pluginVersion,
       String? libraryItemId,
     });
 
@@ -257,10 +258,16 @@ class LibraryPage extends ConsumerWidget {
         onTextChapterRequested: ({required detail, required firstCatalogPage, required chapter, required entryCoverBytes}) async {
           prepareAndOpen(book.id);
         },
-        onAudioChapterRequested: ({required detail, required firstCatalogPage, required chapter}) {
+        onAudioChapterRequested: ({required detail, required firstCatalogPage, required chapter, required pluginVersion}) {
           final callback = onAudioChapterRequested;
           if (callback == null) return Future<void>.error(StateError('An audio-player host has not been registered.'));
-          return callback(detail: detail, firstCatalogPage: firstCatalogPage, chapter: chapter, libraryItemId: book.id);
+          return callback(
+            detail: detail,
+            firstCatalogPage: firstCatalogPage,
+            chapter: chapter,
+            pluginVersion: pluginVersion,
+            libraryItemId: book.id,
+          );
         },
         onVideoEpisodeRequested: ({required detail, required firstCatalogPage, required chapter}) {
           final callback = onVideoEpisodeRequested;
@@ -305,13 +312,20 @@ class LibraryPage extends ConsumerWidget {
             detail: immediateEntry.detail,
             firstCatalogPage: immediateEntry.catalog,
             chapter: immediateEntry.chapter,
+            pluginVersion: item?.coverPluginVersion ?? book.coverRequest?.pluginVersion ?? 'unknown',
             libraryItemId: book.id,
           );
           return;
         }
         final seed = await detailLauncher.load(book.id);
         final entry = persistedLibraryMediaEntry(detail: seed.initialDetail, catalog: seed.initialCatalog, book: book);
-        await callback(detail: entry.detail, firstCatalogPage: entry.catalog, chapter: entry.chapter, libraryItemId: book.id);
+        await callback(
+          detail: entry.detail,
+          firstCatalogPage: entry.catalog,
+          chapter: entry.chapter,
+          pluginVersion: item?.coverPluginVersion ?? book.coverRequest?.pluginVersion ?? 'unknown',
+          libraryItemId: book.id,
+        );
       } on Object catch (error) {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_shelfMediaFailureMessage('无法打开上次的听书进度，请检查网络后重试。', error))));

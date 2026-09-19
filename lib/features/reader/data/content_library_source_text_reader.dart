@@ -34,13 +34,21 @@ import 'package:mg_read/features/reader/data/content_library_text_reader_state_s
 /// Both normal and prewarmed requests must retain the app-owned cached cover;
 /// [ReaderEntryTransition] deliberately performs no network cover request.
 final class ContentLibrarySourceTextReader implements LibraryReaderLauncher, LocalShelfReaderPrewarmer {
-  const ContentLibrarySourceTextReader(this._library, this._gateway, [this._prefetcher, this._settings, this._chapterCacheTasks]);
+  const ContentLibrarySourceTextReader(
+    this._library,
+    this._gateway, [
+    this._prefetcher,
+    this._settings,
+    this._chapterCacheTasks,
+    this._bookRefreshCapability,
+  ]);
 
   final ContentLibrary _library;
   final SourceContentGateway _gateway;
   final ContentLibrarySourcePrefetcher? _prefetcher;
   final AppSettingsManager? _settings;
   final ChapterCacheTaskController? _chapterCacheTasks;
+  final ReaderBookRefreshCapability? _bookRefreshCapability;
 
   @override
   Future<NovelReaderLaunchRequest> launch(String libraryItemId) async {
@@ -264,6 +272,7 @@ final class ContentLibrarySourceTextReader implements LibraryReaderLauncher, Loc
       initialWrite: initialWrite,
     );
     final dataSource = _SessionTextReaderDataSource(
+      library: _library,
       item: item,
       session: session,
       chapterAccess: chapterAccess,
@@ -292,6 +301,7 @@ final class ContentLibrarySourceTextReader implements LibraryReaderLauncher, Loc
         chapterStateCapability: chapterAccess,
         chapterCacheCapability: _chapterCacheTasks == null ? null : chapterAccess,
         chapterRefreshCapability: chapterAccess,
+        bookRefreshCapability: _bookRefreshCapability,
       ),
       estimatedWarmBytes: utf8.encode(initialContent.text).length,
       preparationKind: preparationKind,
@@ -652,9 +662,16 @@ final class _SessionNovelChapterAccess
 }
 
 final class _SessionTextReaderDataSource implements TextReaderDataSource, ReaderCatalogRefreshDataSource {
-  _SessionTextReaderDataSource({required this.item, required this.session, required this.chapterAccess, required this.sourceKind});
+  _SessionTextReaderDataSource({
+    required this.library,
+    required this.item,
+    required this.session,
+    required this.chapterAccess,
+    required this.sourceKind,
+  });
 
-  final LibraryItem item;
+  final ContentLibrary library;
+  LibraryItem item;
   NovelReaderSession session;
   final _SessionNovelChapterAccess chapterAccess;
   final ReaderBookSourceKind sourceKind;
@@ -687,6 +704,7 @@ final class _SessionTextReaderDataSource implements TextReaderDataSource, Reader
     _requireBook(bookId);
     final refreshed = await chapterAccess.refreshSession();
     if (refreshed != null) session = refreshed;
+    item = await library.getLibraryItem(item.id) ?? item;
   }
 
   @override

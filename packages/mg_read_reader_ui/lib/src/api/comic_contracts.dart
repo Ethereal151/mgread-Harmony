@@ -4,6 +4,9 @@ import 'dart:typed_data';
 import 'comic_models.dart';
 import 'models.dart';
 
+export 'contracts.dart'
+    show ReaderBookRefreshCapability, ReaderCatalogRefreshDataSource;
+
 /// Supplies comic metadata and progressively loaded image bytes.
 ///
 /// Implementations own all networking, authentication, files, retries, and

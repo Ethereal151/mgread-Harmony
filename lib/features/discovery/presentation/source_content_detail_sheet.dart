@@ -66,6 +66,7 @@ typedef SourceAudioChapterRequested =
       required PluginContentDetail detail,
       required PluginChaptersResult firstCatalogPage,
       required PluginChapterSummary chapter,
+      required String pluginVersion,
     });
 
 /// Opens a source-owned video episode in the independently maintained player.
@@ -482,7 +483,7 @@ class _SourceDetailScreenState extends State<_SourceDetailScreen> {
                             onAddToShelf: widget.onAddToShelf,
                             onRemoveFromShelf: widget.onRemoveFromShelf,
                             shelfState: widget.shelfState,
-                            onShelfAction: widget.onShelfAction,
+                            onShelfAction: widget.onShelfAction == null ? null : _handleShelfAction,
                             onStartReading: widget.onStartReading,
                             isCoverBlurred: widget.isCoverBlurred,
                             onRecommendationRequested: widget.onRecommendationRequested,
@@ -493,7 +494,7 @@ class _SourceDetailScreenState extends State<_SourceDetailScreen> {
                       return _SourceDetailLoadingView(
                         initialContent: widget.initialContent,
                         shelfState: widget.shelfState,
-                        onShelfAction: widget.onShelfAction,
+                        onShelfAction: widget.onShelfAction == null ? null : _handleShelfAction,
                         onStartReading: widget.onStartReading,
                         isCoverBlurred: widget.isCoverBlurred,
                       );
@@ -543,7 +544,7 @@ class _SourceDetailScreenState extends State<_SourceDetailScreen> {
                                 onAddToShelf: widget.onAddToShelf,
                                 onRemoveFromShelf: widget.onRemoveFromShelf,
                                 shelfState: widget.shelfState,
-                                onShelfAction: widget.onShelfAction,
+                                onShelfAction: widget.onShelfAction == null ? null : _handleShelfAction,
                                 onStartReading: widget.onStartReading,
                                 isCoverBlurred: widget.isCoverBlurred,
                                 onRecommendationRequested: widget.onRecommendationRequested,
@@ -583,7 +584,7 @@ class _SourceDetailScreenState extends State<_SourceDetailScreen> {
                         onAddToShelf: widget.onAddToShelf,
                         onRemoveFromShelf: widget.onRemoveFromShelf,
                         shelfState: widget.shelfState,
-                        onShelfAction: widget.onShelfAction,
+                        onShelfAction: widget.onShelfAction == null ? null : _handleShelfAction,
                         onStartReading: widget.onStartReading,
                         isCoverBlurred: widget.isCoverBlurred,
                         onRecommendationRequested: widget.onRecommendationRequested,

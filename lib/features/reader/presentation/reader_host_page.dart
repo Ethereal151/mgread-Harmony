@@ -47,6 +47,7 @@ class ReaderHostPage extends StatelessWidget {
           observer: request.observer,
           controller: request.controller,
           commentFeed: request.commentFeed,
+          bookRefreshCapability: request.bookRefreshCapability,
           catalogRefreshToken: catalogRefreshToken,
         ),
       },

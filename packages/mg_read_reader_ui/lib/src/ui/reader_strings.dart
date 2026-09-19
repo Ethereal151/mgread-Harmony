@@ -14,6 +14,7 @@ abstract final class ReaderStrings {
   static const addBookmark = '添加书签';
   static const removeBookmark = '删除书签';
   static const refreshChapter = '刷新本章';
+  static const refreshBook = '更新书籍';
   static const more = '更多';
   static const cacheChapters = '缓存章节';
   static const cacheChapterCount = '缓存章节数';

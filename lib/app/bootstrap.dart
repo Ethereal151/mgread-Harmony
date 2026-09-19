@@ -326,6 +326,7 @@ Future<void> bootstrapMgReadApp({
               resolvedManager,
               ref.read(chapterCacheTaskControllerProvider.notifier),
               proxyManager,
+              ref.read(libraryBookRefresherProvider),
             );
           }),
       ],

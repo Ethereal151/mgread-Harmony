@@ -209,6 +209,20 @@ extension _ComicReaderCatalog on _ComicReaderViewState {
                 ),
               ),
             ),
+            if (widget.bookRefreshCapability != null)
+              IconButton(
+                key: const ValueKey<String>('comic-reader-refresh-book'),
+                tooltip: ComicReaderStrings.refreshBook,
+                onPressed: _bookRefreshLoading
+                    ? null
+                    : () => unawaited(_refreshBookFromHost()),
+                icon: _bookRefreshLoading
+                    ? const SizedBox.square(
+                        dimension: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.sync_rounded),
+              ),
           ],
         ),
       ),

@@ -540,10 +540,36 @@ extension _TextReaderSession on _TextReaderViewState {
         _catalogById[current.id] = current;
         _catalogByIndex[current.index] = current;
       }
+      if (current != null) {
+        _currentChapterInfo = _catalogById[current.id] ?? current;
+      }
       _catalogRevision.value++;
       if (mounted) setState(() {});
     } on Object {
       // A silent background signal must never interrupt an active chapter.
+    }
+  }
+
+  Future<void> _refreshBookFromHost() async {
+    final ReaderBookRefreshCapability? capability =
+        widget.extensions.bookRefreshCapability;
+    if (capability == null || _bookRefreshLoading) return;
+    if (mounted) setState(() => _bookRefreshLoading = true);
+    _catalogRevision.value++;
+    try {
+      await capability.refresh(widget.bookId);
+      await _refreshCatalogFromHost();
+      final int generation = _sessionGeneration;
+      final ReaderBookInfo book = await widget.dataSource.loadBookInfo(
+        widget.bookId,
+      );
+      if (!_isSessionCurrent(generation) || !mounted) return;
+      setState(() => _book = book);
+    } catch (error) {
+      await _reportFailure(_asFailure(error, ReaderFailureKind.data));
+    } finally {
+      if (mounted) setState(() => _bookRefreshLoading = false);
+      _catalogRevision.value++;
     }
   }
 

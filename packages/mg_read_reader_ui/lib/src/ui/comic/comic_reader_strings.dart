@@ -11,6 +11,8 @@ abstract final class ComicReaderStrings {
   static const noChapters = '暂无章节';
   static const noBookmarks = '暂无书签';
   static const addBookmark = '添加书签';
+  static const refreshBook = '更新书籍';
+  static const more = '更多';
   static const removeBookmark = '删除书签';
   static const brightness = '亮度';
   static const spacing = '图片间距';

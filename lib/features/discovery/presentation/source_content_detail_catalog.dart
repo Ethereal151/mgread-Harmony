@@ -11,6 +11,17 @@
 ///   the same group identities shown on the detail page.
 part of 'source_content_detail_sheet.dart';
 
+extension _SourceDetailScreenRefresh on _SourceDetailScreenState {
+  Future<void> _handleShelfAction(SourceShelfAction action) async {
+    final actionHandler = widget.onShelfAction;
+    if (actionHandler == null) return;
+    await actionHandler(action);
+    if (action == SourceShelfAction.refresh && mounted) {
+      _retryDetail();
+    }
+  }
+}
+
 class _DetailCatalogSection extends StatelessWidget {
   const _DetailCatalogSection({
     required this.catalog,

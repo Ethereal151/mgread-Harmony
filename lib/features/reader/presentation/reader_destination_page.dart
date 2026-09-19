@@ -164,6 +164,7 @@ class _ReaderDestinationPageState extends ConsumerState<ReaderDestinationPage> {
         observer: _ComicReaderObserverChain(<ComicReaderObserver>[?comic.observer, _ComicReaderExitObserver(_leaveComicReader)]),
         controller: comic.controller,
         commentFeed: comic.commentFeed,
+        bookRefreshCapability: comic.bookRefreshCapability,
         estimatedWarmBytes: comic.estimatedWarmBytes,
         preparationKind: comic.preparationKind,
         networkPreparationElapsed: comic.networkPreparationElapsed,
@@ -381,7 +382,7 @@ final class _ReaderLaunchStageReporter {
   }
 }
 
-final class _MeasuredTextReaderDataSource implements TextReaderDataSource {
+final class _MeasuredTextReaderDataSource implements TextReaderDataSource, ReaderCatalogRefreshDataSource {
   const _MeasuredTextReaderDataSource(this._delegate, this._stages);
 
   final TextReaderDataSource _delegate;
@@ -389,6 +390,14 @@ final class _MeasuredTextReaderDataSource implements TextReaderDataSource {
 
   @override
   Future<ReaderBookInfo> loadBookInfo(String bookId) => _stages.measure('metadata', () => _delegate.loadBookInfo(bookId));
+
+  @override
+  Future<void> refreshCatalog(String bookId) async {
+    final delegate = _delegate;
+    if (delegate case final ReaderCatalogRefreshDataSource refreshable) {
+      await _stages.measure('catalogRefresh', () => refreshable.refreshCatalog(bookId));
+    }
+  }
 
   @override
   Future<ChapterCatalogPage> loadChapterCatalog(String bookId, {String? cursor, int pageSize = 100}) =>

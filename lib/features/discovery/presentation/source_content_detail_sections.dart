@@ -744,7 +744,8 @@ Future<void> _openTextChapter(
     // Audio and video entry covers live on detail.summary. Both branches must
     // attach the resolved bytes before entering their host-owned surface.
     final playbackDetail = _withResolvedEntryCover(detail, context);
-    await callback(detail: playbackDetail, firstCatalogPage: firstCatalogPage, chapter: chapter);
+    final pluginVersion = BookCoverSourceScope.maybeOf(context)?.pluginVersion ?? 'unknown';
+    await callback(detail: playbackDetail, firstCatalogPage: firstCatalogPage, chapter: chapter, pluginVersion: pluginVersion);
     return;
   }
   if (detail.summary.contentKind == PluginContentKind.video) {

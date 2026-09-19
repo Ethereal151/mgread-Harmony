@@ -10,7 +10,7 @@ part of 'text_reader_view.dart';
 
 // ignore_for_file: invalid_use_of_protected_member
 
-enum _ReaderOverflowAction { cacheChapters }
+enum _ReaderOverflowAction { cacheChapters, refreshBook }
 
 extension _TextReaderCacheDialog on _TextReaderViewState {
   Widget _buildReaderOverflowMenu() {
@@ -32,20 +32,40 @@ extension _TextReaderCacheDialog on _TextReaderViewState {
           switch (action) {
             case _ReaderOverflowAction.cacheChapters:
               unawaited(_showCacheChaptersDialog());
+            case _ReaderOverflowAction.refreshBook:
+              unawaited(_refreshBookFromHost());
           }
         },
         itemBuilder: (BuildContext context) =>
-            const <PopupMenuEntry<_ReaderOverflowAction>>[
-              PopupMenuItem<_ReaderOverflowAction>(
-                value: _ReaderOverflowAction.cacheChapters,
-                child: Row(
-                  children: <Widget>[
-                    Icon(Icons.download_for_offline_outlined, size: 20),
-                    SizedBox(width: 12),
-                    Text(ReaderStrings.cacheChapters),
-                  ],
+            <PopupMenuEntry<_ReaderOverflowAction>>[
+              if (widget.extensions.bookRefreshCapability != null)
+                PopupMenuItem<_ReaderOverflowAction>(
+                  value: _ReaderOverflowAction.refreshBook,
+                  enabled: !_bookRefreshLoading,
+                  child: Row(
+                    children: <Widget>[
+                      _bookRefreshLoading
+                          ? const SizedBox.square(
+                              dimension: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.sync_rounded, size: 20),
+                      const SizedBox(width: 12),
+                      const Text(ReaderStrings.refreshBook),
+                    ],
+                  ),
                 ),
-              ),
+              if (widget.extensions.chapterCacheCapability != null)
+                const PopupMenuItem<_ReaderOverflowAction>(
+                  value: _ReaderOverflowAction.cacheChapters,
+                  child: Row(
+                    children: <Widget>[
+                      Icon(Icons.download_for_offline_outlined, size: 20),
+                      SizedBox(width: 12),
+                      Text(ReaderStrings.cacheChapters),
+                    ],
+                  ),
+                ),
             ],
       ),
     );

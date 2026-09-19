@@ -55,7 +55,7 @@ final class ContentLibraryComicReaderDataSource
 
   final ContentLibrary library;
   final SourceContentGateway gateway;
-  final LibraryItem item;
+  LibraryItem item;
   final ComicImageFetcher? _externalFetcher;
   final ComicImageHttpClientOwner? _httpClientOwner;
   _CatalogSnapshot? _catalog;
@@ -145,6 +145,7 @@ final class ContentLibraryComicReaderDataSource
     }
     _catalog = null;
     _catalogLoading = null;
+    item = await library.getLibraryItem(item.id) ?? item;
   }
 
   @override

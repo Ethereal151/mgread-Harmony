@@ -46,6 +46,14 @@ abstract interface class ReaderCatalogRefreshDataSource {
   Future<void> refreshCatalog(String bookId);
 }
 
+/// Optional host capability for refreshing a bookshelf item from its source.
+///
+/// The host owns the source request and durable detail/catalog update. After
+/// this completes, the reader reloads its current local session projection.
+abstract interface class ReaderBookRefreshCapability {
+  Future<void> refresh(String bookId);
+}
+
 @immutable
 /// Host-prepared values that let the reader render without repeating hot-path reads.
 class ReaderSessionSeed {
@@ -408,6 +416,7 @@ class ReaderExtensions {
     this.chapterStateCapability,
     this.chapterCacheCapability,
     this.chapterRefreshCapability,
+    this.bookRefreshCapability,
     this.fontRepository,
     @Deprecated('Use commentFeed for the reader-owned read-only comment UI.')
     this.comments,
@@ -424,6 +433,9 @@ class ReaderExtensions {
 
   /// Optional direct-to-source chapter refresh. The action is hidden when absent.
   final ReaderChapterRefreshCapability? chapterRefreshCapability;
+
+  /// Optional host-owned full book refresh. The action is hidden when absent.
+  final ReaderBookRefreshCapability? bookRefreshCapability;
 
   /// Optional host-owned catalog, installer, and cache for external fonts.
   final ReaderFontRepository? fontRepository;

@@ -190,18 +190,20 @@ class LibraryRoute extends GoRouteData with $LibraryRoute {
         onReaderRequested: (String bookId) {
           ReaderRoute(bookId: bookId).push(context);
         },
-        onAudioChapterRequested: ({required detail, required firstCatalogPage, required chapter, String? libraryItemId}) {
-          final navigator = appRootNavigatorKey.currentState;
-          if (navigator == null) return Future<void>.error(StateError('The application navigator is not ready.'));
-          return openTransientSourceAudioPlayer(
-            context,
-            navigator: navigator,
-            detail: detail,
-            firstCatalogPage: firstCatalogPage,
-            chapter: chapter,
-            libraryItemId: libraryItemId,
-          );
-        },
+        onAudioChapterRequested:
+            ({required detail, required firstCatalogPage, required chapter, required pluginVersion, String? libraryItemId}) {
+              final navigator = appRootNavigatorKey.currentState;
+              if (navigator == null) return Future<void>.error(StateError('The application navigator is not ready.'));
+              return openTransientSourceAudioPlayer(
+                context,
+                navigator: navigator,
+                detail: detail,
+                firstCatalogPage: firstCatalogPage,
+                chapter: chapter,
+                pluginVersion: pluginVersion,
+                libraryItemId: libraryItemId,
+              );
+            },
         onVideoEpisodeRequested: ({required detail, required firstCatalogPage, required chapter, String? libraryItemId}) {
           final navigator = appRootNavigatorKey.currentState;
           if (navigator == null) return Future<void>.error(StateError('The application navigator is not ready.'));
@@ -294,17 +296,19 @@ class SearchRoute extends GoRouteData with $SearchRoute {
             entryCoverBytes: entryCoverBytes,
           );
         },
-        onAudioChapterRequested: ({required detail, required firstCatalogPage, required chapter, String? libraryItemId}) {
-          final navigator = appRootNavigatorKey.currentState;
-          if (navigator == null) return Future<void>.error(StateError('The application navigator is not ready.'));
-          return openTransientSourceAudioPlayer(
-            context,
-            navigator: navigator,
-            detail: detail,
-            firstCatalogPage: firstCatalogPage,
-            chapter: chapter,
-          );
-        },
+        onAudioChapterRequested:
+            ({required detail, required firstCatalogPage, required chapter, required pluginVersion, String? libraryItemId}) {
+              final navigator = appRootNavigatorKey.currentState;
+              if (navigator == null) return Future<void>.error(StateError('The application navigator is not ready.'));
+              return openTransientSourceAudioPlayer(
+                context,
+                navigator: navigator,
+                detail: detail,
+                firstCatalogPage: firstCatalogPage,
+                chapter: chapter,
+                pluginVersion: pluginVersion,
+              );
+            },
         onVideoEpisodeRequested: ({required detail, required firstCatalogPage, required chapter}) {
           final navigator = appRootNavigatorKey.currentState;
           if (navigator == null) return Future<void>.error(StateError('The application navigator is not ready.'));
@@ -360,17 +364,19 @@ class DiscoveryRoute extends GoRouteData with $DiscoveryRoute {
             entryCoverBytes: entryCoverBytes,
           );
         },
-        onAudioChapterRequested: ({required detail, required firstCatalogPage, required chapter, String? libraryItemId}) {
-          final navigator = appRootNavigatorKey.currentState;
-          if (navigator == null) return Future<void>.error(StateError('The application navigator is not ready.'));
-          return openTransientSourceAudioPlayer(
-            context,
-            navigator: navigator,
-            detail: detail,
-            firstCatalogPage: firstCatalogPage,
-            chapter: chapter,
-          );
-        },
+        onAudioChapterRequested:
+            ({required detail, required firstCatalogPage, required chapter, required pluginVersion, String? libraryItemId}) {
+              final navigator = appRootNavigatorKey.currentState;
+              if (navigator == null) return Future<void>.error(StateError('The application navigator is not ready.'));
+              return openTransientSourceAudioPlayer(
+                context,
+                navigator: navigator,
+                detail: detail,
+                firstCatalogPage: firstCatalogPage,
+                chapter: chapter,
+                pluginVersion: pluginVersion,
+              );
+            },
         onVideoEpisodeRequested: ({required detail, required firstCatalogPage, required chapter}) {
           final navigator = appRootNavigatorKey.currentState;
           if (navigator == null) return Future<void>.error(StateError('The application navigator is not ready.'));

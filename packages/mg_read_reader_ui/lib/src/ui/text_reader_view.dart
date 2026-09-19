@@ -250,6 +250,7 @@ class _TextReaderViewState extends State<TextReaderView>
   int _verticalRestoreGeneration = 0;
   bool _loading = true;
   bool _controlsVisible = false;
+  bool _bookRefreshLoading = false;
   bool _readerSettingsVisible = false;
   bool _readerOverflowMenuExpanded = false;
   bool _foreground = true;

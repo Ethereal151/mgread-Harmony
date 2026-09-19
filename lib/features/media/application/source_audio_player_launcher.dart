@@ -22,11 +22,20 @@ Future<void> openTransientSourceAudioPlayer(
   required PluginContentDetail detail,
   required PluginChaptersResult firstCatalogPage,
   required PluginChapterSummary chapter,
+  required String pluginVersion,
   String? libraryItemId,
 }) {
   if (!navigator.mounted) return Future<void>.value();
   final container = ProviderScope.containerOf(context, listen: false);
   return container
       .read(sourceAudioPlaybackServiceProvider.notifier)
-      .open(SourceAudioPlaybackRequest(detail: detail, firstCatalogPage: firstCatalogPage, chapter: chapter, libraryItemId: libraryItemId));
+      .open(
+        SourceAudioPlaybackRequest(
+          detail: detail,
+          firstCatalogPage: firstCatalogPage,
+          chapter: chapter,
+          libraryItemId: libraryItemId,
+          pluginVersion: pluginVersion,
+        ),
+      );
 }
