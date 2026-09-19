@@ -268,9 +268,11 @@ extension _TextReaderChromeWidgets on _TextReaderViewState {
                   ),
                   _barAction(
                     _isNightTheme(_preferences.theme)
-                        ? Icons.nightlight_rounded
+                        ? Icons.light_mode_rounded
                         : Icons.nightlight_outlined,
-                    ReaderStrings.night,
+                    _isNightTheme(_preferences.theme)
+                        ? ReaderStrings.day
+                        : ReaderStrings.night,
                     _toggleNightTheme,
                     key: const Key('reader-toolbar-night-theme'),
                   ),

@@ -579,9 +579,9 @@ class ReaderSettingsBottomNavigation extends StatelessWidget {
           ),
           _NavigationItem(
             icon: nightSelected
-                ? Icons.nightlight_rounded
+                ? Icons.light_mode_rounded
                 : Icons.nightlight_outlined,
-            label: ReaderStrings.night,
+            label: nightSelected ? ReaderStrings.day : ReaderStrings.night,
             onTap: onNightPressed,
             selected: nightSelected,
             palette: palette,

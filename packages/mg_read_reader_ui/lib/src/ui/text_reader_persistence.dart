@@ -169,7 +169,6 @@ extension _TextReaderPersistence on _TextReaderViewState {
         normalized.showBookComments != _preferences.showBookComments ||
         normalized.showChapterComments != _preferences.showChapterComments ||
         normalized.showParagraphComments != _preferences.showParagraphComments;
-    _lastNonNightTheme = normalized.lastNonNightTheme;
     if (normalized.customFontId == null) {
       _fontLoadGeneration++;
       _runtimeFontFamily = null;

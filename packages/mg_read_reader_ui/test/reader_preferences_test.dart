@@ -144,6 +144,26 @@ void main() {
     );
     expect(
       const TextReaderPreferences(
+        theme: ReaderThemePreset.eyeCare,
+        lastNightTheme: ReaderThemePreset.deepNight,
+      ).normalized().lastNightTheme,
+      ReaderThemePreset.deepNight,
+    );
+    expect(
+      const TextReaderPreferences(
+        theme: ReaderThemePreset.deepNight,
+      ).normalized().lastNightTheme,
+      ReaderThemePreset.deepNight,
+    );
+    expect(
+      const TextReaderPreferences(
+        theme: ReaderThemePreset.eyeCare,
+        lastNightTheme: ReaderThemePreset.eyeCare,
+      ).normalized().lastNightTheme,
+      ReaderThemePreset.night,
+    );
+    expect(
+      const TextReaderPreferences(
         theme: ReaderThemePreset.night,
         lastNonNightTheme: ReaderThemePreset.deepNight,
       ).normalized().lastNonNightTheme,
@@ -196,6 +216,34 @@ void main() {
     await tester.runAsync(() => Future<void>.delayed(Duration.zero));
     expect(store.preferences.theme, ReaderThemePreset.eyeCare);
     expect(store.preferences.lastNonNightTheme, ReaderThemePreset.eyeCare);
+  });
+
+  testWidgets('toggles to the last selected night theme from the reader bar', (
+    WidgetTester tester,
+  ) async {
+    final _MemoryStore store = _MemoryStore(
+      const TextReaderPreferences(lastNightTheme: ReaderThemePreset.deepNight),
+    );
+    final TextReaderController controller = TextReaderController();
+    await tester.pumpWidget(_reader(store, controller));
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 500)),
+    );
+    await tester.pumpAndSettle();
+    await controller.showControls();
+    await tester.pump();
+
+    await tester.tap(find.byKey(const Key('reader-toolbar-night-theme')));
+    await tester.pump();
+    await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+    expect(store.preferences.theme, ReaderThemePreset.deepNight);
+    expect(find.text('日间'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('reader-toolbar-night-theme')));
+    await tester.pump();
+    await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+    expect(store.preferences.theme, ReaderThemePreset.day);
+    expect(find.text('夜间'), findsOneWidget);
   });
 
   testWidgets(

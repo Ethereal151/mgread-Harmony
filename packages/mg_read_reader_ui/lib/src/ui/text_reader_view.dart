@@ -292,7 +292,6 @@ class _TextReaderViewState extends State<TextReaderView>
   String? _noticeMessage;
   DateTime _clock = DateTime.now();
   ReaderAutoReadingPace _autoReadingPace = ReaderAutoReadingPace.normal;
-  ReaderThemePreset _lastNonNightTheme = ReaderThemePreset.day;
   TextScaler? _dependencyTextScaler;
   String? _runtimeFontFamily;
   ReaderFontDescriptor? _runtimeFontDescriptor;
@@ -665,7 +664,6 @@ class _TextReaderViewState extends State<TextReaderView>
         autoReading: _autoReadingCoordinator.isRunning,
         autoReadingPace: _autoReadingPace,
         layoutDebugMode: _layoutDebugMode,
-        lastNonNightTheme: _lastNonNightTheme,
         fontRepository: widget.extensions.fontRepository,
         onCustomFontSelected:
             (ReaderFontDescriptor descriptor, String runtimeFamily) {
@@ -727,8 +725,8 @@ class _TextReaderViewState extends State<TextReaderView>
   void _toggleNightTheme() {
     _stopAutoReading();
     final ReaderThemePreset next = _isNightTheme(_preferences.theme)
-        ? _lastNonNightTheme
-        : ReaderThemePreset.night;
+        ? _preferences.lastNonNightTheme
+        : _preferences.lastNightTheme;
     unawaited(_updatePreferences(_preferences.copyWith(theme: next)));
   }
 

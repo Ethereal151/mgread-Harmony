@@ -171,6 +171,7 @@ ReaderBookmark _toReaderBookmark(LibraryBookmark bookmark) => ReaderBookmark(
 Map<String, Object?> _preferencesToMap(TextReaderPreferences value) => <String, Object?>{
   'theme': value.theme.name,
   'lastNonNightTheme': value.lastNonNightTheme.name,
+  'lastNightTheme': value.lastNightTheme.name,
   'background': value.background.name,
   'font': value.font.name,
   'customFontId': value.customFontId,
@@ -210,6 +211,7 @@ TextReaderPreferences _preferencesFromMap(Map<String, Object?> raw) {
   return TextReaderPreferences(
     theme: enumValue(ReaderThemePreset.values, raw['theme'], defaults.theme),
     lastNonNightTheme: enumValue(ReaderThemePreset.values, raw['lastNonNightTheme'], defaults.lastNonNightTheme),
+    lastNightTheme: enumValue(ReaderThemePreset.values, raw['lastNightTheme'], defaults.lastNightTheme),
     background: enumValue(ReaderBackgroundPreset.values, raw['background'], defaults.background),
     font: enumValue(ReaderFontPreset.values, raw['font'], defaults.font),
     customFontId: customFontId is String ? customFontId : null,

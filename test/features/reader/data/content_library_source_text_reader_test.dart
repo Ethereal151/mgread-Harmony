@@ -58,6 +58,7 @@ void main() {
     final expected = const TextReaderPreferences(
       theme: ReaderThemePreset.deepNight,
       lastNonNightTheme: ReaderThemePreset.eyeCare,
+      lastNightTheme: ReaderThemePreset.deepNight,
       background: ReaderBackgroundPreset.softPaper,
       font: ReaderFontPreset.serif,
       customFontId: 'font-1',

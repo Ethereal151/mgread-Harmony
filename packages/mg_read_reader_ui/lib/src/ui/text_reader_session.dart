@@ -150,7 +150,6 @@ extension _TextReaderSession on _TextReaderViewState {
           : loadedProgress;
       _preferences = results[3] as TextReaderPreferences;
       unawaited(_loadPersistedCustomFont());
-      _lastNonNightTheme = _preferences.lastNonNightTheme;
       // Bookmark/state/comment work is deliberately deferred until after the
       // first real text frame so it cannot compete with first-page layout.
       _bookmarks = const <ReaderBookmark>[];

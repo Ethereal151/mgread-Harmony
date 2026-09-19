@@ -9,7 +9,6 @@ Future<void> showReaderSettingsSheet({
   required bool autoReading,
   required ReaderAutoReadingPace autoReadingPace,
   required bool layoutDebugMode,
-  required ReaderThemePreset lastNonNightTheme,
   required ReaderFontRepository? fontRepository,
   required FutureOr<void> Function(
     ReaderFontDescriptor descriptor,
@@ -59,7 +58,6 @@ Future<void> showReaderSettingsSheet({
           autoReading: autoReading,
           autoReadingPace: autoReadingPace,
           layoutDebugMode: layoutDebugMode,
-          lastNonNightTheme: lastNonNightTheme,
           fontRepository: fontRepository,
           onCustomFontSelected: onCustomFontSelected,
           onFontError: onFontError,
@@ -100,7 +98,6 @@ class ReaderSettingsSheet extends StatefulWidget {
     required this.autoReading,
     required this.autoReadingPace,
     required this.layoutDebugMode,
-    required this.lastNonNightTheme,
     required this.fontRepository,
     required this.onCustomFontSelected,
     required this.onFontError,
@@ -120,7 +117,6 @@ class ReaderSettingsSheet extends StatefulWidget {
   final bool autoReading;
   final ReaderAutoReadingPace autoReadingPace;
   final bool layoutDebugMode;
-  final ReaderThemePreset lastNonNightTheme;
   final ReaderFontRepository? fontRepository;
   final FutureOr<void> Function(
     ReaderFontDescriptor descriptor,

@@ -8,7 +8,6 @@ class _ReaderSettingsSheetState extends State<ReaderSettingsSheet> {
   late ReaderAutoReadingPace _autoReadingPace;
   late bool _autoReading;
   late bool _layoutDebugMode;
-  ReaderThemePreset _lastNonNightTheme = ReaderThemePreset.day;
   _SettingsPage _page = _SettingsPage.main;
 
   ReaderPalette get _palette => ReaderPalette.fromPreset(_preferences.theme);
@@ -20,12 +19,6 @@ class _ReaderSettingsSheetState extends State<ReaderSettingsSheet> {
     _autoReading = widget.autoReading;
     _autoReadingPace = widget.autoReadingPace;
     _layoutDebugMode = widget.layoutDebugMode;
-    _lastNonNightTheme = _isNightTheme(widget.lastNonNightTheme)
-        ? ReaderThemePreset.day
-        : widget.lastNonNightTheme;
-    if (!_isNightTheme(_preferences.theme)) {
-      _lastNonNightTheme = _preferences.theme;
-    }
   }
 
   @override
@@ -53,9 +46,6 @@ class _ReaderSettingsSheetState extends State<ReaderSettingsSheet> {
 
   void _commit(TextReaderPreferences next) {
     final TextReaderPreferences normalized = next.normalized();
-    if (!_isNightTheme(normalized.theme)) {
-      _lastNonNightTheme = normalized.theme;
-    }
     if (_preferences != normalized) {
       setState(() => _preferences = normalized);
       widget.onPreferencesPreview(normalized);
@@ -170,8 +160,8 @@ class _ReaderSettingsSheetState extends State<ReaderSettingsSheet> {
 
   void _toggleNight() {
     final ReaderThemePreset next = _isNightTheme(_preferences.theme)
-        ? _lastNonNightTheme
-        : ReaderThemePreset.night;
+        ? _preferences.lastNonNightTheme
+        : _preferences.lastNightTheme;
     _commit(_preferences.copyWith(theme: next));
   }
 

@@ -276,6 +276,7 @@ class TextReaderPreferences {
   const TextReaderPreferences({
     this.theme = ReaderThemePreset.day,
     this.lastNonNightTheme = ReaderThemePreset.day,
+    this.lastNightTheme = ReaderThemePreset.night,
     this.background = ReaderBackgroundPreset.plain,
     this.font = ReaderFontPreset.system,
     this.customFontId,
@@ -306,11 +307,19 @@ class TextReaderPreferences {
   /// Built-in reading color scheme.
   final ReaderThemePreset theme;
 
-  /// The last non-night color scheme, restored when night mode is closed.
+  /// The last day color scheme, restored when night mode is closed.
+  ///
+  /// The name is retained for persisted/API compatibility. This is a global
+  /// reader preference rather than a book-scoped value. Night presets are
+  /// invalid here and normalize to [ReaderThemePreset.day].
+  final ReaderThemePreset lastNonNightTheme;
+
+  /// The last night color scheme, restored when day mode is closed.
   ///
   /// This is a global reader preference rather than a book-scoped value.
-  /// Night presets are invalid here and normalize to [ReaderThemePreset.day].
-  final ReaderThemePreset lastNonNightTheme;
+  /// Day presets are invalid here and normalize to
+  /// [ReaderThemePreset.night].
+  final ReaderThemePreset lastNightTheme;
 
   /// Built-in background treatment applied behind the reading surface.
   final ReaderBackgroundPreset background;
@@ -415,6 +424,11 @@ class TextReaderPreferences {
                 ? fallback.lastNonNightTheme
                 : lastNonNightTheme)
           : theme,
+      lastNightTheme: _isNightThemePreset(theme)
+          ? theme
+          : (_isNightThemePreset(lastNightTheme)
+                ? lastNightTheme
+                : fallback.lastNightTheme),
       customFontId: customFontId?.trim(),
       clearCustomFontId: customFontId?.trim().isEmpty ?? false,
       fontSize: fontSize.isFinite
@@ -490,6 +504,7 @@ class TextReaderPreferences {
   TextReaderPreferences copyWith({
     ReaderThemePreset? theme,
     ReaderThemePreset? lastNonNightTheme,
+    ReaderThemePreset? lastNightTheme,
     ReaderBackgroundPreset? background,
     ReaderFontPreset? font,
     String? customFontId,
@@ -517,6 +532,7 @@ class TextReaderPreferences {
     return TextReaderPreferences(
       theme: theme ?? this.theme,
       lastNonNightTheme: lastNonNightTheme ?? this.lastNonNightTheme,
+      lastNightTheme: lastNightTheme ?? this.lastNightTheme,
       background: background ?? this.background,
       font: font ?? this.font,
       customFontId: clearCustomFontId
@@ -550,6 +566,7 @@ class TextReaderPreferences {
       other is TextReaderPreferences &&
       theme == other.theme &&
       lastNonNightTheme == other.lastNonNightTheme &&
+      lastNightTheme == other.lastNightTheme &&
       background == other.background &&
       font == other.font &&
       customFontId == other.customFontId &&
@@ -577,6 +594,7 @@ class TextReaderPreferences {
   int get hashCode => Object.hashAll(<Object?>[
     theme,
     lastNonNightTheme,
+    lastNightTheme,
     background,
     font,
     customFontId,
