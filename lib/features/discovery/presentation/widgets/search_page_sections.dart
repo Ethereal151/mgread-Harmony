@@ -150,6 +150,8 @@ class SearchResultsSection extends StatelessWidget {
     required this.status,
     required this.query,
     required this.error,
+    required this.sortOrder,
+    required this.onSortOrderChanged,
     this.isInBookshelf = _neverInBookshelf,
     required this.onContentPressed,
     required this.onRetry,
@@ -161,6 +163,8 @@ class SearchResultsSection extends StatelessWidget {
   final SearchPageStatus status;
   final String query;
   final AppError? error;
+  final SearchResultSortOrder sortOrder;
+  final ValueChanged<SearchResultSortOrder> onSortOrderChanged;
   final bool Function(AggregatedSearchItem item) isInBookshelf;
   final ValueChanged<AggregatedSearchItem> onContentPressed;
   final VoidCallback onRetry;
@@ -203,12 +207,13 @@ class SearchResultsSection extends StatelessWidget {
       );
     }
     final searchResult = result!;
+    final sortedItems = searchResult.sortedItems(sortOrder);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
         const Divider(),
         const SizedBox(height: AppSpacing.comfortable),
-        _ResultHeader(result: searchResult),
+        _ResultHeader(result: searchResult, sortOrder: sortOrder, onSortOrderChanged: onSortOrderChanged),
         AnimatedSize(
           duration: AppMotion.navigationSelection,
           curve: AppMotion.navigationCurve,
@@ -245,12 +250,12 @@ class SearchResultsSection extends StatelessWidget {
           Column(
             key: const Key('source-search-results'),
             children: <Widget>[
-              for (var index = 0; index < searchResult.items.length; index++) ...<Widget>[
+              for (var index = 0; index < sortedItems.length; index++) ...<Widget>[
                 SearchResultTile(
-                  item: searchResult.items[index],
-                  variant: _coverVariantFor(searchResult.items[index].content, index),
-                  isInBookshelf: isInBookshelf(searchResult.items[index]),
-                  onPressed: () => onContentPressed(searchResult.items[index]),
+                  item: sortedItems[index],
+                  variant: _coverVariantFor(sortedItems[index].content, index),
+                  isInBookshelf: isInBookshelf(sortedItems[index]),
+                  onPressed: () => onContentPressed(sortedItems[index]),
                 ),
               ],
             ],
@@ -485,8 +490,10 @@ class _HotSearchItem extends StatelessWidget {
 }
 
 class _ResultHeader extends StatelessWidget {
-  const _ResultHeader({required this.result});
+  const _ResultHeader({required this.result, required this.sortOrder, required this.onSortOrderChanged});
   final AggregatedSearchResult result;
+  final SearchResultSortOrder sortOrder;
+  final ValueChanged<SearchResultSortOrder> onSortOrderChanged;
   @override
   Widget build(BuildContext context) {
     final count = result.items.length;
@@ -497,11 +504,38 @@ class _ResultHeader extends StatelessWidget {
         const SizedBox(width: AppSpacing.compact),
         Text('（已聚合 $count 条）', style: Theme.of(context).textTheme.bodyMedium),
         const Spacer(),
-        Text(
-          result.isComplete ? '按相关性' : '已完成 ${result.completedSourceCount}/${result.totalSourceCount} 个来源',
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: tokens.mutedText),
+        if (!result.isComplete)
+          Text(
+            '已完成 ${result.completedSourceCount}/${result.totalSourceCount} 个来源',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: tokens.mutedText),
+          ),
+        PopupMenuButton<SearchResultSortOrder>(
+          key: const Key('search-result-sort'),
+          tooltip: '选择搜索结果排序',
+          onSelected: onSortOrderChanged,
+          itemBuilder: (context) => <PopupMenuEntry<SearchResultSortOrder>>[
+            for (final order in SearchResultSortOrder.values)
+              PopupMenuItem<SearchResultSortOrder>(
+                value: order,
+                child: Row(
+                  children: <Widget>[
+                    SizedBox(width: 24, child: order == sortOrder ? const Icon(Icons.check_rounded, size: 18) : null),
+                    Text(order.label),
+                  ],
+                ),
+              ),
+          ],
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.unit, vertical: AppSpacing.unit),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Text(sortOrder.label, style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: tokens.mutedText)),
+                Icon(Icons.arrow_drop_down_rounded, color: tokens.mutedText),
+              ],
+            ),
+          ),
         ),
-        Icon(Icons.arrow_drop_down_rounded, color: tokens.mutedText),
       ],
     );
   }

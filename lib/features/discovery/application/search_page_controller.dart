@@ -87,7 +87,7 @@ class SearchPageController extends Notifier<SearchPageState> {
     _cancelSearch();
     _cancelSuggestions();
     final query = state.query;
-    state = SearchPageState.ready(sources: state.sources, selectedSourceId: pluginId, query: query);
+    state = SearchPageState.ready(sources: state.sources, selectedSourceId: pluginId, query: query, sortOrder: state.sortOrder);
     state = state.withHotSearches(const <PluginSearchSuggestion>[]);
     if (pluginId != null) {
       try {
@@ -103,7 +103,12 @@ class SearchPageController extends Notifier<SearchPageState> {
   Future<void> clear() async {
     _latestGeneration += 1;
     _cancelSearch();
-    state = SearchPageState.ready(sources: state.sources, selectedSourceId: state.selectedSourceId, hotSearches: state.hotSearches);
+    state = SearchPageState.ready(
+      sources: state.sources,
+      selectedSourceId: state.selectedSourceId,
+      hotSearches: state.hotSearches,
+      sortOrder: state.sortOrder,
+    );
   }
 
   /// Stops the active all-source or selected-source search while preserving
@@ -119,6 +124,7 @@ class SearchPageController extends Notifier<SearchPageState> {
         selectedSourceId: state.selectedSourceId,
         query: state.query,
         hotSearches: state.hotSearches,
+        sortOrder: state.sortOrder,
       );
     } else {
       state = state.withResult(nextStatus: SearchPageStatus.loaded, nextResult: result);
@@ -140,6 +146,7 @@ class SearchPageController extends Notifier<SearchPageState> {
       query: query,
       retainedResult: retainedResult,
       hotSearches: state.hotSearches,
+      sortOrder: state.sortOrder,
     );
     try {
       final sources = state.selectedSourceId == null
@@ -164,6 +171,7 @@ class SearchPageController extends Notifier<SearchPageState> {
           error: error,
           retainedResult: result,
           hotSearches: state.hotSearches,
+          sortOrder: state.sortOrder,
         );
       } else {
         state = SearchPageState.loaded(
@@ -172,6 +180,7 @@ class SearchPageController extends Notifier<SearchPageState> {
           query: query,
           result: result,
           hotSearches: state.hotSearches,
+          sortOrder: state.sortOrder,
         );
       }
     } on Object catch (error) {
@@ -183,6 +192,7 @@ class SearchPageController extends Notifier<SearchPageState> {
         error: AppError.fromUnknown(error),
         retainedResult: retainedResult,
         hotSearches: state.hotSearches,
+        sortOrder: state.sortOrder,
       );
     } finally {
       if (identical(_searchCancellation, cancellation)) _searchCancellation = null;
@@ -194,7 +204,7 @@ class SearchPageController extends Notifier<SearchPageState> {
     try {
       final sources = await ref.read(availablePluginSourcesProvider.future);
       if (!_isCurrent(generation)) return;
-      state = SearchPageState.ready(sources: sources, selectedSourceId: null);
+      state = SearchPageState.ready(sources: sources, selectedSourceId: null, sortOrder: state.sortOrder);
       if (sources.isNotEmpty) unawaited(_loadSuggestions(null, ++_latestSuggestionGeneration));
     } on Object catch (error) {
       if (!_isCurrent(generation)) return;
@@ -216,6 +226,11 @@ class SearchPageController extends Notifier<SearchPageState> {
     final pluginId = state.selectedSourceId;
     final generation = ++_latestSuggestionGeneration;
     await _loadSuggestions(pluginId, generation);
+  }
+
+  void setSortOrder(SearchResultSortOrder value) {
+    if (state.sortOrder == value) return;
+    state = state.withSortOrder(value);
   }
 
   Future<void> loadMore() async {
@@ -276,6 +291,7 @@ class SearchPageController extends Notifier<SearchPageState> {
                 error: result.failedSources.first.error ?? AppError.fromCode(AppErrorCode.internal),
                 retainedResult: result,
                 hotSearches: state.hotSearches,
+                sortOrder: state.sortOrder,
               )
             : state.withResult(nextStatus: SearchPageStatus.loaded, nextResult: result);
       }

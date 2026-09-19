@@ -15,6 +15,23 @@ import 'package:mg_read/features/discovery/application/source_content_gateway.da
 const int batchSearchPageSize = 20;
 const int batchSearchMaximumConcurrency = 6;
 
+/// Sort modes applied to the already aggregated search projection.
+///
+/// Sorting is deliberately owned by the host: source plugins keep returning
+/// their normal ordered pages, while the user can choose how the combined
+/// result is presented without issuing another source request.
+enum SearchResultSortOrder {
+  pluginReturnOrder('默认插件返回顺序'),
+  relevance('相关性'),
+  updatedAt('更新时间'),
+  publishedAt('发布时间'),
+  title('文字排序');
+
+  const SearchResultSortOrder(this.label);
+
+  final String label;
+}
+
 enum BatchSearchSourceStatus { pending, loading, success, failure }
 
 final class SourceSearchHit {
@@ -110,12 +127,63 @@ final class AggregatedSearchResult {
 
   bool get hasMore => sourceStates.any((state) => state.nextCursor != null);
 
+  /// Returns a sorted view without changing the aggregation or source state.
+  ///
+  /// This is used for both the initial result and cursor-appended results, so
+  /// a sort choice never changes the source pagination contract.
+  List<AggregatedSearchItem> sortedItems(SearchResultSortOrder order) {
+    final sorted = List<AggregatedSearchItem>.of(items)..sort((left, right) => _compareItems(order, left, right));
+    return List<AggregatedSearchItem>.unmodifiable(sorted);
+  }
+
   BatchSearchSourceState? sourceState(String pluginId) {
     for (final state in sourceStates) {
       if (state.source.id == pluginId) return state;
     }
     return null;
   }
+}
+
+int _compareItems(SearchResultSortOrder order, AggregatedSearchItem left, AggregatedSearchItem right) {
+  final comparison = switch (order) {
+    SearchResultSortOrder.pluginReturnOrder => 0,
+    SearchResultSortOrder.relevance => right.score.compareTo(left.score),
+    SearchResultSortOrder.updatedAt => _compareDates(_updatedAt(left), _updatedAt(right)),
+    SearchResultSortOrder.publishedAt => _compareDates(left.content.publishedAt, right.content.publishedAt),
+    SearchResultSortOrder.title => _normalize(left.content.title).compareTo(_normalize(right.content.title)),
+  };
+  if (comparison != 0) return comparison;
+  return _comparePluginReturnOrder(left, right);
+}
+
+int _comparePluginReturnOrder(AggregatedSearchItem left, AggregatedSearchItem right) {
+  final leftHit = _firstHitInPluginOrder(left);
+  final rightHit = _firstHitInPluginOrder(right);
+  final source = leftHit.sourceIndex.compareTo(rightHit.sourceIndex);
+  if (source != 0) return source;
+  final rank = leftHit.sourceRank.compareTo(rightHit.sourceRank);
+  if (rank != 0) return rank;
+  final plugin = left.primary.pluginId.compareTo(right.primary.pluginId);
+  if (plugin != 0) return plugin;
+  final id = left.primary.content.id.compareTo(right.primary.content.id);
+  return id != 0 ? id : left.key.compareTo(right.key);
+}
+
+SourceSearchHit _firstHitInPluginOrder(AggregatedSearchItem item) {
+  return item.variants.reduce((left, right) {
+    final source = left.sourceIndex.compareTo(right.sourceIndex);
+    if (source != 0) return source < 0 ? left : right;
+    return left.sourceRank <= right.sourceRank ? left : right;
+  });
+}
+
+DateTime? _updatedAt(AggregatedSearchItem item) => item.content.updatedAt ?? item.content.latestChapter?.updatedAt;
+
+int _compareDates(DateTime? left, DateTime? right) {
+  if (left == null && right == null) return 0;
+  if (left == null) return 1;
+  if (right == null) return -1;
+  return right.compareTo(left);
 }
 
 final class _SearchGroup {

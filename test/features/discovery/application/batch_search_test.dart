@@ -63,6 +63,31 @@ void main() {
     ).run(query: '作品', sources: sources, previous: first, cancellation: PluginInvocationCancellation());
     expect(next.items.map((item) => item.content.title), containsAll(<String>['第一条', '第二条']));
   });
+
+  test('supports plugin order, relevance, date and title sorting without changing aggregation', () async {
+    final sources = <PluginSourceDescriptor>[_source('source.a', '来源 A'), _source('source.b', '来源 B')];
+    final result = await BatchSearchCoordinator(
+      _Gateway(
+        sources: sources,
+        results: <String, Object>{
+          'source.a': _result('source.a', <PluginContentSummary>[
+            _summary(id: 'a-1', title: 'Zeta', updatedAt: DateTime.utc(2024), publishedAt: DateTime.utc(2020)),
+            _summary(id: 'a-2', title: 'Alpha', updatedAt: DateTime.utc(2023), publishedAt: DateTime.utc(2022)),
+          ]),
+          'source.b': _result('source.b', <PluginContentSummary>[
+            _summary(id: 'b-1', title: 'Beta', updatedAt: DateTime.utc(2025), publishedAt: DateTime.utc(2021)),
+          ]),
+        },
+      ),
+    ).run(query: 'Alpha', sources: sources, cancellation: PluginInvocationCancellation());
+
+    expect(result.sortedItems(SearchResultSortOrder.pluginReturnOrder).map((item) => item.content.id), <String>['a-1', 'a-2', 'b-1']);
+    expect(result.sortedItems(SearchResultSortOrder.relevance).map((item) => item.content.id).first, 'a-2');
+    expect(result.sortedItems(SearchResultSortOrder.updatedAt).map((item) => item.content.id), <String>['b-1', 'a-1', 'a-2']);
+    expect(result.sortedItems(SearchResultSortOrder.publishedAt).map((item) => item.content.id), <String>['a-2', 'b-1', 'a-1']);
+    expect(result.sortedItems(SearchResultSortOrder.title).map((item) => item.content.id), <String>['a-2', 'b-1', 'a-1']);
+    expect(result.items, hasLength(3));
+  });
 }
 
 final class _Gateway implements SourceContentGateway {
@@ -116,7 +141,14 @@ PluginSourceDescriptor _source(String id, String name) => PluginSourceDescriptor
 PluginSearchResult _result(String pluginId, List<PluginContentSummary> items, {String? nextCursor}) =>
     PluginSearchResult(pluginId: pluginId, sourceName: pluginId, items: items, nextCursor: nextCursor, totalCount: items.length);
 
-PluginContentSummary _summary({required String id, required String title, String? author, String? cover}) => PluginContentSummary(
+PluginContentSummary _summary({
+  required String id,
+  required String title,
+  String? author,
+  String? cover,
+  DateTime? publishedAt,
+  DateTime? updatedAt,
+}) => PluginContentSummary(
   id: id,
   title: title,
   contentKind: PluginContentKind.novel,
@@ -129,8 +161,8 @@ PluginContentSummary _summary({required String id, required String title, String
   access: PluginAccessKind.unknown,
   wordCount: null,
   chapterCount: null,
-  publishedAt: null,
-  updatedAt: null,
+  publishedAt: publishedAt,
+  updatedAt: updatedAt,
   latestChapter: null,
   categories: const <String>[],
   tags: const <String>[],

@@ -17,6 +17,7 @@ final class SearchPageState {
     required this.result,
     required this.error,
     required Iterable<PluginSearchSuggestion> hotSearches,
+    required this.sortOrder,
   }) : sources = List<PluginSourceDescriptor>.unmodifiable(sources),
        hotSearches = List<PluginSearchSuggestion>.unmodifiable(hotSearches);
 
@@ -28,6 +29,7 @@ final class SearchPageState {
     result: null,
     error: null,
     hotSearches: const <PluginSearchSuggestion>[],
+    sortOrder: SearchResultSortOrder.pluginReturnOrder,
   );
 
   factory SearchPageState.ready({
@@ -35,6 +37,7 @@ final class SearchPageState {
     required String? selectedSourceId,
     String query = '',
     Iterable<PluginSearchSuggestion> hotSearches = const <PluginSearchSuggestion>[],
+    SearchResultSortOrder sortOrder = SearchResultSortOrder.pluginReturnOrder,
   }) => SearchPageState._(
     status: SearchPageStatus.ready,
     sources: sources,
@@ -43,6 +46,7 @@ final class SearchPageState {
     result: null,
     error: null,
     hotSearches: hotSearches,
+    sortOrder: sortOrder,
   );
 
   factory SearchPageState.searching({
@@ -51,6 +55,7 @@ final class SearchPageState {
     required String query,
     AggregatedSearchResult? retainedResult,
     Iterable<PluginSearchSuggestion> hotSearches = const <PluginSearchSuggestion>[],
+    SearchResultSortOrder sortOrder = SearchResultSortOrder.pluginReturnOrder,
   }) => SearchPageState._(
     status: SearchPageStatus.searching,
     sources: sources,
@@ -59,6 +64,7 @@ final class SearchPageState {
     result: retainedResult,
     error: null,
     hotSearches: hotSearches,
+    sortOrder: sortOrder,
   );
 
   factory SearchPageState.loaded({
@@ -67,6 +73,7 @@ final class SearchPageState {
     required String query,
     required AggregatedSearchResult result,
     Iterable<PluginSearchSuggestion> hotSearches = const <PluginSearchSuggestion>[],
+    SearchResultSortOrder sortOrder = SearchResultSortOrder.pluginReturnOrder,
   }) => SearchPageState._(
     status: SearchPageStatus.loaded,
     sources: sources,
@@ -75,6 +82,7 @@ final class SearchPageState {
     result: result,
     error: null,
     hotSearches: hotSearches,
+    sortOrder: sortOrder,
   );
 
   factory SearchPageState.failure({
@@ -84,6 +92,7 @@ final class SearchPageState {
     required AppError error,
     AggregatedSearchResult? retainedResult,
     Iterable<PluginSearchSuggestion> hotSearches = const <PluginSearchSuggestion>[],
+    SearchResultSortOrder sortOrder = SearchResultSortOrder.pluginReturnOrder,
   }) => SearchPageState._(
     status: SearchPageStatus.failure,
     sources: sources,
@@ -92,6 +101,7 @@ final class SearchPageState {
     result: retainedResult,
     error: error,
     hotSearches: hotSearches,
+    sortOrder: sortOrder,
   );
 
   final SearchPageStatus status;
@@ -101,6 +111,7 @@ final class SearchPageState {
   final AggregatedSearchResult? result;
   final AppError? error;
   final List<PluginSearchSuggestion> hotSearches;
+  final SearchResultSortOrder sortOrder;
 
   bool get hasSources => sources.isNotEmpty;
 
@@ -112,6 +123,7 @@ final class SearchPageState {
     result: result,
     error: error,
     hotSearches: hotSearches,
+    sortOrder: sortOrder,
   );
 
   SearchPageState withHotSearches(Iterable<PluginSearchSuggestion> value) => SearchPageState._(
@@ -122,6 +134,7 @@ final class SearchPageState {
     result: result,
     error: error,
     hotSearches: value,
+    sortOrder: sortOrder,
   );
 
   SearchPageState withResult({required SearchPageStatus nextStatus, required AggregatedSearchResult? nextResult, AppError? nextError}) =>
@@ -133,5 +146,17 @@ final class SearchPageState {
         result: nextResult,
         error: nextError,
         hotSearches: hotSearches,
+        sortOrder: sortOrder,
       );
+
+  SearchPageState withSortOrder(SearchResultSortOrder value) => SearchPageState._(
+    status: status,
+    sources: sources,
+    selectedSourceId: selectedSourceId,
+    query: query,
+    result: result,
+    error: error,
+    hotSearches: hotSearches,
+    sortOrder: value,
+  );
 }

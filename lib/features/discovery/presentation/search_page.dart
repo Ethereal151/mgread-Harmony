@@ -191,6 +191,8 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                     status: state.status,
                     query: state.query,
                     error: state.error,
+                    sortOrder: state.sortOrder,
+                    onSortOrderChanged: controller.setSortOrder,
                     isInBookshelf: (item) =>
                         bookshelfMembership.contains(pluginId: item.primary.pluginId, title: item.primary.content.title),
                     onContentPressed: (AggregatedSearchItem item) => unawaited(openContent(item)),
