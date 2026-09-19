@@ -694,11 +694,19 @@ void main() {
     );
     expect(find.text('测试漫画源'), findsOneWidget);
     expect(find.text('https://source.example/comics/book'), findsOneWidget);
+    expect(
+      tester
+          .getRect(
+            find.byKey(const ValueKey<String>('comic-reader-source-name')),
+          )
+          .width,
+      lessThan(104),
+    );
     expect(tester.getRect(sourceStrip).top, tester.getRect(primaryBar).bottom);
     final Material stripMaterial = tester.widget<Material>(
       find.descendant(of: sourceStrip, matching: find.byType(Material)).first,
     );
-    expect(stripMaterial.color, const Color(0xD917191B));
+    expect(stripMaterial.color, const Color(0xFF17191B));
     expect(
       find.byKey(const ValueKey<String>('comic-reader-catalog')),
       findsOneWidget,

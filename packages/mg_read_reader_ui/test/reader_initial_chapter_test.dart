@@ -126,11 +126,31 @@ void main() {
       final Rect sourceStrip = tester.getRect(
         find.byKey(const ValueKey<String>('reader-source-strip')),
       );
+      final Rect sourceName = tester.getRect(
+        find.byKey(const ValueKey<String>('reader-source-name')),
+      );
       final Rect urlRegion = tester.getRect(
         find.byKey(const ValueKey<String>('reader-source-url-region')),
       );
       expect(sourceStrip.top, primaryBar.bottom);
+      expect(sourceName.width, lessThan(104));
       expect(urlRegion.right, sourceStrip.right - 12);
+      expect(
+        tester
+            .widget<Material>(
+              find
+                  .descendant(
+                    of: find.byKey(
+                      const ValueKey<String>('reader-source-strip'),
+                    ),
+                    matching: find.byType(Material),
+                  )
+                  .first,
+            )
+            .color
+            ?.a,
+        1,
+      );
 
       await controller.hideControls();
       final Future<void> turn = controller.nextPage();
