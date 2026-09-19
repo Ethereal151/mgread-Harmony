@@ -146,7 +146,7 @@ _AboutDocument _documentFor(AboutDocumentKind kind) => switch (kind) {
       _AboutDocumentSection(title: '本地数据与备份', body: '书架、阅读进度、历史记录和设置主要保存在当前设备。请根据需要使用应用内导入导出或局域网同步功能自行备份；卸载应用、清除数据或设备故障可能造成数据丢失。'),
       _AboutDocumentSection(title: '第三方内容', body: '数据源、网页和外部链接由第三方提供并适用其各自规则。统一阅读不编辑这些内容，也不保证第三方服务持续可用、准确或完整。'),
       _AboutDocumentSection(title: '功能变更与停止使用', body: '为改进体验、安全性或兼容性，应用功能可能更新、调整或停止提供。若你不同意更新后的规则，可以停止使用相关功能并移除本地数据。'),
-      _AboutDocumentSection(title: '问题反馈', body: '如对本协议或应用功能有疑问，可通过个人中心的“意见反馈”页面说明问题。提交前请避免填写不必要的敏感个人信息。'),
+      _AboutDocumentSection(title: '问题反馈', body: '如对本协议或应用功能有疑问，可通过个人中心的“意见反馈”页面打开 GitHub Issues。提交前请避免填写不必要的敏感个人信息。'),
     ],
   ),
   AboutDocumentKind.privacy => const _AboutDocument(
@@ -157,7 +157,7 @@ _AboutDocument _documentFor(AboutDocumentKind kind) => switch (kind) {
       _AboutDocumentSection(title: '设备内数据', body: '应用会在设备上保存书架、阅读进度、历史记录、偏好设置、数据源配置、缓存和运行诊断信息，用于恢复状态、离线阅读、故障定位和提升使用体验。'),
       _AboutDocumentSection(title: '网络与数据源', body: '当你主动搜索、发现或阅读数据源内容时，必要的搜索词、内容标识和网络请求会发送给你选择的数据源或其内容服务器。第三方如何处理数据，以其自身规则为准。'),
       _AboutDocumentSection(title: '设备权限', body: '只有在你使用对应功能时，应用才会请求必要权限，例如导入导出时访问所选文件、扫码连接时使用相机。拒绝权限只会影响依赖该权限的功能。'),
-      _AboutDocumentSection(title: '反馈信息', body: '意见反馈页面允许你自行填写问题描述和联系方式。当前页面会明确告知提交能力的实际状态；在服务未接入时，内容不会被宣称已经发送。'),
+      _AboutDocumentSection(title: '反馈信息', body: '意见反馈页面只提供 GitHub Issues 地址，并通过系统外部浏览器打开。你在 GitHub 提交的内容由 GitHub 按其自身规则处理。'),
       _AboutDocumentSection(title: '数据共享', body: '当前版本未接入统一阅读账号或云端用户资料服务。应用不会主动出售你的个人信息；但你访问第三方数据源、打开外部内容或使用系统分享时，相关数据会按你的操作发送给对应接收方。'),
       _AboutDocumentSection(title: '管理与删除', body: '你可以在应用内清理缓存、管理书架与历史记录，并通过系统能力删除应用数据。需要保留的信息请先完成导出或其他备份。'),
       _AboutDocumentSection(title: '政策更新', body: '当数据处理范围或应用能力发生实质变化时，本页面会同步更新。建议在版本升级后重新查看本说明。'),

@@ -631,13 +631,6 @@ abstract final class AppDetailMetrics {
 
   static const double feedbackBannerHeight = 108;
   static const double feedbackCardTopGap = 15;
-  static const double feedbackCardHeight = 602;
-  static const double feedbackCardPadding = 14;
-  static const double feedbackTypeHeight = 31;
-  static const double feedbackEditorHeight = 141;
-  static const double feedbackUploadTileExtent = 96;
-  static const double feedbackContactHeight = 34;
-  static const double feedbackSubmitHeight = 39;
 }
 
 /// Shared semantic corner radii for MgRead surfaces.

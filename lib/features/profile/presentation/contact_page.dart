@@ -1,8 +1,8 @@
 /// “关于我们”下的联系与反馈入口。
 ///
 /// 职责：
-/// - 告知用户当前可用的应用内联系渠道和反馈准备事项。
-/// - 将用户带到现有意见反馈页面，不虚构邮箱、电话或在线客服。
+/// - 告知用户当前可用的 GitHub 反馈渠道和反馈准备事项。
+/// - 将用户带到反馈页面，由用户通过系统外部浏览器打开 GitHub Issues。
 ///
 library;
 
@@ -44,15 +44,15 @@ class ContactPage extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      '遇到功能问题或有改进建议时，可通过应用内意见反馈页面告诉我们。',
+                      '遇到功能问题或有改进建议时，可通过 GitHub Issues 告诉我们。',
                       textAlign: TextAlign.center,
                       style: theme.textTheme.bodyMedium?.copyWith(color: tokens.mutedText, height: 1.6),
                     ),
                     const SizedBox(height: 28),
                     _ContactCard(
                       icon: Icons.edit_note_outlined,
-                      title: '应用内意见反馈',
-                      body: '填写问题描述、建议类型和可选联系方式。页面会明确显示当前提交能力，不会把未发送的内容标记为已提交。',
+                      title: 'GitHub Issues 反馈',
+                      body: '反馈页面会提供项目 GitHub Issues 地址，并使用系统外部浏览器打开，不在应用内收集反馈内容。',
                     ),
                     const SizedBox(height: 12),
                     const _ContactCard(
@@ -65,7 +65,7 @@ class ContactPage extends StatelessWidget {
                       key: const Key('contact-open-feedback'),
                       onPressed: onFeedbackRequested,
                       icon: const Icon(Icons.arrow_forward_rounded, size: 20),
-                      label: const Text('前往意见反馈'),
+                      label: const Text('打开 GitHub 反馈'),
                       style: FilledButton.styleFrom(
                         minimumSize: const Size.fromHeight(48),
                         backgroundColor: tokens.accent,
