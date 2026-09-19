@@ -16,9 +16,25 @@ test('fixture outputs pass the current Runtime source validators', async () => {
       },
     },
     http: {
-      async fetch(input) {
+      async fetch(input, init = {}) {
         const path = new URL(input).pathname;
-        if (path.endsWith('/getVodList') || path.endsWith('/search/search')) {
+        if (path.endsWith('/getVodList')) {
+          const payload = JSON.parse(init.body);
+          return Response.json({
+            result: true,
+            data: {
+              items: Array.from({ length: 10 }, (_, index) => ({
+                vodId: payload.vodTopicId * 100 + index,
+                vodName: `专题 ${payload.vodTopicId} 视频 ${index + 1}`,
+                coverImg: `https://img.example/${payload.vodTopicId}-${index}.jpg`,
+                remark: index === 0 ? '更新至 12 集' : '已完结',
+                flags: '2026 / 视频 / 大陆',
+              })),
+              totalPages: 1,
+            },
+          });
+        }
+        if (path.endsWith('/search/search')) {
           return Response.json({
             result: true,
             data: {
@@ -63,6 +79,30 @@ test('fixture outputs pass the current Runtime source validators', async () => {
 
   const pluginId = 'org.mgread.juzi-tv';
   const sourceName = 'Fixture Juzi TV';
+  const home = await plugin.discover({
+    target: null,
+    cursor: null,
+    collectionId: null,
+    pageSize: 20,
+  });
+  assert.deepEqual(
+    home.document.components.map((component) => component.id),
+    [
+      'juzi-home-short-section',
+      'juzi-home-navigation',
+      'juzi-home-movie-section',
+      'juzi-home-series-section',
+    ],
+  );
+  assert.deepEqual(
+    home.document.components
+      .filter((component) => component.type === 'section')
+      .map((section) => section.children[0].items.length),
+    [8, 8, 8],
+  );
+  assert.doesNotThrow(() =>
+    validators.validateDiscoverResult(pluginId, sourceName, home));
+
   const discovery = await plugin.discover({
     target: 'channel:short',
     cursor: null,
