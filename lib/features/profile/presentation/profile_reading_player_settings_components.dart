@@ -49,10 +49,10 @@ class _NovelPreloadChapterCountCardState extends State<_NovelPreloadChapterCount
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
-                  Text('小说预加载章节数量', style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600)),
+                  Text('阅读预加载章节数量', style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600)),
                   const SizedBox(height: 2),
                   Text(
-                    _value == 0 ? '已关闭，翻到下一章时再加载' : '提前加载当前章节之后的 $_value 章',
+                    _value == 0 ? '已关闭，翻到下一章时再加载' : '小说与漫画提前加载当前章节之后的 $_value 章',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(color: tokens.mutedText),
                   ),
                 ],

@@ -2,7 +2,7 @@
 ///
 /// 职责：
 /// - 协调漫画章节窗口、图片缓存、语义进度和阅读器 chrome。
-/// - 通过宿主端口获取内容，只向下拼接有限的后续章节资源。
+/// - 通过宿主端口获取内容，只向下拼接有限的后续章节资源，并按宿主配置顺序预缓存后续章节。
 /// - 为漫画内容提供固定白色底层，并让触控与桌面鼠标共享纵向拖动语义。
 ///
 /// 注意：
@@ -80,11 +80,12 @@ class ComicReaderView extends StatefulWidget {
     required this.bookId,
     required this.dataSource,
     required this.stateStore,
+    this.chapterPreloadCount = 1,
     this.observer,
     this.controller,
     this.commentFeed,
     this.catalogRefreshToken = 0,
-  });
+  }) : assert(chapterPreloadCount >= 0 && chapterPreloadCount <= 5);
 
   /// Stable host identifier for the comic.
   final String bookId;
@@ -94,6 +95,12 @@ class ComicReaderView extends StatefulWidget {
 
   /// Host-owned persistence for progress, preferences, and bookmarks.
   final ComicReaderStateStore stateStore;
+
+  /// Number of following comic chapters cached after the current chapter.
+  ///
+  /// The current chapter is always cached. Zero disables only speculative
+  /// following-chapter work.
+  final int chapterPreloadCount;
 
   /// Optional notification sink. Callback failures never block reading.
   final ComicReaderObserver? observer;
@@ -288,6 +295,9 @@ class _ComicReaderViewState extends State<ComicReaderView>
         onDimensionsChanged: _scheduleDimensionsUpdate,
       );
       unawaited(_restart(preferenceOverride: preferenceOverride));
+    } else if (oldWidget.chapterPreloadCount != widget.chapterPreloadCount) {
+      _preloader?.cancel();
+      _startChapterPreload();
     }
     if (oldWidget.catalogRefreshToken != widget.catalogRefreshToken &&
         oldWidget.bookId == widget.bookId &&

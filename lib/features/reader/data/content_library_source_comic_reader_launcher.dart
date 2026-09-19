@@ -104,6 +104,7 @@ final class ContentLibrarySourceComicReader implements LibraryReaderLauncher, Lo
       bookId: item.id.value,
       dataSource: dataSource,
       stateStore: ContentLibraryComicReaderStateStore(_library, itemId: item.id, settings: settings),
+      chapterPreloadCount: settings?.get(AppSettingKeys.novelPreloadChapterCount) ?? 1,
       entryCoverBytes: await _cachedCover(item),
       estimatedWarmBytes: preparation.estimatedBytes,
       preparationKind: preparation.kind,

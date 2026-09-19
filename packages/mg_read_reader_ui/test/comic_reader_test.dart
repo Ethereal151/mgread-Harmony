@@ -160,6 +160,43 @@ void main() {
     },
   );
 
+  testWidgets(
+    'comic reader caches configured following chapter manifests and images',
+    (WidgetTester tester) async {
+      final source = _MultiChapterPreloadComicSource();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ComicReaderView(
+            bookId: 'book',
+            dataSource: source,
+            stateStore: _MemoryComicStateStore(),
+            chapterPreloadCount: 2,
+          ),
+        ),
+      );
+      for (
+        var frame = 0;
+        frame < 30 && !source.requestedImages.contains('chapter-3/image-3');
+        frame++
+      ) {
+        await tester.pump(const Duration(milliseconds: 10));
+      }
+
+      expect(source.requestedContent, <String>[
+        'chapter-1',
+        'chapter-2',
+        'chapter-3',
+      ]);
+      expect(source.requestedImages, <String>[
+        'chapter-1/image-1',
+        'chapter-2/image-2',
+        'chapter-3/image-3',
+      ]);
+      expect(source.requestedContent, isNot(contains('chapter-4')));
+    },
+  );
+
   test(
     'memory pressure cancels prefetch and rejects late cache insertion',
     () async {
@@ -218,13 +255,13 @@ void main() {
   );
 
   test(
-    'chapter preload is ordered, bounded and waits before the next chapter',
+    'chapter preload is ordered, bounded and obeys the following chapter count',
     () async {
       final source = _BlockingComicSource();
       final cache = ComicImageByteCache(bookId: 'book', dataSource: source);
       final preloader = ComicChapterPreloader(cache);
       addTearDown(cache.dispose);
-      var nextCalls = 0;
+      final nextCalls = <int>[];
       final chapter = ComicChapterContent(
         chapterId: 'chapter-1',
         title: '第一章',
@@ -234,12 +271,13 @@ void main() {
       );
       preloader.start(
         chapter,
-        nextChapter: () async {
-          nextCalls++;
+        followingChapterCount: 2,
+        followingChapter: (int offset) async {
+          nextCalls.add(offset);
           return ComicChapterContent(
-            chapterId: 'chapter-2',
-            title: '第二章',
-            images: [_image('next', null)],
+            chapterId: 'chapter-${offset + 1}',
+            title: '后续第 $offset 章',
+            images: [_image('next-$offset', null)],
           );
         },
       );
@@ -252,14 +290,18 @@ void main() {
         source.complete('page-$i');
         await Future<void>.delayed(Duration.zero);
       }
-      expect(nextCalls, 0);
+      expect(nextCalls, isEmpty);
       expect(source.started, List.generate(10, (i) => 'page-$i'));
       source.complete('page-9');
       await Future<void>.delayed(Duration.zero);
-      expect(nextCalls, 1);
-      expect(source.started.last, 'next');
+      expect(nextCalls, <int>[1]);
+      expect(source.started.last, 'next-1');
       expect(source.peakActive, 4);
-      source.complete('next');
+      source.complete('next-1');
+      await Future<void>.delayed(Duration.zero);
+      expect(nextCalls, <int>[1, 2]);
+      expect(source.started.last, 'next-2');
+      source.complete('next-2');
       await Future<void>.delayed(Duration.zero);
       preloader.cancel();
     },
@@ -282,7 +324,8 @@ void main() {
       var nextCalls = 0;
       preloader.start(
         chapter,
-        nextChapter: () async {
+        followingChapterCount: 1,
+        followingChapter: (int offset) async {
           nextCalls++;
           return null;
         },
@@ -1047,6 +1090,74 @@ class _GatedFirstImageComicSource extends _FakeComicSource {
   ) async {
     requestedImages.add(imageId);
     if (imageId == 'image-1') await _firstImageRelease.future;
+    return Uint8List.fromList(
+      base64Decode(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+      ),
+    );
+  }
+}
+
+class _MultiChapterPreloadComicSource extends _FakeComicSource {
+  final List<String> requestedContent = <String>[];
+  final List<String> requestedImages = <String>[];
+
+  @override
+  Future<ComicChapterCatalogPage> loadChapterCatalog(
+    String bookId, {
+    String? cursor,
+    int pageSize = 50,
+  }) async => ComicChapterCatalogPage(
+    items: <ComicChapterInfo>[
+      for (var index = 0; index < 4; index++)
+        ComicChapterInfo(
+          id: 'chapter-${index + 1}',
+          title: '第 ${index + 1} 章',
+          index: index,
+          imageCount: 1,
+        ),
+    ],
+    total: 4,
+    hasMore: false,
+  );
+
+  @override
+  Future<ComicChapterInfo> loadChapterAtIndex(String bookId, int index) async =>
+      ComicChapterInfo(
+        id: 'chapter-${index + 1}',
+        title: '第 ${index + 1} 章',
+        index: index,
+        imageCount: 1,
+      );
+
+  @override
+  Future<ComicChapterContent> loadChapterContent(
+    String bookId,
+    String chapterId,
+  ) async {
+    requestedContent.add(chapterId);
+    final int chapterNumber = int.parse(chapterId.split('-').last);
+    return ComicChapterContent(
+      chapterId: chapterId,
+      title: chapterId,
+      images: <ComicImageInfo>[
+        ComicImageInfo(
+          id: 'image-$chapterNumber',
+          index: 0,
+          width: 1,
+          height: 1,
+        ),
+      ],
+    );
+  }
+
+  @override
+  Future<Uint8List> loadImageBytes(
+    String bookId,
+    String chapterId,
+    String imageId,
+  ) async {
+    requestedImages.add('$chapterId/$imageId');
     return Uint8List.fromList(
       base64Decode(
         'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',

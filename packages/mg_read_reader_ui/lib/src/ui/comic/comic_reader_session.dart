@@ -748,12 +748,25 @@ extension _ComicReaderSession on _ComicReaderViewState {
     final int navigation = _navigationGeneration;
     (_preloader ??= ComicChapterPreloader(_imageCache)).start(
       chapter.content,
-      nextChapter: () async {
-        final int index = chapter.info.index + 1;
-        await _loadNextAdjacent(index);
+      followingChapterCount: widget.chapterPreloadCount,
+      followingChapter: (int offset) async {
+        final int index = chapter.info.index + offset;
+        if (!_isNavigation(navigation) ||
+            (_catalogTotal > 0 && index >= _catalogTotal)) {
+          return null;
+        }
+        if (offset == 1) {
+          await _loadNextAdjacent(index);
+          if (!_isNavigation(navigation)) return null;
+          final Iterable<_LoadedComicChapter> adjacent = _window.where(
+            (_LoadedComicChapter item) => item.info.index == index,
+          );
+          return adjacent.isEmpty ? null : adjacent.first.content;
+        }
+        final ComicChapterInfo info = await _chapterAtIndex(index);
         if (!_isNavigation(navigation)) return null;
-        final next = _window.where((c) => c.info.index == index);
-        return next.isEmpty ? null : next.first.content;
+        final ComicChapterContent content = await _loadContent(info);
+        return _isNavigation(navigation) ? content : null;
       },
     );
   }

@@ -117,16 +117,22 @@ final class ComicReaderLaunchRequest extends ReaderLaunchRequest {
     required this.dataSource,
     required this.stateStore,
     super.entryCoverBytes,
+    this.chapterPreloadCount = 1,
     this.observer,
     this.controller,
     this.commentFeed,
     super.estimatedWarmBytes,
     super.preparationKind,
     super.networkPreparationElapsed,
-  }) : super._();
+  }) : assert(chapterPreloadCount >= 0 && chapterPreloadCount <= 5),
+       super._();
 
   final ComicReaderDataSource dataSource;
   final ComicReaderStateStore stateStore;
+
+  /// Number of following comic chapters the reader may cache speculatively.
+  final int chapterPreloadCount;
+
   final ComicReaderObserver? observer;
   final ComicReaderController? controller;
   final ReaderCommentFeed? commentFeed;
@@ -137,6 +143,7 @@ final class ComicReaderLaunchRequest extends ReaderLaunchRequest {
     dataSource: dataSource,
     stateStore: stateStore,
     entryCoverBytes: entryCoverBytes,
+    chapterPreloadCount: chapterPreloadCount,
     observer: observer,
     controller: controller,
     commentFeed: commentFeed,

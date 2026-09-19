@@ -7,8 +7,11 @@ import 'package:mg_read/app/app_content_library_source_prefetcher_coordinator.da
 import 'package:mg_read/app/app_startup.dart';
 import 'package:mg_read/core/content_library/content_library.dart';
 import 'package:mg_read/core/diagnostics/diagnostics.dart';
+import 'package:mg_read/core/settings/settings.dart';
 import 'package:mg_read/features/discovery/application/source_content_gateway.dart';
 import 'package:mg_read/features/reader/application/reader_launch_request.dart';
+
+import '../core/settings/settings_testkit.dart';
 
 void main() {
   test('deferred launcher keeps novel and manga sessions typed and supplies the manga cover', () async {
@@ -60,13 +63,24 @@ void main() {
       mimeType: 'image/png',
     );
     final gateway = _Gateway(Uri.parse('http://${server.address.address}:${server.port}/first.png'));
-    final launcher = DeferredLibraryReaderLauncher(() async => library, gateway, AppContentLibrarySourcePrefetcherCoordinator(diagnostics));
+    final settings = AppSettingsManager(store: FakeSettingsStore(), registry: AppSettingKeys.registry);
+    await settings.initialize();
+    await settings.set(AppSettingKeys.novelPreloadChapterCount, 4);
+    addTearDown(settings.close);
+    final launcher = DeferredLibraryReaderLauncher(
+      () async => library,
+      gateway,
+      AppContentLibrarySourcePrefetcherCoordinator(diagnostics),
+      settings,
+    );
 
     final novelRequest = await launcher.launch(novel.id.value);
     final mangaRequest = await launcher.launch(manga.id.value);
 
     expect(novelRequest, isA<NovelReaderLaunchRequest>());
     expect(mangaRequest, isA<ComicReaderLaunchRequest>());
+    expect((novelRequest as NovelReaderLaunchRequest).chapterPreloadCount, 4);
+    expect((mangaRequest as ComicReaderLaunchRequest).chapterPreloadCount, 4);
     expect(mangaRequest.entryCoverBytes, mangaCoverBytes);
     expect(await launcher.warmLocal(novel.id.value), isA<NovelReaderLaunchRequest>());
     expect(await launcher.warmLocal(manga.id.value), isA<ComicReaderLaunchRequest>());

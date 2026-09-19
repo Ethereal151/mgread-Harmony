@@ -434,6 +434,7 @@ Future<void> _openTransientSourceComicReader(
   final request = ComicReaderLaunchRequest(
     bookId: detail.summary.id,
     entryCoverBytes: entryCoverBytes,
+    chapterPreloadCount: container.read(appSettingsProvider).get(AppSettingKeys.novelPreloadChapterCount),
     dataSource: TransientSourceComicReaderDataSource(
       detail: detail,
       catalog: firstCatalogPage,

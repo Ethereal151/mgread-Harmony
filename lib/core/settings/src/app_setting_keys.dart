@@ -159,7 +159,8 @@ final class AppSettingKeys {
     validator: _validateReaderPreferences,
   );
 
-  /// Number of following novel chapters the host may load speculatively.
+  /// Number of following novel or comic chapters the host may load or cache
+  /// speculatively.
   ///
   /// The current chapter is not included. Zero disables speculative chapter
   /// loading, while the default of one preserves the reader's existing

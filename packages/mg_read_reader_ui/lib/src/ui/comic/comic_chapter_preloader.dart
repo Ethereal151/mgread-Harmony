@@ -1,6 +1,7 @@
 /// Session-owned ordered preloading. Four asynchronous workers share the image
-/// cache's global concurrency limit with visible work. Only current + next
-/// chapter are traversed; cancellation stops replenishment and queued work.
+/// cache's global concurrency limit with visible work. The current chapter is
+/// completed first, then the configured following chapters are resolved and
+/// cached one by one; cancellation stops replenishment and queued work.
 library;
 
 import 'dart:async';
@@ -13,33 +14,46 @@ class ComicChapterPreloader {
 
   final ComicImageByteCache cache;
   ComicChapterContent? _current;
+  int _followingChapterCount = 0;
   int _generation = 0;
 
   void start(
     ComicChapterContent chapter, {
-    required Future<ComicChapterContent?> Function() nextChapter,
+    required int followingChapterCount,
+    required Future<ComicChapterContent?> Function(int offset) followingChapter,
   }) {
-    if (identical(_current, chapter)) return;
+    assert(followingChapterCount >= 0);
+    if (identical(_current, chapter) &&
+        _followingChapterCount == followingChapterCount) {
+      return;
+    }
     cancel();
     _current = chapter;
+    _followingChapterCount = followingChapterCount;
     final int generation = _generation;
-    unawaited(_run(chapter, nextChapter, generation));
+    unawaited(
+      _run(chapter, followingChapterCount, followingChapter, generation),
+    );
   }
 
   Future<void> _run(
     ComicChapterContent chapter,
-    Future<ComicChapterContent?> Function() nextChapter,
+    int followingChapterCount,
+    Future<ComicChapterContent?> Function(int offset) followingChapter,
     int generation,
   ) async {
     await _loadChapter(chapter, generation);
     if (generation != _generation) return;
-    try {
-      final next = await nextChapter();
-      if (next != null && generation == _generation) {
+    for (var offset = 1; offset <= followingChapterCount; offset++) {
+      if (generation != _generation) return;
+      try {
+        final next = await followingChapter(offset);
+        if (next == null || generation != _generation) return;
         await _loadChapter(next, generation);
+      } on Object {
+        // One following chapter failing does not prevent later configured
+        // chapters from being cached. Visible boundary retry remains separate.
       }
-    } on Object {
-      // Chapter boundary UI owns explicit retry and error reporting.
     }
   }
 
@@ -70,6 +84,7 @@ class ComicChapterPreloader {
   void cancel() {
     _generation++;
     _current = null;
+    _followingChapterCount = 0;
     cache.cancelPrefetch();
   }
 }

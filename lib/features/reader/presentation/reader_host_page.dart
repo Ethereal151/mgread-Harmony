@@ -43,6 +43,7 @@ class ReaderHostPage extends StatelessWidget {
           bookId: request.bookId,
           dataSource: request.dataSource,
           stateStore: request.stateStore,
+          chapterPreloadCount: request.chapterPreloadCount,
           observer: request.observer,
           controller: request.controller,
           commentFeed: request.commentFeed,

@@ -160,6 +160,7 @@ class _ReaderDestinationPageState extends ConsumerState<ReaderDestinationPage> {
         entryCoverBytes: comic.entryCoverBytes,
         dataSource: comic.dataSource,
         stateStore: comic.stateStore,
+        chapterPreloadCount: comic.chapterPreloadCount,
         observer: _ComicReaderObserverChain(<ComicReaderObserver>[?comic.observer, _ComicReaderExitObserver(_leaveComicReader)]),
         controller: comic.controller,
         commentFeed: comic.commentFeed,
