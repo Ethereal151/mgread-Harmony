@@ -29,28 +29,51 @@ test('Fanqie source keeps book/item IDs and formats paragraphs', async () => {
   assert.match(proxied[0].url, /p6-novel\.byteimg\.com/u);
 });
 
-test('Fanqie bookshelf opens the official page in a visible WebView', async () => {
+test('Fanqie login opens WebView, checks status, and imports bookshelf IDs through source details', async () => {
   const calls = [];
+  let pageState = { status: 'loggedOut', bookIds: [], url: 'https://fanqienovel.com/bookshelf?enter_from=menu' };
   const page = {
     async navigate(url, options) { calls.push(['navigate', url, options]); },
     async show(options) { calls.push(['show', options]); },
+    async executeJavaScript(code, options) {
+      calls.push(['executeJavaScript', options]);
+      return pageState;
+    },
   };
   await plugin.activate({
     log: { info() {}, warn() {} },
     resource: { proxy(value) { return value.url; } },
-    http: { async fetch() { throw new Error('unexpected HTTP request'); } },
+    http: { async fetch(input) {
+      const url = String(input);
+      const bookId = /book_id=(\d+)/u.exec(url)?.[1];
+      if (bookId) return Response.json({ data: { data: { book_id: bookId, book_name: `书${bookId}`, author: '作者' } } });
+      throw new Error(`unexpected HTTP request: ${url}`);
+    } },
     webview: { async open(options) { calls.push(['open', options]); return page; } },
   });
   const home = await plugin.discover({ target: null, cursor: null, collectionId: null, pageSize: 10 });
-  const action = home.document.components[1].children[0].categories[0];
-  assert.deepEqual(action, { id: 'bookshelf', title: '查看书架', target: 'bookshelf', count: null, url: null, icon: 'books' });
+  const actions = home.document.components[1].children[0].categories;
+  assert.deepEqual(actions.map((action) => action.target), ['login', 'login-status', 'bookshelf']);
 
-  const result = await plugin.discover({ target: action.target, cursor: null, collectionId: null, pageSize: 10 });
-  assert.equal(result.document.components[0].title, '番茄书架已打开');
+  const login = await plugin.discover({ target: 'login', cursor: null, collectionId: null, pageSize: 10 });
+  assert.equal(login.document.components[0].title, '番茄网页登录已打开');
   assert.equal(calls[0][0], 'open');
   assert.deepEqual(calls[0][1], { visible: true, timeoutMs: 30_000 });
-  assert.deepEqual(calls[1], ['navigate', 'https://fanqienovel.com/bookshelf?enter_from=menu', { timeoutMs: 45_000 }]);
+  assert.deepEqual(calls[1], ['navigate', 'https://fanqienovel.com/', { timeoutMs: 45_000 }]);
   assert.deepEqual(calls[2], ['show', { timeoutMs: 15_000 }]);
+
+  const loggedOut = await plugin.discover({ target: 'login-status', cursor: null, collectionId: null, pageSize: 10 });
+  assert.equal(loggedOut.document.components[0].title, '番茄未登录');
+
+  pageState = { status: 'loggedIn', bookIds: ['12', '55'], url: 'https://fanqienovel.com/bookshelf?enter_from=menu' };
+  const shelf = await plugin.discover({ target: 'bookshelf', cursor: null, collectionId: null, pageSize: 10 });
+  const items = shelf.document.components[0].children[0].items;
+  assert.deepEqual(items.map((item) => item.content.id), ['novel:12', 'novel:55']);
+  assert.match(shelf.document.components[0].subtitle, /读取 2 本书的 ID/u);
+  assert.deepEqual(calls.at(-4), ['open', { visible: true, timeoutMs: 30_000 }]);
+  assert.deepEqual(calls.at(-3), ['navigate', 'https://fanqienovel.com/bookshelf?enter_from=menu', { timeoutMs: 45_000 }]);
+  assert.deepEqual(calls.at(-2), ['show', { timeoutMs: 15_000 }]);
+  assert.deepEqual(calls.at(-1), ['executeJavaScript', { timeoutMs: 20_000 }]);
 });
 
 test('Fanqie source migrates legacy search payloads and web detail fallback', async () => {

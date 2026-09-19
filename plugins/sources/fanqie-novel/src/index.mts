@@ -1,20 +1,23 @@
 /**
  * 番茄小说原生数据源。
  *
- * 职责：迁移旧书源中可落到公开 Source API 的搜索、分类、详情、目录、正文、封面和官方书架入口。
+ * 职责：迁移旧书源中可落到公开 Source API 的搜索、分类、详情、目录、正文、封面和官方书架 ID 读取。
  * 生命周期：activate 只保存 Runtime 上下文；不注册设备、不保存登录凭据、不创建后台任务。
  * IO：公开 HTTP 接口统一经 ctx.http；封面经 ctx.resource.proxy 交给 Runtime 数据面；登录书架只经可见 WebView。
  * 稳定标识：作品使用 book_id，章节使用 item_id，均不会用标题或数组位置替代。
  * 边界：旧版 legado 设置页、设备签名、段评回调没有对应公开 Source API，因此不在本插件伪造。
  */
-import type { MgReadPluginContext } from '@mgread/source-api';
+import type { MgReadPluginContext, PluginJsonValue, PluginWebViewPage } from '@mgread/source-api';
 
 type Context = MgReadPluginContext;
 type Json = Record<string, unknown>;
 type Channel = readonly [id: string, title: string, gender: number];
+type LoginState = 'loggedIn' | 'loggedOut' | 'unknown';
+type BookshelfSnapshot = { readonly status: LoginState; readonly bookIds: readonly string[]; readonly url: string };
 
 const NOVEL_HOST = 'https://novel.snssdk.com';
 const WEB_HOST = 'https://fanqienovel.com';
+const LOGIN_URL = `${WEB_HOST}/`;
 const BOOKSHELF_URL = `${WEB_HOST}/bookshelf?enter_from=menu`;
 const BOOK_HOST = 'https://fq-book.netsite.cc';
 const CONTENT_HOSTS = ['https://gofq.52dns.cc', 'https://pyfq.52dns.cc', BOOK_HOST] as const;
@@ -28,6 +31,39 @@ const WEB_HEADERS = {
   Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
   'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
 } as const;
+const BOOKSHELF_PROBE = String.raw`(async()=>{
+  const collectBookIds=()=>{
+    const ids=new Set();
+    const nodes=document.querySelectorAll('a[href],[data-book-id],[data-bookid],[book-id]');
+    for(const node of nodes){
+      const href=node.getAttribute('href')||'';
+      for(const match of href.matchAll(/(?:^|\/)page\/(\d+)(?:[/?#]|$)/gu))ids.add(match[1]);
+      for(const name of ['data-book-id','data-bookid','book-id']){
+        const value=node.getAttribute(name)||'';
+        if(/^\d+$/u.test(value))ids.add(value);
+      }
+    }
+    return [...ids];
+  };
+  const readState=()=>{
+    const title=document.title||'';
+    const body=(document.body?.innerText||'').slice(0,12000);
+    const marker=title+' '+body;
+    const bookIds=collectBookIds();
+    const common=window.__INITIAL_STATE__?.common||{};
+    const hasLogout=!!document.querySelector('[data-testid*="logout" i],[class*="logout" i]')||/退出登录|退出账号/u.test(marker);
+    const hasAccount=!!document.querySelector('[data-testid*="avatar" i],[class*="avatar" i],[class*="user-info" i]')||/个人中心|我的账号|账号设置/u.test(marker)||!!common.id||!!common.name||!!common.avatar||common.hasRegistered===true;
+    const needsLogin=/登录后查看|请先登录|立即登录|扫码登录|手机号登录|账号登录|未登录/u.test(marker);
+    const status=hasLogout||hasAccount||(bookIds.length>0&&!needsLogin)?'loggedIn':needsLogin?'loggedOut':'unknown';
+    return {bookIds,status,url:location.href};
+  };
+  for(let attempt=0;attempt<40;attempt+=1){
+    const state=readState();
+    if(state.bookIds.length>0||state.status!=='unknown'||attempt===39)return state;
+    await new Promise(resolve=>setTimeout(resolve,250));
+  }
+  return readState();
+})()`;
 const CHANNELS: readonly Channel[] = [
   ['1', '都市', 1], ['2', '都市生活', 1], ['7', '玄幻', 1], ['8', '科幻', 1],
   ['10', '悬疑', 1], ['11', '乡村', 1], ['12', '仙侠', 1], ['13', '历史', 1],
@@ -98,13 +134,19 @@ export async function discover(request: {
           children: [{
             type: 'categoryCollection' as const,
             id: 'fanqie-account-actions', layout: 'chips' as const,
-            categories: [{ id: 'bookshelf', title: '查看书架', target: 'bookshelf', count: null, url: null, icon: 'books' }],
+            categories: [
+              { id: 'login', title: '登录番茄小说', target: 'login', count: null, url: null, icon: 'books' },
+              { id: 'login-status', title: '检查登录状态', target: 'login-status', count: null, url: null, icon: 'books' },
+              { id: 'bookshelf', title: '读取书架', target: 'bookshelf', count: null, url: null, icon: 'books' },
+            ],
           }],
         }],
       },
     });
   }
-  if (request.target === 'bookshelf') return openBookshelf();
+  if (request.target === 'login') return openLogin();
+  if (request.target === 'login-status') return checkLoginStatus();
+  if (request.target === 'bookshelf') return openBookshelf(request);
   const channel = CHANNELS.find(([id]) => request.target === `channel:${id}`);
   if (!channel) throw new Error('Discovery target is invalid.');
   const page = cursorPage(request.cursor, request.target);
@@ -128,22 +170,89 @@ export async function discover(request: {
   });
 }
 
-async function openBookshelf() {
+async function openLogin() {
   await withPage(async (page) => {
-    await page.navigate(BOOKSHELF_URL, { timeoutMs: 45_000 });
+    await page.navigate(LOGIN_URL, { timeoutMs: 45_000 });
     await page.show({ timeoutMs: 15_000 });
   });
-  requireContext().log.info('bookshelf_page_opened');
+  requireContext().log.info('login_page_opened');
+  return statusDocument('番茄网页登录已打开', '请在打开的官方 WebView 中完成登录，然后使用“检查登录状态”或“读取书架”。');
+}
+
+async function checkLoginStatus() {
+  const snapshot = await withPage(readBookshelfSnapshot);
+  if (snapshot.status === 'loggedIn') {
+    return statusDocument('番茄已登录', `已检测到当前 WebView 登录态；书架发现到 ${snapshot.bookIds.length} 本书。`);
+  }
+  if (snapshot.status === 'loggedOut') {
+    return statusDocument('番茄未登录', '请先使用“登录番茄小说”在官方 WebView 中完成登录。');
+  }
+  return statusDocument('登录状态无法确认', '页面没有返回明确的登录状态，请在官方 WebView 中完成登录后重试。');
+}
+
+async function openBookshelf(request: { cursor: string | null; collectionId: string | null; pageSize: number }) {
+  const snapshot = await withPage(readBookshelfSnapshot);
+  if (snapshot.status === 'loggedOut') return statusDocument('番茄未登录', '请先使用“登录番茄小说”在官方 WebView 中完成登录。');
+  if (snapshot.status !== 'loggedIn') return statusDocument('登录状态无法确认', '请先在官方 WebView 中完成登录，然后重新读取书架。');
+  const offset = bookshelfOffset(request.cursor);
+  const pageSize = clamp(request.pageSize);
+  const ids = snapshot.bookIds.slice(offset, offset + pageSize);
+  const details = (await Promise.all(ids.map(async (bookId) => {
+    try {
+      return await getDetail({ id: `novel:${bookId}` });
+    } catch {
+      requireContext().log.warn(`bookshelf_detail_failed:${bookId}`);
+      return null;
+    }
+  }))).filter(notNull);
+  const collectionId = 'fanqie:bookshelf';
+  const nextOffset = offset + ids.length;
+  const continuation = nextOffset < snapshot.bookIds.length
+    ? frozen({ target: 'bookshelf', cursor: `bookshelf:${nextOffset}` })
+    : null;
+  const items = details.map((content) => frozen({ content, rank: null, metric: null, recommendation: null }));
+  if (request.collectionId !== null) {
+    if (request.collectionId !== collectionId) throw new Error('Discovery collection is invalid.');
+    return frozen({ kind: 'append' as const, collectionId, items, continuation });
+  }
   return frozen({
     kind: 'document' as const,
-    document: {
-      components: [{
-        type: 'section' as const,
-        id: 'fanqie-bookshelf-opened', title: '番茄书架已打开',
-        subtitle: '请在打开的官方 WebView 中完成登录；登录后即可查看书架。', icon: 'books', children: [],
-      }],
-    },
+    document: { components: [{
+      type: 'section' as const, id: 'fanqie-bookshelf:section', title: '番茄书架',
+      subtitle: `已读取 ${snapshot.bookIds.length} 本书的 ID，并通过来源接口加载详情。`, icon: 'books',
+      children: [{ type: 'contentCollection' as const, id: collectionId, layout: 'shelf' as const, items, continuation }],
+    }] },
   });
+}
+
+async function readBookshelfSnapshot(page: PluginWebViewPage): Promise<BookshelfSnapshot> {
+  await page.navigate(BOOKSHELF_URL, { timeoutMs: 45_000 });
+  await page.show({ timeoutMs: 15_000 });
+  const raw = await page.executeJavaScript<PluginJsonValue>(BOOKSHELF_PROBE, { timeoutMs: 20_000 });
+  return parseBookshelfSnapshot(raw);
+}
+
+function parseBookshelfSnapshot(value: PluginJsonValue): BookshelfSnapshot {
+  const raw = isObject(value) ? value : {};
+  const status = text(raw.status);
+  const bookIds = Array.isArray(raw.bookIds)
+    ? [...new Set(raw.bookIds.filter((bookId): bookId is string => typeof bookId === 'string' && /^\d+$/u.test(bookId)))]
+    : [];
+  return { status: status === 'loggedIn' || status === 'loggedOut' ? status : 'unknown', bookIds, url: text(raw.url) };
+}
+
+function statusDocument(title: string, subtitle: string) {
+  return frozen({
+    kind: 'document' as const,
+    document: { components: [{ type: 'section' as const, id: `fanqie-status:${title}`, title, subtitle, icon: 'books', children: [] }] },
+  });
+}
+
+function bookshelfOffset(cursor: string | null): number {
+  if (cursor === null) return 0;
+  const value = Number(cursor.startsWith('bookshelf:') ? cursor.slice('bookshelf:'.length) : '');
+  if (!Number.isSafeInteger(value) || value < 1) throw new Error('Cursor is invalid.');
+  return value;
 }
 
 export async function getDetail(request: { id: string }) {
