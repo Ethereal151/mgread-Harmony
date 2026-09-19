@@ -34,6 +34,7 @@ void main() {
     expect(gateway.queries, isEmpty);
     expect(find.text('输入关键词开始搜索'), findsOneWidget);
     expect(find.text('真实搜索结果'), findsNothing);
+    expect(find.text('热门搜索'), findsOneWidget);
     final historyScroll = tester.widget<SingleChildScrollView>(find.byKey(const Key('search-history-scroll')));
     expect(historyScroll.scrollDirection, Axis.horizontal);
 
@@ -42,6 +43,10 @@ void main() {
 
     expect(gateway.queries, <String>['诡秘之主']);
     expect(find.text('真实搜索结果'), findsWidgets);
+    expect(find.text('热门搜索'), findsNothing);
+    expect(find.text('（已聚合 1 条）'), findsOneWidget);
+    expect(find.text('已完成 1/1 个来源'), findsOneWidget);
+    expect(find.byKey(const Key('search-result-sort')), findsOneWidget);
   });
 
   testWidgets('keeps the discovery source when opening search', (tester) async {

@@ -183,6 +183,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                     onHistoryCleared: _clearHistory,
                     onHotSearchSelected: (String value) => _selectSuggestion(value, controller),
                     hotSearches: state.hotSearches,
+                    isSearchStarted: state.query.isNotEmpty,
                     onHotSearchRefreshed: () => unawaited(controller.refreshSuggestions()),
                   ),
                   const SizedBox(height: AppSpacing.regular),

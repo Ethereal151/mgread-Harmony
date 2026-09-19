@@ -17,6 +17,7 @@ class SearchSuggestionSections extends StatelessWidget {
     required this.onHistoryCleared,
     required this.onHotSearchSelected,
     required this.hotSearches,
+    required this.isSearchStarted,
     required this.onHotSearchRefreshed,
     super.key,
   });
@@ -26,6 +27,7 @@ class SearchSuggestionSections extends StatelessWidget {
   final VoidCallback onHistoryCleared;
   final ValueChanged<String> onHotSearchSelected;
   final List<PluginSearchSuggestion> hotSearches;
+  final bool isSearchStarted;
   final VoidCallback onHotSearchRefreshed;
 
   @override
@@ -34,7 +36,7 @@ class SearchSuggestionSections extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
         _SearchHistoryRow(history: history, onHistorySelected: onHistorySelected, onHistoryCleared: onHistoryCleared),
-        if (hotSearches.isNotEmpty) ...<Widget>[
+        if (hotSearches.isNotEmpty && !isSearchStarted) ...<Widget>[
           const SizedBox(height: AppSpacing.compact),
           _SectionHeading(
             title: '热门搜索',
@@ -498,43 +500,52 @@ class _ResultHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final count = result.items.length;
     final tokens = AppThemeTokens.of(context);
-    return Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        Text('搜索结果', style: Theme.of(context).textTheme.titleMedium),
-        const SizedBox(width: AppSpacing.compact),
-        Text('（已聚合 $count 条）', style: Theme.of(context).textTheme.bodyMedium),
-        const Spacer(),
-        if (!result.isComplete)
-          Text(
-            '已完成 ${result.completedSourceCount}/${result.totalSourceCount} 个来源',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: tokens.mutedText),
-          ),
-        PopupMenuButton<SearchResultSortOrder>(
-          key: const Key('search-result-sort'),
-          tooltip: '选择搜索结果排序',
-          onSelected: onSortOrderChanged,
-          itemBuilder: (context) => <PopupMenuEntry<SearchResultSortOrder>>[
-            for (final order in SearchResultSortOrder.values)
-              PopupMenuItem<SearchResultSortOrder>(
-                value: order,
+        Row(
+          children: <Widget>[
+            Text('搜索结果', style: Theme.of(context).textTheme.titleMedium),
+            const Spacer(),
+            PopupMenuButton<SearchResultSortOrder>(
+              key: const Key('search-result-sort'),
+              tooltip: '选择搜索结果排序',
+              onSelected: onSortOrderChanged,
+              itemBuilder: (context) => <PopupMenuEntry<SearchResultSortOrder>>[
+                for (final order in SearchResultSortOrder.values)
+                  PopupMenuItem<SearchResultSortOrder>(
+                    value: order,
+                    child: Row(
+                      children: <Widget>[
+                        SizedBox(width: 24, child: order == sortOrder ? const Icon(Icons.check_rounded, size: 18) : null),
+                        Text(order.label),
+                      ],
+                    ),
+                  ),
+              ],
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.unit, vertical: AppSpacing.unit),
                 child: Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: <Widget>[
-                    SizedBox(width: 24, child: order == sortOrder ? const Icon(Icons.check_rounded, size: 18) : null),
-                    Text(order.label),
+                    Text(sortOrder.label, style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: tokens.mutedText)),
+                    Icon(Icons.arrow_drop_down_rounded, color: tokens.mutedText),
                   ],
                 ),
               ),
-          ],
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.unit, vertical: AppSpacing.unit),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                Text(sortOrder.label, style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: tokens.mutedText)),
-                Icon(Icons.arrow_drop_down_rounded, color: tokens.mutedText),
-              ],
             ),
-          ),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.unit),
+        Row(
+          children: <Widget>[
+            Text('（已聚合 $count 条）', style: Theme.of(context).textTheme.bodyMedium),
+            const SizedBox(width: AppSpacing.compact),
+            Text(
+              '已完成 ${result.completedSourceCount}/${result.totalSourceCount} 个来源',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: tokens.mutedText),
+            ),
+          ],
         ),
       ],
     );
