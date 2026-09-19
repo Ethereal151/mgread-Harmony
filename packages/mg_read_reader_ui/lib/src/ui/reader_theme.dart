@@ -156,6 +156,59 @@ class ReaderPalette {
   }
 }
 
+/// Builds the Material theme used by reader-owned surfaces and routes.
+///
+/// Reader routes are sometimes pushed from the state context above the local
+/// reader [Theme]. Keeping this factory here lets those routes carry the
+/// active reader palette instead of inheriting the host application's theme.
+ThemeData readerThemeData(
+  ReaderPalette palette, {
+  ReaderFontPreset font = ReaderFontPreset.system,
+}) {
+  final ColorScheme scheme =
+      ColorScheme.fromSeed(
+        seedColor: palette.accent,
+        brightness: palette.systemBrightness,
+      ).copyWith(
+        primary: palette.accent,
+        surface: palette.panel,
+        onSurface: palette.text,
+        outline: palette.divider,
+      );
+  final ThemeData baseTheme = ThemeData(
+    useMaterial3: true,
+    brightness: palette.systemBrightness,
+    colorScheme: scheme,
+    fontFamily: font == ReaderFontPreset.system
+        ? readerPackageFontFamily
+        : readerFontFamily(font),
+    fontFamilyFallback: readerFontFallback(font),
+    scaffoldBackgroundColor: palette.background,
+    dividerColor: palette.divider,
+  );
+  return baseTheme.copyWith(
+    textTheme: baseTheme.textTheme.apply(
+      bodyColor: palette.text,
+      displayColor: palette.text,
+    ),
+    iconTheme: IconThemeData(color: palette.text),
+    iconButtonTheme: IconButtonThemeData(
+      style: IconButton.styleFrom(minimumSize: const Size.square(48)),
+    ),
+    filledButtonTheme: FilledButtonThemeData(
+      style: FilledButton.styleFrom(
+        minimumSize: const Size(0, 48),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      ),
+    ),
+    listTileTheme: ListTileThemeData(
+      dense: true,
+      minTileHeight: 52,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    ),
+  );
+}
+
 /// Paints one of the six reader-owned background treatments.
 ///
 /// The same widget is used for the full reading surface and settings previews,

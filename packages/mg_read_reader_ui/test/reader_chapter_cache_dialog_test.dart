@@ -13,7 +13,11 @@ void main() {
             body: TextReaderView(
               bookId: 'cache-dialog-book',
               dataSource: const _CacheDialogDataSource(),
-              stateStore: const _CacheDialogStateStore(),
+              stateStore: const _CacheDialogStateStore(
+                preferences: TextReaderPreferences(
+                  theme: ReaderThemePreset.night,
+                ),
+              ),
               extensions: ReaderExtensions(chapterCacheCapability: capability),
             ),
           ),
@@ -30,6 +34,10 @@ void main() {
       await tester.tap(find.text('缓存章节'));
       await tester.pumpAndSettle();
 
+      expect(
+        Theme.of(tester.element(find.byType(AlertDialog))).brightness,
+        Brightness.dark,
+      );
       expect(find.text('可选范围：0–3 章'), findsOneWidget);
       final Finder sliderFinder = find.byKey(
         const ValueKey<String>('reader-cache-chapter-slider'),
@@ -180,14 +188,16 @@ final class _CacheDialogDataSource implements TextReaderDataSource {
 }
 
 final class _CacheDialogStateStore implements TextReaderStateStore {
-  const _CacheDialogStateStore();
+  const _CacheDialogStateStore({this.preferences});
+
+  final TextReaderPreferences? preferences;
 
   @override
   Future<List<ReaderBookmark>> loadBookmarks(String bookId) async =>
       const <ReaderBookmark>[];
 
   @override
-  Future<TextReaderPreferences?> loadPreferences() async => null;
+  Future<TextReaderPreferences?> loadPreferences() async => preferences;
 
   @override
   Future<ReaderProgress?> loadProgress(String bookId) async =>

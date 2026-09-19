@@ -12,7 +12,11 @@ void main() {
           body: TextReaderView(
             bookId: 'detail-book',
             dataSource: const _DetailDataSource(),
-            stateStore: const _DetailStateStore(),
+            stateStore: const _DetailStateStore(
+              preferences: TextReaderPreferences(
+                theme: ReaderThemePreset.night,
+              ),
+            ),
           ),
         ),
       ),
@@ -29,6 +33,10 @@ void main() {
 
     await tester.tap(find.text('目录'));
     await tester.pumpAndSettle();
+    expect(
+      Theme.of(tester.element(find.byType(TabBar))).brightness,
+      Brightness.dark,
+    );
     expect(find.text('1200 字'), findsOneWidget);
     final ListTile readTile = tester.widget<ListTile>(
       find.byKey(const ValueKey<String>('reader-catalog-chapter-chapter-3')),
@@ -167,14 +175,16 @@ final class _DetailDataSource implements TextReaderDataSource {
 }
 
 final class _DetailStateStore implements TextReaderStateStore {
-  const _DetailStateStore();
+  const _DetailStateStore({this.preferences});
+
+  final TextReaderPreferences? preferences;
 
   @override
   Future<List<ReaderBookmark>> loadBookmarks(String bookId) async =>
       const <ReaderBookmark>[];
 
   @override
-  Future<TextReaderPreferences?> loadPreferences() async => null;
+  Future<TextReaderPreferences?> loadPreferences() async => preferences;
 
   @override
   Future<ReaderProgress?> loadProgress(String bookId) async =>

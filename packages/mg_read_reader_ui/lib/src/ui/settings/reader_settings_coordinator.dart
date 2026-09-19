@@ -65,23 +65,7 @@ class _ReaderSettingsSheetState extends State<ReaderSettingsSheet> {
   Widget build(BuildContext context) {
     final ReaderPalette palette = _palette;
     final MediaQueryData mediaQuery = MediaQuery.of(context);
-    final ThemeData theme = Theme.of(context).copyWith(
-      brightness: palette.systemBrightness,
-      colorScheme:
-          ColorScheme.fromSeed(
-            seedColor: palette.accent,
-            brightness: palette.systemBrightness,
-          ).copyWith(
-            primary: palette.accent,
-            surface: palette.panel,
-            onSurface: palette.text,
-            outline: palette.divider,
-          ),
-      textTheme: Theme.of(
-        context,
-      ).textTheme.apply(bodyColor: palette.text, displayColor: palette.text),
-      iconTheme: IconThemeData(color: palette.text),
-    );
+    final ThemeData theme = readerThemeData(palette, font: _preferences.font);
     return MediaQuery(
       data: mediaQuery.copyWith(
         textScaler: mediaQuery.textScaler.clamp(maxScaleFactor: 1.3),

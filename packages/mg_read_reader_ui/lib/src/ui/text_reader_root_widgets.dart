@@ -60,7 +60,7 @@ extension _TextReaderRootWidgets on _TextReaderViewState {
                 systemNavigationBarContrastEnforced: false,
               ),
       child: Theme(
-        data: _readerMaterialTheme(palette),
+        data: readerThemeData(palette, font: _preferences.font),
         child: PopScope<void>(
           canPop: true,
           onPopInvokedWithResult: (bool didPop, void result) {

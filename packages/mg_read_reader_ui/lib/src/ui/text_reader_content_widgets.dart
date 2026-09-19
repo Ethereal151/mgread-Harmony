@@ -77,46 +77,6 @@ extension _TextReaderContentWidgets on _TextReaderViewState {
     );
   }
 
-  ThemeData _readerMaterialTheme(ReaderPalette palette) {
-    final ColorScheme scheme =
-        ColorScheme.fromSeed(
-          seedColor: palette.accent,
-          brightness: palette.systemBrightness,
-        ).copyWith(
-          primary: palette.accent,
-          surface: palette.panel,
-          onSurface: palette.text,
-          outline: palette.divider,
-        );
-    return ThemeData(
-      useMaterial3: true,
-      brightness: palette.systemBrightness,
-      colorScheme: scheme,
-      fontFamily: _preferences.font == ReaderFontPreset.system
-          ? readerPackageFontFamily
-          : readerFontFamily(_preferences.font),
-      fontFamilyFallback: readerFontFallback(_preferences.font),
-      scaffoldBackgroundColor: palette.background,
-      dividerColor: palette.divider,
-      iconButtonTheme: IconButtonThemeData(
-        style: IconButton.styleFrom(minimumSize: const Size.square(48)),
-      ),
-      filledButtonTheme: FilledButtonThemeData(
-        style: FilledButton.styleFrom(
-          minimumSize: const Size(0, 48),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-          ),
-        ),
-      ),
-      listTileTheme: ListTileThemeData(
-        dense: true,
-        minTileHeight: 52,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-    );
-  }
-
   Widget _buildContent() {
     if (_loading && _content == null) {
       return _CenteredStatus(
