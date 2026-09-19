@@ -16,6 +16,21 @@ export interface SourceResourceTokenPayload {
   readonly request: JsonObject;
 }
 
+/** Decodes a Runtime-generated source-resource URL into its public payload. */
+export function decodeSourceResourceUrl(
+  value: string,
+): SourceResourceTokenPayload | undefined {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return undefined;
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:" || url.search !== "" || url.hash !== "") return undefined;
+  const match = /^\/v1\/source-resource\/([A-Za-z0-9_-]{16,24576})$/u.exec(url.pathname);
+  return match === null ? undefined : decodeSourceResourceToken(match[1]!);
+}
+
 /** Encodes one source request into a self-contained loopback path segment. */
 export function encodeSourceResourceToken(
   pluginId: string,

@@ -19,6 +19,12 @@ export type {
 export type { RuntimeDebugHttpStatus } from "./debug-http.js";
 export type { RuntimeCompatibilityMatrix } from "./runtime-version.js";
 export {
+  decodeSourceResourceToken,
+  decodeSourceResourceUrl,
+  encodeSourceResourceToken,
+} from "./source-resource-token.js";
+export type { SourceResourceTokenPayload } from "./source-resource-token.js";
+export {
   createPluginArchive,
   extractPluginArchive,
   PluginArchiveError,

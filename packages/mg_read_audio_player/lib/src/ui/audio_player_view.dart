@@ -54,6 +54,7 @@ class AudioPlayerView extends StatefulWidget {
     this.backend,
     this.proxyUri,
     this.artworkBuilder,
+    this.resourceUrlDecoder,
     this.saveInterval = const Duration(milliseconds: 800),
     this.autoplay = true,
     this.prefetchThreshold = 1,
@@ -71,6 +72,7 @@ class AudioPlayerView extends StatefulWidget {
   const AudioPlayerView.controlled({
     required this.controller,
     this.artworkBuilder,
+    this.resourceUrlDecoder,
     this.keepScreenOn = true,
     this.onKeepScreenOnChanged,
     super.key,
@@ -103,6 +105,9 @@ class AudioPlayerView extends StatefulWidget {
   ///
   /// When omitted, the package renders its I/O-free cover placeholder.
   final AudioArtworkBuilder? artworkBuilder;
+
+  /// Optional host callback for inspecting Runtime-generated resource URLs.
+  final AudioResourceUrlDecoder? resourceUrlDecoder;
 
   /// Position persistence throttle; exposed to keep tests deterministic.
   final Duration saveInterval;
@@ -364,6 +369,7 @@ class _AudioViewState extends State<AudioPlayerView>
                                 snapshot: snapshot,
                                 controller: _controller,
                                 artworkBuilder: widget.artworkBuilder,
+                                resourceUrlDecoder: widget.resourceUrlDecoder,
                               ),
                             ),
                           ),

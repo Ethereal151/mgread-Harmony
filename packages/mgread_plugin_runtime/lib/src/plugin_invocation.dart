@@ -116,6 +116,52 @@ final class RuntimeStatusInvocation
   }
 }
 
+/// Decodes one Runtime-generated source-resource URL for technical inspection.
+@immutable
+final class SourceResourceDecodeInvocation
+    extends PluginInvocation<SourceResourceDecodeResult> {
+  const SourceResourceDecodeInvocation({required this.url});
+
+  final String url;
+
+  @override
+  String get _wireMethod => 'runtime.sourceResource.decode.v1';
+
+  @override
+  Map<String, Object?> get _wireParams => <String, Object?>{'url': url};
+
+  @override
+  SourceResourceDecodeResult _decodeResult(Object? value) {
+    final result = _jsonObject(value, 'Source-resource URL decode result');
+    final pluginId = result['pluginId'];
+    if (pluginId is! String) {
+      throw const PluginRuntimeException(
+        'invalid_response',
+        'The Runtime returned an invalid source-resource URL decode result.',
+      );
+    }
+    final request = _jsonObject(
+      result['request'],
+      'Source-resource URL decode request',
+    );
+    return SourceResourceDecodeResult(
+      pluginId: pluginId,
+      request: Map<String, Object?>.unmodifiable(request),
+    );
+  }
+}
+
+@immutable
+final class SourceResourceDecodeResult {
+  const SourceResourceDecodeResult({
+    required this.pluginId,
+    required this.request,
+  });
+
+  final String pluginId;
+  final Map<String, Object?> request;
+}
+
 int _nonNegativeInt(Map<String, Object?> object, String key) {
   final value = object[key];
   if (value is! int || value < 0) {

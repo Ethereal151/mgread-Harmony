@@ -8,11 +8,15 @@
 /// - The sheet owns no media state and performs no host or network I/O.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../api/audio_artwork.dart';
 import '../api/audio_controller.dart';
 import '../api/audio_models.dart';
+import '../api/audio_contracts.dart';
 import 'audio_player_artwork_stage.dart';
 import 'audio_player_glass.dart';
 import 'audio_player_theme.dart';
@@ -22,6 +26,7 @@ Future<void> showAudioDetailsSheet(
   required AudioPlayerSnapshot snapshot,
   required AudioPlayerController controller,
   required AudioArtworkBuilder? artworkBuilder,
+  AudioResourceUrlDecoder? resourceUrlDecoder,
 }) => showModalBottomSheet<void>(
   context: context,
   isScrollControlled: true,
@@ -36,6 +41,7 @@ Future<void> showAudioDetailsSheet(
             ? liveSnapshot
             : snapshot,
         artworkBuilder: artworkBuilder,
+        resourceUrlDecoder: resourceUrlDecoder,
       );
     },
   ),
@@ -45,10 +51,12 @@ class _AudioDetailsSheet extends StatelessWidget {
   const _AudioDetailsSheet({
     required this.snapshot,
     required this.artworkBuilder,
+    required this.resourceUrlDecoder,
   });
 
   final AudioPlayerSnapshot snapshot;
   final AudioArtworkBuilder? artworkBuilder;
+  final AudioResourceUrlDecoder? resourceUrlDecoder;
 
   @override
   Widget build(BuildContext context) {
@@ -258,45 +266,19 @@ class _AudioDetailsSheet extends StatelessWidget {
                                 color: AudioPlayerColors.divider,
                               ),
                               const SizedBox(height: 13),
-                              Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: <Widget>[
-                                  const Icon(
-                                    Icons.link_rounded,
-                                    size: 20,
-                                    color: AudioPlayerColors.accent,
-                                  ),
-                                  const SizedBox(width: 9),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: <Widget>[
-                                        Text(
-                                          '章节地址',
-                                          style: theme.textTheme.labelMedium
-                                              ?.copyWith(
-                                                color: AudioPlayerColors.muted,
-                                                fontWeight: FontWeight.w600,
-                                              ),
-                                        ),
-                                        const SizedBox(height: 5),
-                                        SelectableText(
-                                          track.resource.toString(),
-                                          key: const Key(
-                                            'audio-details-resource',
-                                          ),
-                                          style: theme.textTheme.bodySmall
-                                              ?.copyWith(
-                                                color: AudioPlayerColors.ink,
-                                                height: 1.45,
-                                              ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
+                              _ResourceUrlRow(resource: track.resource),
+                              if (resourceUrlDecoder != null) ...<Widget>[
+                                const SizedBox(height: 13),
+                                const Divider(
+                                  height: 1,
+                                  color: AudioPlayerColors.divider,
+                                ),
+                                const SizedBox(height: 13),
+                                _DecodedResourceRow(
+                                  resource: track.resource,
+                                  decoder: resourceUrlDecoder!,
+                                ),
+                              ],
                             ],
                           ),
                         ),
@@ -466,6 +448,183 @@ class _DetailStat extends StatelessWidget {
       ),
     );
   }
+}
+
+class _ResourceUrlRow extends StatelessWidget {
+  const _ResourceUrlRow({required this.resource});
+
+  final Uri resource;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final value = resource.toString();
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        const Icon(
+          Icons.link_rounded,
+          size: 20,
+          color: AudioPlayerColors.accent,
+        ),
+        const SizedBox(width: 9),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Row(
+                children: <Widget>[
+                  Expanded(
+                    child: Text(
+                      '章节地址',
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        color: AudioPlayerColors.muted,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    key: const Key('audio-details-resource-copy'),
+                    tooltip: '复制章节地址',
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints.tightFor(
+                      width: 32,
+                      height: 32,
+                    ),
+                    onPressed: () => _copyValue(context, value, '章节地址已复制'),
+                    icon: const Icon(Icons.copy_rounded, size: 18),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 2),
+              Text(
+                value,
+                key: const Key('audio-details-resource'),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: AudioPlayerColors.ink,
+                  height: 1.45,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _DecodedResourceRow extends StatefulWidget {
+  const _DecodedResourceRow({required this.resource, required this.decoder});
+
+  final Uri resource;
+  final AudioResourceUrlDecoder decoder;
+
+  @override
+  State<_DecodedResourceRow> createState() => _DecodedResourceRowState();
+}
+
+class _DecodedResourceRowState extends State<_DecodedResourceRow> {
+  AudioResourceDecodeResult? _result;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_decode());
+  }
+
+  Future<void> _decode() async {
+    try {
+      final result = await widget.decoder(widget.resource);
+      if (!mounted) return;
+      setState(() {
+        _result = result;
+        _loading = false;
+      });
+    } on Object {
+      if (!mounted) return;
+      setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final result = _result;
+    final decoded = result == null
+        ? '无法解码此 Runtime 地址'
+        : '插件：${result.pluginId}\n${result.requestJson}';
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        const Icon(
+          Icons.data_object_rounded,
+          size: 20,
+          color: AudioPlayerColors.accent,
+        ),
+        const SizedBox(width: 9),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Row(
+                children: <Widget>[
+                  Expanded(
+                    child: Text(
+                      '解码参数',
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        color: AudioPlayerColors.muted,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  if (!_loading && result != null)
+                    IconButton(
+                      key: const Key('audio-details-resource-decoded-copy'),
+                      tooltip: '复制解码参数',
+                      visualDensity: VisualDensity.compact,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints.tightFor(
+                        width: 32,
+                        height: 32,
+                      ),
+                      onPressed: () => _copyValue(context, decoded, '解码参数已复制'),
+                      icon: const Icon(Icons.copy_rounded, size: 18),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 5),
+              if (_loading)
+                const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              else
+                SelectableText(
+                  decoded,
+                  key: const Key('audio-details-resource-decoded'),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: AudioPlayerColors.ink,
+                    height: 1.45,
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+void _copyValue(BuildContext context, String value, String message) {
+  unawaited(Clipboard.setData(ClipboardData(text: value)));
+  final messenger = ScaffoldMessenger.maybeOf(context);
+  messenger?.hideCurrentSnackBar();
+  messenger?.showSnackBar(SnackBar(content: Text(message)));
 }
 
 class _DetailStatDivider extends StatelessWidget {

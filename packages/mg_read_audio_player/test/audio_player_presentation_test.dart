@@ -312,12 +312,18 @@ void main() {
       findsOneWidget,
     );
     expect(
-      tester
-          .widget<SelectableText>(
-            find.byKey(const Key('audio-details-resource')),
-          )
-          .data,
+      tester.widget<Text>(find.byKey(const Key('audio-details-resource'))).data,
       'https://example.test/audio/1.mp3',
+    );
+    expect(
+      tester
+          .widget<Text>(find.byKey(const Key('audio-details-resource')))
+          .maxLines,
+      1,
+    );
+    expect(
+      find.byKey(const Key('audio-details-resource-copy')),
+      findsOneWidget,
     );
     expect(find.byKey(const Key('audio-details-progress')), findsNothing);
     expect(find.text('播放信息'), findsNothing);
@@ -337,6 +343,39 @@ void main() {
     expect(find.text('即将开放'), findsOneWidget);
     expect(find.text('评论功能正在准备中'), findsOneWidget);
   });
+
+  testWidgets(
+    'runtime resource URL exposes copy and decoded parameter actions',
+    (tester) async {
+      await tester.pumpWidget(
+        _host(
+          backend: _PresentationBackend(),
+          resourceUrlDecoder: (resource) async =>
+              const AudioResourceDecodeResult(
+                pluginId: 'org.example.audio',
+                requestJson: '{\n  "kind": "audio"\n}',
+              ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('audio-track-title')));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('audio-details-resource-copy')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('audio-details-resource-decoded')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('audio-details-resource-decoded-copy')),
+        findsOneWidget,
+      );
+    },
+  );
 
   testWidgets(
     'large catalog uses a subtle indicator instead of a giant badge',
@@ -638,6 +677,7 @@ Widget _host({
   AudioPlayerDataSource dataSource = const _PresentationDataSource(),
   AudioPlayerController? controller,
   AudioArtworkBuilder? artworkBuilder,
+  AudioResourceUrlDecoder? resourceUrlDecoder,
   Size size = const Size(390, 844),
   double textScale = 1.15,
   bool disableAnimations = true,
@@ -659,6 +699,7 @@ Widget _host({
         controller: controller,
         backend: backend,
         artworkBuilder: artworkBuilder,
+        resourceUrlDecoder: resourceUrlDecoder,
         autoplay: false,
         saveInterval: const Duration(hours: 1),
       ),

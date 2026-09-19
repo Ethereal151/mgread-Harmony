@@ -12,6 +12,7 @@
 library;
 
 import 'dart:async';
+import 'dart:convert';
 import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/gestures.dart' show DragStartBehavior, PointerDeviceKind, PointerDownEvent, kBackMouseButton;
@@ -22,7 +23,9 @@ import 'package:mg_read_audio_player/mg_read_audio_player.dart';
 
 import 'package:mg_read/app/app_theme.dart';
 import 'package:mg_read/features/media/application/source_audio_playback_service.dart';
+import 'package:mg_read/features/plugins/application/plugin_runtime_connection.dart';
 import 'package:mg_read/features/media/presentation/media_entry_cover.dart';
+import 'package:mgread_plugin_runtime/mgread_plugin_runtime.dart';
 import 'package:mg_read/shared/presentation/widgets/async_book_cover_loader.dart';
 
 /// Owns a transparent local Navigator for playback above the app router.
@@ -236,10 +239,25 @@ final class _ActiveSourceAudioPlaybackHostState extends ConsumerState<_ActiveSou
         key: const Key('source-audio-player'),
         controller: controller,
         artworkBuilder: (context, track) => _sourceAudioArtwork(context, track, request),
+        resourceUrlDecoder: _decodeSourceResourceUrl,
         keepScreenOn: playback.keepScreenOn,
         onKeepScreenOnChanged: _service.setKeepScreenOn,
       ),
     );
+  }
+
+  Future<AudioResourceDecodeResult?> _decodeSourceResourceUrl(Uri resource) async {
+    try {
+      final decoded = await ref.read(pluginRuntimeFacadeProvider).invoke(SourceResourceDecodeInvocation(url: resource.toString()));
+      return AudioResourceDecodeResult(
+        pluginId: decoded.pluginId,
+        requestJson: const JsonEncoder.withIndent(
+          '  ',
+        ).convert(<String, Object?>{'pluginId': decoded.pluginId, 'request': decoded.request}),
+      );
+    } on Object {
+      return null;
+    }
   }
 
   Widget _buildExitPrompt(BuildContext context) {

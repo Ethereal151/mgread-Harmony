@@ -50,6 +50,7 @@ import { readDebugHttpEnabled } from "./debug-http-control.js";
 import { RuntimeDebugHttpSettings } from "./debug-http-settings.js";
 import { ConfigurablePluginHttpClient } from "./plugin-http-client.js";
 import { readPluginHttpProxyConfiguration } from "./plugin-http-proxy-control.js";
+import { decodeSourceResourceUrl } from "./source-resource-token.js";
 import type {
   InFlightRequestsBySession,
   RuntimeDispatchFailure,
@@ -133,6 +134,7 @@ const RUNTIME_CONTROL_METHOD = Object.freeze({
   sourceGetDetail: "source.getDetail.v1",
   sourceGetChapters: "source.getChapters.v1",
   sourceGetContent: "source.getContent.v1",
+  sourceResourceDecode: "runtime.sourceResource.decode.v1",
   shutdown: "runtime.shutdown",
 } as const);
 
@@ -164,6 +166,7 @@ const RUNTIME_CONTROL_CAPABILITIES = Object.freeze([
   RUNTIME_CONTROL_METHOD.sourceGetDetail,
   RUNTIME_CONTROL_METHOD.sourceGetChapters,
   RUNTIME_CONTROL_METHOD.sourceGetContent,
+  RUNTIME_CONTROL_METHOD.sourceResourceDecode,
   RUNTIME_CONTROL_METHOD.shutdown,
 ]);
 const RUNTIME_RPC_PATH = "/v1/rpc";
@@ -969,6 +972,20 @@ export class DesktopRuntime {
           cancellation,
           "getContent",
         );
+      case RUNTIME_CONTROL_METHOD.sourceResourceDecode: {
+        if (Object.keys(request.params).length !== 1 || typeof request.params.url !== "string" || request.params.url.length > 32 * 1024) {
+          return {
+            error: this.#requestError(request, "invalid_request", "The source-resource URL decode request is invalid."),
+          };
+        }
+        const decoded = decodeSourceResourceUrl(request.params.url);
+        if (decoded === undefined) {
+          return {
+            error: this.#requestError(request, "invalid_request", "The URL is not a valid Runtime source-resource URL."),
+          };
+        }
+        return { result: { pluginId: decoded.pluginId, request: decoded.request } };
+      }
       case RUNTIME_CONTROL_METHOD.shutdown:
         if (
           request.idempotencyKey === undefined ||
