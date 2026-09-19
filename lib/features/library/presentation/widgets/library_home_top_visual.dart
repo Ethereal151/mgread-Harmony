@@ -18,6 +18,9 @@ import 'package:mg_read/app/app_theme.dart';
 import 'package:mg_read/features/library/presentation/library_home_view_data.dart';
 import 'package:mg_read/features/library/presentation/widgets/library_book_cover.dart';
 
+const double _blurBottomInset = 12;
+const double _solidGuardHeight = 20;
+
 /// Full-width cover artwork behind the complete home header area.
 class LibraryHomeTopVisual extends StatelessWidget {
   const LibraryHomeTopVisual({required this.continueReading, required this.child, super.key});
@@ -35,8 +38,13 @@ class LibraryHomeTopVisual extends StatelessWidget {
         children: <Widget>[
           if (data == null)
             Positioned.fill(child: ColoredBox(color: tokens.featureSurface))
-          else
-            Positioned.fill(
+          else ...<Widget>[
+            Positioned(
+              key: const Key('library-home-top-blurred-layer'),
+              left: 0,
+              top: 0,
+              right: 0,
+              bottom: _blurBottomInset,
               child: ExcludeSemantics(
                 child: IgnorePointer(
                   child: LayoutBuilder(
@@ -47,7 +55,7 @@ class LibraryHomeTopVisual extends StatelessWidget {
                           Opacity(
                             opacity: 0.84,
                             child: ImageFiltered(
-                              imageFilter: ImageFilter.blur(sigmaX: 2.4, sigmaY: 2.4),
+                              imageFilter: ImageFilter.blur(sigmaX: 2.4, sigmaY: 2.4, tileMode: TileMode.clamp),
                               child: Transform.scale(
                                 scale: 1.08,
                                 child: LibraryBookCover(
@@ -94,14 +102,15 @@ class LibraryHomeTopVisual extends StatelessWidget {
                                   Colors.transparent,
                                   Colors.transparent,
                                   tokens.pageBackground.withValues(alpha: 0.48),
-                                  tokens.pageBackground.withValues(alpha: 0.86),
+                                  tokens.pageBackground.withValues(alpha: 0.9),
+                                  tokens.pageBackground,
                                   tokens.pageBackground,
                                 ],
                                 // End on an opaque page color instead of a
-                                // transparent clip edge. This keeps the
-                                // blurred cover from leaving a sampled row at
-                                // the Sliver boundary.
-                                stops: const <double>[0, 0.68, 0.82, 0.94, 1],
+                                // transparent clip edge. The solid guard
+                                // below then keeps this layer away from the
+                                // actual Sliver boundary altogether.
+                                stops: const <double>[0, 0.68, 0.8, 0.9, 0.95, 1],
                               ),
                             ),
                           ),
@@ -112,6 +121,15 @@ class LibraryHomeTopVisual extends StatelessWidget {
                 ),
               ),
             ),
+            Positioned(
+              key: const Key('library-home-top-solid-guard'),
+              left: 0,
+              right: 0,
+              bottom: 0,
+              height: _solidGuardHeight,
+              child: ColoredBox(color: tokens.pageBackground),
+            ),
+          ],
           child,
         ],
       ),

@@ -65,6 +65,11 @@ void main() {
     final Rect readingSurface = tester.getRect(find.byKey(const Key('continue-reading-surface')));
 
     expect(find.byKey(const Key('library-home-top-backdrop-cover')), findsOneWidget);
+    final Positioned blurredLayer = tester.widget<Positioned>(find.byKey(const Key('library-home-top-blurred-layer')));
+    expect(blurredLayer.bottom, 12);
+    final Positioned solidGuard = tester.widget<Positioned>(find.byKey(const Key('library-home-top-solid-guard')));
+    expect(solidGuard.bottom, 0);
+    expect(solidGuard.height, 20);
     expect(find.byKey(const Key('library-home-top-bottom-fade')), findsOneWidget);
     expect(find.byKey(const Key('library-home-reading-readability-scrim')), findsOneWidget);
     final DecoratedBox bottomFade = tester.widget<DecoratedBox>(find.byKey(const Key('library-home-top-bottom-fade')));
