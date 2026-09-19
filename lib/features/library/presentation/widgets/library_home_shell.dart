@@ -94,6 +94,7 @@ class _LibraryHomeShellState extends State<LibraryHomeShell> {
   late LibraryHomeLayoutMode _layoutMode;
   bool _layoutModeChangePending = false;
   bool _privacyRevealActive = false;
+  bool _continueReadingTapPending = false;
 
   @override
   void initState() {
@@ -294,11 +295,16 @@ class _LibraryHomeShellState extends State<LibraryHomeShell> {
     if (continueReading == null) {
       return const _NoReadingProgressCard();
     }
-    return LibraryContinueReadingCard(
-      data: continueReading,
-      showBackdrop: false,
-      isPreparing: widget.preparingBookId == continueReading.bookId,
-      onContinueReading: _handleContinueReading,
+    return GestureDetector(
+      key: const Key('continue-reading-surface-tap'),
+      behavior: HitTestBehavior.opaque,
+      onTap: widget.preparingBookId == continueReading.bookId ? null : _handleContinueReading,
+      child: LibraryContinueReadingCard(
+        data: continueReading,
+        showBackdrop: false,
+        isPreparing: widget.preparingBookId == continueReading.bookId,
+        onContinueReading: _handleContinueReading,
+      ),
     );
   }
 
@@ -421,6 +427,11 @@ class _LibraryHomeShellState extends State<LibraryHomeShell> {
   }
 
   void _handleContinueReading() {
+    if (_continueReadingTapPending) return;
+    _continueReadingTapPending = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _continueReadingTapPending = false;
+    });
     _invoke(widget.callbacks.onContinueReading);
   }
 
