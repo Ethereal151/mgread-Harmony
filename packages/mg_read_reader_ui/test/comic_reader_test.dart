@@ -854,6 +854,66 @@ void main() {
     );
   });
 
+  testWidgets(
+    'comic edge taps turn pages, center opens controls, and drag still scrolls',
+    (WidgetTester tester) async {
+      tester.view
+        ..physicalSize = const Size(400, 600)
+        ..devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final controller = ComicReaderController();
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ComicReaderView(
+            bookId: 'book',
+            dataSource: _LongComicSource(),
+            stateStore: _MemoryComicStateStore(),
+            controller: controller,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final Finder surface = find.byKey(
+        const ValueKey<String>('comic-reader-content-surface'),
+      );
+      final Rect surfaceRect = tester.getRect(surface);
+      final ScrollPosition position = tester
+          .state<ScrollableState>(find.byType(Scrollable).first)
+          .position;
+
+      await tester.tapAt(
+        Offset(surfaceRect.center.dx, surfaceRect.bottom - 24),
+      );
+      await tester.pump(const Duration(milliseconds: 220));
+      final double afterDownTap = position.pixels;
+      expect(afterDownTap, greaterThan(0));
+      expect(controller.snapshot.controlsVisible, isFalse);
+
+      await tester.tapAt(Offset(surfaceRect.center.dx, surfaceRect.top + 24));
+      await tester.pump(const Duration(milliseconds: 220));
+      expect(position.pixels, lessThan(afterDownTap));
+      expect(controller.snapshot.controlsVisible, isFalse);
+
+      await tester.tapAt(surfaceRect.center);
+      await tester.pump();
+      expect(controller.snapshot.controlsVisible, isTrue);
+      await tester.tap(
+        find.byKey(
+          const ValueKey<String>('comic-reader-controls-interaction-lock'),
+        ),
+      );
+      await tester.pump();
+
+      final double beforeDrag = position.pixels;
+      await tester.drag(surface, const Offset(0, -180));
+      await tester.pumpAndSettle();
+      expect(position.pixels, greaterThan(beforeDrag));
+      expect(controller.snapshot.controlsVisible, isFalse);
+    },
+  );
+
   testWidgets('next comic chapter responds while chapter metadata resolves', (
     WidgetTester tester,
   ) async {
