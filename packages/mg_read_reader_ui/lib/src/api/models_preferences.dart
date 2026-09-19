@@ -418,6 +418,7 @@ class TextReaderPreferences {
         2.1,
       ], fallback: fallback.lineHeight),
       paragraphSpacing: _nearest(paragraphSpacing, const <double>[
+        0,
         8,
         14,
         22,
@@ -428,17 +429,20 @@ class TextReaderPreferences {
         2,
       ], fallback: fallback.firstLineIndent.toDouble()).round(),
       horizontalPadding: _nearest(horizontalPadding, const <double>[
+        0,
         16,
         24,
         40,
       ], fallback: fallback.horizontalPadding),
       topPadding: _nearest(topPadding, const <double>[
+        0,
         8,
         24,
         40,
         64,
       ], fallback: fallback.topPadding),
       bottomPadding: _nearest(bottomPadding, const <double>[
+        0,
         8,
         24,
         40,

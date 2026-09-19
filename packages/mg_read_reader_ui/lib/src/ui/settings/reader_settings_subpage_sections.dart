@@ -104,9 +104,10 @@ extension _ReaderSettingsSubpageSections on _ReaderSettingsSheetState {
         ),
         _labeledChoice<double>(
           ReaderStrings.paragraphSpacing,
-          const <double>[8, 14, 22],
+          const <double>[0, 8, 14, 22],
           _preferences.paragraphSpacing,
-          _threeLevelLabel,
+          (double value) =>
+              value == 0 ? ReaderStrings.none : _threeLevelLabel(value),
           (double value) =>
               _commit(_preferences.copyWith(paragraphSpacing: value)),
           palette,
@@ -125,30 +126,34 @@ extension _ReaderSettingsSubpageSections on _ReaderSettingsSheetState {
         ),
         _labeledChoice<double>(
           ReaderStrings.pageMargin,
-          const <double>[16, 24, 40],
+          const <double>[0, 16, 24, 40],
           _preferences.horizontalPadding,
           (double value) => value == 16
               ? ReaderStrings.narrow
               : value == 24
               ? ReaderStrings.standard
-              : ReaderStrings.wide,
+              : value == 40
+              ? ReaderStrings.wide
+              : ReaderStrings.none,
           (double value) =>
               _commit(_preferences.copyWith(horizontalPadding: value)),
           palette,
         ),
         _labeledChoice<double>(
           ReaderStrings.topMargin,
-          const <double>[8, 24, 40, 64],
+          const <double>[0, 8, 24, 40, 64],
           _preferences.topPadding,
-          (double value) => value.round().toString(),
+          (double value) =>
+              value == 0 ? ReaderStrings.none : value.round().toString(),
           (double value) => _commit(_preferences.copyWith(topPadding: value)),
           palette,
         ),
         _labeledChoice<double>(
           ReaderStrings.bottomMargin,
-          const <double>[8, 24, 40, 64],
+          const <double>[0, 8, 24, 40, 64],
           _preferences.bottomPadding,
-          (double value) => value.round().toString(),
+          (double value) =>
+              value == 0 ? ReaderStrings.none : value.round().toString(),
           (double value) =>
               _commit(_preferences.copyWith(bottomPadding: value)),
           palette,

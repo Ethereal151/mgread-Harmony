@@ -23,6 +23,21 @@ void main() {
     },
   );
 
+  test('preserves zero spacing and margins as the no-distance option', () {
+    const TextReaderPreferences preferences = TextReaderPreferences(
+      paragraphSpacing: 0,
+      horizontalPadding: 0,
+      topPadding: 0,
+      bottomPadding: 0,
+    );
+    final TextReaderPreferences normalized = preferences.normalized();
+
+    expect(normalized.paragraphSpacing, 0);
+    expect(normalized.horizontalPadding, 0);
+    expect(normalized.topPadding, 0);
+    expect(normalized.bottomPadding, 0);
+  });
+
   test('keeps arbitrary font sizes within the supported continuous range', () {
     expect(
       const TextReaderPreferences(fontSize: 23.5).normalized().fontSize,
