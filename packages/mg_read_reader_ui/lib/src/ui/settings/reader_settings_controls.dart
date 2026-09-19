@@ -155,6 +155,7 @@ class ReaderSettingsCapsule extends StatelessWidget {
         borderRadius: BorderRadius.circular(
           ReaderSettingsTokens.controlRadius + 4,
         ),
+        clipBehavior: Clip.antiAlias,
         child: InkWell(
           borderRadius: BorderRadius.circular(
             ReaderSettingsTokens.controlRadius + 4,
@@ -280,6 +281,7 @@ class ReaderSettingsSegmentedControl<T> extends StatelessWidget {
                                     borderRadius: BorderRadius.circular(
                                       ReaderSettingsTokens.controlRadius,
                                     ),
+                                    clipBehavior: Clip.antiAlias,
                                     child: InkWell(
                                       borderRadius: BorderRadius.circular(
                                         ReaderSettingsTokens.controlRadius,
@@ -362,36 +364,42 @@ class ReaderThemeSwatch extends StatelessWidget {
       label: label,
       onTap: onTap,
       excludeSemantics: true,
-      child: InkResponse(
-        onTap: onTap,
-        radius: ReaderSettingsTokens.touchTarget / 2,
-        child: SizedBox.square(
-          dimension: ReaderSettingsTokens.touchTarget,
-          child: Center(
-            child: AnimatedContainer(
-              duration: ReaderSettingsTokens.transitionDuration,
-              width: ReaderSettingsTokens.swatchSize,
-              height: ReaderSettingsTokens.swatchSize,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: palette.background,
-                border: Border.all(
-                  width: selected
-                      ? ReaderSettingsTokens.selectedBorderWidth
-                      : 1,
-                  color: selected ? palette.text : palette.divider,
-                ),
-                boxShadow: <BoxShadow>[
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: .06),
-                    blurRadius: 3,
-                    offset: const Offset(0, 1),
+      child: Material(
+        type: MaterialType.transparency,
+        shape: const CircleBorder(),
+        clipBehavior: Clip.antiAlias,
+        child: InkResponse(
+          onTap: onTap,
+          radius: ReaderSettingsTokens.swatchSize / 2,
+          highlightShape: BoxShape.circle,
+          child: SizedBox.square(
+            dimension: ReaderSettingsTokens.touchTarget,
+            child: Center(
+              child: AnimatedContainer(
+                duration: ReaderSettingsTokens.transitionDuration,
+                width: ReaderSettingsTokens.swatchSize,
+                height: ReaderSettingsTokens.swatchSize,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: palette.background,
+                  border: Border.all(
+                    width: selected
+                        ? ReaderSettingsTokens.selectedBorderWidth
+                        : 1,
+                    color: selected ? palette.text : palette.divider,
                   ),
-                ],
+                  boxShadow: <BoxShadow>[
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: .06),
+                      blurRadius: 3,
+                      offset: const Offset(0, 1),
+                    ),
+                  ],
+                ),
+                child: selected
+                    ? Icon(Icons.check_rounded, size: 17, color: palette.text)
+                    : null,
               ),
-              child: selected
-                  ? Icon(Icons.check_rounded, size: 17, color: palette.text)
-                  : null,
             ),
           ),
         ),
@@ -424,53 +432,58 @@ class ReaderBackgroundChoice extends StatelessWidget {
       label: label,
       onTap: onTap,
       excludeSemantics: true,
-      child: InkWell(
+      child: Material(
+        type: MaterialType.transparency,
         borderRadius: BorderRadius.circular(ReaderSettingsTokens.smallRadius),
-        onTap: onTap,
-        child: SizedBox(
-          width: ReaderSettingsTokens.backgroundPreviewWidth + 4,
-          height: ReaderSettingsTokens.touchTarget,
-          child: Center(
-            child: AnimatedContainer(
-              duration: ReaderSettingsTokens.transitionDuration,
-              width: ReaderSettingsTokens.backgroundPreviewWidth,
-              height: ReaderSettingsTokens.backgroundPreviewHeight,
-              clipBehavior: Clip.antiAlias,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(
-                  ReaderSettingsTokens.smallRadius,
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(ReaderSettingsTokens.smallRadius),
+          onTap: onTap,
+          child: SizedBox(
+            width: ReaderSettingsTokens.backgroundPreviewWidth + 4,
+            height: ReaderSettingsTokens.touchTarget,
+            child: Center(
+              child: AnimatedContainer(
+                duration: ReaderSettingsTokens.transitionDuration,
+                width: ReaderSettingsTokens.backgroundPreviewWidth,
+                height: ReaderSettingsTokens.backgroundPreviewHeight,
+                clipBehavior: Clip.antiAlias,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(
+                    ReaderSettingsTokens.smallRadius,
+                  ),
+                  border: Border.all(
+                    width: selected
+                        ? ReaderSettingsTokens.selectedBorderWidth
+                        : 1,
+                    color: selected ? palette.text : palette.divider,
+                  ),
                 ),
-                border: Border.all(
-                  width: selected
-                      ? ReaderSettingsTokens.selectedBorderWidth
-                      : 1,
-                  color: selected ? palette.text : palette.divider,
-                ),
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(
-                  ReaderSettingsTokens.smallRadius - 1,
-                ),
-                child: ReaderBackgroundSurface(
-                  preset: preset,
-                  palette: palette,
-                  child: selected
-                      ? Align(
-                          alignment: Alignment.topRight,
-                          child: Container(
-                            margin: const EdgeInsets.all(3),
-                            decoration: BoxDecoration(
-                              color: palette.panel.withValues(alpha: .9),
-                              shape: BoxShape.circle,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(
+                    ReaderSettingsTokens.smallRadius - 1,
+                  ),
+                  child: ReaderBackgroundSurface(
+                    preset: preset,
+                    palette: palette,
+                    child: selected
+                        ? Align(
+                            alignment: Alignment.topRight,
+                            child: Container(
+                              margin: const EdgeInsets.all(3),
+                              decoration: BoxDecoration(
+                                color: palette.panel.withValues(alpha: .9),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                Icons.check_rounded,
+                                size: 14,
+                                color: palette.text,
+                              ),
                             ),
-                            child: Icon(
-                              Icons.check_rounded,
-                              size: 14,
-                              color: palette.text,
-                            ),
-                          ),
-                        )
-                      : null,
+                          )
+                        : null,
+                  ),
                 ),
               ),
             ),
