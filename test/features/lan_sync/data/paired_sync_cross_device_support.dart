@@ -15,6 +15,7 @@ import 'package:mg_read/features/lan_sync/domain/paired_device_models.dart';
 
 const LocalDeviceIdentity crossDeviceWindowsIdentity = LocalDeviceIdentity(deviceId: 'windows_cross_device_123456', label: 'Windows 测试端');
 const LocalDeviceIdentity crossDeviceAndroidIdentity = LocalDeviceIdentity(deviceId: 'android_cross_device_123456', label: 'Android 测试端');
+const LocalDeviceIdentity crossDeviceOhosIdentity = LocalDeviceIdentity(deviceId: 'ohos_cross_device_123456', label: '鸿蒙测试端');
 
 List<int> crossDeviceSecret() => List<int>.generate(32, (index) => index + 71);
 
