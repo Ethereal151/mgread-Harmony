@@ -224,3 +224,111 @@ jobs:
           if-no-files-found: error
           compression-level: 0
           retention-days: 7
+
+  release:
+    name: Publish GitHub Release
+    needs: [android, windows, macos]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Read app version
+        id: version
+        shell: bash
+        run: |
+          VERSION="$(awk '/^version:/ {print $2; exit}' pubspec.yaml)"
+          if [ -z "$VERSION" ]; then
+            echo "Unable to read version from pubspec.yaml" >&2
+            exit 1
+          fi
+
+          TAG="v$VERSION"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+          if [[ "$VERSION" == *-* ]]; then
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check whether this version is already released
+        id: existing
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+        shell: bash
+        run: |
+          if gh release view "$TAG" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Release $TAG already exists; skipping publication."
+          elif git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Tag $TAG already exists; skipping publication to avoid replacing an existing version."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download Android artifact
+        if: steps.existing.outputs.exists != 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: mgread-android-${{ github.sha }}
+          path: release/android
+
+      - name: Download Windows artifact
+        if: steps.existing.outputs.exists != 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: mgread-windows-x64-${{ github.sha }}
+          path: release/windows
+
+      - name: Download macOS artifact
+        if: steps.existing.outputs.exists != 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: mgread-macos-arm64-${{ github.sha }}
+          path: release/macos
+
+      - name: Prepare release assets
+        if: steps.existing.outputs.exists != 'true'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release/final
+
+          mv release/android/app-release.apk             "release/final/MgRead-${VERSION}-android-arm64.apk"
+          mv release/windows/mgread-windows-x64.zip             "release/final/MgRead-${VERSION}-windows-x64.zip"
+          mv release/macos/mgread-macos-arm64.zip             "release/final/MgRead-${VERSION}-macos-arm64.zip"
+
+          (
+            cd release/final
+            sha256sum MgRead-* > SHA256SUMS.txt
+          )
+
+      - name: Publish stable release
+        if: steps.existing.outputs.exists != 'true' && steps.version.outputs.prerelease != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+        shell: bash
+        run: |
+          gh release create "$TAG"             release/final/*             --repo "${{ github.repository }}"             --target "${{ github.sha }}"             --title "MgRead v$VERSION"             --generate-notes             --latest
+
+      - name: Publish prerelease
+        if: steps.existing.outputs.exists != 'true' && steps.version.outputs.prerelease == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+        shell: bash
+        run: |
+          gh release create "$TAG"             release/final/*             --repo "${{ github.repository }}"             --target "${{ github.sha }}"             --title "MgRead v$VERSION"             --generate-notes             --prerelease             --latest=false
+
