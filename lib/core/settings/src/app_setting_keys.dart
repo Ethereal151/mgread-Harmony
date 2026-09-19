@@ -12,17 +12,25 @@ final class AppSettingKeys {
     validator: _validateThemeMode,
   );
 
-  /// Accent palette for host application surfaces.
+  /// Accent palette for host application light surfaces.
   ///
   /// Reader packages own their own appearance settings and do not consume
-  /// this value. The host currently exposes this only for light mode; dark
-  /// mode keeps its fixed product accent.
+  /// this value.
   static const themeColor = SettingKey<String>(
     id: 'appearance.themeColor',
     documentKind: 'settings.appearance',
     defaultValue: 'warm',
     codec: SettingCodec<String>(_stringEncode, _stringDecode),
     validator: _validateThemeColor,
+  );
+
+  /// Dark palette for host application surfaces.
+  static const darkThemeColor = SettingKey<String>(
+    id: 'appearance.darkThemeColor',
+    documentKind: 'settings.appearance',
+    defaultValue: 'blue',
+    codec: SettingCodec<String>(_stringEncode, _stringDecode),
+    validator: _validateDarkThemeColor,
   );
 
   static const homeLayoutMode = SettingKey<String>(
@@ -209,6 +217,7 @@ final class AppSettingKeys {
   static const all = <SettingKey<dynamic>>[
     themeMode,
     themeColor,
+    darkThemeColor,
     homeLayoutMode,
     blurredCoverBookIds,
     searchHistory,
@@ -264,6 +273,12 @@ void _validateThemeMode(String value) {
 
 void _validateThemeColor(String value) {
   if (value != 'warm' && value != 'blue' && value != 'green' && value != 'purple' && value != 'rose') {
+    throw ArgumentError.value(value);
+  }
+}
+
+void _validateDarkThemeColor(String value) {
+  if (value != 'blue' && value != 'coolBlack' && value != 'forestBlack' && value != 'purpleBlack' && value != 'amberBlack') {
     throw ArgumentError.value(value);
   }
 }

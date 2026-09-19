@@ -134,7 +134,7 @@ plugins/sources/                    真实数据源及其他能力参考实现
 
 ## UI、状态与组件
 
-- 当前只开发和验收浅色模式；保留既有深色实现，不自主扩展深色设计。
+- 日间与夜间主题分别由应用设置持有；夜间主题通过接近黑色的语义配色提供多种方案。
 - 页面只组合布局和状态。复用顺序为 feature 内组件 → `shared/`；只有跨两个以上 feature 的无业务模式
   进入 shared。
 - 全局视觉通过 `AppTheme`、`AppThemeTokens`、`TextTheme`、`AppSpacing`、`AppRadii` 和既有组件扩展，

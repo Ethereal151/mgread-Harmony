@@ -36,6 +36,108 @@ enum AppThemeColor {
   }
 }
 
+/// Preset dark palettes for host application surfaces.
+///
+/// Every palette keeps its large surfaces near black so the setting remains
+/// comfortable for night use while still offering different accent moods.
+enum AppDarkThemeColor {
+  seaSaltBlue(
+    'blue',
+    '海盐蓝',
+    Color(0xFF8AB4F8),
+    Color(0xFF000000),
+    Color(0xFF0B0E12),
+    Color(0xFF131820),
+    Color(0xFF11151A),
+    Color(0xFF252B33),
+    Color(0xFFA6AFBB),
+    Color(0xFF17263A),
+    Color(0xFFB5D1FF),
+  ),
+  coolBlack(
+    'coolBlack',
+    '酷黑',
+    Color(0xFFD7DCE5),
+    Color(0xFF000000),
+    Color(0xFF08090B),
+    Color(0xFF101216),
+    Color(0xFF0D0E11),
+    Color(0xFF25272C),
+    Color(0xFFA9AFB9),
+    Color(0xFF1B1D22),
+    Color(0xFFF0F2F5),
+  ),
+  forestBlack(
+    'forestBlack',
+    '墨绿黑',
+    Color(0xFF8FD3A6),
+    Color(0xFF020806),
+    Color(0xFF08130D),
+    Color(0xFF0F1D14),
+    Color(0xFF0C1911),
+    Color(0xFF203128),
+    Color(0xFFA1B9AA),
+    Color(0xFF14291D),
+    Color(0xFFB6E8C5),
+  ),
+  purpleBlack(
+    'purpleBlack',
+    '黛紫黑',
+    Color(0xFFD0A6FF),
+    Color(0xFF08050C),
+    Color(0xFF140A1B),
+    Color(0xFF21102A),
+    Color(0xFF1A0D22),
+    Color(0xFF382342),
+    Color(0xFFB9A9C8),
+    Color(0xFF29163A),
+    Color(0xFFE4CFFF),
+  ),
+  amberBlack(
+    'amberBlack',
+    '暖炭黑',
+    Color(0xFFFFC18A),
+    Color(0xFF0A0806),
+    Color(0xFF15100C),
+    Color(0xFF211811),
+    Color(0xFF1A120C),
+    Color(0xFF3A2A1D),
+    Color(0xFFC0AA96),
+    Color(0xFF332015),
+    Color(0xFFFFD4AF),
+  );
+
+  const AppDarkThemeColor(
+    this.id,
+    this.label,
+    this.accent,
+    this.pageBackground,
+    this.surface,
+    this.featureSurface,
+    this.mutedSurface,
+    this.divider,
+    this.mutedText,
+    this.accentSoft,
+    this.focusRing,
+  );
+
+  final String id;
+  final String label;
+  final Color accent;
+  final Color pageBackground;
+  final Color surface;
+  final Color featureSurface;
+  final Color mutedSurface;
+  final Color divider;
+  final Color mutedText;
+  final Color accentSoft;
+  final Color focusRing;
+
+  static AppDarkThemeColor fromId(String id) {
+    return values.firstWhere((color) => color.id == id, orElse: () => AppDarkThemeColor.seaSaltBlue);
+  }
+}
+
 /// Defines the application-wide visual defaults and semantic UI tokens.
 abstract final class AppTheme {
   /// Temporary product switch while the source-picker visual baseline is light-only.
@@ -100,23 +202,23 @@ abstract final class AppTheme {
     return _theme(colorScheme, tokens);
   }
 
-  static ThemeData dark() {
-    const AppThemeTokens tokens = AppThemeTokens(
-      pageBackground: Color(0xFF000000),
-      surface: Color(0xFF0B0E12),
-      featureSurface: Color(0xFF131820),
-      mutedSurface: Color(0xFF11151A),
-      divider: Color(0xFF252B33),
-      mutedText: Color(0xFFA6AFBB),
-      accent: Color(0xFF8AB4F8),
+  static ThemeData dark({AppDarkThemeColor color = AppDarkThemeColor.seaSaltBlue}) {
+    final AppThemeTokens tokens = AppThemeTokens(
+      pageBackground: color.pageBackground,
+      surface: color.surface,
+      featureSurface: color.featureSurface,
+      mutedSurface: color.mutedSurface,
+      divider: color.divider,
+      mutedText: color.mutedText,
+      accent: color.accent,
       dataSourceAccent: Color(0xFFFF9A62),
       dataSourceCat: Color(0xFFFFC857),
       dataSourceCommunity: Color(0xFF81C995),
-      accentSoft: Color(0xFF17263A),
+      accentSoft: color.accentSoft,
       notification: Color(0xFFFF8B8B),
       success: Color(0xFF7DDBA5),
       warning: Color(0xFFFFC266),
-      focusRing: Color(0xFFB5D1FF),
+      focusRing: color.focusRing,
       shadow: Color(0x99000000),
       coverDuskStart: Color(0xFF182433),
       coverDuskEnd: Color(0xFF455B73),
@@ -131,9 +233,9 @@ abstract final class AppTheme {
     );
     final ColorScheme colorScheme = ColorScheme.fromSeed(seedColor: tokens.accent, brightness: Brightness.dark).copyWith(
       primary: tokens.accent,
-      onPrimary: const Color(0xFF07111F),
+      onPrimary: color == AppDarkThemeColor.seaSaltBlue ? const Color(0xFF07111F) : const Color(0xFF111111),
       primaryContainer: tokens.accentSoft,
-      onPrimaryContainer: const Color(0xFFD7E7FF),
+      onPrimaryContainer: color == AppDarkThemeColor.seaSaltBlue ? const Color(0xFFD7E7FF) : const Color(0xFFE8EDF3),
       surface: tokens.surface,
       onSurface: const Color(0xFFE8EDF3),
       outlineVariant: tokens.divider,

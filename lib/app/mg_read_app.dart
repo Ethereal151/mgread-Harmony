@@ -179,6 +179,7 @@ class _MgReadAppState extends ConsumerState<MgReadApp> with WidgetsBindingObserv
     ref.watch(appSettingsStatusProvider);
     final AppSettingsManager settings = ref.watch(appSettingsProvider);
     final AppThemeColor themeColor = AppThemeColor.fromId(settings.get(AppSettingKeys.themeColor));
+    final AppDarkThemeColor darkThemeColor = AppDarkThemeColor.fromId(settings.get(AppSettingKeys.darkThemeColor));
     final ThemeMode themeMode = switch (settings.get(AppSettingKeys.themeMode)) {
       'dark' => ThemeMode.dark,
       'light' => ThemeMode.light,
@@ -192,7 +193,7 @@ class _MgReadAppState extends ConsumerState<MgReadApp> with WidgetsBindingObserv
       title: 'MgRead',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(color: themeColor),
-      darkTheme: AppTheme.dark(),
+      darkTheme: AppTheme.dark(color: darkThemeColor),
       themeMode: themeMode,
       routerConfig: router,
       builder: (BuildContext context, Widget? child) {

@@ -14,6 +14,7 @@ import 'package:mg_read/core/settings/settings.dart';
 import 'package:mg_read/features/profile/presentation/about_document_page.dart';
 import 'package:mg_read/shared/presentation/widgets/app_secondary_page_chrome.dart';
 
+part 'profile_appearance_theme_controls.dart';
 part 'profile_reading_player_settings_components.dart';
 
 class ProfileGeneralSettingPage extends ConsumerWidget {
@@ -92,7 +93,8 @@ class ProfileGeneralSettingPage extends ConsumerWidget {
   List<Widget> _appearanceSections(BuildContext context, AppSettingsManager settings) {
     final String layout = settings.get(AppSettingKeys.homeLayoutMode);
     final String themeMode = settings.get(AppSettingKeys.themeMode);
-    final AppThemeColor themeColor = AppThemeColor.fromId(settings.get(AppSettingKeys.themeColor));
+    final AppThemeColor lightThemeColor = AppThemeColor.fromId(settings.get(AppSettingKeys.themeColor));
+    final AppDarkThemeColor darkThemeColor = AppDarkThemeColor.fromId(settings.get(AppSettingKeys.darkThemeColor));
     return <Widget>[
       const _SectionHeading(title: '界面模式', description: '选择应用界面使用日间、夜间，或跟随系统设置'),
       const SizedBox(height: AppSpacing.regular),
@@ -103,16 +105,25 @@ class ProfileGeneralSettingPage extends ConsumerWidget {
         },
       ),
       const SizedBox(height: AppSpacing.section),
-      const _SectionHeading(title: '界面主题色', description: '只影响应用界面；小说、漫画、音频和视频阅读器独立管理主题'),
+      const _SectionHeading(title: '日间主题色', description: '只影响应用日间界面；阅读器独立管理主题'),
       const SizedBox(height: AppSpacing.regular),
       _ThemeColorCard(
-        value: themeColor,
+        value: lightThemeColor,
         onChanged: (AppThemeColor value) async {
           await settings.set(AppSettingKeys.themeColor, value.id);
         },
       ),
       const SizedBox(height: AppSpacing.regular),
-      _AppearancePreviewCard(color: themeColor),
+      const _SectionHeading(title: '夜间主题色', description: '为夜间界面单独选择适合深色背景的配色'),
+      const SizedBox(height: AppSpacing.regular),
+      _DarkThemeColorCard(
+        value: darkThemeColor,
+        onChanged: (AppDarkThemeColor value) async {
+          await settings.set(AppSettingKeys.darkThemeColor, value.id);
+        },
+      ),
+      const SizedBox(height: AppSpacing.regular),
+      _AppearancePreviewCard(lightColor: lightThemeColor, darkColor: darkThemeColor),
       const SizedBox(height: AppSpacing.section),
       const _SectionHeading(title: '书架布局', description: '选择书架首页的默认浏览方式'),
       const SizedBox(height: AppSpacing.regular),
@@ -123,7 +134,7 @@ class ProfileGeneralSettingPage extends ConsumerWidget {
         },
       ),
       const SizedBox(height: AppSpacing.comfortable),
-      const _InlineNotice(icon: Icons.dark_mode_outlined, message: '浅色模式提供多种主题色；深色模式使用 OLED 冷黑主题。阅读器内主题不受此处影响。'),
+      const _InlineNotice(icon: Icons.dark_mode_outlined, message: '日间和夜间主题色互不影响；阅读器内主题不受此处影响。'),
     ];
   }
 
@@ -369,110 +380,6 @@ class _SettingsRowShell extends StatelessWidget {
           ),
           if (trailing != null) ...<Widget>[const SizedBox(width: AppSpacing.compact), trailing!],
         ],
-      ),
-    );
-  }
-}
-
-class _AppearancePreviewCard extends StatelessWidget {
-  const _AppearancePreviewCard({required this.color});
-
-  final AppThemeColor color;
-
-  @override
-  Widget build(BuildContext context) {
-    final ThemeData theme = Theme.of(context);
-    final AppThemeTokens tokens = AppThemeTokens.of(context);
-    return DecoratedBox(
-      key: const Key('appearance-settings-preview'),
-      decoration: BoxDecoration(
-        color: tokens.surface,
-        borderRadius: AppRadii.detailCard,
-        border: Border.all(color: tokens.divider),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.comfortable),
-        child: Row(
-          children: <Widget>[
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Text(color.label, style: theme.textTheme.titleMedium),
-                  const SizedBox(height: AppSpacing.unit),
-                  Text('柔和、清晰，适合长时间浏览', style: theme.textTheme.bodySmall?.copyWith(color: tokens.mutedText)),
-                ],
-              ),
-            ),
-            for (final Color color in <Color>[tokens.pageBackground, tokens.featureSurface, tokens.accent]) ...<Widget>[
-              const SizedBox(width: AppSpacing.compact),
-              Container(
-                width: 32,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: color,
-                  borderRadius: AppRadii.pill,
-                  border: Border.all(color: tokens.divider),
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ThemeColorCard extends StatefulWidget {
-  const _ThemeColorCard({required this.value, required this.onChanged});
-
-  final AppThemeColor value;
-  final ValueChanged<AppThemeColor> onChanged;
-
-  @override
-  State<_ThemeColorCard> createState() => _ThemeColorCardState();
-}
-
-class _ThemeColorCardState extends State<_ThemeColorCard> {
-  late AppThemeColor _value = widget.value;
-
-  @override
-  void didUpdateWidget(covariant _ThemeColorCard oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.value != widget.value) _value = widget.value;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final AppThemeTokens tokens = AppThemeTokens.of(context);
-    return DecoratedBox(
-      key: const Key('appearance-theme-color'),
-      decoration: BoxDecoration(
-        color: tokens.surface,
-        borderRadius: AppRadii.detailCard,
-        border: Border.all(color: tokens.divider),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.regular),
-        child: Wrap(
-          spacing: AppSpacing.compact,
-          runSpacing: AppSpacing.compact,
-          children: <Widget>[
-            for (final AppThemeColor color in AppThemeColor.values)
-              ChoiceChip(
-                key: Key('appearance-theme-color-${color.id}'),
-                avatar: CircleAvatar(backgroundColor: color.accent, radius: 9),
-                label: Text(color.label),
-                selected: color == _value,
-                onSelected: (_) {
-                  setState(() => _value = color);
-                  widget.onChanged(color);
-                },
-                selectedColor: tokens.accentSoft,
-                side: BorderSide(color: color == _value ? tokens.accent : tokens.divider),
-              ),
-          ],
-        ),
       ),
     );
   }

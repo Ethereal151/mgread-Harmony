@@ -14,6 +14,16 @@ void main() {
     expect(theme.colorScheme.onSurface, const Color(0xFFE8EDF3));
   });
 
+  test('offers independent near-black dark palettes', () {
+    final ThemeData theme = AppTheme.dark(color: AppDarkThemeColor.coolBlack);
+    final AppThemeTokens tokens = theme.extension<AppThemeTokens>()!;
+
+    expect(tokens.pageBackground, const Color(0xFF000000));
+    expect(tokens.surface, const Color(0xFF08090B));
+    expect(tokens.accent, const Color(0xFFD7DCE5));
+    expect(AppDarkThemeColor.fromId('purpleBlack'), AppDarkThemeColor.purpleBlack);
+  });
+
   test('exposes the compact semantic typography scale globally', () {
     final textTheme = AppTheme.light().textTheme;
 

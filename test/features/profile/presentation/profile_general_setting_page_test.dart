@@ -81,6 +81,18 @@ void main() {
     expect(settings.get(AppSettingKeys.themeColor), 'blue');
   });
 
+  testWidgets('appearance settings persists the independent night theme color', (WidgetTester tester) async {
+    final AppSettingsManager settings = await _settings();
+    addTearDown(settings.close);
+    await tester.pumpWidget(_host(settings, settingId: 'theme-appearance'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('appearance-dark-theme-color-coolBlack')));
+    await tester.pumpAndSettle();
+
+    expect(settings.get(AppSettingKeys.darkThemeColor), 'coolBlack');
+  });
+
   testWidgets('appearance settings persists the host day and night mode', (WidgetTester tester) async {
     final AppSettingsManager settings = await _settings();
     addTearDown(settings.close);
