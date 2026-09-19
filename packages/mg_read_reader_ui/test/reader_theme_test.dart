@@ -11,15 +11,22 @@ void main() {
       ReaderPalette.fromPreset(ReaderThemePreset.night),
       ReaderPalette.fromPreset(ReaderThemePreset.deepNight),
       ReaderPalette.fromPreset(ReaderThemePreset.charcoal),
+      ReaderPalette.fromPreset(ReaderThemePreset.oled),
+      ReaderPalette.fromPreset(ReaderThemePreset.midnight),
+      ReaderPalette.fromPreset(ReaderThemePreset.forestNight),
     ];
 
     for (int index = 0; index < palettes.length; index++) {
       final ReaderPalette palette = palettes[index];
       expect(_contrastRatio(palette.text, palette.background), greaterThan(7));
-      expect(
-        _contrastRatio(palette.panel, palette.background),
-        greaterThan(1.15),
-      );
+      if (palette.background == Colors.black) {
+        expect(palette.panel, Colors.black);
+      } else {
+        expect(
+          _contrastRatio(palette.panel, palette.background),
+          greaterThan(1.15),
+        );
+      }
       for (
         int otherIndex = index + 1;
         otherIndex < palettes.length;
@@ -31,6 +38,18 @@ void main() {
         );
       }
     }
+  });
+
+  test('provides an OLED palette with pure black and white reading colors', () {
+    final ReaderPalette palette = ReaderPalette.fromPreset(
+      ReaderThemePreset.oled,
+    );
+
+    expect(palette.background, Colors.black);
+    expect(palette.panel, Colors.black);
+    expect(palette.text, Colors.white);
+    expect(palette.accent, Colors.white);
+    expect(palette.systemBrightness, Brightness.dark);
   });
 }
 

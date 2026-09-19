@@ -25,6 +25,24 @@ enum ReaderThemePreset {
 
   /// A neutral charcoal palette with subdued contrast.
   charcoal,
+
+  /// Pure black and white for OLED displays and maximum dark-room contrast.
+  oled,
+
+  /// A deep indigo palette with a soft violet accent.
+  midnight,
+
+  /// A deep green palette with a low-glare natural tone.
+  forestNight,
+
+  /// A cool, pale lavender reading palette.
+  lavenderMist,
+
+  /// A warm blush palette with rose accents.
+  roseTea,
+
+  /// A pale teal palette with a fresh, low-saturation surface.
+  seaGlass,
 }
 
 /// Built-in, reader-owned background treatments.
@@ -587,7 +605,10 @@ class TextReaderPreferences {
 bool _isNightThemePreset(ReaderThemePreset theme) =>
     theme == ReaderThemePreset.night ||
     theme == ReaderThemePreset.deepNight ||
-    theme == ReaderThemePreset.charcoal;
+    theme == ReaderThemePreset.charcoal ||
+    theme == ReaderThemePreset.oled ||
+    theme == ReaderThemePreset.midnight ||
+    theme == ReaderThemePreset.forestNight;
 
 @immutable
 /// A recoverable reader error suitable for host diagnostics.

@@ -47,15 +47,18 @@ void main() {
     expect(const TextReaderPreferences(fontSize: 40).normalized().fontSize, 32);
   });
 
-  test('enables common page-turn shortcuts by default and can disable them', () {
-    expect(TextReaderPreferences.defaults.pageTurnShortcuts, isTrue);
-    expect(
-      TextReaderPreferences.defaults
-          .copyWith(pageTurnShortcuts: false)
-          .pageTurnShortcuts,
-      isFalse,
-    );
-  });
+  test(
+    'enables common page-turn shortcuts by default and can disable them',
+    () {
+      expect(TextReaderPreferences.defaults.pageTurnShortcuts, isTrue);
+      expect(
+        TextReaderPreferences.defaults
+            .copyWith(pageTurnShortcuts: false)
+            .pageTurnShortcuts,
+        isFalse,
+      );
+    },
+  );
 
   testWidgets('labels the bottom margin and page footer debug regions', (
     WidgetTester tester,
@@ -146,6 +149,16 @@ void main() {
       ).normalized().lastNonNightTheme,
       ReaderThemePreset.day,
     );
+    for (final ReaderThemePreset theme in <ReaderThemePreset>[
+      ReaderThemePreset.oled,
+      ReaderThemePreset.midnight,
+      ReaderThemePreset.forestNight,
+    ]) {
+      expect(
+        TextReaderPreferences(theme: theme).normalized().lastNonNightTheme,
+        ReaderThemePreset.day,
+      );
+    }
   });
 
   testWidgets('restores the last non-night theme after a reader re-entry', (

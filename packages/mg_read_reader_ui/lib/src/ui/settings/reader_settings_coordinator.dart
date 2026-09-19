@@ -233,6 +233,12 @@ class _ReaderSettingsSheetState extends State<ReaderSettingsSheet> {
     ReaderThemePreset.mistBlue => ReaderStrings.mistBlue,
     ReaderThemePreset.deepNight => ReaderStrings.deepNight,
     ReaderThemePreset.charcoal => ReaderStrings.charcoal,
+    ReaderThemePreset.oled => ReaderStrings.oled,
+    ReaderThemePreset.midnight => ReaderStrings.midnight,
+    ReaderThemePreset.forestNight => ReaderStrings.forestNight,
+    ReaderThemePreset.lavenderMist => ReaderStrings.lavenderMist,
+    ReaderThemePreset.roseTea => ReaderStrings.roseTea,
+    ReaderThemePreset.seaGlass => ReaderStrings.seaGlass,
   };
 
   String _backgroundLabel(ReaderBackgroundPreset preset) => switch (preset) {
@@ -255,5 +261,8 @@ class _ReaderSettingsSheetState extends State<ReaderSettingsSheet> {
   bool _isNightTheme(ReaderThemePreset theme) =>
       theme == ReaderThemePreset.night ||
       theme == ReaderThemePreset.deepNight ||
-      theme == ReaderThemePreset.charcoal;
+      theme == ReaderThemePreset.charcoal ||
+      theme == ReaderThemePreset.oled ||
+      theme == ReaderThemePreset.midnight ||
+      theme == ReaderThemePreset.forestNight;
 }

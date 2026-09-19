@@ -735,5 +735,8 @@ class _TextReaderViewState extends State<TextReaderView>
   bool _isNightTheme(ReaderThemePreset theme) =>
       theme == ReaderThemePreset.night ||
       theme == ReaderThemePreset.deepNight ||
-      theme == ReaderThemePreset.charcoal;
+      theme == ReaderThemePreset.charcoal ||
+      theme == ReaderThemePreset.oled ||
+      theme == ReaderThemePreset.midnight ||
+      theme == ReaderThemePreset.forestNight;
 }

@@ -62,6 +62,12 @@ abstract final class ReaderStrings {
   static const mistBlue = '雾蓝';
   static const deepNight = '深夜';
   static const charcoal = '炭灰';
+  static const oled = 'OLED 黑白';
+  static const midnight = '午夜蓝紫';
+  static const forestNight = '森林夜';
+  static const lavenderMist = '薰衣草雾';
+  static const roseTea = '玫瑰茶';
+  static const seaGlass = '海玻璃';
   static const color = '颜色';
   static const background = '背景';
   static const plainBackground = '纯净';

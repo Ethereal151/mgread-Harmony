@@ -37,7 +37,13 @@ const List<ReaderThemePreset> _themeOrder = <ReaderThemePreset>[
   ReaderThemePreset.parchment,
   ReaderThemePreset.eyeCare,
   ReaderThemePreset.mistBlue,
+  ReaderThemePreset.lavenderMist,
+  ReaderThemePreset.roseTea,
+  ReaderThemePreset.seaGlass,
   ReaderThemePreset.night,
   ReaderThemePreset.deepNight,
   ReaderThemePreset.charcoal,
+  ReaderThemePreset.midnight,
+  ReaderThemePreset.forestNight,
+  ReaderThemePreset.oled,
 ];
