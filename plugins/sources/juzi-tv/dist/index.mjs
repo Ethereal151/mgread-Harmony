@@ -51,7 +51,7 @@ export async function getContent(request) { const id = contentId(request.id), ep
         continue;
     }
 } if (!safeUrl(upstream))
-    throw new Error('Video address is unavailable.'); const mediaHeaders = { 'User-Agent': 'Mozilla/5.0', Referer: 'https://55.app/' }; return frozen({ chapterId: request.chapterId, contentKind: 'video', title: null, updatedAt: null, text: null, pages: [], media: { url: requireContext().resource.proxy({ kind: 'video', url: upstream, headers: mediaHeaders }), resourceType: 'video', resourcePolicy: 'sessionOnly', expiresAt: null, mimeType: /\.m3u8(?:$|[?#])/iu.test(upstream) ? 'application/vnd.apple.mpegurl' : 'video/mp4', headers: mediaHeaders } }); }
+    throw new Error('Video address is unavailable.'); const resourceType = /\.m3u8(?:$|[?#])/iu.test(upstream) ? 'hls' : 'video', mediaHeaders = { 'User-Agent': 'Mozilla/5.0', Referer: 'https://55.app/' }; return frozen({ chapterId: request.chapterId, contentKind: 'video', title: null, updatedAt: null, text: null, pages: [], media: { url: requireContext().resource.proxy({ kind: resourceType, url: upstream, headers: mediaHeaders }), resourceType, resourcePolicy: 'sessionOnly', expiresAt: null, mimeType: resourceType === 'hls' ? 'application/vnd.apple.mpegurl' : 'video/mp4', headers: mediaHeaders } }); }
 async function post(path, extra) { const body = sign({ ...common, ...extra, udid, requestId: randomUUID() }), payload = JSON.stringify(body), ordered = [activeHost, ...hosts.filter(host => host !== activeHost)]; let last = ''; for (const host of ordered) {
     try {
         const response = await requireContext().http.fetch(`${host}${path}`, { method: 'POST', headers, body: payload });

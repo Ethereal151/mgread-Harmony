@@ -3,13 +3,15 @@ import test from 'node:test';
 
 import * as plugin from '../dist/index.mjs';
 
-test('live Juzi TV home and catalog remain reachable', { timeout: 90_000 }, async () => {
+test('live Juzi TV home, catalog and HLS media remain reachable', { timeout: 90_000 }, async () => {
   let resourceId = 0;
+  let mediaRequest;
   await plugin.activate({
     log: { info() {}, warn() {} },
     resource: {
-      proxy() {
+      proxy(request) {
         resourceId += 1;
+        if (request.kind === 'hls' || request.kind === 'video') mediaRequest = request;
         return `http://127.0.0.1:9000/v1/source-resource/${String(resourceId).padStart(16, '0')}`;
       },
     },
@@ -35,19 +37,94 @@ test('live Juzi TV home and catalog remain reachable', { timeout: 90_000 }, asyn
     ],
   );
   assert.ok(Buffer.byteLength(JSON.stringify(home), 'utf8') < 56 * 1024);
-  for (const section of home.document.components.filter(
-    (component) => component.type === 'section',
-  )) {
-    const items = section.children[0].items;
-    assert.ok(items.length > 0);
-    assert.ok(items.every((item) => item.content.coverUrl !== null));
-  }
 
   const catalog = await plugin.discover({
     target: 'channel:short',
     cursor: null,
     collectionId: null,
-    pageSize: 3,
+    pageSize: 1,
   });
-  assert.ok(catalog.document.components[0].children[0].items.length > 0);
+  const selected = catalog.document.components[0].children[0].items[0].content;
+  assert.ok(selected.coverUrl !== null);
+
+  const detail = await plugin.getDetail({ id: selected.id });
+  const chapters = await plugin.getChapters({ id: detail.id });
+  assert.ok(chapters.items.length > 0);
+  const content = await plugin.getContent({
+    id: detail.id,
+    chapterId: chapters.items[0].id,
+  });
+  assert.equal(content.contentKind, 'video');
+  assert.equal(content.media.resourceType, 'hls');
+  assert.equal(mediaRequest.kind, 'hls');
+
+  const root = await fetch(mediaRequest.url, {
+    headers: mediaRequest.headers,
+    redirect: 'follow',
+    signal: AbortSignal.timeout(20_000),
+  });
+  const rootPrefix = await readPrefix(root);
+  assert.ok(root.ok, `HLS root status ${root.status}`);
+  assert.match(rootPrefix.text, /^#EXTM3U/u);
+
+  let playlistUrl = root.url;
+  let playlistText = rootPrefix.text;
+  for (let depth = 0; depth < 2 && /#EXT-X-STREAM-INF/u.test(playlistText); depth += 1) {
+    const child = firstPlaylistUri(playlistText);
+    assert.ok(child);
+    const response = await fetch(new URL(child, playlistUrl), {
+      headers: mediaRequest.headers,
+      redirect: 'follow',
+      signal: AbortSignal.timeout(20_000),
+    });
+    const prefix = await readPrefix(response);
+    assert.ok(response.ok, `HLS child status ${response.status}`);
+    assert.match(prefix.text, /^#EXTM3U/u);
+    playlistUrl = response.url;
+    playlistText = prefix.text;
+  }
+
+  const segment = firstMediaUri(playlistText);
+  assert.ok(segment);
+  const segmentResponse = await fetch(new URL(segment, playlistUrl), {
+    headers: { ...mediaRequest.headers, Range: 'bytes=0-65535' },
+    redirect: 'follow',
+    signal: AbortSignal.timeout(20_000),
+  });
+  const segmentPrefix = await readPrefix(segmentResponse);
+  assert.ok(segmentResponse.ok, `HLS segment status ${segmentResponse.status}`);
+  assert.ok(segmentPrefix.bytes > 0);
 });
+
+function firstPlaylistUri(text) {
+  const lines = text.split(/\r?\n/u).map((line) => line.trim());
+  const marker = lines.findIndex((line) => line.startsWith('#EXT-X-STREAM-INF'));
+  return lines.slice(marker + 1).find((line) => line !== '' && !line.startsWith('#')) ?? null;
+}
+
+function firstMediaUri(text) {
+  return text.split(/\r?\n/u)
+    .map((line) => line.trim())
+    .find((line) => line !== '' && !line.startsWith('#') && !/\.m3u8(?:$|[?#])/iu.test(line)) ?? null;
+}
+
+async function readPrefix(response) {
+  const reader = response.body?.getReader();
+  if (reader === undefined) return { bytes: 0, text: '' };
+  const chunks = [];
+  let bytes = 0;
+  try {
+    while (bytes < 64 * 1024) {
+      const next = await reader.read();
+      if (next.done || next.value === undefined) break;
+      const remaining = 64 * 1024 - bytes;
+      const chunk = next.value.slice(0, remaining);
+      chunks.push(Buffer.from(chunk));
+      bytes += chunk.byteLength;
+      if (chunk.byteLength < next.value.byteLength) break;
+    }
+  } finally {
+    await reader.cancel().catch(() => {});
+  }
+  return { bytes, text: Buffer.concat(chunks).toString('utf8') };
+}

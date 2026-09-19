@@ -112,7 +112,9 @@ test('Juzi TV source signs requests, keeps ep IDs and proxies HLS', async () => 
     id: item.id,
     chapterId: chapters.items[0].id,
   });
-  assert.equal(content.media.resourceType, 'video');
+  assert.equal(content.media.resourceType, 'hls');
+  assert.equal(proxied.at(-1).kind, 'hls');
+  assert.equal(content.media.mimeType, 'application/vnd.apple.mpegurl');
   assert.equal(proxied.at(-1).url, 'https://media.example/1.m3u8');
 });
 
