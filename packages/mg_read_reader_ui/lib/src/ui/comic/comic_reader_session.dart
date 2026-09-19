@@ -47,6 +47,7 @@ extension _ComicReaderSession on _ComicReaderViewState {
     _bookmarks = const <ComicReaderBookmark>[];
     _firstContentPresented = false;
     _preloader?.cancel();
+    _imageRetryCoordinator.clear();
     _layoutCorrection = 0;
     _failure = null;
     _loading = true;
@@ -566,9 +567,11 @@ extension _ComicReaderSession on _ComicReaderViewState {
     }
     final Set<String> retained = _window.map((e) => e.info.id).toSet();
     _imageCache.retainGeometry(retained);
-    _imageKeys.removeWhere(
-      (key, _) => !retained.contains(key.split('\u0000').first),
-    );
+    _imageKeys.removeWhere((key, _) {
+      final bool remove = !retained.contains(key.split('\u0000').first);
+      if (remove) _imageRetryCoordinator.remove(key);
+      return remove;
+    });
     for (final String id in _contentCache.keys.toList()) {
       if (!retained.contains(id)) _contentCache.remove(id);
     }
@@ -665,6 +668,7 @@ extension _ComicReaderSession on _ComicReaderViewState {
 
   void _handleScroll() {
     if (_disposed || _restoring || !_scrollController.hasClients) return;
+    _imageRetryCoordinator.onViewportChanged();
     _updateProgressFromScroll();
     final ScrollPosition position = _scrollController.position;
     final double trigger = position.viewportDimension * 1.5;
@@ -673,6 +677,24 @@ extension _ComicReaderSession on _ComicReaderViewState {
         _loadNextAdjacent(_afterBoundaryIndex ?? _window.last.info.index + 1),
       );
     }
+  }
+
+  bool _isImageNearViewport(String key) {
+    final RenderBox? surface =
+        _readingSurfaceKey.currentContext?.findRenderObject() as RenderBox?;
+    final RenderBox? image =
+        _imageKeys[key]?.currentContext?.findRenderObject() as RenderBox?;
+    if (surface == null ||
+        image == null ||
+        !surface.hasSize ||
+        !image.hasSize) {
+      return false;
+    }
+    final double surfaceTop = surface.localToGlobal(Offset.zero).dy;
+    final double imageTop = image.localToGlobal(Offset.zero).dy - surfaceTop;
+    final double padding = surface.size.height * .75;
+    return imageTop + image.size.height >= -padding &&
+        imageTop <= surface.size.height + padding;
   }
 
   void _updateProgressFromScroll() {

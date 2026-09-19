@@ -74,29 +74,44 @@ extension _ComicReaderChrome on _ComicReaderViewState {
               final _ComicListEntry entry = entries[index];
               return switch (entry) {
                 _ComicHeaderEntry() => _buildChapterHeader(entry, palette),
-                _ComicImageEntry() => ComicProgressiveImageTile(
-                  key: _imageKeyFor(entry),
-                  cache: _imageCache,
-                  chapterId: entry.chapter.info.id,
-                  image: entry.image,
-                  width: _viewportWidth,
-                  placeholderHeight: entry.placeholderExtent,
-                  palette: palette,
-                  decodeBudget: _decodeBudget,
-                  onPresented: _notifyFirstContentPresented,
-                  bookId: widget.bookId,
-                  commentFeed: widget.commentFeed,
-                  onOpenComments: (ReaderCommentTarget target) =>
-                      _showImageComments(target, palette),
-                  onFailure: (Object error) =>
-                      unawaited(_reportFailure(_asImageFailure(error))),
-                ),
+                _ComicImageEntry() => _buildImageTile(entry, palette),
                 _ComicBoundaryEntry() => _buildBoundary(entry, palette),
               };
             },
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildImageTile(_ComicImageEntry entry, ReaderPalette palette) {
+    final String retryKey = '${entry.chapter.info.id}\u0000${entry.image.id}';
+    return ComicProgressiveImageTile(
+      key: _imageKeyFor(entry),
+      cache: _imageCache,
+      chapterId: entry.chapter.info.id,
+      image: entry.image,
+      width: _viewportWidth,
+      placeholderHeight: entry.placeholderExtent,
+      palette: palette,
+      decodeBudget: _decodeBudget,
+      onPresented: (bool cacheHit) {
+        _imageRetryCoordinator.markResolved(retryKey);
+        _notifyFirstContentPresented(cacheHit);
+      },
+      onAutomaticRetryAvailable: (Future<void> Function() retry) {
+        _imageRetryCoordinator.register(
+          key: retryKey,
+          isNearViewport: () => _isImageNearViewport(retryKey),
+          retry: retry,
+        );
+      },
+      bookId: widget.bookId,
+      commentFeed: widget.commentFeed,
+      onOpenComments: (ReaderCommentTarget target) =>
+          _showImageComments(target, palette),
+      onFailure: (Object error) =>
+          unawaited(_reportFailure(_asImageFailure(error))),
     );
   }
 

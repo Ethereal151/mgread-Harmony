@@ -8,6 +8,7 @@ import 'package:novel_reader_ui/novel_reader_ui.dart';
 import 'package:novel_reader_ui/src/ui/comic/comic_image_cache.dart';
 import 'package:novel_reader_ui/src/ui/comic/comic_image_tile.dart';
 import 'package:novel_reader_ui/src/ui/comic/comic_chapter_preloader.dart';
+import 'package:novel_reader_ui/src/ui/comic/comic_image_retry_coordinator.dart';
 import 'package:novel_reader_ui/src/ui/reader_theme.dart';
 
 void main() {
@@ -72,6 +73,38 @@ void main() {
         sourceUrl: sourceUrl,
       ),
     );
+  });
+
+  testWidgets('failed comic images expose a background retry callback', (
+    WidgetTester tester,
+  ) async {
+    final source = _RetryingComicSource(failures: 1);
+    final cache = ComicImageByteCache(bookId: 'book', dataSource: source);
+    Future<void> Function()? retry;
+    addTearDown(cache.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ComicProgressiveImageTile(
+          cache: cache,
+          chapterId: 'chapter-1',
+          image: _image('image-1', null),
+          width: 320,
+          placeholderHeight: 240,
+          palette: ReaderPalette.fromPreset(ReaderThemePreset.day),
+          onFailure: (_) {},
+          decodeBudget: ComicDecodedImageBudget(),
+          onAutomaticRetryAvailable: (callback) => retry = callback,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(retry, isNotNull);
+    await retry!();
+    await tester.pump();
+    expect(source.imageCalls, 2);
   });
 
   test(
@@ -491,48 +524,89 @@ void main() {
     );
   });
 
-  testWidgets(
-    'visible comic images automatically retry transient load failures',
-    (WidgetTester tester) async {
-      final source = _RetryingComicSource(failures: 2);
-      final cache = ComicImageByteCache(bookId: 'book', dataSource: source);
-      addTearDown(cache.dispose);
-
-      await tester.pumpWidget(
-        MaterialApp(
-          home: ComicProgressiveImageTile(
-            cache: cache,
-            chapterId: 'chapter-1',
-            image: _image('image-1', null),
-            width: 320,
-            placeholderHeight: 240,
-            palette: ReaderPalette.fromPreset(ReaderThemePreset.day),
-            onFailure: (_) {},
-            decodeBudget: ComicDecodedImageBudget(),
-          ),
-        ),
+  test(
+    'comic image retries use jittered and near-viewport scheduling',
+    () async {
+      var nearViewport = false;
+      var retryCalls = 0;
+      final coordinator = ComicImageRetryCoordinator(
+        retryDelay: () => const Duration(milliseconds: 20),
+        scanDebounce: const Duration(milliseconds: 2),
       );
+      addTearDown(coordinator.dispose);
 
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
-      await tester.pump(const Duration(milliseconds: 900));
-      await tester.pumpAndSettle();
+      coordinator.register(
+        key: 'far',
+        isNearViewport: () => nearViewport,
+        retry: () async {
+          retryCalls++;
+          coordinator.markResolved('far');
+        },
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 8));
+      expect(retryCalls, 0);
 
-      expect(source.imageCalls, 3);
-      expect(
-        find.byKey(
-          const ValueKey<String>('comic-reader-image-chapter-1-image-1'),
-        ),
-        findsOneWidget,
+      nearViewport = true;
+      coordinator.onViewportChanged();
+      await Future<void>.delayed(const Duration(milliseconds: 8));
+      expect(retryCalls, 1);
+
+      coordinator.register(
+        key: 'near',
+        isNearViewport: () => true,
+        retry: () async {
+          retryCalls++;
+          coordinator.markResolved('near');
+        },
       );
-      expect(
-        find.byKey(
-          const ValueKey<String>('comic-reader-image-retry-chapter-1-image-1'),
-        ),
-        findsNothing,
-      );
+      await Future<void>.delayed(const Duration(milliseconds: 8));
+      expect(retryCalls, 2);
     },
   );
+
+  test('comic image retry coordinator keeps one request in flight', () async {
+    final coordinator = ComicImageRetryCoordinator(
+      retryDelay: () => Duration.zero,
+      scanDebounce: const Duration(milliseconds: 2),
+    );
+    addTearDown(coordinator.dispose);
+    final Completer<void> firstRetry = Completer<void>();
+    var active = 0;
+    var peakActive = 0;
+    var retryCalls = 0;
+
+    coordinator.register(
+      key: 'first',
+      isNearViewport: () => true,
+      retry: () async {
+        active++;
+        peakActive = active > peakActive ? active : peakActive;
+        retryCalls++;
+        await firstRetry.future;
+        active--;
+        coordinator.markResolved('first');
+      },
+    );
+    coordinator.register(
+      key: 'second',
+      isNearViewport: () => true,
+      retry: () async {
+        active++;
+        peakActive = active > peakActive ? active : peakActive;
+        retryCalls++;
+        active--;
+        coordinator.markResolved('second');
+      },
+    );
+
+    await Future<void>.delayed(const Duration(milliseconds: 8));
+    expect(retryCalls, 1);
+    expect(peakActive, 1);
+    firstRetry.complete();
+    await Future<void>.delayed(const Duration(milliseconds: 8));
+    expect(retryCalls, 2);
+    expect(peakActive, 1);
+  });
 
   testWidgets(
     'comic images use decoded dimensions and meet without fixed-extent gaps',

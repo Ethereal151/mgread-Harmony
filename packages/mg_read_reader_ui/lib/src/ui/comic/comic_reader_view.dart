@@ -35,6 +35,7 @@ import '../reader_theme.dart';
 import '../reader_source_strip.dart';
 import 'comic_image_cache.dart';
 import 'comic_chapter_preloader.dart';
+import 'comic_image_retry_coordinator.dart';
 import 'comic_image_tile.dart';
 import 'comic_reader_strings.dart';
 import 'comic_scroll_physics.dart';
@@ -137,6 +138,8 @@ class _ComicReaderViewState extends State<ComicReaderView>
   StreamSubscription<ReaderVolumeKey>? _volumeKeySubscription;
   final ScrollController _scrollController = ScrollController();
   final ComicDecodedImageBudget _decodeBudget = ComicDecodedImageBudget();
+  final ComicImageRetryCoordinator _imageRetryCoordinator =
+      ComicImageRetryCoordinator();
   final List<ComicChapterInfo> _catalog = <ComicChapterInfo>[];
   final Map<String, ComicChapterInfo> _catalogById =
       <String, ComicChapterInfo>{};
@@ -337,6 +340,7 @@ class _ComicReaderViewState extends State<ComicReaderView>
     _scrollController
       ..removeListener(_handleScroll)
       ..dispose();
+    _imageRetryCoordinator.dispose();
     _focusNode.dispose();
     _volumeKeySubscription?.cancel();
     unawaited(_disableVolumeKeyHandling());
