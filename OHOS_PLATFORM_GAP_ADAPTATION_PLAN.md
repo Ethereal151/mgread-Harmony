@@ -209,3 +209,17 @@
 ```
 
 阶段 1 是最高优先级，因为在线数据源、插件管理和部分局域网能力都依赖 Runtime 可用；阶段 2 和阶段 3 可以并行开发，但最终验收必须在同一套 arm64 真机上完成。
+
+## 7. 本地执行同步记录（2026-09-19）
+
+以下内容已按本计划落地到代码，并同步到 [`docs/feature-matrix.md`](docs/feature-matrix.md) 与 [`docs/ohos-build.md`](docs/ohos-build.md)。
+
+| 阶段 | 已完成的本地适配 | 当前证据 | 状态 |
+| --- | --- | --- | --- |
+| 阶段 1 | arm64 Node 24.16.0 宿主、Runtime ping、ArkWeb 页面操作、请求 deadline/cancel 清理 | `ohos_runtime_smoke_test.dart`、`ohos_browser_session_smoke_test.dart`、`ohos_stage2_runtime_arkweb_test.dart` | arm64 真机通过；5 个 fixture 通过，真实来源仍待验收 |
+| 阶段 2 | AVPlayer 音频/视频桥、Texture、后台 Ability 生命周期、中断暂停/恢复 | `ohos_media_smoke_test.dart`、`ohos_video_smoke_test.dart` | 音频控制和视频首帧/窗口恢复 arm64 真机通过；锁屏/蓝牙/焦点证据待补 |
+| 阶段 3 | Network Kit 地址探测、网络可用性事件边界、现有二维码载荷校验路由 | `platform_lan_sync_network_environment_test.dart`、`ohos_runtime_smoke_test.dart` | 代码与本机网络探测通过；三组跨设备和有效二维码待验收 |
+| 阶段 4 | HAP 下载后大小/SHA-256 校验、包名校验、应用市场 fallback；插件文件选择和错误映射保持可用 | `platform_app_update_service_test.dart`、插件管理页面 | 代码测试通过；应用市场真机跳转待验收 |
+| 阶段 5 | 首次启动、首页、空书架和 OHOS EL2 持久化路径保持可用 | `library_first_run_test.dart` | arm64 真机首次启动通过；缓存、进度、迁移和异常场景待回归 |
+
+本次同步提交为 `005e0156`（`完成鸿蒙平台能力适配与真机验收`）。未通过真实来源、另一台设备、真实二维码或应用市场确认的项目继续保留为“待验收”，不改写为已完成。
