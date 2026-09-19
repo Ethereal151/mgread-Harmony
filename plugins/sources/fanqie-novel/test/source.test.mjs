@@ -16,11 +16,14 @@ test('Fanqie source keeps book/item IDs and formats paragraphs', async () => {
       throw new Error(url);
     } },
   });
+  const home = await plugin.discover({ target: null, cursor: null, collectionId: null, pageSize: 3 });
   const result = await plugin.discover({ target: 'channel:1', cursor: null, collectionId: null, pageSize: 3 });
   const item = result.document.components[0].children[0].items[0].content;
   const chapters = await plugin.getChapters({ id: item.id });
   const content = await plugin.getContent({ id: item.id, chapterId: chapters.items[0].id });
   assert.equal(item.id, 'novel:12');
+  assert.equal(home.document.components[0].icon, 'book');
+  assert.equal(home.document.components[0].children[0].categories[0].icon, 'book');
   assert.equal(chapters.items[0].id, 'novel:12:34');
   assert.equal(content.text, '第一段\n\n第二段');
   assert.match(proxied[0].url, /p6-novel\.byteimg\.com/u);

@@ -60,11 +60,11 @@ export async function discover(request) {
             document: {
                 components: [{
                         type: 'section',
-                        id: 'fanqie-channels', title: '番茄小说', subtitle: '公开分类', icon: 'novel',
+                        id: 'fanqie-channels', title: '番茄小说', subtitle: '公开分类', icon: 'book',
                         children: [{
                                 type: 'categoryCollection',
                                 id: 'fanqie-channel-list', layout: 'chips',
-                                categories: CHANNELS.map(([id, title]) => ({ id, title, target: `channel:${id}`, count: null, url: null, icon: 'novel' })),
+                                categories: CHANNELS.map(([id, title]) => ({ id, title, target: `channel:${id}`, count: null, url: null, icon: 'book' })),
                             }],
                     }],
             },
@@ -89,7 +89,7 @@ export async function discover(request) {
     return frozen({
         kind: 'document',
         document: { components: [{
-                    type: 'section', id: `${collectionId}:section`, title: channel[1], subtitle: null, icon: 'novel',
+                    type: 'section', id: `${collectionId}:section`, title: channel[1], subtitle: null, icon: 'book',
                     children: [{ type: 'contentCollection', id: collectionId, layout: 'coverGrid', items, continuation }],
                 }] },
     });
