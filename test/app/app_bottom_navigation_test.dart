@@ -48,6 +48,8 @@ void main() {
     final BoxDecoration indicatorDecoration = tester.widget<DecoratedBox>(indicator).decoration as BoxDecoration;
     final Rect initialIndicator = tester.getRect(indicator);
 
+    expect(find.byType(BackdropFilter), findsOneWidget);
+    expect(tester.getRect(find.byKey(const Key('app-bottom-navigation'))).width, lessThanOrEqualTo(AppSpacing.bottomNavigationMaxWidth));
     expect(initialIndicator.width, lessThan(tester.getSize(homeItem).width));
     expect(backdropDecoration.gradient, isNull);
     expect(backdropDecoration.color!.a, lessThan(1));

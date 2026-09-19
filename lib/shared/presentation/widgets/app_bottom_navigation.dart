@@ -13,6 +13,8 @@ library;
 
 export 'package:mg_read/shared/presentation/motion/app_bottom_navigation_motion_scope.dart';
 
+import 'dart:ui' show ImageFilter;
+
 import 'package:flutter/material.dart';
 
 import 'package:mg_read/app/app_theme.dart';
@@ -98,89 +100,99 @@ class _AppBottomNavigationContent extends StatelessWidget {
     final ThemeData theme = Theme.of(context);
     final AppThemeTokens tokens = AppThemeTokens.of(context);
 
-    return SizedBox(
-      key: const Key('app-bottom-navigation'),
-      height: height,
-      child: LayoutBuilder(
-        builder: (BuildContext context, BoxConstraints constraints) {
-          return AnimatedBuilder(
-            animation: motion.animation,
-            builder: (BuildContext context, Widget? child) {
-              final double innerWidth = constraints.maxWidth - AppSpacing.regular * 2;
-              final double innerHeight = constraints.maxHeight - AppSpacing.compact * 2;
-              final double itemWidth = innerWidth / AppNavigationDestination.values.length;
-              final double position = motion.positionFor(selected).clamp(0, AppNavigationDestination.values.length - 1);
-              final double indicatorWidth = AppSpacing.bottomNavigationIndicatorWidth * motion.pillWidthScale;
-              final double indicatorHeight = AppSpacing.bottomNavigationIndicatorHeight * motion.pillHeightScale;
-              final double indicatorLeft = itemWidth * (position + 0.5) - indicatorWidth / 2;
-              final double indicatorTop = (innerHeight - indicatorHeight) / 2;
-              final AppNavigationDestination visualSelection = motion.visualSelectionFor(selected);
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: AppSpacing.bottomNavigationMaxWidth),
+        child: SizedBox(
+          key: const Key('app-bottom-navigation'),
+          height: height,
+          child: LayoutBuilder(
+            builder: (BuildContext context, BoxConstraints constraints) {
+              return AnimatedBuilder(
+                animation: motion.animation,
+                builder: (BuildContext context, Widget? child) {
+                  final double innerWidth = constraints.maxWidth - AppSpacing.regular * 2;
+                  final double innerHeight = constraints.maxHeight - AppSpacing.compact * 2;
+                  final double itemWidth = innerWidth / AppNavigationDestination.values.length;
+                  final double position = motion.positionFor(selected).clamp(0, AppNavigationDestination.values.length - 1);
+                  final double indicatorWidth = AppSpacing.bottomNavigationIndicatorWidth * motion.pillWidthScale;
+                  final double indicatorHeight = AppSpacing.bottomNavigationIndicatorHeight * motion.pillHeightScale;
+                  final double indicatorLeft = itemWidth * (position + 0.5) - indicatorWidth / 2;
+                  final double indicatorTop = (innerHeight - indicatorHeight) / 2;
+                  final AppNavigationDestination visualSelection = motion.visualSelectionFor(selected);
 
-              return Padding(
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.regular, vertical: AppSpacing.compact),
-                child: DecoratedBox(
-                  key: const Key('app-bottom-navigation-backdrop'),
-                  decoration: BoxDecoration(
-                    // The navigation is intentionally a floating glass surface:
-                    // primary pages extend their content beneath it, so the
-                    // last row remains visible while controls stay legible.
-                    color: tokens.surface.withValues(alpha: 0.84),
-                    border: Border.all(color: tokens.divider.withValues(alpha: 0.86)),
-                    borderRadius: AppRadii.card,
-                    boxShadow: <BoxShadow>[
-                      BoxShadow(
-                        color: tokens.shadow.withValues(alpha: 0.22),
-                        blurRadius: AppSpacing.comfortable,
-                        offset: const Offset(0, 3),
-                      ),
-                    ],
-                  ),
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: <Widget>[
-                      Positioned(
-                        left: indicatorLeft,
-                        top: indicatorTop,
-                        width: indicatorWidth,
-                        height: indicatorHeight,
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: AppSpacing.regular, vertical: AppSpacing.compact),
+                    child: ClipRRect(
+                      borderRadius: AppRadii.card,
+                      child: BackdropFilter(
+                        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
                         child: DecoratedBox(
-                          key: const Key('app-bottom-navigation-moving-indicator'),
+                          key: const Key('app-bottom-navigation-backdrop'),
                           decoration: BoxDecoration(
-                            color: tokens.accentSoft,
-                            border: Border.all(color: tokens.accent.withValues(alpha: 0.12)),
-                            borderRadius: AppRadii.pill,
+                            // Keep the surface translucent so the content below
+                            // is softened by blur instead of being painted over.
+                            color: tokens.surface.withValues(alpha: 0.68),
+                            border: Border.all(color: tokens.divider.withValues(alpha: 0.86)),
+                            borderRadius: AppRadii.card,
+                            boxShadow: <BoxShadow>[
+                              BoxShadow(
+                                color: tokens.shadow.withValues(alpha: 0.22),
+                                blurRadius: AppSpacing.comfortable,
+                                offset: const Offset(0, 3),
+                              ),
+                            ],
+                          ),
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: <Widget>[
+                              Positioned(
+                                left: indicatorLeft,
+                                top: indicatorTop,
+                                width: indicatorWidth,
+                                height: indicatorHeight,
+                                child: DecoratedBox(
+                                  key: const Key('app-bottom-navigation-moving-indicator'),
+                                  decoration: BoxDecoration(
+                                    color: tokens.accentSoft,
+                                    border: Border.all(color: tokens.accent.withValues(alpha: 0.12)),
+                                    borderRadius: AppRadii.pill,
+                                  ),
+                                ),
+                              ),
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: AppNavigationDestination.values
+                                    .map(
+                                      (AppNavigationDestination destination) => Expanded(
+                                        child: _AppNavigationItem(
+                                          destination: destination,
+                                          visuallySelected: destination == visualSelection,
+                                          semanticallySelected: destination == selected,
+                                          onSelected: (value) {
+                                            motion.animateTo(value);
+                                            onSelected(value);
+                                          },
+                                          onLongPressed: onLongPressed,
+                                          iconOverride: iconOverrides[destination],
+                                          theme: theme,
+                                          tokens: tokens,
+                                        ),
+                                      ),
+                                    )
+                                    .toList(growable: false),
+                              ),
+                            ],
                           ),
                         ),
                       ),
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: AppNavigationDestination.values
-                            .map(
-                              (AppNavigationDestination destination) => Expanded(
-                                child: _AppNavigationItem(
-                                  destination: destination,
-                                  visuallySelected: destination == visualSelection,
-                                  semanticallySelected: destination == selected,
-                                  onSelected: (value) {
-                                    motion.animateTo(value);
-                                    onSelected(value);
-                                  },
-                                  onLongPressed: onLongPressed,
-                                  iconOverride: iconOverrides[destination],
-                                  theme: theme,
-                                  tokens: tokens,
-                                ),
-                              ),
-                            )
-                            .toList(growable: false),
-                      ),
-                    ],
-                  ),
-                ),
+                    ),
+                  );
+                },
               );
             },
-          );
-        },
+          ),
+        ),
       ),
     );
   }

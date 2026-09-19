@@ -7,11 +7,7 @@ import 'package:mg_read/shared/presentation/widgets/app_secondary_page_chrome.da
 
 /// Backwards-compatible profile wrapper around the shared secondary header.
 class ProfileDetailTopBar extends StatelessWidget {
-  const ProfileDetailTopBar({
-    required this.title,
-    required this.onBack,
-    super.key,
-  });
+  const ProfileDetailTopBar({required this.title, required this.onBack, super.key});
 
   final String title;
   final VoidCallback onBack;
@@ -33,24 +29,18 @@ class ProfileDetailBottomBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final AppThemeTokens tokens = AppThemeTokens.of(context);
     final double bottomInset = MediaQuery.paddingOf(context).bottom;
     return SizedBox(
       height: AppDetailMetrics.bottomNavigationHeight + bottomInset,
-      child: ColoredBox(
-        color: tokens.pageBackground.withValues(alpha: 0.84),
-        child: SafeArea(
-          top: false,
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(
-                maxWidth: AppSpacing.contentMaxWidth,
-              ),
-              child: AppBottomNavigation(
-                selected: AppNavigationDestination.profile,
-                onSelected: onSelected,
-                height: AppDetailMetrics.bottomNavigationHeight,
-              ),
+      child: SafeArea(
+        top: false,
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: AppSpacing.contentMaxWidth),
+            child: AppBottomNavigation(
+              selected: AppNavigationDestination.profile,
+              onSelected: onSelected,
+              height: AppDetailMetrics.bottomNavigationHeight,
             ),
           ),
         ),
