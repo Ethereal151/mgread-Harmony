@@ -72,7 +72,7 @@ void main() {
     final categoryChip = find.byKey(const ValueKey<String>('runtime-discovery-category-category:fantasy'));
     expect(tester.getSize(categoryChip).height, AppSpacing.minimumTouchTarget);
     expect(
-      tester.getSize(find.descendant(of: categoryChip, matching: find.byType(ChoiceChip))).height,
+      tester.getSize(find.descendant(of: categoryChip, matching: find.byKey(const Key('runtime-discovery-expanded-chip-surface')))).height,
       AppSpacing.discoveryChipVisualHeight,
     );
     final title = tester.widget<Text>(find.byKey(const ValueKey<String>('runtime-discovery-section-title-rankings')));
@@ -351,16 +351,26 @@ void main() {
     expect(find.byType(DiscoveryLandscapeCoverGrid), findsNothing);
   });
 
-  testWidgets('fills each category chip row with adaptive equal-width columns', (tester) async {
+  testWidgets('fills adaptive category columns with equal-width visible buttons', (tester) async {
     addTearDown(() => tester.binding.setSurfaceSize(null));
     const categories = <PluginDiscoveryCategory>[
       PluginDiscoveryCategory(id: 'short', title: '科幻', target: 'short', count: null, url: null, icon: PluginDiscoveryIcon.scienceFiction),
       PluginDiscoveryCategory(id: 'medium', title: '经典', target: 'medium', count: null, url: null, icon: PluginDiscoveryIcon.classic),
-      PluginDiscoveryCategory(id: 'long', title: '都市小说', target: 'long', count: null, url: null, icon: PluginDiscoveryIcon.urban),
+      PluginDiscoveryCategory(
+        id: 'long',
+        title: '这是一个需要省略的超长分类标题',
+        target: 'long',
+        count: null,
+        url: null,
+        icon: PluginDiscoveryIcon.urban,
+      ),
       PluginDiscoveryCategory(id: 'fourth', title: '乡村', target: 'fourth', count: null, url: null, icon: PluginDiscoveryIcon.rural),
       PluginDiscoveryCategory(id: 'fifth', title: '奇幻小说', target: 'fifth', count: null, url: null, icon: PluginDiscoveryIcon.fantasy),
       PluginDiscoveryCategory(id: 'sixth', title: '历史', target: 'sixth', count: null, url: null, icon: PluginDiscoveryIcon.history),
+      PluginDiscoveryCategory(id: 'seventh', title: '悬疑', target: 'seventh', count: null, url: null, icon: PluginDiscoveryIcon.mystery),
+      PluginDiscoveryCategory(id: 'eighth', title: '现实', target: 'eighth', count: null, url: null, icon: PluginDiscoveryIcon.other),
     ];
+    String? selectedCategory;
 
     Future<void> pumpAtWidth(double width) async {
       await tester.binding.setSurfaceSize(Size(width, 600));
@@ -370,7 +380,11 @@ void main() {
           home: Scaffold(
             body: Padding(
               padding: const EdgeInsets.all(AppSpacing.discoveryPagePadding),
-              child: DiscoveryCategoryCollection(categories: categories, layout: PluginDiscoveryCategoryLayout.chips, onSelected: (_) {}),
+              child: DiscoveryCategoryCollection(
+                categories: categories,
+                layout: PluginDiscoveryCategoryLayout.chips,
+                onSelected: (value) => selectedCategory = value,
+              ),
             ),
           ),
         ),
@@ -378,23 +392,37 @@ void main() {
       await tester.pump();
     }
 
-    Rect chipRect(String id) => tester.getRect(
-      find.descendant(of: find.byKey(ValueKey<String>('runtime-discovery-category-$id')), matching: find.byType(ChoiceChip)),
-    );
+    Finder targetFinder(String id) => find.byKey(ValueKey<String>('runtime-discovery-category-$id'));
+    Finder surfaceFinder(String id) =>
+        find.descendant(of: targetFinder(id), matching: find.byKey(const Key('runtime-discovery-expanded-chip-surface')));
+    Rect targetRect(String id) => tester.getRect(targetFinder(id));
+    Rect surfaceRect(String id) => tester.getRect(surfaceFinder(id));
 
     await pumpAtWidth(390);
-    final compact = <Rect>[chipRect('short'), chipRect('medium'), chipRect('long')];
+    final compact = <Rect>[surfaceRect('short'), surfaceRect('medium'), surfaceRect('long')];
     expect(compact.map((rect) => rect.width), everyElement(closeTo(compact.first.width, 0.01)));
     expect(compact.first.left, AppSpacing.discoveryPagePadding);
     expect(compact.last.right, closeTo(390 - AppSpacing.discoveryPagePadding, 0.01));
-    expect(chipRect('fourth').top, greaterThan(compact.first.top));
+    expect(surfaceRect('fourth').top, greaterThan(compact.first.top));
+    expect(surfaceRect('seventh').width, closeTo(compact.first.width, 0.01));
+    expect(surfaceRect('fourth').top - compact.first.bottom, AppSpacing.minimumTouchTarget - AppSpacing.discoveryChipVisualHeight);
+    expect(targetRect('short').height, AppSpacing.minimumTouchTarget);
+    expect(surfaceRect('short').left, targetRect('short').left);
+    expect(surfaceRect('short').right, targetRect('short').right);
+    final longLabel = tester.widget<Text>(find.descendant(of: targetFinder('long'), matching: find.byType(Text)));
+    expect(longLabel.maxLines, 1);
+    expect(longLabel.overflow, TextOverflow.ellipsis);
+    final seventhTarget = targetRect('seventh');
+    await tester.tapAt(Offset(seventhTarget.center.dx, seventhTarget.top + 1));
+    expect(selectedCategory, 'seventh');
 
     await pumpAtWidth(760);
-    final wide = <Rect>[chipRect('short'), chipRect('medium'), chipRect('long'), chipRect('fourth')];
+    final wide = <Rect>[surfaceRect('short'), surfaceRect('medium'), surfaceRect('long'), surfaceRect('fourth')];
     expect(wide.map((rect) => rect.width), everyElement(closeTo(wide.first.width, 0.01)));
     expect(wide.first.left, AppSpacing.discoveryPagePadding);
     expect(wide.last.right, closeTo(760 - AppSpacing.discoveryPagePadding, 0.01));
-    expect(chipRect('fifth').top, greaterThan(wide.first.top));
+    expect(surfaceRect('fifth').top, greaterThan(wide.first.top));
+    expect(surfaceRect('eighth').width, closeTo(wide.first.width, 0.01));
   });
 
   testWidgets('allows a mouse drag to scroll the horizontal shelf on desktop', (tester) async {
