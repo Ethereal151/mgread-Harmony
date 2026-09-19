@@ -1,5 +1,7 @@
 import {
   Any,
+  AbilityAware,
+  AbilityPluginBinding,
   FlutterPlugin,
   FlutterPluginBinding,
   MethodCall,
@@ -11,7 +13,7 @@ import common from '@ohos.app.ability.common'
 import window from '@ohos.window'
 
 /** Owns reader/video window state for the current OHOS application window. */
-export default class NovelReaderUiPlugin implements FlutterPlugin, MethodCallHandler {
+export default class NovelReaderUiPlugin implements FlutterPlugin, MethodCallHandler, AbilityAware {
   private channel?: MethodChannel
   private context?: common.Context
   private activeWindow?: window.Window
@@ -23,9 +25,17 @@ export default class NovelReaderUiPlugin implements FlutterPlugin, MethodCallHan
   }
 
   onAttachedToEngine(binding: FlutterPluginBinding): void {
-    this.context = binding.getApplicationContext()
     this.channel = new MethodChannel(binding.getBinaryMessenger(), 'novel_reader_ui/system')
     this.channel.setMethodCallHandler(this)
+  }
+
+  onAttachedToAbility(binding: AbilityPluginBinding): void {
+    this.context = binding.getAbility().context as common.UIAbilityContext
+  }
+
+  onDetachedFromAbility(): void {
+    this.context = undefined
+    this.activeWindow = undefined
   }
 
   onDetachedFromEngine(binding: FlutterPluginBinding): void {
@@ -43,6 +53,9 @@ export default class NovelReaderUiPlugin implements FlutterPlugin, MethodCallHan
         break
       case 'setReaderSystemUi':
         this.setReaderSystemUi(call.args as Map<string, Object> | null, result)
+        break
+      case 'setVideoWindowMode':
+        this.setVideoWindowMode(call.args as Map<string, Object> | null, result)
         break
       default:
         result.notImplemented()
@@ -70,6 +83,28 @@ export default class NovelReaderUiPlugin implements FlutterPlugin, MethodCallHan
       }
       this.keepScreenOn = keep
       this.immersiveMode = immersive
+      result.success(null)
+    } catch (error) {
+      result.error('operation_failed', this.errorMessage(error), null)
+    }
+  }
+
+  private async setVideoWindowMode(
+    args: Map<string, Object> | null,
+    result: MethodResult,
+  ): Promise<void> {
+    const fullscreen = args?.get('fullscreen')
+    if (typeof fullscreen !== 'boolean') {
+      result.error('invalid_argument', 'fullscreen must be a boolean.', null)
+      return
+    }
+    try {
+      const target = await this.applicationWindow()
+      await target.setPreferredOrientation(
+        fullscreen ? window.Orientation.LANDSCAPE : window.Orientation.PORTRAIT,
+      )
+      await target.setWindowLayoutFullScreen(fullscreen)
+      await target.setWindowSystemBarEnable(fullscreen ? [] : ['status', 'navigation'])
       result.success(null)
     } catch (error) {
       result.error('operation_failed', this.errorMessage(error), null)

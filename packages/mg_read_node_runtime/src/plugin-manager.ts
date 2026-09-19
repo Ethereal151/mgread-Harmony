@@ -175,6 +175,8 @@ export class PluginManager {
       readonly http?: PluginRuntimeHttpClient;
       readonly browserSession?: PluginBrowserSessionProvider;
       readonly debugLogEnabled?: () => boolean;
+      /** Platform-owned artifact inbox; desktop defaults to dataRoot/import-inbox. */
+      readonly pluginImportInboxRoot?: string;
       readonly cacheClearTimeoutMs?: number;
       readonly maxActiveInvocationsPerPlugin?: number;
       readonly maxQueuedOperationsPerPlugin?: number;
@@ -214,7 +216,7 @@ export class PluginManager {
         ? {}
         : { maxQueuedOperations: options.maxQueuedOperationsPerPlugin }),
     } satisfies PluginOperationCoordinatorOptions);
-    this.#pluginTransfer = new PluginArtifactTransferManager(this.#dataRoot);
+    this.#pluginTransfer = new PluginArtifactTransferManager(this.#dataRoot, options.pluginImportInboxRoot);
     this.#pluginIcons = new PluginIconResources(this.#dataRoot);
     this.#installer = new PluginInstaller(this.#dataRoot, { catalog: this.#catalog });
     this.#development = new DevelopmentPluginRegistry({

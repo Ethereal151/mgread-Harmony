@@ -153,7 +153,10 @@ export default class MgReadOhosSystemPlugin implements FlutterPlugin, MethodCall
       supportsOhosRuntime: this.probe(true, 'native_runtime', apiVersion, architecture),
       supportsOhosWebView: this.probe(true, 'arkweb_native_bridge_registered', apiVersion, architecture),
       supportsOhosBackgroundAudio: this.probe(true, 'avsession_native_bridge_registered', apiVersion, architecture),
-      supportsOhosAppUpdate: this.probe(false, 'install_bundle_signature_permission_required', 'unknown', architecture),
+      // BundleInstaller is a signature-level capability for ordinary HAPs.
+      // Do not advertise a false positive; Flutter presents the app-market
+      // fallback after the package has been downloaded and verified.
+      supportsOhosAppUpdate: this.probe(false, 'app_update_market_fallback_required', apiVersion, architecture),
       supportsOhosNetworkEvents: this.probe(
         networkEventsAvailable,
         networkEventsAvailable ? 'network_kit' : 'network_kit_unavailable',
@@ -289,7 +292,7 @@ export default class MgReadOhosSystemPlugin implements FlutterPlugin, MethodCall
   private async getPackageInfo(result: MethodResult): Promise<void> {
     try {
       const info = await bundleManager.getBundleInfoForSelf(bundleManager.BundleFlag.GET_BUNDLE_INFO_DEFAULT)
-      result.success({version: info.versionName, build: info.versionCode})
+      result.success({version: info.versionName, build: info.versionCode, packageName: info.name})
     } catch (error) {
       result.error('package_info_failed', this.errorMessage(error), null)
     }

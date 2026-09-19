@@ -8,6 +8,7 @@ library;
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
 import 'package:archive/archive.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mg_read/features/lan_sync/data/platform_app_update_service.dart';
@@ -82,8 +83,9 @@ void main() {
     await package.writeAsBytes(<int>[4, 5, 6]);
     final descriptor = AppPackageDescriptor(
       version: const AppVersionInfo(platform: AppUpdatePlatform.windows, version: '3.2.1', buildNumber: 44),
+      packageName: 'mg_read',
       bytes: await package.length(),
-      checksum: lanSyncChecksum(await package.readAsBytes()),
+      checksum: sha256.convert(await package.readAsBytes()).toString(),
       fileName: 'received.zip',
     );
     List<String>? arguments;
@@ -149,8 +151,9 @@ void main() {
     await package.writeAsBytes(<int>[4, 5, 6]);
     final descriptor = AppPackageDescriptor(
       version: const AppVersionInfo(platform: AppUpdatePlatform.windows, version: '3.2.1', buildNumber: 44),
+      packageName: 'mg_read',
       bytes: await package.length(),
-      checksum: lanSyncChecksum(await package.readAsBytes()),
+      checksum: sha256.convert(await package.readAsBytes()).toString(),
       fileName: 'received.zip',
     );
     var launched = false;
@@ -173,7 +176,7 @@ void main() {
     expect(launched, isFalse);
   });
 
-  test('OHOS update refuses before transfer when only signature install exists', () async {
+  test('OHOS update keeps download available and defers to the market fallback', () async {
     final service = PlatformAppUpdateService(
       dependencies: PlatformAppUpdateDependencies(
         isAndroid: false,
@@ -190,10 +193,7 @@ void main() {
       ),
     );
 
-    await expectLater(
-      service.ensureInstallPermission(),
-      throwsA(predicate<Object>((error) => error is StateError && error.toString().contains('app_update_install_unsupported'))),
-    );
+    await service.ensureInstallPermission();
   });
 }
 

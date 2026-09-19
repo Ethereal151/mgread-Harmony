@@ -12,7 +12,12 @@ import 'package:flutter/rendering.dart';
 /// Runtime calls; the native host controls visibility through its event
 /// channel. On non-OHOS platforms this is an empty widget.
 final class OhosBrowserSessionSurface extends StatefulWidget {
-  const OhosBrowserSessionSurface({super.key});
+  const OhosBrowserSessionSurface({super.key, this.prewarm = false});
+
+  /// Creates one hidden native ArkWeb view before the first session event.
+  /// This is useful for integration harnesses whose first frame is otherwise
+  /// occupied waiting for the Runtime request to return.
+  final bool prewarm;
 
   @override
   State<OhosBrowserSessionSurface> createState() =>
@@ -59,15 +64,31 @@ final class _OhosBrowserSessionSurfaceState
 
   @override
   Widget build(BuildContext context) {
-    if (Platform.operatingSystem != 'ohos' || _sessions.isEmpty) {
+    if (Platform.operatingSystem != 'ohos' ||
+        (_sessions.isEmpty && !widget.prewarm)) {
       return const SizedBox.shrink();
     }
     return Stack(
       fit: StackFit.expand,
       children: <Widget>[
+        if (widget.prewarm)
+          const Opacity(
+            opacity: 0.001,
+            child: OhosView(
+              key: ValueKey<String>('mgread_ohos_arkweb_prewarm'),
+              viewType: 'mgread_ohos_arkweb',
+              creationParams: <String, Object?>{},
+              creationParamsCodec: StandardMessageCodec(),
+              hitTestBehavior: PlatformViewHitTestBehavior.opaque,
+            ),
+          ),
         for (final entry in _sessions.entries)
           Opacity(
-            opacity: entry.value ? 1 : 0,
+            // OHOS may skip creating a platform view whose opacity is exactly
+            // zero. Keep hidden ArkWeb sessions mounted with a negligible
+            // alpha so cookie/profile state and the native controller remain
+            // available for the next Runtime request.
+            opacity: entry.value ? 1 : 0.001,
             child: IgnorePointer(
               ignoring: !entry.value,
               child: OhosView(

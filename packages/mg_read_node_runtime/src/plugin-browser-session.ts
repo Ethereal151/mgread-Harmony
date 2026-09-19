@@ -232,6 +232,8 @@ export async function requestPluginBrowserInteraction(
       pluginId,
       signal,
     }));
+    const hostErrorCode = browserSessionErrorCode(response);
+    if (hostErrorCode !== undefined) throw new PluginManagerError(hostErrorCode);
     return validateInteractionResponse(response, validated.action);
   } catch (error) {
     if (error instanceof PluginManagerError) throw error;

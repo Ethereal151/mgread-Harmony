@@ -11,7 +11,10 @@
 /// - Every lease must be released when its owning host is minimized or closed.
 library;
 
+import 'dart:io';
+
 import 'package:flutter/services.dart';
+import 'package:novel_reader_ui/novel_reader_ui.dart';
 
 enum SourceMediaSystemUiMode { portraitImmersive, landscapeImmersive }
 
@@ -30,12 +33,20 @@ final class SystemSourceMediaSystemUiPlatform implements SourceMediaSystemUiPlat
 
   @override
   Future<void> enterPortrait() async {
+    if (Platform.operatingSystem == 'ohos') {
+      await ReaderPlatform.instance.setVideoWindowMode(fullscreen: false);
+      return;
+    }
     await SystemChrome.setPreferredOrientations(const <DeviceOrientation>[DeviceOrientation.portraitUp]);
     await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
   }
 
   @override
   Future<void> enterLandscape() async {
+    if (Platform.operatingSystem == 'ohos') {
+      await ReaderPlatform.instance.setVideoWindowMode(fullscreen: true);
+      return;
+    }
     await SystemChrome.setPreferredOrientations(const <DeviceOrientation>[
       DeviceOrientation.landscapeLeft,
       DeviceOrientation.landscapeRight,
@@ -45,6 +56,10 @@ final class SystemSourceMediaSystemUiPlatform implements SourceMediaSystemUiPlat
 
   @override
   Future<void> restore() async {
+    if (Platform.operatingSystem == 'ohos') {
+      await ReaderPlatform.instance.setVideoWindowMode(fullscreen: false);
+      return;
+    }
     await SystemChrome.setPreferredOrientations(const <DeviceOrientation>[]);
     await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
   }

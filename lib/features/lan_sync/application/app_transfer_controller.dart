@@ -267,6 +267,7 @@ String _appTransferMessage(String code) => switch (code) {
   'app_update_installer_permission_denied' => '系统拒绝向安装程序授予 APK 读取权限',
   'app_update_file_provider_failed' => '安装包临时文件无法提供给系统安装程序',
   'app_update_installer_failed' => '系统安装程序启动失败',
+  'app_update_market_fallback_required' => '鸿蒙系统未向普通应用开放 HAP 安装确认入口，请通过应用市场升级',
   'lan_sync_local_network_unavailable' => '未找到可用的私有局域网地址',
   _ => 'App 传输未完成（$code）',
 };

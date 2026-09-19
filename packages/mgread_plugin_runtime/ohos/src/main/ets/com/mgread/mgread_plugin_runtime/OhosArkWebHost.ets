@@ -77,7 +77,6 @@ export default class OhosArkWebHost implements MethodCallHandler {
   private readonly sessions = new Map<string, OhosArkWebPlatformView>()
   private readonly waiting = new Map<string, Array<(page: OhosArkWebPlatformView) => void>>()
   private readonly pendingPluginIds = new Array<string>()
-  private readonly unboundPages = new Array<OhosArkWebPlatformView>()
   private readonly cancelled = new Set<string>()
   private readonly stream = new OhosArkWebSessionStreamHandler()
 
@@ -90,14 +89,29 @@ export default class OhosArkWebHost implements MethodCallHandler {
   }
 
   emitVisibility(pluginId: string, visible: boolean): void {
-    const event: Any = {type: 'session', action: 'visibility', pluginId, visible}
+    const event: Map<string, Any> = new Map<string, Any>()
+    event.set('type', 'session')
+    event.set('action', 'visibility')
+    event.set('pluginId', pluginId)
+    event.set('visible', visible)
+    this.stream.emit(event)
+  }
+
+  emitRemoved(pluginId: string): void {
+    if (pluginId.length === 0) return
+    const event: Map<string, Any> = new Map<string, Any>()
+    event.set('type', 'session')
+    event.set('action', 'remove')
+    event.set('pluginId', pluginId)
     this.stream.emit(event)
   }
 
   onMethodCall(call: MethodCall, result: MethodResult): void {
     switch (call.method) {
       case 'request':
-        this.handleRequest(call.args as Map<string, Any> | null, result)
+        this.request(call.args as Map<string, Any> | null)
+          .then((response: Any): void => result.success(response))
+          .catch((error: Object): void => result.error(this.errorCode(error), this.errorMessage(error), null))
         break
       case 'cancel':
         this.cancel(call.args as Map<string, Any> | null)
@@ -114,15 +128,7 @@ export default class OhosArkWebHost implements MethodCallHandler {
   }
 
   attach(pluginId: string, page: OhosArkWebPlatformView): void {
-    if (pluginId.length === 0) {
-      const pendingPluginId = this.pendingPluginIds.length > 0 ? this.pendingPluginIds[0] : ''
-      if (pendingPluginId.length > 0) {
-        page.bindPluginId(pendingPluginId)
-        return
-      }
-      this.unboundPages.push(page)
-      return
-    }
+    if (pluginId.length === 0) return
     this.sessions.set(pluginId, page)
     const pendingIndex = this.pendingPluginIds.indexOf(pluginId)
     if (pendingIndex >= 0) this.pendingPluginIds.splice(pendingIndex, 1)
@@ -133,45 +139,46 @@ export default class OhosArkWebHost implements MethodCallHandler {
     }
   }
 
-  bindUnboundPage(pluginId: string): void {
-    if (pluginId.length === 0 || this.unboundPages.length === 0) return
-    const page = this.unboundPages.shift()
-    if (page !== undefined) page.bindPluginId(pluginId)
-  }
-
   detach(pluginId: string, page: OhosArkWebPlatformView): void {
     if (this.sessions.get(pluginId) !== page) return
     this.sessions.delete(pluginId)
   }
 
-  private async handleRequest(args: Map<string, Any> | null, result: MethodResult): Promise<void> {
-    try {
-      const envelope: Map<string, Any> = args ?? new Map<string, Any>()
-      const nested: Any = envelope.get('raw')
-      const raw: Map<string, Any> = nested instanceof Map ? nested as Map<string, Any> : envelope
-      if (!raw.has('jobId')) raw.set('jobId', envelope.get('jobId'))
-      if (!raw.has('deadlineUnixMs')) raw.set('deadlineUnixMs', envelope.get('deadlineUnixMs'))
-      const pluginId = this.stringValue(raw, 'pluginId')
-      const pluginName = this.stringValue(raw, 'pluginName')
-      if (pluginId.length === 0 || pluginName.length === 0) throw new OhosArkWebError('plugin_execution_failed')
-      const jobId = this.stringValue(raw, 'jobId')
-      const page = await this.pageFor(pluginId, pluginName)
-      const operation = this.stringValue(raw, 'operation')
-       let response: Any
-      if (operation === 'debug') {
-        await page.setVisible(true)
-        response = {version: 1, accepted: true, action: this.stringValue(raw, 'action')}
-      } else if (operation.startsWith('page.')) {
-        response = await this.pageOperation(page, raw, jobId)
-      } else if (operation === 'interaction') {
-        response = await this.interaction(page, raw, jobId)
-      } else {
-        response = await this.legacyRequest(page, raw, jobId)
-      }
-      result.success(response)
-    } catch (error) {
-      result.error(this.errorCode(error), this.errorMessage(error), null)
+  async request(args: Map<string, Any> | null): Promise<Any> {
+    const envelope: Map<string, Any> = args ?? new Map<string, Any>()
+    const nested: Any = envelope.get('raw')
+    const raw: Map<string, Any> = nested instanceof Map ? nested as Map<string, Any> : envelope
+    if (!raw.has('jobId')) raw.set('jobId', envelope.get('jobId'))
+    if (!raw.has('deadlineUnixMs')) raw.set('deadlineUnixMs', envelope.get('deadlineUnixMs'))
+    const pluginId = this.stringValue(raw, 'pluginId')
+    const pluginName = this.stringValue(raw, 'pluginName')
+    const jobId = this.stringValue(raw, 'jobId')
+    const operation = this.stringValue(raw, 'operation')
+    if (pluginId.length === 0 || (operation.startsWith('page.') && pluginName.length === 0)) {
+      throw new OhosArkWebError('plugin_execution_failed')
     }
+    const page = await this.pageFor(pluginId, pluginName)
+    if (operation === 'debug') {
+      await page.setVisible(true)
+      return {version: 1, accepted: true, action: this.stringValue(raw, 'action')}
+    }
+    try {
+      let response: Any
+      if (operation.startsWith('page.')) response = await this.pageOperation(page, raw, jobId)
+      else if (operation === 'interaction') response = await this.interaction(page, raw, jobId)
+      else response = await this.legacyRequest(page, raw, jobId)
+      return response
+    } catch (error) {
+      if (error instanceof OhosArkWebError) throw error
+      throw new OhosArkWebError('plugin_execution_failed')
+    }
+  }
+
+  async requestJson(payload: string): Promise<Any> {
+    const decoded: Any = JSON.parse(payload)
+    const value: Any = this.fromJsonValue(decoded)
+    if (!(value instanceof Map)) throw new OhosArkWebError('plugin_execution_failed')
+    return await this.request(value as Map<string, Any>)
   }
 
   private async pageFor(pluginId: string, pluginName: string): Promise<OhosArkWebPlatformView> {
@@ -182,8 +189,13 @@ export default class OhosArkWebHost implements MethodCallHandler {
       listeners.push(resolve)
       this.waiting.set(pluginId, listeners)
       if (!this.pendingPluginIds.includes(pluginId)) this.pendingPluginIds.push(pluginId)
-      this.stream.emit({type: 'session', action: 'upsert', pluginId, pluginName, visible: false})
-      this.bindUnboundPage(pluginId)
+      const event: Map<string, Any> = new Map<string, Any>()
+      event.set('type', 'session')
+      event.set('action', 'upsert')
+      event.set('pluginId', pluginId)
+      event.set('pluginName', pluginName)
+      event.set('visible', false)
+      this.stream.emit(event)
       setTimeout((): void => {
         const current = this.sessions.get(pluginId)
         if (current !== undefined) return
@@ -202,8 +214,7 @@ export default class OhosArkWebHost implements MethodCallHandler {
         return value
       }
     }
-    const fallback = this.pendingPluginIds.length > 0 ? this.pendingPluginIds[0] : ''
-    return fallback
+    return ''
   }
 
   private async pageOperation(page: OhosArkWebPlatformView, raw: Map<string, Any>, jobId: string): Promise<Any> {
@@ -227,7 +238,7 @@ export default class OhosArkWebHost implements MethodCallHandler {
     }
     if (operation === 'page.navigate') {
       await page.load(this.stringValue(raw, 'url'), this.headers(raw.get('headers')))
-      await this.waitReady(page, jobId, deadline)
+      await this.waitReady(page, jobId, deadline, this.stringValue(raw, 'url'))
       return {}
     }
     if (operation === 'page.evaluate') {
@@ -274,7 +285,7 @@ export default class OhosArkWebHost implements MethodCallHandler {
     if (transport === 'http') throw new OhosArkWebError('unsupported')
     const url = this.stringValue(raw, 'url')
     await page.load(url, this.headers(raw.get('headers')))
-    await this.waitReady(page, jobId, deadline)
+    await this.waitReady(page, jobId, deadline, url)
     if (transport === 'html') {
       const body: HtmlPayload = await page.html() as HtmlPayload
       const responseHeaders = new Map<string, string>()
@@ -333,12 +344,16 @@ export default class OhosArkWebHost implements MethodCallHandler {
     }
   }
 
-  private async waitReady(page: OhosArkWebPlatformView, jobId: string, deadline: number): Promise<void> {
+  private async waitReady(page: OhosArkWebPlatformView, jobId: string, deadline: number, targetUrl: string): Promise<void> {
     while (true) {
       await this.ensureNotCancelled(jobId, deadline)
       try {
         const state = (await page.script('document.readyState')).replace(/"/g, '')
-        if (state === 'interactive' || state === 'complete') return
+        if (state === 'interactive' || state === 'complete') {
+          if (targetUrl === 'about:blank') return
+          const body = (await page.script('document.body?.innerHTML??""')).replace(/"/g, '')
+          if (body.trim().length > 0) return
+        }
       } catch (_) {
         // The first controller call can race Web initialization; keep polling.
       }
@@ -363,21 +378,38 @@ export default class OhosArkWebHost implements MethodCallHandler {
     if (jobId.length > 0) this.cancelled.add(jobId)
   }
 
+  private fromJsonValue(value: Any): Any {
+    if (Array.isArray(value)) return value.map((entry: Any): Any => this.fromJsonValue(entry))
+    if (value !== null && typeof value === 'object') {
+      const map: Map<string, Any> = new Map<string, Any>()
+      Object.keys(value as Record<string, Any>).forEach((key: string): void => {
+        map.set(key, this.fromJsonValue((value as Record<string, Any>)[key]))
+      })
+      return map
+    }
+    return value
+  }
+
   dispose(): void {
     this.cancelled.clear()
     this.waiting.clear()
     this.sessions.forEach((page: OhosArkWebPlatformView, pluginId: string): void => {
       page.close()
-      this.stream.emit({type: 'session', action: 'remove', pluginId})
     })
     this.sessions.clear()
   }
 
   private deadline(raw: Map<string, Any>): number {
-     const value: Any = raw.get('deadlineUnixMs')
-    const parsed = typeof value === 'number' ? value : Number(value ?? 0)
-    if (!Number.isFinite(parsed) || parsed <= Date.now()) throw new OhosArkWebError('timeout')
-    return Math.min(parsed, Date.now() + MAX_WAIT_MS)
+    const value: Any = raw.get('deadlineUnixMs')
+    const supplied = typeof value === 'number' ? value : Number(value ?? 0)
+    const timeoutValue: Any = raw.get('timeoutMs')
+    const timeout = typeof timeoutValue === 'number' && Number.isFinite(timeoutValue) && timeoutValue > 0
+      ? timeoutValue
+      : 30_000
+    const now = Date.now()
+    const parsed = Number.isFinite(supplied) && supplied > now ? supplied : now + timeout
+    if (!Number.isFinite(parsed) || parsed <= now) throw new OhosArkWebError('timeout')
+    return Math.min(parsed, now + MAX_WAIT_MS)
   }
 
   private headers(value: Any): Array<webview.WebHeader> {
@@ -467,19 +499,25 @@ export class OhosArkWebPlatformView extends PlatformView {
   private disposed = false
   pluginId: string
   private readonly host: OhosArkWebHost
+  private ready = false
 
   constructor(pluginId: string, host: OhosArkWebHost) {
     super()
     this.controller = new webview.WebviewController()
     this.pluginId = pluginId
     this.host = host
-    host.attach(pluginId, this)
   }
 
   bindPluginId(pluginId: string): void {
     if (this.pluginId.length > 0 || pluginId.length === 0) return
     this.pluginId = pluginId
-    this.host.attach(pluginId, this)
+    if (this.ready) this.host.attach(pluginId, this)
+  }
+
+  markReady(): void {
+    if (this.ready) return
+    this.ready = true
+    this.host.attach(this.pluginId, this)
   }
 
   getView(): WrappedBuilder<[Params]> {
@@ -488,19 +526,60 @@ export class OhosArkWebPlatformView extends PlatformView {
 
   async load(url: string, headers: Array<webview.WebHeader>): Promise<void> {
     if (this.disposed) throw new OhosArkWebError('unsupported')
-    this.controller.loadUrl(url, headers)
+    let lastError: Object | null = null
+    for (let attempt = 0; attempt < 75; attempt++) {
+      try {
+        this.controller.loadUrl(url, headers)
+        if (url === 'about:blank') return
+        for (let waitAttempt = 0; waitAttempt < 75; waitAttempt++) {
+          try {
+            const current = this.controller.getUrl()
+            if (current.length > 0 && current !== 'about:blank') {
+              return
+            }
+          } catch (_) {
+            // The controller can briefly lose its page while Web is attaching.
+          }
+          await new Promise<void>((resolve): void => {
+            setTimeout((): void => resolve(), POLL_MS)
+          })
+        }
+        throw new OhosArkWebError('plugin_execution_failed')
+      } catch (error) {
+        if (error instanceof OhosArkWebError) throw error
+        lastError = error as Object
+        await new Promise<void>((resolve): void => {
+          setTimeout((): void => resolve(), POLL_MS)
+        })
+      }
+    }
+    throw new OhosArkWebError('plugin_execution_failed')
   }
 
   async script(source: string): Promise<string> {
     if (this.disposed) throw new OhosArkWebError('unsupported')
-    return await this.controller.runJavaScript(source)
+    try {
+      const value: Any = await this.controller.runJavaScript(source)
+      if (typeof value === 'string') return value
+      if (value === undefined || value === null) return 'null'
+      return JSON.stringify(value)
+    } catch (error) {
+      throw new OhosArkWebError(`plugin_execution_failed:${String(error)}`)
+    }
   }
 
   async evaluate(source: string): Promise<Any> {
-    const value = await this.script(`(async()=>{const AsyncFunction=Object.getPrototypeOf(async function(){}).constructor;const value=await new AsyncFunction(${JSON.stringify(source)}).call(window);return JSON.stringify({value});})()`)
-    const decoded: Any = this.parseScriptResult(value)
-    if (decoded === null || typeof decoded !== 'object') throw new OhosArkWebError('plugin_execution_failed')
-     return decoded
+    try {
+      const trimmed = source.trim()
+      const expression = !trimmed.includes(';') && !trimmed.includes('\\n')
+        ? `JSON.stringify({value:(${source})})`
+        : `(()=>{eval(${JSON.stringify(source)});return JSON.stringify({value:null});})()`
+      const value = await this.script(expression)
+      const decoded: Any = this.parseScriptResult(value)
+      return decoded !== null && typeof decoded === 'object' ? decoded : {value: decoded}
+    } catch (error) {
+      throw new OhosArkWebError(`plugin_execution_failed:${String(error)}`)
+    }
   }
 
   async html(): Promise<Any> {
@@ -541,6 +620,7 @@ export class OhosArkWebPlatformView extends PlatformView {
     this.disposed = true
     try { this.controller.stop() } catch (_) { /* best effort */ }
     this.host.detach(this.pluginId, this)
+    this.host.emitRemoved(this.pluginId)
   }
 
   dispose(): void {
@@ -564,4 +644,5 @@ function buildOhosArkWeb(params: Params): void {
     .height('100%')
     .javaScriptAccess(true)
     .zoomAccess(true)
+    .onAppear((): void => (params.platformView as OhosArkWebPlatformView).markReady())
 }

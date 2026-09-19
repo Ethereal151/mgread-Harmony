@@ -1,0 +1,15 @@
+{
+  "name": "@mgread-test/ohos-stage2-browser-fixture",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "index.mjs",
+  "mgread": {
+    "schemaVersion": 1,
+    "id": "org.mgread.ohos.stage2.fixture",
+    "displayName": "OHOS 阶段 2 ArkWeb 验收 fixture",
+    "pluginApi": 1,
+    "packageMode": "single-file",
+    "contentKinds": ["novel"]
+  }
+}

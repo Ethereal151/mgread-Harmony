@@ -30,4 +30,16 @@ void main() {
     expect(decoded?.addresses, offer.addresses);
     expect(AppTransferQrPayload.decode('mgread://lan-sync/v2?session=x&port=1&addresses=192.168.1.1'), isNull);
   });
+
+  test('App packages carry a platform identity and a SHA-256 digest', () {
+    const descriptor = AppPackageDescriptor(
+      version: AppVersionInfo(platform: AppUpdatePlatform.ohos, version: '1.2.3', buildNumber: 7),
+      packageName: 'com.ohos.mgread',
+      bytes: 3,
+      checksum: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+      fileName: 'entry.hap',
+    );
+    expect(AppPackageDescriptor.fromJson(descriptor.toJson()).packageName, 'com.ohos.mgread');
+    expect(() => AppPackageDescriptor.fromJson({...descriptor.toJson(), 'checksum': 'deadbeef'}), throwsFormatException);
+  });
 }

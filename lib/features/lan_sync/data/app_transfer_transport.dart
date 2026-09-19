@@ -2,7 +2,7 @@
 ///
 /// 职责：
 /// - 用独立二维码建立一次性 App 会话并显示双方版本。
-/// - 通过标准 HTTP Range、ETag 和 CRC32 传输 App 包。
+/// - 通过标准 HTTP Range、ETag 和 SHA-256 传输 App 包。
 /// - 下载完成后才把本地文件交给平台安装边界。
 ///
 /// 注意：App 包不会进入书架/插件 manifest；普通升级只接受更高版本，显式
@@ -14,6 +14,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
+import 'package:convert/convert.dart';
 import 'package:crypto/crypto.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -261,7 +262,7 @@ Future<void> serveAppPackage(HttpRequest request, File file, AppPackageDescripto
     await request.response.close();
     return;
   }
-  final etag = '"crc32-${descriptor.checksum}"';
+  final etag = '"sha256-${descriptor.checksum}"';
   final rangeHeader = request.headers.value(HttpHeaders.rangeHeader);
   final ifRange = request.headers.value(HttpHeaders.ifRangeHeader);
   final range = rangeHeader == null || (ifRange != null && ifRange != etag) ? null : _range(rangeHeader, descriptor.bytes);
@@ -328,7 +329,7 @@ Future<File> downloadAppPackage(
           throw LanSyncTransportException('app_update_http_failed', reason: 'status_${response.statusCode}');
         }
         final responseEtag = response.headers.value(HttpHeaders.etagHeader);
-        if (responseEtag != '"crc32-${descriptor.checksum}"') throw const LanSyncTransportException('app_update_package_changed');
+        if (responseEtag != '"sha256-${descriptor.checksum}"') throw const LanSyncTransportException('app_update_package_changed');
         if (offset > 0 && response.statusCode == HttpStatus.ok) {
           offset = 0;
           await file.writeAsBytes(const <int>[]);
@@ -368,11 +369,13 @@ Future<File> downloadAppPackage(
 }
 
 Future<String> _checksumFile(File file) async {
-  final sink = LanSyncChecksumSink();
+  final output = AccumulatorSink<Digest>();
+  final input = sha256.startChunkedConversion(output);
   await for (final chunk in file.openRead()) {
-    sink.add(chunk);
+    input.add(chunk);
   }
-  return sink.close();
+  input.close();
+  return output.events.single.toString();
 }
 
 void _verifyPreparedOffer(AppPackageDescriptor descriptor, AppPackageOffer offer) {

@@ -54,6 +54,9 @@ export default class OhosRuntimePlugin implements FlutterPlugin, MethodCallHandl
     this.browserChannel.setMethodCallHandler(this.browserHost)
     this.browserEventChannel = new EventChannel(binding.getBinaryMessenger(), 'mgread_plugin_runtime/ohos_browser_session/events')
     this.browserEventChannel.setStreamHandler(this.browserHost.getStreamHandler())
+    mgreadNodeHost.setBrowserSessionCallback((requestId: string, payload: string): void => {
+      this.forwardBrowserRequest(requestId, payload)
+    })
   }
 
   onAttachedToAbility(binding: AbilityPluginBinding): void {
@@ -75,6 +78,7 @@ export default class OhosRuntimePlugin implements FlutterPlugin, MethodCallHandl
     this.browserEventChannel = undefined
     this.browserHost?.dispose()
     this.browserHost = undefined
+    mgreadNodeHost.clearBrowserSessionCallback()
     if (this.runtimeReady) mgreadNodeHost.dispose()
     this.context = undefined
     this.assets = undefined
@@ -134,17 +138,52 @@ export default class OhosRuntimePlugin implements FlutterPlugin, MethodCallHandl
     mgreadNodeHost.cancelInvocation(String(args?.get('requestId') ?? ''))
   }
 
+  private forwardBrowserRequest(requestId: string, payload: string): void {
+    const host = this.browserHost
+    if (host === undefined) {
+      mgreadNodeHost.resolveBrowserSession(requestId, JSON.stringify({__mgreadBrowserSessionError: 'unsupported'}))
+      return
+    }
+    host.requestJson(payload)
+      .then((response: Any): void => {
+        mgreadNodeHost.resolveBrowserSession(requestId, JSON.stringify(this.toJsonValue(response)))
+      })
+      .catch((error: Object): void => {
+        mgreadNodeHost.resolveBrowserSession(requestId, JSON.stringify({
+          __mgreadBrowserSessionError: this.browserErrorCode(error),
+        }))
+      })
+  }
+
+  private browserErrorCode(error: Object): string {
+    const values = error as Record<string, Any>
+    const code = String(values['code'] ?? values['message'] ?? '')
+    switch (code) {
+      case 'cancelled':
+      case 'interaction_required':
+      case 'overloaded':
+      case 'plugin_execution_failed':
+      case 'timeout':
+      case 'unsupported':
+        return code
+      default:
+        return 'plugin_execution_failed'
+    }
+  }
+
   private invoke(args: Map<string, Object> | null, result: MethodResult): void {
     const invokeNative = (): void => {
       try {
         const method = String(args?.get('method') ?? '')
-        const encoded: string = mgreadNodeHost.invoke(
+        const pending: Promise<string> = mgreadNodeHost.invokeAsync(
           String(args?.get('requestId') ?? ''),
           method,
           this.encodeParams(args?.get('params')),
           Number(args?.get('deadlineUnixMs') ?? 0),
         )
-        result.success(encoded)
+        pending
+          .then((encoded: string): void => result.success(encoded))
+          .catch((error: Object): void => result.error('runtime_invocation_failed', this.errorMessage(error), null))
       } catch (error) {
         result.error('runtime_invocation_failed', this.errorMessage(error), null)
       }
@@ -271,12 +310,26 @@ export default class OhosRuntimePlugin implements FlutterPlugin, MethodCallHandl
   }
 
   private encodeParams(value: Any | undefined): string {
+    return JSON.stringify(this.toJsonValue(value ?? {}))
+  }
+
+  /**
+   * StandardMethodCodec preserves nested Dart maps as ArkTS Map instances.
+   * JSON.stringify serializes those maps as `{}`, so normalize the complete
+   * request tree before handing it to the embedded Node Runtime.
+   */
+  private toJsonValue(value: Any): Any {
     if (value instanceof Map) {
       const object: Record<string, Any> = {}
-      value.forEach((entry: Any, key: string): void => { object[key] = entry })
-      return JSON.stringify(object)
+      value.forEach((entry: Any, key: string): void => {
+        object[key] = this.toJsonValue(entry)
+      })
+      return object
     }
-    return JSON.stringify(value ?? {})
+    if (Array.isArray(value)) {
+      return value.map((entry: Any): Any => this.toJsonValue(entry))
+    }
+    return value
   }
 
   private async copyFile(sourcePath: string, targetPath: string): Promise<void> {

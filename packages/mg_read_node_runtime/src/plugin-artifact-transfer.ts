@@ -95,12 +95,14 @@ export interface DevelopmentTransferProject {
 /** Owns retained/development artifact indexes and one-shot streams. */
 export class PluginArtifactTransferManager {
   readonly #dataRoot: string;
+  readonly #inboxRoot: string;
   readonly #stagingRoot: string;
   readonly #development = new Map<string, TransferEntry>();
   readonly #resources = new Map<string, TransferEntry>();
 
-  constructor(dataRoot: string) {
+  constructor(dataRoot: string, inboxRoot?: string) {
     this.#dataRoot = resolve(dataRoot);
+    this.#inboxRoot = resolve(inboxRoot ?? resolve(this.#dataRoot, "import-inbox"));
     this.#stagingRoot = resolve(this.#dataRoot, "temporary", "plugin-transfer", randomUUID());
   }
 
@@ -302,7 +304,7 @@ export class PluginArtifactTransferManager {
 
   async verifyInbox(incoming: readonly PluginTransferArtifact[]): Promise<void> {
     validateArtifactBatch(incoming);
-    const inbox = resolve(this.#dataRoot, "import-inbox");
+    const inbox = this.#inboxRoot;
     let names: string[];
     try { names = (await readdir(inbox)).filter(isArtifactName); }
     catch (error) { if (isMissing(error)) throw new PluginArtifactTransferError("plugin_transfer_artifact_missing"); throw error; }
@@ -505,8 +507,14 @@ function developmentCacheRoot(
 
 export function validateArtifactBatch(artifacts: readonly PluginTransferArtifact[]): void {
   let bytes = 0;
-  for (const artifact of artifacts) {
-    if (!isPluginTransferArtifact(artifact)) throw new PluginArtifactTransferError("invalid_request");
+  for (const [index, artifact] of artifacts.entries()) {
+    if (!isPluginTransferArtifact(artifact)) {
+      const value = artifact as unknown as Record<string, unknown>;
+      throw new PluginArtifactTransferError(
+        "invalid_request",
+        `artifact_index=${index} keys=${Object.keys(value).join(",")} format=${String(value.format)} provenance=${String(value.provenance)} id=${String(value.id)} version=${String(value.version)}`,
+      );
+    }
     bytes += artifact.bytes;
     if (bytes > MAX_PLUGIN_ARTIFACT_TRANSFER_BATCH_BYTES) throw new PluginArtifactTransferError("plugin_transfer_batch_too_large");
   }

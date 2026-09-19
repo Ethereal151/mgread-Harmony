@@ -29,6 +29,11 @@ abstract class ReaderPlatform extends PlatformInterface {
     throw UnimplementedError('setReaderSystemUi() has not been implemented.');
   }
 
+  /// Applies the route-scoped video window mode on platforms that expose a
+  /// native window owner. The default keeps older hosts source-compatible.
+  Future<void> setVideoWindowMode({required bool fullscreen}) =>
+      Future<void>.value();
+
   bool get supportsKeepScreenOn => false;
 
   /// Opens a source-owned URL in the platform browser.
@@ -103,6 +108,14 @@ class MethodChannelReaderPlatform extends ReaderPlatform {
       'keepScreenOn': keepScreenOn,
       'immersiveMode': immersiveMode,
       'allowScreenDimming': allowScreenDimming,
+    });
+  }
+
+  @override
+  Future<void> setVideoWindowMode({required bool fullscreen}) {
+    if (!_isOhos) return Future<void>.value();
+    return _channel.invokeMethod<void>('setVideoWindowMode', <String, bool>{
+      'fullscreen': fullscreen,
     });
   }
 

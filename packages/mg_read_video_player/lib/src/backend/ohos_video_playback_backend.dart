@@ -157,6 +157,17 @@ final class OhosVideoPlaybackBackend implements VideoPlaybackBackend {
         );
       case 'buffering':
         _emit(_state.value.copyWith(buffering: value == true));
+      case 'buffered':
+        _emit(
+          _state.value.copyWith(
+            bufferedPosition: Duration(milliseconds: milliseconds),
+          ),
+        );
+      case 'bufferingPercent':
+        // OHOS reports a percentage separately from the playable duration.
+        // Keep the last duration-based position until a duration estimate is
+        // available; the buffering flag remains the authoritative state.
+        break;
       case 'completed':
         _emit(
           _state.value.copyWith(

@@ -80,24 +80,45 @@ final class AppPackageOffer {
 
 @immutable
 final class AppPackageDescriptor {
-  const AppPackageDescriptor({required this.version, required this.bytes, required this.checksum, required this.fileName});
+  const AppPackageDescriptor({
+    required this.version,
+    required this.packageName,
+    required this.bytes,
+    required this.checksum,
+    required this.fileName,
+  });
 
   final AppVersionInfo version;
+
+  /// The platform bundle identity. It is checked again before installation;
+  /// it is not inferred from the file name.
+  final String packageName;
   final int bytes;
   final String checksum;
   final String fileName;
 
-  Map<String, Object?> toJson() => <String, Object?>{...version.toJson(), 'bytes': bytes, 'checksum': checksum, 'fileName': fileName};
+  Map<String, Object?> toJson() => <String, Object?>{
+    ...version.toJson(),
+    'packageName': packageName,
+    'bytes': bytes,
+    'checksum': checksum,
+    'fileName': fileName,
+  };
 
   factory AppPackageDescriptor.fromJson(Map<String, Object?> json) {
     final bytes = json['bytes'];
+    final packageName = json['packageName'];
     final checksum = json['checksum'];
     final fileName = json['fileName'];
     if (bytes is! int ||
         bytes <= 0 ||
         bytes > appUpdateMaxPackageBytes ||
+        packageName is! String ||
+        packageName.isEmpty ||
+        packageName.length > 256 ||
+        !RegExp(r'^[A-Za-z0-9._-]+$').hasMatch(packageName) ||
         checksum is! String ||
-        !RegExp(r'^[a-f0-9]{8}$').hasMatch(checksum) ||
+        !RegExp(r'^[a-f0-9]{64}$').hasMatch(checksum) ||
         fileName is! String ||
         fileName.isEmpty ||
         fileName.length > 128 ||
@@ -105,7 +126,13 @@ final class AppPackageDescriptor {
         fileName.contains(r'\')) {
       throw const FormatException('invalid_app_package');
     }
-    return AppPackageDescriptor(version: AppVersionInfo.fromJson(json), bytes: bytes, checksum: checksum, fileName: fileName);
+    return AppPackageDescriptor(
+      version: AppVersionInfo.fromJson(json),
+      packageName: packageName,
+      bytes: bytes,
+      checksum: checksum,
+      fileName: fileName,
+    );
   }
 }
 

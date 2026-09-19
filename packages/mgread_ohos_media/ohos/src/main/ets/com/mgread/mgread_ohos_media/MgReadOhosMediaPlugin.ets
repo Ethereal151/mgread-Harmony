@@ -136,7 +136,12 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
     try {
       await this.disposeSession(sessionId)
       const player = await media.createAVPlayer()
-      const texture = video ? this.textures?.createSurfaceTexture() : undefined
+      // The OHOS Flutter engine's deprecated createSurfaceTexture() path
+      // creates an entry without registering a native surface (surfaceId is
+      // left at 0). AVPlayer can prepare successfully against that value but
+      // never receives a render target. Register an explicit texture so the
+      // engine supplies both the Flutter texture id and a real surface id.
+      const texture = video ? this.createVideoTexture() : undefined
       if (video && texture === undefined) {
         await player.release()
         result.error('surface_unavailable', 'The OHOS texture registry is unavailable.', null)
@@ -167,6 +172,12 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
     }
   }
 
+  private createVideoTexture(): SurfaceTextureEntry | undefined {
+    if (this.textures === undefined) return undefined
+    const textureId = this.textures.getTextureId()
+    return this.textures.registerTexture(textureId)
+  }
+
   private bind(sessionId: string, session: MediaSession): void {
     const player = session.player
     player.on('stateChange', (state: media.AVPlayerState, reason: media.StateChangeReason) => {
@@ -174,6 +185,7 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
       if (state === 'playing') this.emit(sessionId, 'playing', true)
       if (state === 'paused' || state === 'completed' || state === 'stopped') this.emit(sessionId, 'playing', false)
       if (state === 'completed') this.emit(sessionId, 'completed', true)
+      if (state === 'error') this.emit(sessionId, 'error', null, `avplayer_state_error_${reason}`)
       if (!session.video) {
         const playbackState = this.playbackState(state)
         if (playbackState !== undefined) this.syncAudioPlaybackState(sessionId, playbackState)
@@ -192,6 +204,8 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
         this.emit(sessionId, 'buffering', true)
       } else if (kind === media.BufferingInfoType.BUFFERING_END) {
         this.emit(sessionId, 'buffering', false)
+      } else if (kind === media.BufferingInfoType.BUFFERING_PERCENT) {
+        this.emit(sessionId, 'bufferingPercent', value)
       }
     })
     player.on('startRenderFrame', () => this.emit(sessionId, 'firstFrame', true))
@@ -238,6 +252,7 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
       // registry; a native cleanup error must not block the next media item.
     } finally {
       session.texture?.release()
+      this.emit(sessionId, 'released', true)
     }
   }
 

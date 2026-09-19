@@ -11,12 +11,13 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:archive/archive_io.dart';
+import 'package:convert/convert.dart';
+import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 import 'package:mg_read/features/lan_sync/application/app_update_service.dart';
-import 'package:mg_read/features/lan_sync/data/lan_sync_checksum.dart';
 import 'package:mg_read/features/lan_sync/domain/app_update_models.dart';
 import 'package:mgread_ohos_system/mgread_ohos_system.dart';
 
@@ -105,9 +106,10 @@ final class PlatformAppUpdateService implements AppUpdateService {
 
   @override
   Future<void> ensureInstallPermission() async {
-    if (_dependencies.isOhos) {
-      throw StateError('app_update_install_unsupported');
-    }
+    // OHOS ordinary applications cannot request the signature-level bundle
+    // installer permission. Keep the download/verification flow available;
+    // launchInstaller reports the documented application-market fallback.
+    if (_dependencies.isOhos) return;
     if (!_dependencies.isAndroid) return;
     try {
       await _appUpdateChannel.invokeMethod<void>('ensureInstallPermission');
@@ -130,6 +132,13 @@ final class PlatformAppUpdateService implements AppUpdateService {
       await _verifyWindowsPackage(package, descriptor);
       await _launchWindowsUpdater(package, descriptor);
       return;
+    }
+    if (descriptor.version.platform == AppUpdatePlatform.ohos && _dependencies.isOhos) {
+      final info = await OhosSystemClient.getPackageInfo();
+      if (info == null || info.packageName != descriptor.packageName) {
+        throw StateError('app_update_package_name_mismatch');
+      }
+      throw StateError('app_update_market_fallback_required');
     }
     throw StateError('app_update_platform_mismatch');
   }
@@ -170,7 +179,7 @@ final class PlatformAppUpdateService implements AppUpdateService {
         reason: current.platform == AppUpdatePlatform.macos
             ? 'app_update_platform_unsupported'
             : current.platform == AppUpdatePlatform.ohos
-            ? 'app_update_install_unsupported'
+            ? 'app_update_market_fallback_required'
             : null,
       ),
     ];
@@ -190,7 +199,8 @@ final class PlatformAppUpdateService implements AppUpdateService {
       source = (await locateDebugReleaseApk(_candidateProjectRoots()))?.file;
     }
     if (source == null || !await source.exists()) throw StateError('app_update_package_unavailable');
-    return _existingPackage(source, version, 'mg_read-${version.version}-android.apk');
+    final packageName = _dependencies.isAndroid ? (await PackageInfo.fromPlatform()).packageName : 'com.mgread.mg_read';
+    return _existingPackage(source, version, 'mg_read-${version.version}-android.apk', packageName: packageName);
   }
 
   Future<PreparedAppPackage> _prepareWindowsPackage(AppVersionInfo version) async {
@@ -204,7 +214,7 @@ final class PlatformAppUpdateService implements AppUpdateService {
     final archive = File('${temporary.path}${Platform.pathSeparator}mg_read-${version.version}-windows.zip');
     try {
       await createWindowsBundleArchive(archive: archive, version: version, files: files);
-      final prepared = await _existingPackage(archive, version, archive.uri.pathSegments.last);
+      final prepared = await _existingPackage(archive, version, archive.uri.pathSegments.last, packageName: 'mg_read');
       return PreparedAppPackage(
         descriptor: prepared.descriptor,
         file: prepared.file,
@@ -219,22 +229,24 @@ final class PlatformAppUpdateService implements AppUpdateService {
     }
   }
 
-  Future<PreparedAppPackage> _existingPackage(File file, AppVersionInfo version, String fileName) async {
+  Future<PreparedAppPackage> _existingPackage(File file, AppVersionInfo version, String fileName, {required String packageName}) async {
     final bytes = await file.length();
     if (bytes <= 0 || bytes > appUpdateMaxPackageBytes) throw StateError('app_update_package_size_invalid');
     final digest = await _checksumFile(file);
     return PreparedAppPackage(
-      descriptor: AppPackageDescriptor(version: version, bytes: bytes, checksum: digest, fileName: fileName),
+      descriptor: AppPackageDescriptor(version: version, packageName: packageName, bytes: bytes, checksum: digest, fileName: fileName),
       file: file,
     );
   }
 
   Future<String> _checksumFile(File file) async {
-    final sink = LanSyncChecksumSink();
+    final output = AccumulatorSink<Digest>();
+    final input = sha256.startChunkedConversion(output);
     await for (final chunk in file.openRead()) {
-      sink.add(chunk);
+      input.add(chunk);
     }
-    return sink.close();
+    input.close();
+    return output.events.single.toString();
   }
 
   Iterable<Directory> _candidateProjectRoots() sync* {

@@ -22,6 +22,7 @@ void main() {
     final (peerIdentity, peerPlatform) = switch (_peerPlatform) {
       'android' => (crossDeviceAndroidIdentity, PairedDevicePlatform.android),
       'windows' => (crossDeviceWindowsIdentity, PairedDevicePlatform.windows),
+      'ohos' => (crossDeviceOhosPeerIdentity, PairedDevicePlatform.ohos),
       _ => throw StateError('unsupported_cross_device_peer'),
     };
     final gateway = CrossDeviceSyncGateway(side: 'ohos', pluginIds: const <String>['org.example.ohos.one']);
@@ -48,7 +49,13 @@ void main() {
     expect(summary.receivedPlugins, _expectedRemotePlugins);
     expect(summary.sentBooks, 1);
     expect(summary.sentPlugins, 1);
-    expect(gateway.appliedShelfItems.single.remoteContentId, '${_peerPlatform == 'android' ? 'android' : 'windows'}-book');
+    final peerPrefix = switch (_peerPlatform) {
+      'android' => 'android',
+      'windows' => 'windows',
+      'ohos' => 'ohos',
+      _ => throw StateError('unsupported_cross_device_peer'),
+    };
+    expect(gateway.appliedShelfItems.single.remoteContentId, '$peerPrefix-book');
     expect(gateway.importedPluginIds, hasLength(_expectedRemotePlugins));
     debugPrint('MGREAD_CROSS_DEVICE_OHOS_SUCCESS=true');
   }, timeout: const Timeout(Duration(minutes: 7)));

@@ -27,7 +27,7 @@ void main() {
     expect(capabilities.supportsOhosBackgroundAudio.available, isTrue);
     expect(capabilities.supportsOhosNetworkEvents.available, isTrue);
     expect(capabilities.supportsOhosAppUpdate.available, isFalse);
-    expect(capabilities.supportsOhosAppUpdate.reason, 'install_bundle_signature_permission_required');
+    expect(capabilities.supportsOhosAppUpdate.reason, 'app_update_market_fallback_required');
     final localAddresses = await OhosSystemClient.getLocalNetworkAddresses();
     debugPrint('OHOS Network Kit local addresses: $localAddresses');
     expect(localAddresses, isNotEmpty);

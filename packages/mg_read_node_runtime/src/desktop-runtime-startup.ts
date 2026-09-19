@@ -82,7 +82,11 @@ export async function createInitializedPluginManager(
     ...managerOptions
   } = options;
   const catalog = new InstalledPluginCatalog(dataRoot);
-  const manager = new PluginManager(dataRoot, { ...managerOptions, catalog });
+  const manager = new PluginManager(dataRoot, {
+    ...managerOptions,
+    ...(pluginImportInboxRoot === undefined ? {} : { pluginImportInboxRoot }),
+    catalog,
+  });
   try {
     await initializePluginArtifactSources({
       bundledPluginRoot,

@@ -24,6 +24,24 @@ napi_value SetProgress(napi_env env, napi_callback_info) {
   return result;
 }
 
+napi_value SetBrowserSessionCallback(napi_env env, napi_callback_info) {
+  napi_value result;
+  napi_get_undefined(env, &result);
+  return result;
+}
+
+napi_value ResolveBrowserSession(napi_env env, napi_callback_info) {
+  napi_value result;
+  napi_get_undefined(env, &result);
+  return result;
+}
+
+napi_value ClearBrowserSessionCallback(napi_env env, napi_callback_info) {
+  napi_value result;
+  napi_get_undefined(env, &result);
+  return result;
+}
+
 napi_value Dispose(napi_env env, napi_callback_info) {
   napi_value result;
   napi_get_undefined(env, &result);
@@ -48,6 +66,8 @@ napi_value Init(napi_env env, napi_value exports) {
        napi_default, nullptr},
       {"invoke", nullptr, ThrowUnavailable, nullptr, nullptr, nullptr,
        napi_default, nullptr},
+      {"invokeAsync", nullptr, ThrowUnavailable, nullptr, nullptr, nullptr,
+       napi_default, nullptr},
       {"cancelInvocation", nullptr, Cancel, nullptr, nullptr, nullptr,
        napi_default, nullptr},
       {"runtimePaths", nullptr, ThrowUnavailable, nullptr, nullptr, nullptr,
@@ -58,6 +78,12 @@ napi_value Init(napi_env env, napi_value exports) {
        napi_default, nullptr},
       {"setProgressCallback", nullptr, SetProgress, nullptr, nullptr,
        nullptr, napi_default, nullptr},
+      {"setBrowserSessionCallback", nullptr, SetBrowserSessionCallback, nullptr,
+       nullptr, nullptr, napi_default, nullptr},
+      {"resolveBrowserSession", nullptr, ResolveBrowserSession, nullptr,
+       nullptr, nullptr, napi_default, nullptr},
+      {"clearBrowserSessionCallback", nullptr, ClearBrowserSessionCallback, nullptr,
+       nullptr, nullptr, napi_default, nullptr},
       {"dispose", nullptr, Dispose, nullptr, nullptr, nullptr, napi_default,
        nullptr},
       {"runtimeVersion", nullptr, RuntimeVersion, nullptr, nullptr, nullptr,

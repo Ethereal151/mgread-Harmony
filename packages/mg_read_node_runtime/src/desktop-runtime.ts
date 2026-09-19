@@ -258,7 +258,17 @@ export class DesktopRuntime {
     this.#debugHttpAllowed = options.debugHttpAllowed ?? false;
     this.#debugHttpSettings = new RuntimeDebugHttpSettings(this.#dataRoot);
     this.#onProgress = options.onProgress ?? (() => {});
-    this.#browserSession = options.browserSession ?? (this.#embedded ? undefined : new DesktopBrowserSessionBroker(this.#bootId));
+    const embeddedBrowserRequest = (globalThis as {
+      readonly __mgreadBrowserRequestJson?: (payload: string) => Promise<string>;
+    }).__mgreadBrowserRequestJson;
+    const embeddedBrowserSession = embeddedBrowserRequest === undefined
+      ? undefined
+      : {
+          request: async (request: unknown): Promise<unknown> =>
+            JSON.parse(await embeddedBrowserRequest(JSON.stringify(request))),
+        };
+    this.#browserSession = options.browserSession ?? embeddedBrowserSession ??
+      (this.#embedded ? undefined : new DesktopBrowserSessionBroker(this.#bootId));
     this.#removeDebugDiagnosticObserver = observeRuntimeDiagnostics((record) => {
       if (!this.#debugHttp?.status().enabled) return;
       this.#debugLogs.append({
@@ -352,7 +362,9 @@ export class DesktopRuntime {
       debugLogEnabled: () => this.#debugHttp?.status().enabled === true,
       http: this.#pluginHttp,
       onProgress: this.#onProgress,
-      pluginImportInboxRoot: this.#pluginImportInboxRoot,
+      ...(this.#pluginImportInboxRoot === undefined
+        ? {}
+        : { pluginImportInboxRoot: this.#pluginImportInboxRoot }),
     });
     this.#pluginManager = pluginManager;
     const serviceStartedAt = performance.now();

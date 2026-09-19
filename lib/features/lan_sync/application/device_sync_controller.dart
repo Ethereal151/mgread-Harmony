@@ -703,6 +703,7 @@ String _appUpdateFailureMessage(String label, String code) => switch (code) {
   'app_update_file_provider_failed' => '安装包临时文件无法提供给系统安装程序',
   'app_update_installer_failed' => '系统安装程序启动失败',
   'app_update_install_unsupported' => '鸿蒙普通应用没有可用的 HAP 用户确认安装入口，请通过应用市场升级',
+  'app_update_market_fallback_required' => '鸿蒙系统未向普通应用开放 HAP 安装确认入口，请通过应用市场升级',
   'lan_sync_peer_offline' => '$label 已离线，无法获取 App',
   _ => '从 $label 获取 App 失败（$code）',
 };

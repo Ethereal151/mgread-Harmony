@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:mg_read/features/lan_sync/application/app_update_service.dart';
@@ -108,8 +109,9 @@ final class _FakeAppUpdateService implements AppUpdateService {
     return PreparedAppPackage(
       descriptor: AppPackageDescriptor(
         version: version,
+        packageName: 'mg_read',
         bytes: packageBytes.length,
-        checksum: lanSyncChecksum(packageBytes),
+        checksum: sha256.convert(packageBytes).toString(),
         fileName: 'mg_read.zip',
       ),
       file: file,

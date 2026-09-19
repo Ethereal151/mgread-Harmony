@@ -41,8 +41,18 @@ final class OhosSystemClient {
     if (value is! Map) return null;
     final version = value['version'] as String?;
     final build = value['build'] as int?;
-    if (version == null || version.trim().isEmpty || build == null) return null;
-    return OhosPackageInfo(version: version, build: build);
+    final packageName = value['packageName'] as String?;
+    if (version == null ||
+        version.trim().isEmpty ||
+        build == null ||
+        packageName == null ||
+        packageName.trim().isEmpty)
+      return null;
+    return OhosPackageInfo(
+      version: version,
+      build: build,
+      packageName: packageName,
+    );
   }
 
   static Future<OhosDeviceInfo?> getDeviceInfo() async {
@@ -97,10 +107,15 @@ final class OhosSystemClient {
 }
 
 final class OhosPackageInfo {
-  const OhosPackageInfo({required this.version, required this.build});
+  const OhosPackageInfo({
+    required this.version,
+    required this.build,
+    required this.packageName,
+  });
 
   final String version;
   final int build;
+  final String packageName;
 }
 
 final class OhosDeviceInfo {

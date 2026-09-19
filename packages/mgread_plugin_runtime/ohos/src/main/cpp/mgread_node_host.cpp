@@ -9,6 +9,7 @@
 #include <string>
 #include <set>
 #include <thread>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -100,6 +101,28 @@ class NodeHost {
     return future.get();
   }
 
+  napi_value InvokeAsync(napi_env env, const std::string& request_id, const std::string& method,
+                         const std::string& params_json, double deadline) {
+    napi_deferred deferred;
+    napi_value promise;
+    napi_create_promise(env, &deferred, &promise);
+    auto* invocation = new AsyncInvocation{
+      this, nullptr, deferred, request_id, method, params_json, deadline, false, {}};
+    napi_value resource_name;
+    napi_create_string_utf8(env, "mgread-node-invocation", NAPI_AUTO_LENGTH, &resource_name);
+    if (napi_create_async_work(env, nullptr, resource_name, &NodeHost::ExecuteAsync,
+          &NodeHost::CompleteAsync, invocation, &invocation->work) != napi_ok ||
+        napi_queue_async_work(env, invocation->work) != napi_ok) {
+      napi_value message = StringValue(env, "runtime_invocation_queue_failed");
+      napi_value error;
+      napi_create_error(env, nullptr, message, &error);
+      napi_reject_deferred(env, deferred, error);
+      if (invocation->work != nullptr) napi_delete_async_work(env, invocation->work);
+      delete invocation;
+    }
+    return promise;
+  }
+
   bool Cancel(const std::string& request_id) {
     std::lock_guard<std::mutex> lock(mutex_);
     if (disposed_ || !thread_.joinable()) return false;
@@ -185,6 +208,47 @@ class NodeHost {
       nullptr, this, &NodeHost::ProgressOnJs, &progress_function_tsfn_);
   }
 
+  void SetBrowserSessionCallback(napi_env env, napi_value callback) {
+    std::lock_guard<std::mutex> lock(callback_mutex_);
+    if (browser_function_tsfn_ != nullptr) {
+      napi_release_threadsafe_function(browser_function_tsfn_, napi_tsfn_abort);
+      browser_function_tsfn_ = nullptr;
+    }
+    if (browser_function_ != nullptr) {
+      napi_delete_reference(env, browser_function_);
+      browser_function_ = nullptr;
+    }
+    napi_create_reference(env, callback, 1, &browser_function_);
+    napi_value resource_name;
+    napi_create_string_utf8(env, "mgread-node-browser", NAPI_AUTO_LENGTH, &resource_name);
+    napi_create_threadsafe_function(env, callback, nullptr, resource_name, 32, 1, this,
+      nullptr, this, &NodeHost::BrowserOnJs, &browser_function_tsfn_);
+  }
+
+  void ClearBrowserSessionCallback(napi_env env) {
+    std::lock_guard<std::mutex> lock(callback_mutex_);
+    if (browser_function_tsfn_ != nullptr) {
+      napi_release_threadsafe_function(browser_function_tsfn_, napi_tsfn_abort);
+      browser_function_tsfn_ = nullptr;
+    }
+    if (browser_function_ != nullptr) {
+      napi_delete_reference(env, browser_function_);
+      browser_function_ = nullptr;
+    }
+  }
+
+  void ResolveBrowserSession(const std::string& request_id, const std::string& response) {
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      if (disposed_ || !thread_.joinable()) return;
+    }
+    {
+      std::lock_guard<std::mutex> lock(browser_mutex_);
+      browser_responses_.emplace_back(request_id, response);
+    }
+    if (browser_async_initialized_) uv_async_send(&browser_async_);
+  }
+
   void ReportProgress(const std::string& payload) {
     std::lock_guard<std::mutex> lock(callback_mutex_);
     if (progress_function_tsfn_ != nullptr) {
@@ -208,6 +272,49 @@ class NodeHost {
   }
 
  private:
+  struct BrowserPayload {
+    std::string request_id;
+    std::string payload;
+  };
+
+  struct AsyncInvocation {
+    NodeHost* host;
+    napi_async_work work;
+    napi_deferred deferred;
+    std::string request_id;
+    std::string method;
+    std::string params_json;
+    double deadline;
+    bool failed;
+    std::string response;
+    std::string error;
+  };
+
+  static void ExecuteAsync(napi_env, void* data) {
+    auto* invocation = static_cast<AsyncInvocation*>(data);
+    try {
+      invocation->response = invocation->host->Invoke(
+        invocation->request_id, invocation->method, invocation->params_json, invocation->deadline);
+    } catch (const std::exception& error) {
+      invocation->failed = true;
+      invocation->error = error.what();
+    }
+  }
+
+  static void CompleteAsync(napi_env env, napi_status status, void* data) {
+    auto* invocation = static_cast<AsyncInvocation*>(data);
+    if (status != napi_ok || invocation->failed) {
+      napi_value message = StringValue(env, invocation->failed ? invocation->error : "runtime_invocation_cancelled");
+      napi_value error;
+      napi_create_error(env, nullptr, message, &error);
+      napi_reject_deferred(env, invocation->deferred, error);
+    } else {
+      napi_resolve_deferred(env, invocation->deferred, StringValue(env, invocation->response));
+    }
+    napi_delete_async_work(env, invocation->work);
+    delete invocation;
+  }
+
   void EnqueueLocked(std::function<void()> task) {
     queue_.emplace_back(std::move(task));
     condition_.notify_one();
@@ -267,7 +374,13 @@ class NodeHost {
     v8::HandleScope handle_scope(isolate_);
     v8::Context::Scope context_scope(setup_->context());
     node::SetProcessExitHandler(env_, [](node::Environment* environment, int) { node::Stop(environment); });
+    if (uv_async_init(setup_->event_loop(), &browser_async_, &NodeHost::BrowserAsync) != 0) {
+      throw std::runtime_error("node_browser_async_init_failed");
+    }
+    browser_async_.data = this;
+    browser_async_initialized_ = true;
     InstallProgressCallback();
+    InstallBrowserCallback();
     const std::string dist = runtime_root + "/dist/desktop-runtime.js";
     const std::string bootstrap =
       "globalThis.__mgreadStartCoreJson = async (dataRoot, inboxRoot) => {"
@@ -276,6 +389,7 @@ class NodeHost {
       " catch (e) { const state = fs.existsSync(" + Quote(dist) + ") ? String(fs.statSync(" + Quote(dist) + ").size) : 'missing';"
       " throw new Error('runtime_load:' + state + ':' + String(e?.stack ?? e)); }"
       " const core = new mod.DesktopRuntime({dataRoot, pluginImportInboxRoot: inboxRoot, embedded: true, debugHttpAllowed: true, "
+      " browserSession: { request: async request => JSON.parse(await globalThis.__mgreadBrowserRequestJson(JSON.stringify(request))) }, "
       " onProgress: p => globalThis.__mgreadReportProgress(JSON.stringify(p))});"
       " await core.start(); const hello = await core.invokeEmbedded('runtime.hello', {});"
       " if (!hello.ok) throw new Error('runtime_hello_failed'); globalThis.__mgreadCore = core; return JSON.stringify({ok:true}); };"
@@ -397,11 +511,69 @@ class NodeHost {
     setup_->context()->Global()->Set(setup_->context(), ToV8("__mgreadReportProgress"), callback).Check();
   }
 
+  void InstallBrowserCallback() {
+    auto callback = v8::FunctionTemplate::New(isolate_, &NodeHost::BrowserFromNode,
+      v8::External::New(isolate_, this))->GetFunction(setup_->context()).ToLocalChecked();
+    setup_->context()->Global()->Set(setup_->context(), ToV8("__mgreadBrowserRequestJson"), callback).Check();
+  }
+
+  v8::Local<v8::Promise> RequestBrowser(const std::string& payload) {
+    v8::Local<v8::Promise::Resolver> resolver =
+      v8::Promise::Resolver::New(setup_->context()).ToLocalChecked();
+    const std::string request_id = "browser-" + std::to_string(++browser_sequence_);
+    browser_resolvers_.emplace(request_id, v8::Global<v8::Promise::Resolver>(isolate_, resolver));
+    auto* request = new BrowserPayload{request_id, payload};
+    std::lock_guard<std::mutex> lock(callback_mutex_);
+    if (browser_function_tsfn_ == nullptr ||
+        napi_call_threadsafe_function(browser_function_tsfn_, request, napi_tsfn_nonblocking) != napi_ok) {
+      delete request;
+      browser_resolvers_.erase(request_id);
+      resolver->Reject(setup_->context(), ToV8("browser_host_unavailable")).Check();
+    }
+    return resolver->GetPromise();
+  }
+
+  void ResolveBrowserSessionOnNode(const std::string& request_id, const std::string& response) {
+    const auto found = browser_resolvers_.find(request_id);
+    if (found == browser_resolvers_.end()) return;
+    v8::Local<v8::Promise::Resolver> resolver = found->second.Get(isolate_);
+    resolver->Resolve(setup_->context(), ToV8(response)).Check();
+    found->second.Reset();
+    browser_resolvers_.erase(found);
+  }
+
+  static void BrowserAsync(uv_async_t* handle) {
+    auto* host = static_cast<NodeHost*>(handle->data);
+    host->DrainBrowserResponses();
+  }
+
+  void DrainBrowserResponses() {
+    std::deque<std::pair<std::string, std::string>> responses;
+    {
+      std::lock_guard<std::mutex> lock(browser_mutex_);
+      responses.swap(browser_responses_);
+    }
+    for (const auto& response : responses) {
+      ResolveBrowserSessionOnNode(response.first, response.second);
+    }
+  }
+
   static void ProgressFromNode(const v8::FunctionCallbackInfo<v8::Value>& info) {
     auto* host = static_cast<NodeHost*>(v8::Local<v8::External>::Cast(info.Data())->Value());
     if (info.Length() == 0) return;
     v8::String::Utf8Value value(info.GetIsolate(), info[0]);
     if (*value) host->ReportProgress(std::string(*value, value.length()));
+  }
+
+  static void BrowserFromNode(const v8::FunctionCallbackInfo<v8::Value>& info) {
+    auto* host = static_cast<NodeHost*>(v8::Local<v8::External>::Cast(info.Data())->Value());
+    if (info.Length() != 1 || !info[0]->IsString()) {
+      info.GetIsolate()->ThrowException(v8::Exception::Error(
+        v8::String::NewFromUtf8(info.GetIsolate(), "browser_request_requires_json").ToLocalChecked()));
+      return;
+    }
+    v8::String::Utf8Value value(info.GetIsolate(), info[0]);
+    info.GetReturnValue().Set(host->RequestBrowser(*value ? std::string(*value, value.length()) : std::string()));
   }
 
   static void ProgressOnJs(napi_env env, napi_value callback, void*, void* data) {
@@ -411,12 +583,29 @@ class NodeHost {
     delete payload;
   }
 
+  static void BrowserOnJs(napi_env env, napi_value callback, void*, void* data) {
+    auto* request = static_cast<BrowserPayload*>(data);
+    napi_value arguments[2] = {
+      StringValue(env, request->request_id),
+      StringValue(env, request->payload),
+    };
+    napi_call_function(env, nullptr, callback, 2, arguments, nullptr);
+    delete request;
+  }
+
   void Stop() {
     if (setup_ && env_ && isolate_) {
       v8::Locker locker(isolate_);
       v8::Isolate::Scope isolate_scope(isolate_);
       v8::HandleScope handle_scope(isolate_);
       v8::Context::Scope context_scope(setup_->context());
+      for (auto& entry : browser_resolvers_) entry.second.Reset();
+      browser_resolvers_.clear();
+      if (browser_async_initialized_) {
+        uv_close(reinterpret_cast<uv_handle_t*>(&browser_async_), nullptr);
+        uv_run(setup_->event_loop(), UV_RUN_NOWAIT);
+        browser_async_initialized_ = false;
+      }
       env_ = nullptr;
       setup_.reset();
     }
@@ -452,6 +641,14 @@ class NodeHost {
   std::mutex callback_mutex_;
   napi_ref progress_function_ = nullptr;
   napi_threadsafe_function progress_function_tsfn_ = nullptr;
+  napi_ref browser_function_ = nullptr;
+  napi_threadsafe_function browser_function_tsfn_ = nullptr;
+  uint64_t browser_sequence_ = 0;
+  std::unordered_map<std::string, v8::Global<v8::Promise::Resolver>> browser_resolvers_;
+  std::mutex browser_mutex_;
+  std::deque<std::pair<std::string, std::string>> browser_responses_;
+  uv_async_t browser_async_{};
+  bool browser_async_initialized_ = false;
 };
 
 NodeHost& Host() {
@@ -476,6 +673,14 @@ napi_value Invoke(napi_env env, napi_callback_info info) {
   try {
     return StringValue(env, Host().Invoke(Utf8(env, argv[0]), Utf8(env, argv[1]), Utf8(env, argv[2]), deadline));
   } catch (const std::exception& error) { napi_throw_error(env, "runtime_invocation_failed", error.what()); return nullptr; }
+}
+
+napi_value InvokeAsync(napi_env env, napi_callback_info info) {
+  size_t argc = 4; napi_value argv[4];
+  napi_get_cb_info(env, info, &argc, argv, nullptr, nullptr);
+  if (argc != 4) { napi_throw_error(env, "invalid_arguments", "invokeAsync expects four arguments"); return nullptr; }
+  double deadline = 0; napi_get_value_double(env, argv[3], &deadline);
+  return Host().InvokeAsync(env, Utf8(env, argv[0]), Utf8(env, argv[1]), Utf8(env, argv[2]), deadline);
 }
 
 napi_value Cancel(napi_env env, napi_callback_info info) {
@@ -507,6 +712,24 @@ napi_value SetProgress(napi_env env, napi_callback_info info) {
   Host().SetProgress(env, argv[0]); napi_value result; napi_get_undefined(env, &result); return result;
 }
 
+napi_value SetBrowserSessionCallback(napi_env env, napi_callback_info info) {
+  size_t argc = 1; napi_value argv[1]; napi_get_cb_info(env, info, &argc, argv, nullptr, nullptr);
+  if (argc != 1) { napi_throw_error(env, "invalid_arguments", "setBrowserSessionCallback expects a function"); return nullptr; }
+  Host().SetBrowserSessionCallback(env, argv[0]); napi_value result; napi_get_undefined(env, &result); return result;
+}
+
+napi_value ResolveBrowserSession(napi_env env, napi_callback_info info) {
+  size_t argc = 2; napi_value argv[2]; napi_get_cb_info(env, info, &argc, argv, nullptr, nullptr);
+  if (argc != 2) { napi_throw_error(env, "invalid_arguments", "resolveBrowserSession expects two strings"); return nullptr; }
+  Host().ResolveBrowserSession(Utf8(env, argv[0]), Utf8(env, argv[1]));
+  napi_value result; napi_get_undefined(env, &result); return result;
+}
+
+napi_value ClearBrowserSessionCallback(napi_env env, napi_callback_info) {
+  Host().ClearBrowserSessionCallback(env);
+  napi_value result; napi_get_undefined(env, &result); return result;
+}
+
 napi_value Dispose(napi_env env, napi_callback_info) {
   Host().Dispose();
   Host().ClearProgress(env);
@@ -524,11 +747,15 @@ napi_value Init(napi_env env, napi_value exports) {
   napi_property_descriptor properties[] = {
     {"initialize", nullptr, Initialize, nullptr, nullptr, nullptr, napi_default, nullptr},
     {"invoke", nullptr, Invoke, nullptr, nullptr, nullptr, napi_default, nullptr},
+    {"invokeAsync", nullptr, InvokeAsync, nullptr, nullptr, nullptr, napi_default, nullptr},
     {"cancelInvocation", nullptr, Cancel, nullptr, nullptr, nullptr, napi_default, nullptr},
     {"runtimePaths", nullptr, RuntimePaths, nullptr, nullptr, nullptr, napi_default, nullptr},
     {"materializeTransfer", nullptr, MaterializeTransfer, nullptr, nullptr, nullptr, napi_default, nullptr},
     {"restart", nullptr, Restart, nullptr, nullptr, nullptr, napi_default, nullptr},
     {"setProgressCallback", nullptr, SetProgress, nullptr, nullptr, nullptr, napi_default, nullptr},
+    {"setBrowserSessionCallback", nullptr, SetBrowserSessionCallback, nullptr, nullptr, nullptr, napi_default, nullptr},
+    {"resolveBrowserSession", nullptr, ResolveBrowserSession, nullptr, nullptr, nullptr, napi_default, nullptr},
+    {"clearBrowserSessionCallback", nullptr, ClearBrowserSessionCallback, nullptr, nullptr, nullptr, napi_default, nullptr},
     {"dispose", nullptr, Dispose, nullptr, nullptr, nullptr, napi_default, nullptr},
     {"runtimeVersion", nullptr, RuntimeVersion, nullptr, nullptr, nullptr, napi_default, nullptr},
     {"nativeNodeHostAvailable", nullptr, NativeNodeHostAvailable, nullptr, nullptr, nullptr, napi_default, nullptr},
