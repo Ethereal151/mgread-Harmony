@@ -25,12 +25,14 @@ void main() {
       'ohos' => (crossDeviceOhosPeerIdentity, PairedDevicePlatform.ohos),
       _ => throw StateError('unsupported_cross_device_peer'),
     };
+    final localIdentity = _peerPlatform == 'ohos' ? crossDeviceOhosPeerIdentity : crossDeviceOhosIdentity;
+    final configuredPeerIdentity = _peerPlatform == 'ohos' ? crossDeviceOhosIdentity : peerIdentity;
     final gateway = CrossDeviceSyncGateway(side: 'ohos', pluginIds: const <String>['org.example.ohos.one']);
     final result = Completer<PairedSyncRunSummary>();
     final host = await PairedSyncHost.start(
-      identity: crossDeviceOhosIdentity,
-      devices: CrossDevicePairedRepository(crossDevicePeer(peerIdentity, peerPlatform)),
-      identityStore: CrossDeviceIdentityStore(crossDeviceOhosIdentity, peerIdentity.deviceId),
+      identity: localIdentity,
+      devices: CrossDevicePairedRepository(crossDevicePeer(configuredPeerIdentity, peerPlatform)),
+      identityStore: CrossDeviceIdentityStore(localIdentity, configuredPeerIdentity.deviceId),
       discoveryPort: 0,
       onIncoming: (session) async {
         try {
