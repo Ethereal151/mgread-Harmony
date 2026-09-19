@@ -92,6 +92,7 @@ class ProfileGeneralSettingPage extends ConsumerWidget {
 
   List<Widget> _appearanceSections(BuildContext context, AppSettingsManager settings) {
     final String layout = settings.get(AppSettingKeys.homeLayoutMode);
+    final String coverMetadataMode = settings.get(AppSettingKeys.homeCoverMetadataMode);
     final String themeMode = settings.get(AppSettingKeys.themeMode);
     final AppThemeColor lightThemeColor = AppThemeColor.fromId(settings.get(AppSettingKeys.themeColor));
     final AppDarkThemeColor darkThemeColor = AppDarkThemeColor.fromId(settings.get(AppSettingKeys.darkThemeColor));
@@ -131,6 +132,13 @@ class ProfileGeneralSettingPage extends ConsumerWidget {
         value: layout,
         onChanged: (String value) async {
           await settings.set(AppSettingKeys.homeLayoutMode, value);
+        },
+      ),
+      const SizedBox(height: AppSpacing.regular),
+      _CoverMetadataModeCard(
+        value: coverMetadataMode,
+        onChanged: (String value) async {
+          await settings.set(AppSettingKeys.homeCoverMetadataMode, value);
         },
       ),
       const SizedBox(height: AppSpacing.comfortable),
@@ -489,6 +497,61 @@ class _LayoutModeCardState extends State<_LayoutModeCard> {
           },
         ),
       ),
+    );
+  }
+}
+
+class _CoverMetadataModeCard extends StatefulWidget {
+  const _CoverMetadataModeCard({required this.value, required this.onChanged});
+  final String value;
+  final ValueChanged<String> onChanged;
+
+  @override
+  State<_CoverMetadataModeCard> createState() => _CoverMetadataModeCardState();
+}
+
+class _CoverMetadataModeCardState extends State<_CoverMetadataModeCard> {
+  late String _value = widget.value;
+
+  @override
+  void didUpdateWidget(covariant _CoverMetadataModeCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.value != widget.value) _value = widget.value;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final AppThemeTokens tokens = AppThemeTokens.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        const _SectionHeading(title: '封面信息', description: '选择卡片模式下标题和作者的显示位置'),
+        const SizedBox(height: AppSpacing.regular),
+        DecoratedBox(
+          decoration: BoxDecoration(
+            color: tokens.surface,
+            borderRadius: AppRadii.detailCard,
+            border: Border.all(color: tokens.divider),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(AppSpacing.regular),
+            child: SegmentedButton<String>(
+              key: const Key('appearance-cover-metadata-mode'),
+              segments: const <ButtonSegment<String>>[
+                ButtonSegment<String>(value: 'belowCover', icon: Icon(Icons.text_snippet_outlined), label: Text('封面下方')),
+                ButtonSegment<String>(value: 'insideCover', icon: Icon(Icons.movie_outlined), label: Text('封面内叠加')),
+              ],
+              selected: <String>{_value},
+              showSelectedIcon: false,
+              onSelectionChanged: (Set<String> selected) {
+                final String value = selected.single;
+                setState(() => _value = value);
+                widget.onChanged(value);
+              },
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

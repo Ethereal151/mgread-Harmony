@@ -67,6 +67,11 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(settings.get(AppSettingKeys.homeLayoutMode), 'card');
+
+    await tester.scrollUntilVisible(find.text('封面内叠加'), 200, scrollable: scrollable);
+    await tester.tap(find.text('封面内叠加'));
+    await tester.pumpAndSettle();
+    expect(settings.get(AppSettingKeys.homeCoverMetadataMode), 'insideCover');
   });
 
   testWidgets('appearance settings persists the host theme color', (WidgetTester tester) async {

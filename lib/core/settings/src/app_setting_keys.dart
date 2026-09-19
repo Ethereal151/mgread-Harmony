@@ -41,6 +41,15 @@ final class AppSettingKeys {
     validator: _validateHomeLayoutMode,
   );
 
+  /// Position of title and author metadata on bookshelf card covers.
+  static const homeCoverMetadataMode = SettingKey<String>(
+    id: 'appearance.homeCoverMetadataMode',
+    documentKind: 'settings.appearance',
+    defaultValue: 'belowCover',
+    codec: SettingCodec<String>(_stringEncode, _stringDecode),
+    validator: _validateHomeCoverMetadataMode,
+  );
+
   /// Stable local book IDs whose covers are hidden with a blur on the shelf.
   static const blurredCoverBookIds = SettingKey<List<String>>(
     id: 'appearance.blurredCoverBookIds',
@@ -219,6 +228,7 @@ final class AppSettingKeys {
     themeColor,
     darkThemeColor,
     homeLayoutMode,
+    homeCoverMetadataMode,
     blurredCoverBookIds,
     searchHistory,
     discoverySourceId,
@@ -285,6 +295,12 @@ void _validateDarkThemeColor(String value) {
 
 void _validateHomeLayoutMode(String value) {
   if (value != 'list' && value != 'card') {
+    throw ArgumentError.value(value);
+  }
+}
+
+void _validateHomeCoverMetadataMode(String value) {
+  if (value != 'belowCover' && value != 'insideCover') {
     throw ArgumentError.value(value);
   }
 }

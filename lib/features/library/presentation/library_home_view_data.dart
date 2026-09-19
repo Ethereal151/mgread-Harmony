@@ -241,6 +241,18 @@ enum LibraryHomeLayoutMode {
   static LibraryHomeLayoutMode fromSetting(String value) => value == card.name ? card : list;
 }
 
+/// Where card metadata is rendered when the bookshelf uses card mode.
+enum LibraryHomeCoverMetadataMode {
+  belowCover,
+  insideCover;
+
+  /// Stable value persisted by the app-owned settings manager.
+  String get settingValue => name;
+
+  /// Resolves an app setting while retaining the unobtrusive default.
+  static LibraryHomeCoverMetadataMode fromSetting(String value) => value == insideCover.name ? insideCover : belowCover;
+}
+
 /// The two content sections available at the library landing page.
 enum LibraryHomeSection { recentUpdates, shelf }
 

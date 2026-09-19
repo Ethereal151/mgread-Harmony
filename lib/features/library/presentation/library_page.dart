@@ -113,6 +113,9 @@ class LibraryPage extends ConsumerWidget {
     final AppThemeModeScope themeModeScope = AppThemeModeScope.of(context);
     final AppSettingsManager settings = ref.read(appSettingsProvider);
     final LibraryHomeLayoutMode initialLayoutMode = LibraryHomeLayoutMode.fromSetting(settings.snapshot.get(AppSettingKeys.homeLayoutMode));
+    final LibraryHomeCoverMetadataMode initialCoverMetadataMode = LibraryHomeCoverMetadataMode.fromSetting(
+      settings.snapshot.get(AppSettingKeys.homeCoverMetadataMode),
+    );
     final Set<String> blurredCoverBookIds = settings.snapshot.get(AppSettingKeys.blurredCoverBookIds).toSet();
     final LibraryPageState state = ref.watch(libraryPageControllerProvider);
     final LibraryPageController controller = ref.read(libraryPageControllerProvider.notifier);
@@ -402,6 +405,7 @@ class LibraryPage extends ConsumerWidget {
           data: data,
           initialLayoutMode: initialLayoutMode,
           onLayoutModeChanged: (LibraryHomeLayoutMode mode) => settings.set(AppSettingKeys.homeLayoutMode, mode.settingValue),
+          initialCoverMetadataMode: initialCoverMetadataMode,
           callbacks: resolvedCallbacks,
           preparingBookId: readerLaunch.status == ShelfReaderPreparationStatus.preparing ? readerLaunch.bookId : null,
           isRefreshing: state.status == LibraryPageStatus.refreshing,

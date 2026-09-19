@@ -206,6 +206,16 @@ void main() {
     expect(privateBook?.id, 'fixture-lord-of-mysteries');
   });
 
+  testWidgets('card mode can place title and author inside the cover', (WidgetTester tester) async {
+    await tester.pumpWidget(
+      _host(initialLayoutMode: LibraryHomeLayoutMode.card, initialCoverMetadataMode: LibraryHomeCoverMetadataMode.insideCover),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('library-grid-book-overlay-title-fixture-lord-of-mysteries')), findsOneWidget);
+    expect(find.byKey(const Key('library-grid-book-overlay-subtitle-fixture-lord-of-mysteries')), findsOneWidget);
+  });
+
   testWidgets('card menu stays subtle until hover or expansion', (WidgetTester tester) async {
     await tester.pumpWidget(
       _host(
@@ -1032,6 +1042,7 @@ Widget _host({
   TextScaler textScaler = TextScaler.noScaling,
   LibraryHomeLayoutMode initialLayoutMode = LibraryHomeLayoutMode.list,
   Future<void> Function(LibraryHomeLayoutMode mode)? onLayoutModeChanged,
+  LibraryHomeCoverMetadataMode initialCoverMetadataMode = LibraryHomeCoverMetadataMode.belowCover,
 }) {
   return MaterialApp(
     theme: AppTheme.light(),
@@ -1048,6 +1059,7 @@ Widget _host({
         data: data ?? LibraryHomeFixtures.preview,
         initialLayoutMode: initialLayoutMode,
         onLayoutModeChanged: onLayoutModeChanged,
+        initialCoverMetadataMode: initialCoverMetadataMode,
         callbacks: callbacks,
         isRefreshing: false,
         onRefresh: () async {},
