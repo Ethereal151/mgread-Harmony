@@ -456,7 +456,16 @@ void main() {
     addTearDown(fixture.close);
     final store = ContentLibraryComicReaderStateStore(fixture.library, itemId: fixture.manga.id, settings: fixture.settings);
     const progress = ComicReaderProgress(chapterId: 'chapter-1', imageId: 'image-1', imageFraction: .4, chapterIndex: 0, bookFraction: .4);
-    const preferences = ComicReaderPreferences(brightness: .6, keepScreenOn: false, immersiveMode: true, imageSpacing: 12);
+    const preferences = ComicReaderPreferences(
+      brightness: .6,
+      keepScreenOn: false,
+      immersiveMode: true,
+      pageTurnShortcuts: false,
+      pageTurnFraction: .5,
+      pageTurnLayout: ComicPageTurnLayout.horizontal,
+      singleHandMode: true,
+      imageSpacing: 12,
+    );
     final bookmark = ComicReaderBookmark(
       id: 'bookmark-1',
       bookId: fixture.manga.id.value,

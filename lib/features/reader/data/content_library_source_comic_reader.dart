@@ -549,6 +549,9 @@ final class ContentLibraryComicReaderStateStore implements ComicReaderStateStore
             keepScreenOn: raw['keepScreenOn'] as bool? ?? true,
             immersiveMode: raw['immersiveMode'] as bool? ?? false,
             pageTurnShortcuts: raw['pageTurnShortcuts'] as bool? ?? true,
+            pageTurnFraction: (raw['pageTurnFraction'] as num?)?.toDouble() ?? .9,
+            pageTurnLayout: raw['pageTurnLayout'] == 'horizontal' ? ComicPageTurnLayout.horizontal : ComicPageTurnLayout.vertical,
+            singleHandMode: raw['singleHandMode'] as bool? ?? false,
             imageSpacing: (raw['imageSpacing'] as num?)?.toDouble() ?? 0,
           ).normalized();
   }
@@ -562,6 +565,9 @@ final class ContentLibraryComicReaderStateStore implements ComicReaderStateStore
       'keepScreenOn': p.keepScreenOn,
       'immersiveMode': p.immersiveMode,
       'pageTurnShortcuts': p.pageTurnShortcuts,
+      'pageTurnFraction': p.pageTurnFraction,
+      'pageTurnLayout': p.pageTurnLayout.name,
+      'singleHandMode': p.singleHandMode,
       'imageSpacing': p.imageSpacing,
     });
     await s.flush();

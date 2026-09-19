@@ -424,6 +424,9 @@ class ComicReaderBookmark {
   );
 }
 
+/// The screen axis used by comic edge taps when single-hand mode is off.
+enum ComicPageTurnLayout { vertical, horizontal }
+
 @immutable
 /// Persisted presentation settings for the vertical comic reader.
 class ComicReaderPreferences {
@@ -433,11 +436,17 @@ class ComicReaderPreferences {
     this.keepScreenOn = true,
     this.immersiveMode = false,
     this.pageTurnShortcuts = true,
+    this.pageTurnFraction = .9,
+    this.pageTurnLayout = ComicPageTurnLayout.vertical,
+    this.singleHandMode = false,
     this.imageSpacing = 0,
   });
 
   /// Default settings used when the host has no saved value.
   static const defaults = ComicReaderPreferences();
+
+  /// Supported scroll distances for one page-turn action.
+  static const pageTurnFractions = <double>[.3, .5, .8, .9, 1];
 
   /// Reader overlay brightness from 0.25 to 1.0.
   final double brightness;
@@ -451,6 +460,15 @@ class ComicReaderPreferences {
   /// Whether volume keys and common hardware keyboard shortcuts turn pages.
   final bool pageTurnShortcuts;
 
+  /// Fraction of the viewport to move for one page-turn action.
+  final double pageTurnFraction;
+
+  /// Whether the normal edge-tap rails are vertical or horizontal.
+  final ComicPageTurnLayout pageTurnLayout;
+
+  /// Makes both side rails advance, for one-handed use.
+  final bool singleHandMode;
+
   /// Legacy setting retained for persistence compatibility. Comic pages always
   /// render edge-to-edge, so normalized values are zero.
   final double imageSpacing;
@@ -463,8 +481,22 @@ class ComicReaderPreferences {
     keepScreenOn: keepScreenOn,
     immersiveMode: immersiveMode,
     pageTurnShortcuts: pageTurnShortcuts,
+    pageTurnFraction: _nearestPageTurnFraction(pageTurnFraction),
+    pageTurnLayout: pageTurnLayout,
+    singleHandMode: singleHandMode,
     imageSpacing: 0,
   );
+
+  static double _nearestPageTurnFraction(double value) {
+    if (!value.isFinite) return defaults.pageTurnFraction;
+    var nearest = pageTurnFractions.first;
+    for (final double candidate in pageTurnFractions.skip(1)) {
+      if ((candidate - value).abs() < (nearest - value).abs()) {
+        nearest = candidate;
+      }
+    }
+    return nearest;
+  }
 
   /// Returns a copy with the supplied fields replaced.
   ComicReaderPreferences copyWith({
@@ -472,12 +504,18 @@ class ComicReaderPreferences {
     bool? keepScreenOn,
     bool? immersiveMode,
     bool? pageTurnShortcuts,
+    double? pageTurnFraction,
+    ComicPageTurnLayout? pageTurnLayout,
+    bool? singleHandMode,
     double? imageSpacing,
   }) => ComicReaderPreferences(
     brightness: brightness ?? this.brightness,
     keepScreenOn: keepScreenOn ?? this.keepScreenOn,
     immersiveMode: immersiveMode ?? this.immersiveMode,
     pageTurnShortcuts: pageTurnShortcuts ?? this.pageTurnShortcuts,
+    pageTurnFraction: pageTurnFraction ?? this.pageTurnFraction,
+    pageTurnLayout: pageTurnLayout ?? this.pageTurnLayout,
+    singleHandMode: singleHandMode ?? this.singleHandMode,
     imageSpacing: imageSpacing ?? this.imageSpacing,
   );
 
@@ -488,6 +526,9 @@ class ComicReaderPreferences {
       keepScreenOn == other.keepScreenOn &&
       immersiveMode == other.immersiveMode &&
       pageTurnShortcuts == other.pageTurnShortcuts &&
+      pageTurnFraction == other.pageTurnFraction &&
+      pageTurnLayout == other.pageTurnLayout &&
+      singleHandMode == other.singleHandMode &&
       imageSpacing == other.imageSpacing;
 
   @override
@@ -496,6 +537,9 @@ class ComicReaderPreferences {
     keepScreenOn,
     immersiveMode,
     pageTurnShortcuts,
+    pageTurnFraction,
+    pageTurnLayout,
+    singleHandMode,
     imageSpacing,
   );
 }

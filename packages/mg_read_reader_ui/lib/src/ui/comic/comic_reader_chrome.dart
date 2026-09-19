@@ -6,22 +6,40 @@ enum _ComicOverflowAction { refreshBook }
 
 extension _ComicReaderPageTurning on _ComicReaderViewState {
   static const double _tapTurnZoneFraction = .25;
+  static const double _singleHandTurnZoneFraction = .3;
 
   void _handleReadingSurfaceTap(TapUpDetails details) {
-    final double viewportHeight = _viewportHeight;
-    if (_preferences.pageTurnShortcuts && viewportHeight > 0) {
-      final double edgeZone = viewportHeight * _tapTurnZoneFraction;
-      final double y = details.localPosition.dy;
-      if (y <= edgeZone) {
-        _scheduleScrollByViewport(-1);
-        return;
-      }
-      if (y >= viewportHeight - edgeZone) {
-        _scheduleScrollByViewport(1);
+    if (_preferences.pageTurnShortcuts) {
+      final int? direction = _tapPageTurnDirection(details);
+      if (direction != null) {
+        _scheduleScrollByViewport(direction);
         return;
       }
     }
     _setControlsVisible(!_controlsVisible);
+  }
+
+  int? _tapPageTurnDirection(TapUpDetails details) {
+    if (_preferences.singleHandMode) {
+      final double width = MediaQuery.sizeOf(context).width;
+      final double edgeZone = width * _singleHandTurnZoneFraction;
+      final double x = details.localPosition.dx;
+      if (x <= edgeZone || x >= width - edgeZone) return 1;
+      return null;
+    }
+    if (_preferences.pageTurnLayout == ComicPageTurnLayout.horizontal) {
+      final double width = MediaQuery.sizeOf(context).width;
+      final double edgeZone = width * _tapTurnZoneFraction;
+      final double x = details.localPosition.dx;
+      if (x <= edgeZone) return -1;
+      if (x >= width - edgeZone) return 1;
+      return null;
+    }
+    final double edgeZone = _viewportHeight * _tapTurnZoneFraction;
+    final double y = details.localPosition.dy;
+    if (y <= edgeZone) return -1;
+    if (y >= _viewportHeight - edgeZone) return 1;
+    return null;
   }
 
   void _scheduleScrollByViewport(int direction) {
@@ -35,8 +53,14 @@ extension _ComicReaderPageTurning on _ComicReaderViewState {
   }
 
   void _scrollByViewport(int direction, {bool animate = true}) {
-    _scrollBy(direction * _viewportHeight * .82, animate: animate);
+    _scrollBy(
+      direction * _viewportHeight * _preferences.pageTurnFraction,
+      animate: animate,
+    );
   }
+
+  double get _pageTurnDistance =>
+      _viewportHeight * _preferences.pageTurnFraction;
 
   void _scrollBy(double delta, {bool animate = true}) {
     if (!_preferences.pageTurnShortcuts ||
@@ -615,16 +639,16 @@ extension _ComicReaderChrome on _ComicReaderViewState {
     final double delta = switch (event.logicalKey) {
       LogicalKeyboardKey.arrowDown => 72,
       LogicalKeyboardKey.arrowUp => -72,
-      LogicalKeyboardKey.arrowRight => _viewportHeight * .82,
+      LogicalKeyboardKey.arrowRight => _pageTurnDistance,
       LogicalKeyboardKey.space when !HardwareKeyboard.instance.isShiftPressed =>
-        _viewportHeight * .82,
-      LogicalKeyboardKey.enter => _viewportHeight * .82,
-      LogicalKeyboardKey.pageDown => _viewportHeight * .82,
-      LogicalKeyboardKey.arrowLeft => -_viewportHeight * .82,
-      LogicalKeyboardKey.space => -_viewportHeight * .82,
-      LogicalKeyboardKey.pageUp => -_viewportHeight * .82,
-      LogicalKeyboardKey.audioVolumeDown => _viewportHeight * .82,
-      LogicalKeyboardKey.audioVolumeUp => -_viewportHeight * .82,
+        _pageTurnDistance,
+      LogicalKeyboardKey.enter => _pageTurnDistance,
+      LogicalKeyboardKey.pageDown => _pageTurnDistance,
+      LogicalKeyboardKey.arrowLeft => -_pageTurnDistance,
+      LogicalKeyboardKey.space => -_pageTurnDistance,
+      LogicalKeyboardKey.pageUp => -_pageTurnDistance,
+      LogicalKeyboardKey.audioVolumeDown => _pageTurnDistance,
+      LogicalKeyboardKey.audioVolumeUp => -_pageTurnDistance,
       _ => 0,
     };
     if (delta == 0) return;
@@ -979,6 +1003,86 @@ extension _ComicReaderChrome on _ComicReaderViewState {
                                   onChanged: (bool value) => update(
                                     _preferences.copyWith(
                                       pageTurnShortcuts: value,
+                                    ),
+                                  ),
+                                ),
+                                DropdownButtonFormField<double>(
+                                  key: const ValueKey<String>(
+                                    'comic-reader-page-turn-fraction',
+                                  ),
+                                  initialValue: _preferences.pageTurnFraction,
+                                  decoration: const InputDecoration(
+                                    labelText:
+                                        ComicReaderStrings.pageTurnFraction,
+                                  ),
+                                  items: ComicReaderPreferences
+                                      .pageTurnFractions
+                                      .map(
+                                        (double fraction) =>
+                                            DropdownMenuItem<double>(
+                                              value: fraction,
+                                              child: Text(
+                                                '${(fraction * 100).round()}%',
+                                              ),
+                                            ),
+                                      )
+                                      .toList(),
+                                  onChanged: (double? value) {
+                                    if (value != null) {
+                                      update(
+                                        _preferences.copyWith(
+                                          pageTurnFraction: value,
+                                        ),
+                                      );
+                                    }
+                                  },
+                                ),
+                                DropdownButtonFormField<ComicPageTurnLayout>(
+                                  key: const ValueKey<String>(
+                                    'comic-reader-page-turn-layout',
+                                  ),
+                                  initialValue: _preferences.pageTurnLayout,
+                                  decoration: const InputDecoration(
+                                    labelText:
+                                        ComicReaderStrings.pageTurnLayout,
+                                  ),
+                                  items:
+                                      const <
+                                        DropdownMenuItem<ComicPageTurnLayout>
+                                      >[
+                                        DropdownMenuItem<ComicPageTurnLayout>(
+                                          value: ComicPageTurnLayout.vertical,
+                                          child: Text(
+                                            ComicReaderStrings.pageTurnVertical,
+                                          ),
+                                        ),
+                                        DropdownMenuItem<ComicPageTurnLayout>(
+                                          value: ComicPageTurnLayout.horizontal,
+                                          child: Text(
+                                            ComicReaderStrings
+                                                .pageTurnHorizontal,
+                                          ),
+                                        ),
+                                      ],
+                                  onChanged: (ComicPageTurnLayout? value) {
+                                    if (value != null) {
+                                      update(
+                                        _preferences.copyWith(
+                                          pageTurnLayout: value,
+                                        ),
+                                      );
+                                    }
+                                  },
+                                ),
+                                SwitchListTile.adaptive(
+                                  contentPadding: EdgeInsets.zero,
+                                  title: const Text(
+                                    ComicReaderStrings.singleHandMode,
+                                  ),
+                                  value: _preferences.singleHandMode,
+                                  onChanged: (bool value) => update(
+                                    _preferences.copyWith(
+                                      singleHandMode: value,
                                     ),
                                   ),
                                 ),

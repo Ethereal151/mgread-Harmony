@@ -12,7 +12,8 @@ extension _ComicReaderPreferences on _ComicReaderViewState {
     final String writeKey =
         '${normalized.brightness}\u0000${normalized.imageSpacing}\u0000'
         '${normalized.keepScreenOn}\u0000${normalized.immersiveMode}\u0000'
-        '${normalized.pageTurnShortcuts}';
+        '${normalized.pageTurnShortcuts}\u0000${normalized.pageTurnFraction}\u0000'
+        '${normalized.pageTurnLayout.name}\u0000${normalized.singleHandMode}';
     if (_lastPreferenceWriteKeys[targetStore] == writeKey) {
       return _preferenceWrites[targetStore] ?? Future<void>.value();
     }
@@ -30,7 +31,10 @@ extension _ComicReaderPreferences on _ComicReaderViewState {
             normalized.imageSpacing == _preferences.imageSpacing &&
             normalized.keepScreenOn == _preferences.keepScreenOn &&
             normalized.immersiveMode == _preferences.immersiveMode &&
-            normalized.pageTurnShortcuts == _preferences.pageTurnShortcuts) {
+            normalized.pageTurnShortcuts == _preferences.pageTurnShortcuts &&
+            normalized.pageTurnFraction == _preferences.pageTurnFraction &&
+            normalized.pageTurnLayout == _preferences.pageTurnLayout &&
+            normalized.singleHandMode == _preferences.singleHandMode) {
           _preferencesDirty = true;
         }
         if (!_disposed && identical(targetStore, widget.stateStore)) {

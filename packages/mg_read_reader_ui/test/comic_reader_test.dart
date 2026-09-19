@@ -516,11 +516,40 @@ void main() {
 
   test('comic reader keeps page-turn shortcut preference in copies', () {
     expect(ComicReaderPreferences.defaults.pageTurnShortcuts, isTrue);
+    expect(ComicReaderPreferences.defaults.pageTurnFraction, .9);
+    expect(ComicReaderPreferences.pageTurnFractions, <double>[
+      .3,
+      .5,
+      .8,
+      .9,
+      1,
+    ]);
     expect(
       ComicReaderPreferences.defaults
-          .copyWith(pageTurnShortcuts: false)
+          .copyWith(
+            pageTurnShortcuts: false,
+            pageTurnFraction: .5,
+            pageTurnLayout: ComicPageTurnLayout.horizontal,
+            singleHandMode: true,
+          )
           .pageTurnShortcuts,
       isFalse,
+    );
+    final ComicReaderPreferences configured = ComicReaderPreferences.defaults
+        .copyWith(
+          pageTurnFraction: .5,
+          pageTurnLayout: ComicPageTurnLayout.horizontal,
+          singleHandMode: true,
+        )
+        .normalized();
+    expect(configured.pageTurnFraction, .5);
+    expect(configured.pageTurnLayout, ComicPageTurnLayout.horizontal);
+    expect(configured.singleHandMode, isTrue);
+    expect(
+      const ComicReaderPreferences(
+        pageTurnFraction: .82,
+      ).normalized().pageTurnFraction,
+      .8,
     );
   });
 
@@ -726,6 +755,57 @@ void main() {
     expect(observer.exitCount, 1);
     expect(observer.firstContentCount, 1);
   });
+
+  testWidgets(
+    'comic settings expose shared page-turn layout and ratio controls',
+    (WidgetTester tester) async {
+      final store = _MemoryComicStateStore();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ComicReaderView(
+            bookId: 'book',
+            dataSource: _FakeComicSource(),
+            stateStore: store,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey<String>('comic-reader-content-surface')),
+      );
+      await tester.pump();
+      await tester.tap(
+        find.byKey(const ValueKey<String>('comic-reader-settings')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('跳转比例'), findsOneWidget);
+      expect(find.text('90%'), findsOneWidget);
+      expect(find.text('点击翻页方向'), findsOneWidget);
+      expect(find.text('上下区域'), findsOneWidget);
+      expect(find.text('单手模式'), findsOneWidget);
+
+      await tester.tap(
+        find.byKey(const ValueKey<String>('comic-reader-page-turn-fraction')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('50%').last);
+      await tester.pumpAndSettle();
+      expect(store.preferences?.pageTurnFraction, .5);
+
+      await tester.tap(
+        find.byKey(const ValueKey<String>('comic-reader-page-turn-layout')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('左右区域').last);
+      await tester.pumpAndSettle();
+      expect(store.preferences?.pageTurnLayout, ComicPageTurnLayout.horizontal);
+
+      await tester.tap(find.text('单手模式'));
+      await tester.pump();
+      expect(store.preferences?.singleHandMode, isTrue);
+    },
+  );
 
   testWidgets('comic catalog completes pages and centers the current chapter', (
     WidgetTester tester,
@@ -1509,6 +1589,7 @@ class _MemoryComicStateStore implements ComicReaderStateStore {
   _MemoryComicStateStore({this.progress});
 
   final ComicReaderProgress? progress;
+  ComicReaderPreferences? preferences;
 
   @override
   Future<ComicReaderProgress?> loadProgress(String bookId) async => progress;
@@ -1518,9 +1599,10 @@ class _MemoryComicStateStore implements ComicReaderStateStore {
     ComicReaderProgress progress,
   ) async {}
   @override
-  Future<ComicReaderPreferences?> loadPreferences() async => null;
+  Future<ComicReaderPreferences?> loadPreferences() async => preferences;
   @override
-  Future<void> savePreferences(ComicReaderPreferences preferences) async {}
+  Future<void> savePreferences(ComicReaderPreferences value) async =>
+      preferences = value;
   @override
   Future<List<ComicReaderBookmark>> loadBookmarks(String bookId) async =>
       const <ComicReaderBookmark>[];
