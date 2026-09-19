@@ -57,12 +57,14 @@ class ReaderPalette {
         systemBrightness: Brightness.light,
       ),
       ReaderThemePreset.night => const ReaderPalette(
-        background: Color(0xFF171918),
-        text: Color(0xFFB8BCB6),
-        secondaryText: Color(0xFF969B96),
-        panel: Color(0xFF222523),
-        divider: Color(0x267A817B),
-        accent: Color(0xFFBF765E),
+        // Warm plum: keep night mode soft without collapsing into the
+        // blue-black and neutral-charcoal presets below.
+        background: Color(0xFF2C2028),
+        text: Color(0xFFDED8DF),
+        secondaryText: Color(0xFFBDAFBD),
+        panel: Color(0xFF3B2D38),
+        divider: Color(0x4A9A8397),
+        accent: Color(0xFFD58B9A),
         systemBrightness: Brightness.dark,
       ),
       ReaderThemePreset.mistBlue => const ReaderPalette(
@@ -75,21 +77,25 @@ class ReaderPalette {
         systemBrightness: Brightness.light,
       ),
       ReaderThemePreset.deepNight => const ReaderPalette(
-        background: Color(0xFF10171D),
-        text: Color(0xFFAEBBC2),
-        secondaryText: Color(0xFF8B989F),
-        panel: Color(0xFF192228),
-        divider: Color(0x29778289),
-        accent: Color(0xFF7698AA),
+        // Blue-black: deliberately blue enough to remain identifiable in
+        // the compact settings swatch and on a dim reading surface.
+        background: Color(0xFF101C2C),
+        text: Color(0xFFC8D8EA),
+        secondaryText: Color(0xFF98B0C9),
+        panel: Color(0xFF1B2C43),
+        divider: Color(0x507FA7C8),
+        accent: Color(0xFF78A9D7),
         systemBrightness: Brightness.dark,
       ),
       ReaderThemePreset.charcoal => const ReaderPalette(
-        background: Color(0xFF242524),
-        text: Color(0xFFC0C0BB),
-        secondaryText: Color(0xFFA0A19B),
-        panel: Color(0xFF2E302E),
-        divider: Color(0x2E8D8E88),
-        accent: Color(0xFFC49170),
+        // Neutral charcoal: the lightest dark preset, with a neutral hue so
+        // it is visibly different from both warm night and blue deep-night.
+        background: Color(0xFF323538),
+        text: Color(0xFFE6E7E5),
+        secondaryText: Color(0xFFC2C5C5),
+        panel: Color(0xFF40454A),
+        divider: Color(0x4D9EA3A5),
+        accent: Color(0xFFD49B73),
         systemBrightness: Brightness.dark,
       ),
     };
