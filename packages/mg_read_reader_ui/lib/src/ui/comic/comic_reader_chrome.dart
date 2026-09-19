@@ -2,6 +2,8 @@ part of 'comic_reader_view.dart';
 
 // ignore_for_file: invalid_use_of_protected_member
 
+enum _ComicOverflowAction { refreshBook }
+
 extension _ComicReaderPageTurning on _ComicReaderViewState {
   static const double _tapTurnZoneFraction = .25;
 
@@ -289,6 +291,46 @@ extension _ComicReaderChrome on _ComicReaderViewState {
                                 label: ComicReaderStrings.addBookmark,
                                 onPressed: () => unawaited(_addBookmark()),
                               ),
+                              if (widget.bookRefreshCapability != null)
+                                PopupMenuButton<_ComicOverflowAction>(
+                                  key: _comicOverflowMenuKey,
+                                  tooltip: ComicReaderStrings.more,
+                                  icon: const Icon(Icons.more_vert_rounded),
+                                  onSelected: (_ComicOverflowAction action) {
+                                    switch (action) {
+                                      case _ComicOverflowAction.refreshBook:
+                                        unawaited(_refreshBookFromHost());
+                                    }
+                                  },
+                                  itemBuilder: (BuildContext context) =>
+                                      <PopupMenuEntry<_ComicOverflowAction>>[
+                                        PopupMenuItem<_ComicOverflowAction>(
+                                          value:
+                                              _ComicOverflowAction.refreshBook,
+                                          enabled: !_bookRefreshLoading,
+                                          child: Row(
+                                            children: <Widget>[
+                                              _bookRefreshLoading
+                                                  ? const SizedBox.square(
+                                                      dimension: 20,
+                                                      child:
+                                                          CircularProgressIndicator(
+                                                            strokeWidth: 2,
+                                                          ),
+                                                    )
+                                                  : const Icon(
+                                                      Icons.sync_rounded,
+                                                      size: 20,
+                                                    ),
+                                              const SizedBox(width: 12),
+                                              const Text(
+                                                ComicReaderStrings.refreshBook,
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                ),
                             ],
                           ),
                         ),

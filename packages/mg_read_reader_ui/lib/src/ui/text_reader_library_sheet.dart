@@ -157,6 +157,8 @@ extension _TextReaderLibrarySheet on _TextReaderViewState {
     return ListView(
       padding: const EdgeInsets.fromLTRB(18, 16, 18, 24),
       children: <Widget>[
+        _buildBookRefreshAction(routeSession, routeBookId),
+        const SizedBox(height: 10),
         Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 520),
@@ -424,6 +426,29 @@ extension _TextReaderLibrarySheet on _TextReaderViewState {
     int routeSession,
     String routeBookId,
     TextReaderStateStore routeStore,
+  ) => Column(
+    children: <Widget>[
+      _buildBookRefreshAction(
+        routeSession,
+        routeBookId,
+        title: ReaderStrings.catalog,
+      ),
+      Expanded(
+        child: _buildCatalogListBody(
+          sheetContext,
+          routeSession,
+          routeBookId,
+          routeStore,
+        ),
+      ),
+    ],
+  );
+
+  Widget _buildCatalogListBody(
+    BuildContext sheetContext,
+    int routeSession,
+    String routeBookId,
+    TextReaderStateStore routeStore,
   ) {
     bool catalogCompletionStarted = false;
     Widget buildList() => ValueListenableBuilder<int>(
@@ -679,6 +704,48 @@ extension _TextReaderLibrarySheet on _TextReaderViewState {
     return AnimatedBuilder(
       animation: coordinator,
       builder: (BuildContext context, Widget? child) => buildList(),
+    );
+  }
+
+  Widget _buildBookRefreshAction(
+    int routeSession,
+    String routeBookId, {
+    String title = ReaderStrings.bookDetails,
+  }) {
+    if (widget.extensions.bookRefreshCapability == null) {
+      return const SizedBox.shrink();
+    }
+    return ValueListenableBuilder<int>(
+      valueListenable: _catalogRevision,
+      builder: (BuildContext context, int revision, Widget? child) {
+        final bool enabled =
+            !_bookRefreshLoading &&
+            _isRouteSessionCurrent(routeSession, routeBookId);
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(18, 6, 12, 2),
+          child: Row(
+            children: <Widget>[
+              Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
+              const Spacer(),
+              TextButton.icon(
+                key: ValueKey<String>('reader-refresh-book-$title'),
+                onPressed: enabled
+                    ? () => unawaited(_refreshBookFromHost())
+                    : null,
+                icon: _bookRefreshLoading
+                    ? const SizedBox.square(
+                        dimension: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.sync_rounded, size: 18),
+                label: Text(
+                  _bookRefreshLoading ? '更新中' : ReaderStrings.refreshBook,
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
