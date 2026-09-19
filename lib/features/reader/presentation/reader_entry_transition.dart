@@ -25,11 +25,14 @@ import 'package:mg_read/features/reader/presentation/reader_host_page.dart';
 import 'package:mg_read/shared/presentation/widgets/default_content_cover_artwork.dart';
 
 const SystemUiOverlayStyle _readerEntrySystemUiStyle = SystemUiOverlayStyle(
-  statusBarColor: Colors.transparent,
+  // The immersive request is asynchronous. Keep the system-bar fallback
+  // aligned with the black letterbox around the entry artwork while Android
+  // is still showing the bars during that transition.
+  statusBarColor: Colors.black,
   statusBarIconBrightness: Brightness.light,
   statusBarBrightness: Brightness.dark,
-  systemNavigationBarColor: Colors.transparent,
-  systemNavigationBarDividerColor: Colors.transparent,
+  systemNavigationBarColor: Colors.black,
+  systemNavigationBarDividerColor: Colors.black,
   systemNavigationBarIconBrightness: Brightness.light,
   systemStatusBarContrastEnforced: false,
   systemNavigationBarContrastEnforced: false,

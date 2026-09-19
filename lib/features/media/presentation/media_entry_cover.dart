@@ -35,6 +35,19 @@ enum MediaEntryKind {
   };
 }
 
+const SystemUiOverlayStyle _mediaEntrySystemUiStyle = SystemUiOverlayStyle(
+  // Media fullscreen is requested asynchronously. Use the same black
+  // fallback as the cover letterbox until Android has hidden the bars.
+  statusBarColor: Colors.black,
+  statusBarIconBrightness: Brightness.light,
+  statusBarBrightness: Brightness.dark,
+  systemNavigationBarColor: Colors.black,
+  systemNavigationBarDividerColor: Colors.black,
+  systemNavigationBarIconBrightness: Brightness.light,
+  systemStatusBarContrastEnforced: false,
+  systemNavigationBarContrastEnforced: false,
+);
+
 /// Keeps portrait immersive mode aligned with one mounted media presentation.
 final class SourceMediaImmersiveScope extends StatefulWidget {
   const SourceMediaImmersiveScope({required this.active, required this.child, super.key});
@@ -176,16 +189,7 @@ final class MediaEntryCoverSurface extends StatelessWidget {
     final bytes = coverBytes;
     final hasFailure = failureMessage != null;
     return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: const SystemUiOverlayStyle(
-        statusBarColor: Colors.transparent,
-        statusBarIconBrightness: Brightness.light,
-        statusBarBrightness: Brightness.dark,
-        systemNavigationBarColor: Colors.transparent,
-        systemNavigationBarDividerColor: Colors.transparent,
-        systemNavigationBarIconBrightness: Brightness.light,
-        systemStatusBarContrastEnforced: false,
-        systemNavigationBarContrastEnforced: false,
-      ),
+      value: _mediaEntrySystemUiStyle,
       child: Material(
         color: tokens.pageBackground,
         child: Stack(

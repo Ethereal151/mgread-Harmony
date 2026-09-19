@@ -28,7 +28,7 @@ import 'package:mg_read/features/reader/presentation/reader_host_page.dart';
 import '../../../core/diagnostics/diagnostics_testkit.dart';
 
 void main() {
-  testWidgets('route preparation uses immersive transparent system bars', (WidgetTester tester) async {
+  testWidgets('route preparation uses immersive black fallback system bars', (WidgetTester tester) async {
     final systemUi = _recordReaderSystemUi();
     await tester.pumpWidget(
       MaterialApp(
@@ -41,8 +41,8 @@ void main() {
     expect(systemUi.first['keepScreenOn'], isFalse);
     expect(systemUi.first['immersiveMode'], isTrue);
     final region = tester.widget<AnnotatedRegion<SystemUiOverlayStyle>>(find.byType(AnnotatedRegion<SystemUiOverlayStyle>));
-    expect(region.value.statusBarColor, Colors.transparent);
-    expect(region.value.systemNavigationBarColor, Colors.transparent);
+    expect(region.value.statusBarColor, Colors.black);
+    expect(region.value.systemNavigationBarColor, Colors.black);
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump();

@@ -29,8 +29,8 @@ void main() {
     expect(find.text('正在准备音频'), findsOneWidget);
     expect(tester.getSemantics(find.byKey(const Key('media-entry-status'))).label, contains('正在准备音频'));
     final region = tester.widget<AnnotatedRegion<SystemUiOverlayStyle>>(find.byType(AnnotatedRegion<SystemUiOverlayStyle>));
-    expect(region.value.statusBarColor, Colors.transparent);
-    expect(region.value.systemNavigationBarColor, Colors.transparent);
+    expect(region.value.statusBarColor, Colors.black);
+    expect(region.value.systemNavigationBarColor, Colors.black);
     expect(region.value.statusBarIconBrightness, Brightness.light);
     expect(region.value.systemNavigationBarIconBrightness, Brightness.light);
   });
