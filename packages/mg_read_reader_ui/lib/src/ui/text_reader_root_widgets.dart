@@ -1,5 +1,7 @@
 part of 'text_reader_view.dart';
 
+const double _readerPageFooterDebugHeight = 16;
+
 /// 组合阅读器根背景、输入、系统样式和覆盖层。
 ///
 /// 固定背景与正文分属不同重绘边界；只有覆盖/仿真翻页把背景交给移动页片。
@@ -177,17 +179,22 @@ extension _TextReaderRootWidgets on _TextReaderViewState {
               ),
             ),
           ),
-          Positioned(
-            left: 8,
-            right: 8,
-            bottom: max(4, bottomInset + 4),
-            child: Align(
-              alignment: Alignment.bottomLeft,
+          if (bottomPadding > 0)
+            Positioned(
+              left: 8,
+              bottom: max(4, bottomInset + 4),
               child: _ReaderLayoutDebugBadge(
-                color: const Color(0xFF37474F),
-                text:
-                    '安全区青  顶边红  正文绿  页边黄  页脚蓝  底边紫   左右 ${horizontalPadding.round()} px  底部 ${(bottomPadding + bottomInset).round()} px',
+                color: const Color(0xFF6A1B9A),
+                text: '底部边距 ${bottomPadding.round()} px',
               ),
+            ),
+          Positioned(
+            right: 8,
+            bottom: bottomInset + _TextReaderViewState._pageFooterBottomInset,
+            child: _ReaderLayoutDebugBadge(
+              color: const Color(0xFF1565C0),
+              text:
+                  '页脚叠加层 bottom ${_TextReaderViewState._pageFooterBottomInset.round()} px',
             ),
           ),
           if (contentBottom > contentTop)
@@ -299,11 +306,6 @@ final class _ReaderLayoutDebugPainter extends CustomPainter {
           const Color(0x55FFC107),
         );
       }
-      final double footerTop = max(contentTop, contentBottom - 10);
-      fillRect(
-        Rect.fromLTRB(0, footerTop, size.width, contentBottom),
-        const Color(0x55429BFF),
-      );
     }
     if (bottomPadding > 0) {
       fillRect(
@@ -314,6 +316,18 @@ final class _ReaderLayoutDebugPainter extends CustomPainter {
           size.height - bottomInset,
         ),
         const Color(0x559C27B0),
+      );
+    }
+    final double footerBottom =
+        size.height - bottomInset - _TextReaderViewState._pageFooterBottomInset;
+    final double footerTop = max(
+      0,
+      footerBottom - _readerPageFooterDebugHeight,
+    );
+    if (footerBottom > footerTop) {
+      fillRect(
+        Rect.fromLTRB(0, footerTop, size.width, footerBottom),
+        const Color(0x55429BFF),
       );
     }
     if (bottomInset > 0) {

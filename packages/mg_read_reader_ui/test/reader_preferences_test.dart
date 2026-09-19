@@ -57,6 +57,42 @@ void main() {
     );
   });
 
+  testWidgets('labels the bottom margin and page footer debug regions', (
+    WidgetTester tester,
+  ) async {
+    final TextReaderController controller = TextReaderController();
+    await tester.pumpWidget(
+      _reader(
+        _MemoryStore(const TextReaderPreferences(bottomPadding: 40)),
+        controller,
+      ),
+    );
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 500)),
+    );
+    await tester.pumpAndSettle();
+    await controller.showControls();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('reader-toolbar-settings')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('更多'));
+    await tester.pumpAndSettle();
+
+    final Finder debugMode = find.ancestor(
+      of: find.text('排版调试模式'),
+      matching: find.byType(SwitchListTile),
+    );
+    await tester.tap(
+      find.descendant(of: debugMode, matching: find.byType(Switch)),
+    );
+    await tester.pumpAndSettle();
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+
+    expect(find.text('底部边距 40 px'), findsOneWidget);
+    expect(find.text('页脚叠加层 bottom 10 px'), findsOneWidget);
+  });
+
   testWidgets(
     'places default text content eight dp after the Android safe area',
     (WidgetTester tester) async {
