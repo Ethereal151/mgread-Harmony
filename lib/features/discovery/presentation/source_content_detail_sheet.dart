@@ -25,6 +25,7 @@ import 'package:mgread_plugin_runtime/mgread_plugin_runtime.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:mg_read/app/app_theme.dart';
+import 'package:mg_read/app/app_theme_mode_scope.dart';
 import 'package:mg_read/core/content_library/content_library.dart';
 import 'package:mg_read/core/errors/app_error.dart';
 import 'package:mg_read/features/discovery/application/batch_search.dart';
@@ -812,6 +813,17 @@ class _SourceDetailBody extends StatelessWidget {
     final tokens = AppThemeTokens.of(context);
     final theme = Theme.of(context);
     final firstChapter = bundle.chapters.items.isEmpty ? null : bundle.chapters.items.first;
+    final canStartReading =
+        !isRefreshing &&
+        firstChapter != null &&
+        switch (content.contentKind) {
+          PluginContentKind.audio => onAudioChapterRequested != null,
+          PluginContentKind.video => onVideoEpisodeRequested != null,
+          _ => true,
+        };
+    final canChangeShelf = shelfState != SourceDetailShelfState.canAdd
+        ? onRemoveFromShelf != null && !isRemovingFromShelf
+        : onAddToShelf != null && !isSavingToShelf;
     final labels = <String>{...content.categories, ...content.tags}.take(3).toList(growable: false);
     final attributes = _displayAttributes(content.attributes).toList(growable: false);
     final chapterTotal = _chapterTotal(detailTotal: content.chapterCount, loadedCount: bundle.chapters.items.length);
@@ -863,16 +875,10 @@ class _SourceDetailBody extends StatelessWidget {
               Expanded(
                 child: OutlinedButton.icon(
                   key: const Key('source-detail-add-shelf'),
-                  onPressed: shelfState != SourceDetailShelfState.canAdd
-                      ? onRemoveFromShelf == null
-                            ? () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('移出书架功能暂不可用。')))
-                            : isRemovingFromShelf
-                            ? null
-                            : () => onRemoveFromShelfRequested(content)
-                      : onAddToShelf == null
-                      ? () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('书架保存功能尚未接入此数据源。')))
-                      : isSavingToShelf
+                  onPressed: !canChangeShelf
                       ? null
+                      : shelfState != SourceDetailShelfState.canAdd
+                      ? () => onRemoveFromShelfRequested(content)
                       : () => onSaveToShelf(detail),
                   icon: Icon(
                     shelfState != SourceDetailShelfState.canAdd
@@ -894,8 +900,8 @@ class _SourceDetailBody extends StatelessWidget {
                   ),
                   style: OutlinedButton.styleFrom(
                     minimumSize: const Size.fromHeight(54),
-                    foregroundColor: tokens.accent,
-                    side: BorderSide(color: tokens.accent),
+                    foregroundColor: canChangeShelf ? tokens.accent : tokens.mutedText,
+                    side: BorderSide(color: canChangeShelf ? tokens.accent : tokens.divider),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                   ),
                 ),
@@ -904,7 +910,7 @@ class _SourceDetailBody extends StatelessWidget {
               Expanded(
                 child: FilledButton(
                   key: const Key('source-detail-start-reading'),
-                  onPressed: isRefreshing || firstChapter == null
+                  onPressed: !canStartReading
                       ? null
                       : () => unawaited(
                           _openTextChapter(
@@ -921,9 +927,9 @@ class _SourceDetailBody extends StatelessWidget {
                         ),
                   style: FilledButton.styleFrom(
                     minimumSize: const Size.fromHeight(54),
-                    backgroundColor: tokens.accent,
-                    disabledBackgroundColor: tokens.accent,
-                    disabledForegroundColor: tokens.surface,
+                    backgroundColor: canStartReading ? tokens.accent : tokens.mutedSurface,
+                    disabledBackgroundColor: tokens.mutedSurface,
+                    disabledForegroundColor: tokens.mutedText,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                   ),
                   child: isRefreshing
@@ -981,20 +987,26 @@ class _SourceDetailBody extends StatelessWidget {
           _RecommendationsSection(candidates: recommendationCandidates, onRecommendationRequested: onRecommendationRequested),
           const SizedBox(height: AppSpacing.regular),
           Material(
-            color: tokens.accentSoft.withValues(alpha: .52),
+            color: tokens.mutedSurface,
             borderRadius: BorderRadius.circular(14),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(14),
-              onTap: () {},
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                child: Row(
-                  children: <Widget>[
-                    Expanded(child: Text('查看书友评论', style: theme.textTheme.bodyLarge)),
-                    Text('4.2万条评论', style: theme.textTheme.bodyMedium?.copyWith(color: tokens.mutedText)),
-                    const SizedBox(width: 6),
-                    Icon(Icons.chevron_right_rounded, color: tokens.mutedText),
-                  ],
+            child: Semantics(
+              enabled: false,
+              label: '查看书友评论，暂不可用',
+              child: InkWell(
+                borderRadius: BorderRadius.circular(14),
+                onTap: null,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                  child: Row(
+                    children: <Widget>[
+                      Expanded(
+                        child: Text('查看书友评论', style: theme.textTheme.bodyLarge?.copyWith(color: tokens.mutedText)),
+                      ),
+                      Text('4.2万条评论', style: theme.textTheme.bodyMedium?.copyWith(color: tokens.mutedText.withValues(alpha: .68))),
+                      const SizedBox(width: 6),
+                      Icon(Icons.chevron_right_rounded, color: tokens.mutedText.withValues(alpha: .5)),
+                    ],
+                  ),
                 ),
               ),
             ),

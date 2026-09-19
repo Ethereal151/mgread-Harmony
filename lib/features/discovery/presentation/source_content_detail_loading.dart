@@ -119,8 +119,8 @@ class _SourceDetailLoadingView extends StatelessWidget {
                   onPressed: null,
                   style: FilledButton.styleFrom(
                     minimumSize: const Size.fromHeight(54),
-                    disabledBackgroundColor: tokens.accent,
-                    disabledForegroundColor: tokens.surface,
+                    disabledBackgroundColor: tokens.mutedSurface,
+                    disabledForegroundColor: tokens.mutedText,
                     shape: RoundedRectangleBorder(borderRadius: AppRadii.control),
                   ),
                   child: const _DetailLoadingButtonLabel(),
