@@ -974,13 +974,17 @@ void main() {
       await tester.tapAt(
         Offset(surfaceRect.center.dx, surfaceRect.bottom - 24),
       );
-      await tester.pump(const Duration(milliseconds: 220));
+      for (var frame = 0; frame < 20; frame++) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
       final double afterDownTap = position.pixels;
       expect(afterDownTap, greaterThan(0));
       expect(controller.snapshot.controlsVisible, isFalse);
 
       await tester.tapAt(Offset(surfaceRect.center.dx, surfaceRect.top + 24));
-      await tester.pump(const Duration(milliseconds: 220));
+      for (var frame = 0; frame < 20; frame++) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
       expect(position.pixels, lessThan(afterDownTap));
       expect(controller.snapshot.controlsVisible, isFalse);
 

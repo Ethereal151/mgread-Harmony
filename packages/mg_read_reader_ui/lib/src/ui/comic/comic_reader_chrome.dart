@@ -47,7 +47,13 @@ extension _ComicReaderPageTurning on _ComicReaderViewState {
     // this deferral its zero-velocity ballistic activity can cancel the tap's
     // programmatic scroll before it moves.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_disposed) _scrollByViewport(direction, animate: false);
+      if (_disposed) return;
+      // Use one more frame so the Scrollable has fully left its pointer-up
+      // activity before animateTo takes ownership of the position.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!_disposed) _scrollByViewport(direction);
+      });
+      WidgetsBinding.instance.scheduleFrame();
     });
     WidgetsBinding.instance.scheduleFrame();
   }
