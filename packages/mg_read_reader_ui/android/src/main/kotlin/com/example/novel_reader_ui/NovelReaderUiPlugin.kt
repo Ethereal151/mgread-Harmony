@@ -278,6 +278,12 @@ class NovelReaderUiPlugin :
 
     private fun applyImmersiveMode(target: Activity, enabled: Boolean) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            // Hiding the bars alone does not move the Flutter surface into
+            // the system-bar insets on Android 11+. During reader entry this
+            // leaves the window background visible as a fixed top colour.
+            // Keep the reader edge-to-edge both while hiding and restoring
+            // bars; Flutter's normal app chrome also uses edge-to-edge.
+            target.window.setDecorFitsSystemWindows(false)
             target.window.insetsController?.let { controller ->
                 if (enabled) {
                     if (originalStatusBarsVisible == null) {
