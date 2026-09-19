@@ -74,6 +74,7 @@ class _DiscoveryPageState extends State<DiscoveryPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      extendBody: true,
       body: AppPageBackdrop(
         style: AppPageBackdropStyle.discover,
         child: SafeArea(
@@ -97,7 +98,7 @@ class _DiscoveryPageState extends State<DiscoveryPage> {
                           pagePadding,
                           AppSpacing.pageHeaderTopPaddingFor(context),
                           pagePadding,
-                          AppSpacing.page,
+                          AppSpacing.bottomNavigationContentBottomPadding + MediaQuery.viewPaddingOf(context).bottom,
                         ),
                         children: <Widget>[
                           DiscoveryTopBar(

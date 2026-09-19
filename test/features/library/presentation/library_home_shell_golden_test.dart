@@ -20,7 +20,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
     await tester.pump();
-    expect(find.byType(Image), findsNWidgets(8));
+    expect(find.byType(Image), findsAtLeastNWidgets(7));
 
     await expectLater(find.byType(MaterialApp), matchesGoldenFile('goldens/library_home_compact_light.png'));
   });

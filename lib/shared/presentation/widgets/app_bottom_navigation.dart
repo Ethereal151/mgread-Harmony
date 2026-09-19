@@ -121,8 +121,11 @@ class _AppBottomNavigationContent extends StatelessWidget {
                 child: DecoratedBox(
                   key: const Key('app-bottom-navigation-backdrop'),
                   decoration: BoxDecoration(
-                    color: tokens.surface,
-                    border: Border.all(color: tokens.divider),
+                    // The navigation is intentionally a floating glass surface:
+                    // primary pages extend their content beneath it, so the
+                    // last row remains visible while controls stay legible.
+                    color: tokens.surface.withValues(alpha: 0.84),
+                    border: Border.all(color: tokens.divider.withValues(alpha: 0.86)),
                     borderRadius: AppRadii.card,
                     boxShadow: <BoxShadow>[
                       BoxShadow(

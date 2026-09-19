@@ -86,6 +86,7 @@ class _ProfilePageState extends State<ProfilePage> {
       data = data.withReadingStats(stats);
     }
     return Scaffold(
+      extendBody: true,
       body: AppPageBackdrop(
         style: AppPageBackdropStyle.profile,
         child: SafeArea(
@@ -112,7 +113,7 @@ class _ProfilePageState extends State<ProfilePage> {
                           pagePadding,
                           AppSpacing.pageHeaderTopPaddingFor(context),
                           pagePadding,
-                          AppSpacing.profileContentBottomSafeDistance,
+                          AppSpacing.profileContentBottomSafeDistance + MediaQuery.viewPaddingOf(context).bottom,
                         ),
                         children: <Widget>[
                           ProfileTopBar(

@@ -107,6 +107,7 @@ class RuntimeDiscoveryPage extends StatelessWidget {
               if (!allowsRoutePop && !didPop) onBackRequested();
             },
             child: Scaffold(
+              extendBody: true,
               body: SafeArea(
                 bottom: false,
                 child: LayoutBuilder(
@@ -134,7 +135,7 @@ class RuntimeDiscoveryPage extends StatelessWidget {
                                 pagePadding,
                                 AppSpacing.pageHeaderTopPaddingFor(context),
                                 pagePadding,
-                                AppSpacing.page,
+                                AppSpacing.bottomNavigationContentBottomPadding + MediaQuery.viewPaddingOf(context).bottom,
                               ),
                               children: <Widget>[
                                 DiscoveryTopBar(

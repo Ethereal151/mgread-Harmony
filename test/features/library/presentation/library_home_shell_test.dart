@@ -52,6 +52,7 @@ void main() {
       find.byWidgetPredicate((Widget widget) => widget is Semantics && widget.properties.label == '诡秘之主，第1268章 不可名状的低语，1小时前，有更新'),
       findsOneWidget,
     );
+    expect(tester.widget<Scaffold>(find.byType(Scaffold)).extendBody, isTrue);
   });
 
   testWidgets('uses the current cover behind the complete top area', (WidgetTester tester) async {

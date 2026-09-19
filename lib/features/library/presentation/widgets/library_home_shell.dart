@@ -37,6 +37,7 @@ import 'package:mg_read/shared/presentation/widgets/app_page_backdrop.dart';
 const _deleteBookAction = LibraryBookListAction(id: 'delete', label: '删除');
 const _setBookPrivateAction = LibraryBookListAction(id: 'set-private', label: '隐私');
 const _refreshBookAction = LibraryBookListAction(id: 'refresh', label: '刷新');
+const _openBookDetailAction = LibraryBookListAction(id: 'detail', label: '详情');
 const _toggleBookCoverBlurAction = LibraryBookListAction(id: 'toggle-cover-blur', label: '模糊封面', labelBuilder: _coverBlurActionLabel);
 
 String _coverBlurActionLabel(LibraryBookListItemViewData book) => book.isCoverBlurred ? '取消模糊封面' : '模糊封面';
@@ -50,6 +51,8 @@ class LibraryHomeShell extends StatefulWidget {
     required this.isRefreshing,
     this.initialLayoutMode = LibraryHomeLayoutMode.list,
     this.onLayoutModeChanged,
+    this.initialCoverMetadataMode = LibraryHomeCoverMetadataMode.belowCover,
+    this.onCoverMetadataModeChanged,
     this.showLoading = false,
     this.preparingBookId,
     this.errorNotice,
@@ -63,6 +66,8 @@ class LibraryHomeShell extends StatefulWidget {
   final bool isRefreshing;
   final LibraryHomeLayoutMode initialLayoutMode;
   final Future<void> Function(LibraryHomeLayoutMode mode)? onLayoutModeChanged;
+  final LibraryHomeCoverMetadataMode initialCoverMetadataMode;
+  final Future<void> Function(LibraryHomeCoverMetadataMode mode)? onCoverMetadataModeChanged;
 
   /// Hides shelf content while app startup is resolving the real library.
   final bool showLoading;
@@ -92,7 +97,9 @@ class _LibraryHomeShellState extends State<LibraryHomeShell> {
   final Set<String> _refreshingBookIds = <String>{};
   final Set<String> _coverBlurTogglingBookIds = <String>{};
   late LibraryHomeLayoutMode _layoutMode;
+  late LibraryHomeCoverMetadataMode _coverMetadataMode;
   bool _layoutModeChangePending = false;
+  bool _coverMetadataModeChangePending = false;
   bool _privacyRevealActive = false;
   bool _continueReadingTapPending = false;
 
@@ -100,6 +107,7 @@ class _LibraryHomeShellState extends State<LibraryHomeShell> {
   void initState() {
     super.initState();
     _layoutMode = widget.initialLayoutMode;
+    _coverMetadataMode = widget.initialCoverMetadataMode;
   }
 
   @override
@@ -107,6 +115,9 @@ class _LibraryHomeShellState extends State<LibraryHomeShell> {
     super.didUpdateWidget(oldWidget);
     if (!_layoutModeChangePending && oldWidget.initialLayoutMode != widget.initialLayoutMode) {
       _layoutMode = widget.initialLayoutMode;
+    }
+    if (!_coverMetadataModeChangePending && oldWidget.initialCoverMetadataMode != widget.initialCoverMetadataMode) {
+      _coverMetadataMode = widget.initialCoverMetadataMode;
     }
     if (oldWidget.isRefreshing && !widget.isRefreshing && !identical(oldWidget.data, widget.data)) {
       _contentOpacity = 0.4;
@@ -129,6 +140,7 @@ class _LibraryHomeShellState extends State<LibraryHomeShell> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      extendBody: true,
       body: AppPageBackdrop(
         style: AppPageBackdropStyle.home,
         child: FocusTraversalGroup(
@@ -149,7 +161,12 @@ class _LibraryHomeShellState extends State<LibraryHomeShell> {
                     slivers: <Widget>[
                       _buildTopSliver(context, pagePadding),
                       SliverPadding(
-                        padding: EdgeInsets.fromLTRB(pagePadding, AppSpacing.comfortable, pagePadding, AppSpacing.page),
+                        padding: EdgeInsets.fromLTRB(
+                          pagePadding,
+                          AppSpacing.comfortable,
+                          pagePadding,
+                          AppSpacing.bottomNavigationContentBottomPadding + MediaQuery.viewPaddingOf(context).bottom,
+                        ),
                         sliver: _buildBodySlivers(context),
                       ),
                     ],
@@ -323,6 +340,7 @@ class _LibraryHomeShellState extends State<LibraryHomeShell> {
         preparingBookId: widget.preparingBookId,
         removingBookIds: _removingBookIds,
         refreshingBookIds: _refreshingBookIds,
+        metadataMode: _coverMetadataMode,
       );
     }
     return LibraryBookSliverList(
@@ -340,6 +358,7 @@ class _LibraryHomeShellState extends State<LibraryHomeShell> {
   }
 
   List<LibraryBookListAction> get _bookActions => <LibraryBookListAction>[
+    if (widget.callbacks.onOpenBook != null) _openBookDetailAction,
     if (widget.callbacks.onRefreshBook != null) _refreshBookAction,
     if (widget.callbacks.onSetBookPrivate != null) _setBookPrivateAction,
     if (widget.callbacks.onToggleBookCoverBlur != null) _toggleBookCoverBlurAction,
@@ -464,6 +483,9 @@ class _LibraryHomeShellState extends State<LibraryHomeShell> {
 
   void _handleBookAction(LibraryBookListItemViewData book, LibraryBookListAction action) {
     switch (action.id) {
+      case 'detail':
+        _handleOpenBook(book);
+        return;
       case 'refresh':
         final refreshBook = widget.callbacks.onRefreshBook;
         if (refreshBook != null) {

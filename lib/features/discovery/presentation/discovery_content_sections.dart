@@ -769,15 +769,17 @@ class DiscoveryEditorsChoiceCard extends StatelessWidget {
                           ),
                           if (data.description != null) ...<Widget>[
                             const SizedBox(height: 4),
-                            Text(
-                              data.description!,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: theme.colorScheme.onSurface.withValues(alpha: 0.76),
-                                fontWeight: FontWeight.w400,
-                                height: 1.28,
-                                letterSpacing: 0,
+                            Flexible(
+                              child: Text(
+                                data.description!,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: theme.colorScheme.onSurface.withValues(alpha: 0.76),
+                                  fontWeight: FontWeight.w400,
+                                  height: 1.28,
+                                  letterSpacing: 0,
+                                ),
                               ),
                             ),
                           ],

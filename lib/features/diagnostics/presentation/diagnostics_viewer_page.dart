@@ -88,6 +88,7 @@ class _DiagnosticsViewerPageState extends ConsumerState<DiagnosticsViewerPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      extendBody: true,
       body: SafeArea(
         bottom: false,
         child: AppSecondaryPageContent(
@@ -101,11 +102,11 @@ class _DiagnosticsViewerPageState extends ConsumerState<DiagnosticsViewerPage> {
                     key: const Key('diagnostics-viewer-content'),
                     slivers: <Widget>[
                       SliverPadding(
-                        padding: const EdgeInsets.fromLTRB(
+                        padding: EdgeInsets.fromLTRB(
                           AppSpacing.comfortable,
                           AppSpacing.regular,
                           AppSpacing.comfortable,
-                          AppSpacing.page,
+                          AppDetailMetrics.bottomNavigationContentBottomPadding + MediaQuery.viewPaddingOf(context).bottom,
                         ),
                         sliver: SliverList.list(
                           children: <Widget>[

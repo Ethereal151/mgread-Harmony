@@ -50,7 +50,8 @@ void main() {
 
     expect(initialIndicator.width, lessThan(tester.getSize(homeItem).width));
     expect(backdropDecoration.gradient, isNull);
-    expect(backdropDecoration.color, AppThemeTokens.of(tester.element(backdrop)).surface);
+    expect(backdropDecoration.color!.a, lessThan(1));
+    expect(backdropDecoration.color, isNot(AppThemeTokens.of(tester.element(backdrop)).surface));
     expect(backdropDecoration.borderRadius, AppRadii.card);
     expect(initialIndicator.height, AppSpacing.bottomNavigationIndicatorHeight);
     expect(indicatorDecoration.gradient, isNull);

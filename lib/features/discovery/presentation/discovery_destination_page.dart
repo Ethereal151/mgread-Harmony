@@ -119,6 +119,7 @@ class DiscoveryDestinationPage extends ConsumerWidget {
     };
 
     return Scaffold(
+      extendBody: true,
       appBar: AppBar(
         toolbarHeight: AppSpacing.pageHeaderHeight,
         title: const AppPageTitle(title: '发现'),

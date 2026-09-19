@@ -516,6 +516,7 @@ abstract final class AppSpacing {
   static const double sourceManagerHeight = unit * 10;
   static const double sourceManagerGap = unit + unit / 2;
   static const double bottomNavigationHeight = unit * 18;
+  static const double bottomNavigationContentBottomPadding = bottomNavigationHeight + page;
   static const double bottomNavigationItemHeight = unit * 13;
   static const double topBarActionSize = unit * 10;
   static const double topBarActionIconSize = unit * 5 + 2;
@@ -621,6 +622,7 @@ abstract final class AppDetailMetrics {
   static const double backButtonExtent = 48;
   static const double backButtonLeft = 8;
   static const double bottomNavigationHeight = 76;
+  static const double bottomNavigationContentBottomPadding = bottomNavigationHeight + AppSpacing.page;
 
   static const double aboutIconTopGap = 29;
   static const double aboutIconExtent = 106;

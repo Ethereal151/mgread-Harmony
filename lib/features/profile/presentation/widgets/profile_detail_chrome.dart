@@ -38,7 +38,7 @@ class ProfileDetailBottomBar extends StatelessWidget {
     return SizedBox(
       height: AppDetailMetrics.bottomNavigationHeight + bottomInset,
       child: ColoredBox(
-        color: tokens.pageBackground,
+        color: tokens.pageBackground.withValues(alpha: 0.84),
         child: SafeArea(
           top: false,
           child: Center(

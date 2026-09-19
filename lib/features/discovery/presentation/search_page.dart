@@ -146,6 +146,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     }
 
     return Scaffold(
+      extendBody: true,
       body: AppPageBackdrop(
         style: AppPageBackdropStyle.search,
         child: SafeArea(
@@ -160,7 +161,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                   AppSpacing.searchPageHorizontalPadding,
                   AppSpacing.pageHeaderTopPaddingFor(context),
                   AppSpacing.searchPageHorizontalPadding,
-                  AppSpacing.section,
+                  AppSpacing.bottomNavigationContentBottomPadding + MediaQuery.viewPaddingOf(context).bottom,
                 ),
                 children: <Widget>[
                   SizedBox(

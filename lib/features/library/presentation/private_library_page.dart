@@ -76,6 +76,7 @@ class PrivateLibraryPage extends ConsumerWidget {
     }
 
     return Scaffold(
+      extendBody: true,
       body: SafeArea(
         bottom: false,
         child: AppSecondaryPageContent(
@@ -165,11 +166,11 @@ class _PrivateLibraryBodyState extends ConsumerState<_PrivateLibraryBody> {
       onRefresh: widget.controller.refresh,
       child: ListView(
         key: const Key('private-library-content'),
-        padding: const EdgeInsets.fromLTRB(
+        padding: EdgeInsets.fromLTRB(
           AppSpacing.compactPagePadding,
           AppSpacing.compact,
           AppSpacing.compactPagePadding,
-          AppSpacing.page,
+          AppSpacing.bottomNavigationContentBottomPadding + MediaQuery.viewPaddingOf(context).bottom,
         ),
         children: <Widget>[
           if (_feedback != null) ...<Widget>[
