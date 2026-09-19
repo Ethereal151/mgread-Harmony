@@ -24,7 +24,7 @@ extension _ReaderSettingsSubpageSections on _ReaderSettingsSheetState {
           ),
           palette,
         ),
-        _buildFontSizeSlider(palette),
+        _buildFontSizeControl(palette, showProgress: true),
         _labeledChoice<int>(
           ReaderStrings.fontWeight,
           const <int>[400, 500, 600],
@@ -327,7 +327,10 @@ extension _ReaderSettingsSubpageSections on _ReaderSettingsSheetState {
     );
   }
 
-  Widget _buildFontSizeSlider(ReaderPalette palette) {
+  Widget _buildFontSizeControl(
+    ReaderPalette palette, {
+    required bool showProgress,
+  }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
       child: Column(
@@ -344,35 +347,22 @@ extension _ReaderSettingsSubpageSections on _ReaderSettingsSheetState {
               ),
             ),
           ),
-          ReaderSettingsCapsule(
+          ReaderSettingsFontSizeControl(
+            value: _preferences.fontSize,
+            min: _fontSizeMin,
+            max: _fontSizeMax,
             palette: palette,
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: Row(
-              children: <Widget>[
-                Expanded(
-                  child: Slider(
-                    value: _preferences.fontSize,
-                    min: _fontSizeMin,
-                    max: _fontSizeMax,
-                    label: _preferences.fontSize.round().toString(),
-                    semanticFormatterCallback: (double value) =>
-                        '${ReaderStrings.fontSize} ${value.round()}',
-                    onChanged: (double value) =>
-                        _preview(_preferences.copyWith(fontSize: value)),
-                    onChangeEnd: (double value) =>
-                        _commit(_preferences.copyWith(fontSize: value)),
-                  ),
-                ),
-                SizedBox(
-                  width: 30,
-                  child: Text(
-                    _preferences.fontSize.round().toString(),
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                ),
-              ],
-            ),
+            showProgress: showProgress,
+            onDecrease: () => _adjustFontSize(-1),
+            onIncrease: () => _adjustFontSize(1),
+            onProgressChanged: showProgress
+                ? (double value) =>
+                      _preview(_preferences.copyWith(fontSize: value))
+                : null,
+            onProgressChangeEnd: showProgress
+                ? (double value) =>
+                      _commit(_preferences.copyWith(fontSize: value))
+                : null,
           ),
         ],
       ),

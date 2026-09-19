@@ -116,7 +116,10 @@ extension _ReaderSettingsMainSections on _ReaderSettingsSheetState {
     };
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
-        final Widget sizeControl = _buildFontSizeSlider(palette);
+        final Widget sizeControl = _buildFontSizeControl(
+          palette,
+          showProgress: false,
+        );
         final Widget fontControl = ReaderSettingsCapsule(
           palette: palette,
           padding: const EdgeInsets.symmetric(horizontal: 8),

@@ -58,6 +58,10 @@ class _ReaderSettingsSheetState extends State<ReaderSettingsSheet> {
     widget.onPreferencesCommit(normalized);
   }
 
+  void _adjustFontSize(double delta) {
+    _commit(_preferences.copyWith(fontSize: _preferences.fontSize + delta));
+  }
+
   void _openPage(_SettingsPage page) => setState(() => _page = page);
 
   void _updateState(VoidCallback update) => setState(update);
