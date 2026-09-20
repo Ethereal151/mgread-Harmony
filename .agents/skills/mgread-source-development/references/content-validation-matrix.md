@@ -22,7 +22,9 @@ media 组始终适用。严格验证只有在内容链路与全部适用组通�
 
 验证来源登记的真实上游 URL、kind、Referer/Accept 等 headers。通过条件是成功响应、图片 MIME、非空前缀且
 文件签名与声明格式相容；有解码器时再验证正尺寸。分别记录 `404/403`、挑战页、错误 HTML、空对象和格式伪装，
-不能只信扩展名或 `Content-Type`。内容表面有项但未提供封面时记为“未登记”而不是“已通过”。
+不能只信扩展名或 `Content-Type`。若 CDN 以 `.png`/`image/png` 返回 JPEG/WebP，先判断站点是否提供有证据的格式
+转换参数；否则记录为上游声明/字节不一致，不在插件内搬运或重写图片主体。内容表面有项但未提供封面时记为
+“未登记”而不是“已通过”。
 
 ## 小说与图书
 
@@ -45,15 +47,18 @@ media 组始终适用。严格验证只有在内容链路与全部适用组通�
 
 ## 音频与音乐
 
-验证详情、曲目/章节顺序、锁定语义、扁平 items 与 groups 对应、当前曲目标识和 `media.resourceType=audio`。对实际媒体登记验证 headers、Range 行为、
-音频 MIME 或可接受的 octet-stream、非空媒体前缀；不下载完整音频。若地址带签名或会话期限，验证刷新后重新
-调用 `getContent`，并区分 `sessionOnly` 与有证据支持的 `refreshable + expiresAt`。封面仍按独立封面组验证。
+验证详情、曲目/章节顺序、锁定语义、扁平 items 与 groups 对应、当前曲目标识和 `media.resourceType=audio`；每个
+实际 group/线路至少验证一个样本。对实际媒体登记验证 headers、Range 行为、音频 MIME 或可接受的 octet-stream、
+非空媒体前缀；直播首块从帧中间开始时可在有界窗口内确认连续有效帧，不下载完整音频。若地址带签名或会话期限，
+稳定 ID 排除临时 token/sign/livekey，刷新后重新调用 `getContent`，并区分 `sessionOnly` 与有证据支持的
+`refreshable + expiresAt`。封面仍按独立封面组验证。
 
 ## 视频
 
 验证详情、扁平 episodes 与 `groups[]` 一一对应、`groupId + episodeId` 可稳定回传，且当前选集返回
-`media.resourceType=video|hls`。直链视频使用有界 Range/前缀探测，接受来源契约允许的 `206` 或可流式 `200`；检查
-视频 MIME、octet-stream 与容器签名的一致性，不下载整片。
+`media.resourceType=video|hls`。线路标题从真实 tab/group 读取，不能把外层“选择播放源”容器当作线路；每个实际
+group/线路至少验证一个样本，任一适用线路 404/错误页面都使视频组失败。直链视频使用有界 Range/前缀探测，接受
+来源契约允许的 `206` 或可流式 `200`；检查视频 MIME、octet-stream 与容器签名的一致性，不下载整片。
 
 HLS 至少验证主/媒体 playlist 是文本且以 `#EXTM3U` 开始，URI 能按基址解析；按需有界探测一个 variant、key
 或 segment，保持 headers 和取消语义。解析出播放地址不等于真实可播，封面通过也不等于视频通过。

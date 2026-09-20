@@ -17,7 +17,8 @@ mock 或单独 build 替代主程序 EXE CLI。两层都可访问真站，“快
 
 1. `discover.root`：根发现文档可解码，组件、target、collection 和 continuation 合法。
 2. `discover.target.*`：有界遍历根页暴露的 tab/category target，不得在找到第一个非空列表后就假定其他子列表正常。
-3. `discover.append.*`：对带 continuation 的代表列表至少验证一次追加，核对 target/cursor/collectionId 和稳定 ID。
+3. `discover.append.*`：对响应真实暴露 continuation 的代表列表至少验证一次追加，核对 target/cursor/collectionId
+   和稳定 ID；没有下一页链接/cursor 的落地页不得因条目数达到 pageSize 而合成追加请求。
 4. `search`：从当前发现标题生成少量有界查询，搜索结果必须找回同一稳定 ID，不能无条件取首项。
 5. `detail`：使用上述稳定 ID，校验标题、`contentKind`、访问性和关键元数据。
 6. `chapters`：读取完整目录，校验非空 ID、唯一性、顺序、锁定语义；音频/视频还要校验 `groups[]` 与扁平 items 对应。
@@ -83,9 +84,12 @@ Windows Release 是 GUI 子系统进程；自动化用 `Start-Process -WindowSty
 - 漫画：除封面外，首/中/末可读章节都要有 pages；按不同章节和页位分层抽样页图，校验 page id/index、
   登记描述、MIME、文件签名与非空前缀。
 - 音频/音乐：校验曲目顺序、锁定项、groups 对应、`media.resourceType=audio`、headers、Range、媒体 MIME/签名；
-  有时效签名时重新 `getContent` 验证刷新语义。封面仍是独立子组。
+  每个实际 group/线路至少探测一个可读样本；有时效签名时重新 `getContent` 验证刷新语义，稳定 ID 不得包含
+  `token/sign/livekey` 等临时参数。直播首块可能从帧中间开始，格式识别可在有界前缀内寻找连续有效帧，不能只认
+  第一个字节。封面仍是独立子组。
 - 视频：校验扁平 episodes 与 `groups[]`、稳定 `groupId + episodeId`、`media.resourceType=video|hls`。直链检查有界 Range、
-  MIME 与容器签名；HLS 检查 `#EXTM3U`、主/媒体 playlist、基址解析，并有界探测一个 variant、key 或 segment。
+  MIME 与容器签名；每个实际 group/线路至少取一个样本，不能由健康线路掩盖另一条 404/错误线路。HLS 检查
+  `#EXTM3U`、主/媒体 playlist、基址解析，并有界探测一个 variant、key 或 segment。
 
 上述额外检查不得被“详情可读”“有 media URL”或“封面可达”替代。
 
@@ -96,7 +100,10 @@ Windows Release 是 GUI 子系统进程；自动化用 `Start-Process -WindowSty
 - 快速/实际同阶段失败：优先检查来源解析、网络或公开返回值。
 - 快速过、实际为 `invalid_format`：检查 Runtime/Facade 公开校验。
 - 快速过、实际在资源失败：检查 proxy 描述、headers 与 Runtime 数据面。
-- WebView/人工交互受限：记录 `interactionRequired`，不归为普通解析缺陷。
+- Node 报 `source_webview_script_unsupported` 而 EXE 报 `plugin_damaged/source_not_found/source_list_empty`：分别记录
+  临时宿主能力和安装/启用状态，不合并为来源失败。
+- WebView/人工交互受限：记录 `interactionRequired`，不归为普通解析缺陷；浏览器页面可访问也不能替代 App
+  可见 WebView 交互。
 - 单次 live 失败：保留首次报告，只有界复跑一次，不无限重试到绿。
 
 全源必须遇错继续、保留每源首错和中间报告。最终将快速检查、实际检查、各封面表面、正文、漫画页图、
