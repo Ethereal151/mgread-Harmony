@@ -51,6 +51,13 @@ void main() {
     expect(find.text('已启用'), findsNothing);
     expect(find.text('成人向原创网络小说数据源。'), findsOneWidget);
     expect(find.byIcon(Icons.check_rounded), findsOneWidget);
+    expect(tester.getSize(find.byKey(const Key('discovery-source-picker-search'))).height, 44);
+    expect(tester.getSize(find.byKey(const Key('discovery-source-picker-filters'))).height, 40);
+    expect(find.byKey(const ValueKey<String>('discovery-source-picker-filter-count-可用')), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.byKey(const Key('discovery-source-picker-filters'))).dy,
+      lessThan(tester.getTopLeft(find.byKey(const Key('discovery-source-picker-search'))).dy),
+    );
     final Image image = tester.widget<Image>(find.byKey(const Key('source-icon-network-org.example.manga')));
     expect(
       image.image,
@@ -60,6 +67,13 @@ void main() {
     await tester.pump();
 
     expect(find.text('爱丽丝书屋'), findsNothing);
+    expect(find.byKey(const Key('discovery-source-picker-search-clear')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('discovery-source-picker-search-clear')));
+    await tester.pump();
+    expect(find.text('爱丽丝书屋'), findsOneWidget);
+    expect(find.byKey(const Key('discovery-source-picker-search-clear')), findsNothing);
+    await tester.enterText(find.byKey(const Key('discovery-source-picker-search')), '漫画');
+    await tester.pump();
     await tester.tap(find.byKey(const ValueKey<String>('discovery-source-picker-org.example.manga')));
     await tester.pumpAndSettle();
 

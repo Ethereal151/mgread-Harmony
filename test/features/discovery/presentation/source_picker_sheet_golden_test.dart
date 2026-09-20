@@ -33,17 +33,33 @@ void main() {
       matchesGoldenFile('goldens/source_picker_compact_light.png'),
     );
   });
+
+  testWidgets('matches the compact dark source picker visual baseline', (
+    tester,
+  ) async {
+    await _setViewport(tester, const Size(768, 1496));
+    await tester.pumpWidget(const _SourcePickerGoldenHost(dark: true));
+    await tester.tap(find.byKey(const Key('discovery-source-selector')));
+    await tester.pumpAndSettle();
+
+    await expectLater(
+      find.byType(MaterialApp),
+      matchesGoldenFile('goldens/source_picker_compact_dark.png'),
+    );
+  });
 }
 
 class _SourcePickerGoldenHost extends StatelessWidget {
-  const _SourcePickerGoldenHost();
+  const _SourcePickerGoldenHost({this.dark = false});
+
+  final bool dark;
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.light(),
-      themeMode: ThemeMode.light,
+      theme: dark ? AppTheme.dark() : AppTheme.light(),
+      themeMode: dark ? ThemeMode.dark : ThemeMode.light,
       builder: (context, child) {
         final mediaQuery = MediaQuery.of(context);
         return MediaQuery(

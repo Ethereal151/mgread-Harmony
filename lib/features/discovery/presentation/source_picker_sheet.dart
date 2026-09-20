@@ -1,3 +1,10 @@
+/// Discovery source selection sheet.
+///
+/// Owns source filtering, search, pinning, selection, and the management
+/// hand-off. Runtime installation details remain outside this presentation
+/// boundary.
+library;
+
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -93,14 +100,22 @@ class _DiscoverySourcePickerSheet extends StatefulWidget {
 class _DiscoverySourcePickerSheetState extends State<_DiscoverySourcePickerSheet> {
   _SourceFilter _filter = _SourceFilter.available;
   String _query = '';
+  late final TextEditingController _searchController;
   late List<String> _pinnedSourceIds;
   late List<String> _recentSourceIds;
 
   @override
   void initState() {
     super.initState();
+    _searchController = TextEditingController();
     _pinnedSourceIds = List<String>.of(widget.pinnedSourceIds);
     _recentSourceIds = List<String>.of(widget.recentSourceIds);
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   List<PluginSourceDescriptor> get _visibleSources {
@@ -134,6 +149,13 @@ class _DiscoverySourcePickerSheetState extends State<_DiscoverySourcePickerSheet
 
   bool _isPinned(String sourceId) => _pinnedSourceIds.contains(sourceId);
 
+  int get _recentSourceCount => widget.sources.where((source) => _recentSourceIds.contains(source.id)).length;
+
+  void _clearQuery() {
+    _searchController.clear();
+    setState(() => _query = '');
+  }
+
   Future<void> _togglePinned(String sourceId) async {
     final pinned = !_isPinned(sourceId);
     final previous = List<String>.of(_pinnedSourceIds);
@@ -157,7 +179,7 @@ class _DiscoverySourcePickerSheetState extends State<_DiscoverySourcePickerSheet
     return SafeArea(
       top: false,
       child: FractionallySizedBox(
-        heightFactor: 0.78,
+        heightFactor: 0.84,
         child: DecoratedBox(
           decoration: BoxDecoration(
             color: Theme.of(context).colorScheme.surface,
@@ -167,87 +189,115 @@ class _DiscoverySourcePickerSheetState extends State<_DiscoverySourcePickerSheet
             borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
             child: Column(
               children: <Widget>[
-                SizedBox(
-                  width: double.infinity,
-                  height: 44,
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: <Widget>[
-                      Text(
-                        '选择数据源',
-                        key: Key('discovery-source-picker-title'),
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
-                      ),
-                      Positioned(
-                        right: 22,
-                        top: 12,
-                        child: Semantics(
-                          button: true,
-                          label: '关闭',
-                          child: GestureDetector(
-                            key: const Key('discovery-source-picker-close'),
-                            behavior: HitTestBehavior.opaque,
-                            onTap: () => Navigator.of(context).pop(),
-                            child: Icon(Icons.close_rounded, size: 20, color: Theme.of(context).colorScheme.onSurface),
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    border: Border(bottom: BorderSide(color: tokens.divider)),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.comfortable,
+                      AppSpacing.compact,
+                      AppSpacing.comfortable,
+                      AppSpacing.regular,
+                    ),
+                    child: Column(
+                      children: <Widget>[
+                        Container(
+                          width: 34,
+                          height: 4,
+                          decoration: BoxDecoration(color: tokens.divider, borderRadius: AppRadii.pill),
+                        ),
+                        SizedBox(
+                          width: double.infinity,
+                          height: 44,
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: <Widget>[
+                              Text(
+                                '选择数据源',
+                                key: const Key('discovery-source-picker-title'),
+                                style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+                              ),
+                              PositionedDirectional(
+                                end: 0,
+                                child: IconButton(
+                                  key: const Key('discovery-source-picker-close'),
+                                  tooltip: '关闭',
+                                  onPressed: () => Navigator.of(context).pop(),
+                                  icon: const Icon(Icons.close_rounded, size: 21),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.comfortable),
-                  child: SizedBox(
-                    height: 28,
-                    child: TextField(
-                      key: const Key('discovery-source-picker-search'),
-                      onChanged: (value) => setState(() => _query = value),
-                      style: Theme.of(context).textTheme.bodyMedium,
-                      decoration: InputDecoration(
-                        isDense: true,
-                        contentPadding: EdgeInsets.zero,
-                        hintText: '搜索数据源',
-                        hintStyle: Theme.of(context).textTheme.bodyMedium?.copyWith(color: tokens.mutedText),
-                        prefixIcon: IconTheme(
-                          data: IconThemeData(color: tokens.mutedText, size: 18),
-                          child: const Icon(Icons.search_rounded),
+                        Container(
+                          key: const Key('discovery-source-picker-filters'),
+                          height: 40,
+                          padding: const EdgeInsets.all(3),
+                          decoration: BoxDecoration(color: tokens.mutedSurface, borderRadius: AppRadii.detailControl),
+                          child: Row(
+                            children: <Widget>[
+                              for (final filter in _SourceFilter.values)
+                                Expanded(
+                                  child: _SourceFilterButton(
+                                    label: switch (filter) {
+                                      _SourceFilter.available => '可用',
+                                      _SourceFilter.recent => '最近使用',
+                                    },
+                                    count: filter == _SourceFilter.available ? widget.sources.length : _recentSourceCount,
+                                    selected: _filter == filter,
+                                    onPressed: () => setState(() => _filter = filter),
+                                  ),
+                                ),
+                            ],
+                          ),
                         ),
-                        prefixIconConstraints: const BoxConstraints(minWidth: 36),
-                        filled: true,
-                        fillColor: tokens.mutedSurface,
-                        border: const OutlineInputBorder(borderRadius: AppRadii.pill, borderSide: BorderSide.none),
-                        enabledBorder: const OutlineInputBorder(borderRadius: AppRadii.pill, borderSide: BorderSide.none),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: AppRadii.pill,
-                          borderSide: BorderSide(color: tokens.accent),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.comfortable),
-                  child: Row(
-                    children: <Widget>[
-                      for (final filter in _SourceFilter.values)
-                        Expanded(
-                          child: Padding(
-                            padding: EdgeInsetsDirectional.only(end: filter == _SourceFilter.recent ? 0 : AppSpacing.compact),
-                            child: _SourceFilterButton(
-                              label: switch (filter) {
-                                _SourceFilter.available => '可用',
-                                _SourceFilter.recent => '最近使用',
-                              },
-                              selected: _filter == filter,
-                              onPressed: () => setState(() => _filter = filter),
+                        const SizedBox(height: AppSpacing.compact),
+                        SizedBox(
+                          height: 44,
+                          child: TextField(
+                            key: const Key('discovery-source-picker-search'),
+                            controller: _searchController,
+                            onChanged: (value) => setState(() => _query = value),
+                            textInputAction: TextInputAction.search,
+                            style: Theme.of(context).textTheme.bodyMedium,
+                            decoration: InputDecoration(
+                              isDense: true,
+                              contentPadding: const EdgeInsets.symmetric(vertical: AppSpacing.regular),
+                              hintText: '搜索数据源',
+                              hintStyle: Theme.of(context).textTheme.bodyMedium?.copyWith(color: tokens.mutedText),
+                              prefixIcon: Icon(Icons.search_rounded, color: tokens.mutedText, size: 20),
+                              prefixIconConstraints: const BoxConstraints(minWidth: 42),
+                              suffixIcon: _query.isEmpty
+                                  ? null
+                                  : IconButton(
+                                      key: const Key('discovery-source-picker-search-clear'),
+                                      tooltip: '清除搜索',
+                                      onPressed: _clearQuery,
+                                      icon: Icon(Icons.cancel_rounded, size: 18, color: tokens.mutedText),
+                                    ),
+                              filled: true,
+                              fillColor: tokens.mutedSurface.withValues(alpha: 0.72),
+                              border: OutlineInputBorder(
+                                borderRadius: AppRadii.control,
+                                borderSide: BorderSide(color: tokens.divider),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: AppRadii.control,
+                                borderSide: BorderSide(color: tokens.divider),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: AppRadii.control,
+                                borderSide: BorderSide(color: tokens.accent, width: 1.4),
+                              ),
                             ),
                           ),
                         ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: AppSpacing.compact),
                 Expanded(
                   child: widget.allowAllSources
                       ? Column(
@@ -276,7 +326,7 @@ class _DiscoverySourcePickerSheetState extends State<_DiscoverySourcePickerSheet
     }
     return ListView.separated(
       key: const Key('discovery-source-picker-list'),
-      padding: const EdgeInsets.fromLTRB(AppSpacing.comfortable, 0, AppSpacing.comfortable, 0),
+      padding: const EdgeInsets.fromLTRB(AppSpacing.comfortable, 0, AppSpacing.comfortable, AppSpacing.compact),
       itemCount: visibleSources.length,
       separatorBuilder: (_, _) => const SizedBox(height: 0.5),
       itemBuilder: (context, index) {
@@ -319,9 +369,10 @@ class _AllSourcesPickerRow extends StatelessWidget {
 }
 
 class _SourceFilterButton extends StatelessWidget {
-  const _SourceFilterButton({required this.label, required this.selected, required this.onPressed});
+  const _SourceFilterButton({required this.label, required this.count, required this.selected, required this.onPressed});
 
   final String label;
+  final int count;
   final bool selected;
   final VoidCallback onPressed;
 
@@ -332,22 +383,54 @@ class _SourceFilterButton extends StatelessWidget {
     return Semantics(
       button: true,
       selected: selected,
-      label: '筛选数据源：$label',
+      label: '筛选数据源：$label，$count 个',
       child: Material(
-        color: selected ? tokens.accentSoft : tokens.mutedSurface,
-        borderRadius: const BorderRadius.all(Radius.circular(7)),
+        color: Colors.transparent,
+        borderRadius: AppRadii.discoveryTile,
         child: InkWell(
           onTap: onPressed,
-          borderRadius: const BorderRadius.all(Radius.circular(7)),
-          child: SizedBox(
-            height: 22,
+          borderRadius: AppRadii.discoveryTile,
+          child: AnimatedContainer(
+            duration: AppMotion.navigationSelection,
+            decoration: BoxDecoration(
+              color: selected ? theme.colorScheme.surface : Colors.transparent,
+              borderRadius: AppRadii.discoveryTile,
+              border: Border.all(color: selected ? tokens.divider : Colors.transparent),
+              boxShadow: selected
+                  ? <BoxShadow>[BoxShadow(color: tokens.shadow.withValues(alpha: 0.12), blurRadius: 8, offset: const Offset(0, 2))]
+                  : null,
+            ),
             child: Center(
-              child: Text(
-                label,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: selected ? tokens.accent : tokens.mutedText,
-                  fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-                ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  Text(
+                    label,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: selected ? theme.colorScheme.onSurface : tokens.mutedText,
+                      fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.unit + 2),
+                  DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: selected ? tokens.accentSoft : tokens.divider.withValues(alpha: 0.55),
+                      borderRadius: AppRadii.pill,
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                      child: Text(
+                        '$count',
+                        key: ValueKey<String>('discovery-source-picker-filter-count-$label'),
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: selected ? tokens.accent : tokens.mutedText,
+                          height: 1.2,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
