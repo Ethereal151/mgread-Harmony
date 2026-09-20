@@ -68,3 +68,18 @@ test('drops an expired playback URL without probing it', async () => {
   await plugin.getContent(contentRequest); await plugin.getContent(contentRequest);
   assert.equal(playCalls, 2); assert.equal(probeCalls, 0);
 });
+
+test('loads a long catalog in bounded parallel page batches while preserving order', async () => {
+  let active = 0; let maximumActive = 0;
+  await plugin.activate({ log: { info() {}, warn() {} }, resource: { proxy() { return 'http://127.0.0.1:9000/v1/source-resource/token123456789012'; } }, http: { async fetch(input) {
+    const url = String(input); const page = Number(new URL(url).searchParams.get('page') ?? 1);
+    active += 1; maximumActive = Math.max(maximumActive, active);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    active -= 1;
+    return Response.json({ data: { count: 1000, list: [{ chapterId: `c-${page}`, title: `Episode ${page}`, price: 0 }] } });
+  } } });
+  const result = await plugin.getChapters({ id: 'audio:book-long' });
+  assert.equal(result.items.map((item) => item.id).join(','), [1, 2, 3, 4, 5].map((page) => `audio:book-long:c-${page}`).join(','));
+  assert.ok(maximumActive > 1);
+  assert.ok(maximumActive <= 6);
+});

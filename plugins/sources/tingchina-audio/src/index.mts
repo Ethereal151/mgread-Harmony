@@ -22,6 +22,7 @@ const playbackCacheTtlMs = 10 * 60 * 1000;
 const playbackExpirySafetyMs = 5 * 1000;
 const playbackProbeTimeoutMs = 1500;
 const playbackCacheMaxEntries = 256;
+const chapterPageConcurrency = 6;
 let context: Context | undefined;
 const chapterLocks = new Map<string, boolean>();
 const playbackCache = new Map<string, CachedPlayback>();
@@ -74,8 +75,8 @@ export async function getDetail(request: { id: string }) {
 
 export async function getChapters(request: { id: string }) {
   const id = contentId(request.id); const first = await chapterPage(id, 1); const total = positive(first.count, first.list.length);
-  const pages = [first]; const pageCount = Math.min(25, Math.ceil(total / 200));
-  for (let page = 2; page <= pageCount; page += 1) pages.push(await chapterPage(id, page));
+  const pageCount = Math.min(25, Math.ceil(total / 200));
+  const pages = [first, ...(await chapterPages(id, pageCount))];
   const items = pages.flatMap((value) => value.list).slice(0, 5000).map((value, order) => chapter(id, value, order));
   if (chapterLocks.size + items.length > 10_000) chapterLocks.clear();
   for (const item of items) chapterLocks.set(item.id, item.isLocked === true);
@@ -83,6 +84,17 @@ export async function getChapters(request: { id: string }) {
     ? []
     : [frozen({ id: `group:${id}:default`, title: '节目', order: 0, episodes: items })];
   return frozen({ items, groups });
+}
+
+async function chapterPages(id: string, pageCount: number) {
+  const pages = [] as Awaited<ReturnType<typeof chapterPage>>[];
+  for (let start = 2; start <= pageCount; start += chapterPageConcurrency) {
+    const batch = await Promise.all(
+      Array.from({ length: Math.min(chapterPageConcurrency, pageCount - start + 1) }, (_, offset) => chapterPage(id, start + offset)),
+    );
+    pages.push(...batch);
+  }
+  return pages;
 }
 
 export async function getContent(request: { id: string; chapterId: string }) {
