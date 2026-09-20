@@ -49,7 +49,8 @@ description: Develop, migrate, repair, retire, audit, or batch-test MgRead real 
   当前公开 session API，页面必须执行脚本时才保留最小 WebView 操作。
 - 本技能中“快速检查”仅指仓库固定 Node 直接调用 `mgread-source-test.mjs`；“实际检查”仅指当前真实
   MgRead 主程序 EXE 的 `--source-check` / `--source-check-all` CLI。不得用 Node、`flutter test`、mock、Runtime 私有端口
-  或单独构建成功冒充实际检查。
+  或单独构建成功冒充实际检查。视频来源的实际检查还必须出现 `playback.video`，由生产 MediaKit 表面取得首帧并
+  确认播放进度前进；只有资源或 HLS 前缀可达不能算 App 可播放。
 - 离线测试、快速检查、实际检查、artifact、Windows/Android 实机是不同证据。只有完成发现根页、发现子列表、
   搜索、详情、完整目录、按类型正文/媒体抽样与所有适用资源组后，才能称为全链路通过。
 

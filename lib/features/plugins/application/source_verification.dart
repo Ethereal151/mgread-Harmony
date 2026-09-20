@@ -4,3 +4,4 @@ library;
 export 'source_verification_engine.dart';
 export 'source_verification_models.dart';
 export 'source_verification_report_writer.dart';
+export 'source_verification_video_playback.dart';

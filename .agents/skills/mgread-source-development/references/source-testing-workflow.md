@@ -5,7 +5,7 @@
 | 名称 | 唯一入口 | 能证明什么 | 不能代替什么 |
 | --- | --- | --- | --- |
 | 快速检查 | 仓库固定 Node 直接运行 `packages/mg_read_source_testkit/bin/mgread-source-test.mjs` | 来源 build、公开导出、临时宿主与有界 live 内容/资源链路 | 真实 App 启动、已安装/已启用插件、Runtime Facade 校验和主程序资源代理 |
-| 实际检查 | 当前真实 MgRead 主程序 EXE 的 `--source-check` / `--source-check-all` | 生产 `SourceContentGateway -> Runtime Facade -> Runtime -> 已启用插件` 链路 | Windows/Android 可见 UI、人工验证、真机播放或长时稳定性 |
+| 实际检查 | 当前真实 MgRead 主程序 EXE 的 `--source-check` / `--source-check-all` | 生产 `SourceContentGateway -> Runtime Facade -> Runtime -> 已启用插件` 链路；视频还验证生产 MediaKit 首帧与进度推进 | 人工交互、Android 真机播放或长时稳定性 |
 
 不要再把 Node CLI 称为“正式验收”，也不要用 `flutter test`、`integration_test`、Runtime 私有端口、
 mock 或单独 build 替代主程序 EXE CLI。两层都可访问真站，“快速”指它绕过 Flutter/主程序宿主，
@@ -79,6 +79,12 @@ Windows Release 是 GUI 子系统进程；自动化用 `Start-Process -WindowSty
 `resource.cover/resource.content`，没有发现表面和类型子组，调用方必须降级为 `partial` 并列出缺失项；
 不得因 EXE 返回 `0` 就宣称全链路通过。
 
+视频来源还必须有 `playback.video` 阶段。CLI 在真实 Flutter 视频表面上用生产 Runtime URL、headers、视频代理和
+MediaKit 静音打开样本；只有取得首帧、进入 playing 且 position 前进才通过。报告按样本保留线路序号、解析/播放
+阶段、`video_backend_initialization_failed`、`video_backend_open_failed`、`video_stream_error`、`video_runtime_resource_unavailable`、
+`video_proxy_unavailable` 或 `video_first_frame_timeout`，以及 buffering/position/duration/bufferedPosition。
+缺少该阶段、探针不可用或样本因上限未测试时，视频来源不得通过。
+
 ## 漫画、音频和视频的额外检查
 
 - 漫画：除封面外，首/中/末可读章节都要有 pages；按不同章节和页位分层抽样页图，校验 page id/index、
@@ -89,7 +95,8 @@ Windows Release 是 GUI 子系统进程；自动化用 `Start-Process -WindowSty
   第一个字节。封面仍是独立子组。
 - 视频：校验扁平 episodes 与 `groups[]`、稳定 `groupId + episodeId`、`media.resourceType=video|hls`。直链检查有界 Range、
   MIME 与容器签名；每个实际 group/线路至少取一个样本，不能由健康线路掩盖另一条 404/错误线路。HLS 检查
-  `#EXTM3U`、主/媒体 playlist、基址解析，并有界探测一个 variant、key 或 segment。
+  `#EXTM3U`、主/媒体 playlist、基址解析，并有界探测一个 variant、key 或 segment；随后由实际检查验证真实解复用、
+  解码、视频表面首帧和播放时钟推进。
 
 上述额外检查不得被“详情可读”“有 media URL”或“封面可达”替代。
 

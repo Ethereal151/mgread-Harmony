@@ -1,6 +1,6 @@
 /// desktop 正式 App 内置的数据源全链路自检引擎。
 ///
-/// 职责：经生产 SourceContentGateway 顺序验证发现、搜索、详情、完整目录、内容抽样和 Runtime 资源代理。
+/// 职责：经生产 SourceContentGateway 顺序验证发现、搜索、详情、完整目录、内容抽样、Runtime 资源代理和视频播放。
 /// 注意：只产生计数与稳定错误码；内容值仅在当前调用栈内用于下一阶段，不进入报告或诊断。
 library;
 
@@ -14,6 +14,7 @@ import 'package:mg_read/core/errors/app_error.dart';
 import 'package:mg_read/features/discovery/application/source_content_gateway.dart';
 
 import 'source_verification_models.dart';
+import 'source_verification_video_playback.dart';
 
 typedef SourceVerificationProgressCallback = void Function(SourceVerificationProgress progress);
 typedef SourceVerificationDebugCallback = void Function(SourceVerificationDebugRecord record);
@@ -58,6 +59,7 @@ final class SourceVerificationEngine {
     SourceVerificationProgressCallback? onProgress,
     SourceVerificationDebugCallback? onDebug,
     SourceVerificationCancellationToken? cancellationToken,
+    SourceVerificationVideoPlaybackProbe? videoPlaybackProbe,
   }) async {
     final startedAt = DateTime.now();
     final stopwatch = Stopwatch()..start();
@@ -76,7 +78,13 @@ final class SourceVerificationEngine {
     final results = <SourceVerificationSourceResult>[];
     for (final source in selected) {
       if (cancellationToken?.isCancelled ?? false) break;
-      final result = await _runSource(source, onProgress: onProgress, onDebug: onDebug, cancellationToken: cancellationToken);
+      final result = await _runSource(
+        source,
+        onProgress: onProgress,
+        onDebug: onDebug,
+        cancellationToken: cancellationToken,
+        videoPlaybackProbe: videoPlaybackProbe,
+      );
       results.add(result);
       if (result.status == SourceVerificationResultStatus.cancelled) break;
     }
@@ -94,6 +102,7 @@ final class SourceVerificationEngine {
     SourceVerificationProgressCallback? onProgress,
     SourceVerificationDebugCallback? onDebug,
     SourceVerificationCancellationToken? cancellationToken,
+    SourceVerificationVideoPlaybackProbe? videoPlaybackProbe,
   }) async {
     final stopwatch = Stopwatch()..start();
     final stages = <SourceVerificationStageResult>[
@@ -192,6 +201,24 @@ final class SourceVerificationEngine {
           () => _probeAny(contentResources, expectedImage: detail.summary.contentKind == PluginContentKind.manga),
           summary: (value) => value.summary,
         );
+      }
+      if (detail.summary.contentKind == PluginContentKind.video) {
+        if (videoPlaybackProbe == null) {
+          await context.stage<void>('playback.video', () => throw const _VerificationFailure('video_playback_probe_unavailable'));
+        } else {
+          final playback = SourceVerificationVideoPlaybackRunner(gateway: _gateway, probe: videoPlaybackProbe);
+          await context.stage<SourceVerificationVideoPlaybackResult>(
+            'playback.video',
+            () => playback.run(pluginId: source.id, contentId: selected.id, chapters: chapters, resolvedContents: contents),
+            timeout: const Duration(minutes: 5),
+            validate: (value) {
+              if (!value.passed) {
+                throw _VerificationFailure(value.failureCode, summary: value.summary);
+              }
+            },
+            summary: (value) => value.summary,
+          );
+        }
       }
     } on _StageAbort catch (failure) {
       status = failure.cancelled
@@ -320,13 +347,14 @@ final class _SourceRunContext {
     void Function(T value)? validate,
     Map<String, Object?> Function(T value)? summary,
     Map<String, Object?> Function(T value)? debugData,
+    Duration? timeout,
   }) async {
     checkCancellation();
     onDebug?.call(SourceVerificationDebugRecord(event: 'stage_started', pluginId: source.id, stage: stage));
     onProgress?.call(SourceVerificationProgress(pluginId: source.id, displayName: source.displayName, stage: stage, running: true));
     final stopwatch = Stopwatch()..start();
     try {
-      final value = await action().timeout(stageTimeout);
+      final value = await action().timeout(timeout ?? stageTimeout);
       onDebug?.call(
         SourceVerificationDebugRecord(event: 'stage_response', pluginId: source.id, stage: stage, data: debugData?.call(value)),
       );

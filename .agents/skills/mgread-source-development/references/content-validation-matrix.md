@@ -61,7 +61,9 @@ group/线路至少验证一个样本，任一适用线路 404/错误页面都使
 来源契约允许的 `206` 或可流式 `200`；检查视频 MIME、octet-stream 与容器签名的一致性，不下载整片。
 
 HLS 至少验证主/媒体 playlist 是文本且以 `#EXTM3U` 开始，URI 能按基址解析；按需有界探测一个 variant、key
-或 segment，保持 headers 和取消语义。解析出播放地址不等于真实可播，封面通过也不等于视频通过。
+或 segment，保持 headers 和取消语义。真实 App CLI 还要对首/中/末及每个实际线路的代表样本执行
+`playback.video`：静音打开生产 Runtime URL，等待视频表面首帧、playing 和 position 前进，并报告打开异常、流错误、
+Runtime/代理不可用或首帧超时。解析出播放地址、playlist/segment 可达或封面通过都不等于 App 真实可播。
 
 ## 自动化实现要求
 

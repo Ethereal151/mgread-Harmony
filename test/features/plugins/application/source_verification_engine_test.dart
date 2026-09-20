@@ -73,6 +73,214 @@ void main() {
     final content = traces.singleWhere((trace) => trace.event == 'stage_response' && trace.stage == 'content.first');
     expect(content.data!['text'], 'fixture body');
   });
+
+  test('uses the App playback probe for video lines and records first-frame evidence', () async {
+    final server = await _startMediaServer();
+    final probe = _VideoPlaybackProbe(passed: true);
+    try {
+      final report = await SourceVerificationEngine(
+        _VideoVerificationGateway(_serverUri(server)),
+      ).run(pluginId: _VideoVerificationGateway.pluginId, videoPlaybackProbe: probe);
+
+      expect(report.isSuccessful, isTrue);
+      expect(probe.calls, 3);
+      final stage = report.sources.single.stages.singleWhere((stage) => stage.stage == 'playback.video');
+      expect(stage.status, SourceVerificationStageStatus.passed);
+      expect(stage.summary['tested'], 3);
+      expect(stage.summary['failed'], 0);
+    } finally {
+      await server.close(force: true);
+    }
+  });
+
+  test('reports playback timeout separately from a reachable video resource', () async {
+    final server = await _startMediaServer();
+    final probe = _VideoPlaybackProbe(passed: false);
+    try {
+      final report = await SourceVerificationEngine(
+        _VideoVerificationGateway(_serverUri(server)),
+      ).run(pluginId: _VideoVerificationGateway.pluginId, videoPlaybackProbe: probe);
+
+      expect(report.isSuccessful, isFalse);
+      final failure = report.sources.single.failure!;
+      expect(failure.stage, 'playback.video');
+      expect(failure.code, 'video_playback_failed');
+      final samples = failure.summary['samples']! as List<Object?>;
+      expect(samples, hasLength(3));
+      expect((samples.first! as Map<String, Object?>)['code'], 'video_first_frame_timeout');
+    } finally {
+      await server.close(force: true);
+    }
+  });
+}
+
+Future<HttpServer> _startMediaServer() async {
+  final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+  server.listen((request) async {
+    request.response.headers.contentType = ContentType.binary;
+    request.response.add(const <int>[0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70]);
+    await request.response.close();
+  });
+  return server;
+}
+
+Uri _serverUri(HttpServer server) => Uri.parse('http://${server.address.address}:${server.port}/video');
+
+final class _VideoPlaybackProbe implements SourceVerificationVideoPlaybackProbe {
+  _VideoPlaybackProbe({required this.passed});
+
+  final bool passed;
+  int calls = 0;
+
+  @override
+  Future<SourceVerificationVideoPlaybackProbeResult> probe(SourceVerificationVideoPlaybackRequest request) async {
+    calls += 1;
+    return SourceVerificationVideoPlaybackProbeResult(
+      passed: passed,
+      code: passed ? 'video_playback_ready' : 'video_first_frame_timeout',
+      elapsed: const Duration(milliseconds: 25),
+      firstFrameReady: passed,
+      playing: passed,
+      buffering: !passed,
+      position: passed ? const Duration(milliseconds: 500) : Duration.zero,
+      duration: const Duration(minutes: 1),
+      bufferedPosition: passed ? const Duration(seconds: 5) : Duration.zero,
+      errorMessage: passed ? null : 'The first frame did not arrive.',
+    );
+  }
+}
+
+final class _VideoVerificationGateway implements SourceContentGateway {
+  _VideoVerificationGateway(this.mediaUrl);
+
+  static const pluginId = 'org.mgread.video-fixture';
+  final Uri mediaUrl;
+
+  PluginContentSummary get summary => PluginContentSummary(
+    id: 'video:fixture',
+    title: 'Video Fixture',
+    contentKind: PluginContentKind.video,
+    author: null,
+    url: null,
+    coverUrl: null,
+    description: null,
+    language: 'zh',
+    status: PluginContentStatus.ongoing,
+    access: PluginAccessKind.free,
+    wordCount: null,
+    chapterCount: 3,
+    publishedAt: null,
+    updatedAt: null,
+    latestChapter: null,
+    categories: const <String>[],
+    tags: const <String>[],
+    attributes: const <PluginContentAttribute>[],
+  );
+
+  List<PluginChapterSummary> get episodes => List<PluginChapterSummary>.generate(
+    3,
+    (index) => PluginChapterSummary(
+      id: 'episode:$index',
+      title: 'Episode $index',
+      order: index,
+      url: null,
+      volumeTitle: null,
+      wordCount: null,
+      updatedAt: null,
+      isLocked: false,
+      attributes: const <PluginContentAttribute>[],
+    ),
+  );
+
+  @override
+  Future<List<PluginSourceDescriptor>> listSources() async => <PluginSourceDescriptor>[
+    PluginSourceDescriptor(
+      id: pluginId,
+      displayName: 'Video Fixture Source',
+      pluginVersion: '1.0.0',
+      contentKinds: const <PluginContentKind>[PluginContentKind.video],
+    ),
+  ];
+
+  @override
+  Future<PluginDiscoverResult> discover({
+    required String pluginId,
+    String? target,
+    String? cursor,
+    String? collectionId,
+    int pageSize = 20,
+  }) async => PluginDiscoveryDocumentResult(
+    pluginId: pluginId,
+    sourceName: 'Video Fixture Source',
+    document: PluginDiscoveryDocument(
+      components: <PluginDiscoveryComponent>[
+        PluginDiscoveryContentCollectionComponent(
+          id: 'video-collection',
+          layout: PluginDiscoveryContentLayout.list,
+          items: <PluginDiscoveryContentItem>[PluginDiscoveryContentItem(content: summary, rank: null, metric: null, recommendation: null)],
+          continuation: null,
+        ),
+      ],
+    ),
+  );
+
+  @override
+  Future<PluginSearchResult> search({required String pluginId, required String query, String? cursor, int pageSize = 20}) async =>
+      PluginSearchResult(
+        pluginId: pluginId,
+        sourceName: 'Video Fixture Source',
+        items: <PluginContentSummary>[summary],
+        nextCursor: null,
+        totalCount: 1,
+      );
+
+  @override
+  Future<PluginSearchSuggestionsResult> searchSuggestions({required String pluginId, String? cursor, int pageSize = 20}) =>
+      throw UnsupportedError('Not used by verification engine.');
+
+  @override
+  Future<PluginContentDetail> getDetail({required String pluginId, required String id}) async => PluginContentDetail(
+    pluginId: pluginId,
+    sourceName: 'Video Fixture Source',
+    summary: summary,
+    aliases: const <String>[],
+    catalogUrl: null,
+  );
+
+  @override
+  Future<PluginChaptersResult> getChapters({required String pluginId, required String id}) async {
+    final values = episodes;
+    return PluginChaptersResult(
+      pluginId: pluginId,
+      sourceName: 'Video Fixture Source',
+      items: values,
+      groups: <PluginMediaGroup>[
+        PluginMediaGroup(id: 'line:1', title: 'Line 1', order: 0, episodes: values.take(2).toList(growable: false)),
+        PluginMediaGroup(id: 'line:2', title: 'Line 2', order: 1, episodes: values.skip(2).toList(growable: false)),
+      ],
+    );
+  }
+
+  @override
+  Future<PluginChapterContent> getContent({required String pluginId, required String id, required String chapterId}) async =>
+      PluginChapterContent(
+        pluginId: pluginId,
+        sourceName: 'Video Fixture Source',
+        contentKind: PluginContentKind.video,
+        chapterId: chapterId,
+        title: null,
+        updatedAt: null,
+        text: null,
+        pages: const <PluginMangaPage>[],
+        media: PluginMediaResource(
+          url: mediaUrl,
+          resourceType: PluginMediaResourceType.video,
+          resourcePolicy: PluginMediaResourcePolicy.sessionOnly,
+          expiresAt: null,
+          mimeType: 'video/mp4',
+          headers: const <String, String>{},
+        ),
+      );
 }
 
 final class _VerificationGateway implements SourceContentGateway {
