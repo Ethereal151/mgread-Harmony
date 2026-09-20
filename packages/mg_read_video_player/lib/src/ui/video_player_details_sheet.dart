@@ -26,6 +26,7 @@ Future<void> showVideoDetailsSheet(
   BuildContext context, {
   required VideoPlayerController controller,
   required VideoEpisode? activeEpisode,
+  bool showBufferedPosition = true,
 }) => showModalBottomSheet<void>(
   context: context,
   isScrollControlled: true,
@@ -36,6 +37,7 @@ Future<void> showVideoDetailsSheet(
     builder: (context, child) => _VideoDetailsSheet(
       snapshot: controller.snapshot,
       activeEpisode: activeEpisode,
+      showBufferedPosition: showBufferedPosition,
     ),
   ),
 );
@@ -44,10 +46,12 @@ final class _VideoDetailsSheet extends StatelessWidget {
   const _VideoDetailsSheet({
     required this.snapshot,
     required this.activeEpisode,
+    required this.showBufferedPosition,
   });
 
   final VideoPlayerSnapshot snapshot;
   final VideoEpisode? activeEpisode;
+  final bool showBufferedPosition;
 
   @override
   Widget build(BuildContext context) {
@@ -165,10 +169,11 @@ final class _VideoDetailsSheet extends StatelessWidget {
                             value:
                                 '${_formatDuration(snapshot.position)} / ${_formatDuration(snapshot.duration)}',
                           ),
-                          _MetadataRow(
-                            label: '已缓冲',
-                            value: _formatDuration(snapshot.bufferedPosition),
-                          ),
+                          if (showBufferedPosition)
+                            _MetadataRow(
+                              label: '已缓冲',
+                              value: _formatDuration(snapshot.bufferedPosition),
+                            ),
                           _MetadataRow(
                             label: '播放速度',
                             value: '${snapshot.rate.toStringAsFixed(2)}x',

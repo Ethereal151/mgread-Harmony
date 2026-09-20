@@ -43,6 +43,8 @@ final class VideoPlayerChrome extends StatefulWidget {
     required this.onAutoAdvance,
     required this.onInteractionStart,
     required this.onInteractionEnd,
+    this.supportsBufferedPosition = true,
+    this.supportsEnhancement = true,
     super.key,
   });
 
@@ -65,6 +67,8 @@ final class VideoPlayerChrome extends StatefulWidget {
   final Future<void> Function(bool) onAutoAdvance;
   final VoidCallback onInteractionStart;
   final VoidCallback onInteractionEnd;
+  final bool supportsBufferedPosition;
+  final bool supportsEnhancement;
 
   @override
   State<VideoPlayerChrome> createState() => _VideoPlayerChromeState();
@@ -133,6 +137,7 @@ final class _VideoPlayerChromeState extends State<VideoPlayerChrome> {
       context,
       controller: widget.controller,
       activeEpisode: widget.activeEpisode,
+      showBufferedPosition: widget.supportsBufferedPosition,
     ).whenComplete(widget.onInteractionEnd);
   }
 
@@ -147,6 +152,7 @@ final class _VideoPlayerChromeState extends State<VideoPlayerChrome> {
       onPreviousEpisode: widget.onPreviousEpisode,
       onNextEpisode: widget.onNextEpisode,
       onAutoAdvance: widget.onAutoAdvance,
+      supportsEnhancement: widget.supportsEnhancement,
     ).whenComplete(widget.onInteractionEnd);
   }
 
@@ -197,7 +203,9 @@ final class _VideoPlayerChromeState extends State<VideoPlayerChrome> {
                     key: const Key('video-player-slider'),
                     value: value,
                     max: max,
-                    secondaryTrackValue: buffered < value ? value : buffered,
+                    secondaryTrackValue: widget.supportsBufferedPosition
+                        ? (buffered < value ? value : buffered)
+                        : null,
                     onChangeStart: (_) => widget.onInteractionStart(),
                     onChanged: (double next) => widget.onSeekPreviewChanged(
                       Duration(milliseconds: next.round()),

@@ -70,10 +70,15 @@ class ReaderPlatformCapabilities {
   const ReaderPlatformCapabilities({
     this.keepScreenOn = false,
     this.immersiveMode = false,
+    this.volumeKeyPageTurning = true,
   });
 
   final bool keepScreenOn;
   final bool immersiveMode;
+
+  /// Whether the host can expose physical volume keys as page-turn shortcuts.
+  /// Older hosts default to true for source compatibility.
+  final bool volumeKeyPageTurning;
 }
 
 class MethodChannelReaderPlatform extends ReaderPlatform {
@@ -145,6 +150,7 @@ class MethodChannelReaderPlatform extends ReaderPlatform {
     return ReaderPlatformCapabilities(
       keepScreenOn: result?['keepScreenOn'] == true,
       immersiveMode: result?['immersiveMode'] == true,
+      volumeKeyPageTurning: result?['volumeKeyPageTurning'] != false,
     );
   }
 

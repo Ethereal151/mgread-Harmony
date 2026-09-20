@@ -998,18 +998,19 @@ extension _ComicReaderChrome on _ComicReaderViewState {
                                       ),
                                     ),
                                   ),
-                                SwitchListTile.adaptive(
-                                  contentPadding: EdgeInsets.zero,
-                                  title: const Text(
-                                    ComicReaderStrings.pageTurnShortcuts,
-                                  ),
-                                  value: _preferences.pageTurnShortcuts,
-                                  onChanged: (bool value) => update(
-                                    _preferences.copyWith(
-                                      pageTurnShortcuts: value,
+                                if (_platformCapabilities.volumeKeyPageTurning)
+                                  SwitchListTile.adaptive(
+                                    contentPadding: EdgeInsets.zero,
+                                    title: const Text(
+                                      ComicReaderStrings.pageTurnShortcuts,
+                                    ),
+                                    value: _preferences.pageTurnShortcuts,
+                                    onChanged: (bool value) => update(
+                                      _preferences.copyWith(
+                                        pageTurnShortcuts: value,
+                                      ),
                                     ),
                                   ),
-                                ),
                                 DropdownButtonFormField<double>(
                                   key: const ValueKey<String>(
                                     'comic-reader-page-turn-fraction',

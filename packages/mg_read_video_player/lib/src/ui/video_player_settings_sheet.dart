@@ -26,6 +26,7 @@ Future<void> showVideoPlayerSettingsSheet({
   required Future<void> Function() onPreviousEpisode,
   required Future<void> Function() onNextEpisode,
   required Future<void> Function(bool) onAutoAdvance,
+  bool supportsEnhancement = true,
 }) => showModalBottomSheet<void>(
   context: context,
   backgroundColor: Colors.transparent,
@@ -44,6 +45,7 @@ Future<void> showVideoPlayerSettingsSheet({
       onPreviousEpisode: onPreviousEpisode,
       onNextEpisode: onNextEpisode,
       onAutoAdvance: onAutoAdvance,
+      supportsEnhancement: supportsEnhancement,
     ),
   ),
 );
@@ -57,6 +59,7 @@ final class _VideoPlayerSettingsSheet extends StatefulWidget {
     required this.onPreviousEpisode,
     required this.onNextEpisode,
     required this.onAutoAdvance,
+    required this.supportsEnhancement,
   });
 
   final VideoPlayerSnapshot snapshot;
@@ -66,6 +69,7 @@ final class _VideoPlayerSettingsSheet extends StatefulWidget {
   final Future<void> Function() onPreviousEpisode;
   final Future<void> Function() onNextEpisode;
   final Future<void> Function(bool) onAutoAdvance;
+  final bool supportsEnhancement;
 
   @override
   State<_VideoPlayerSettingsSheet> createState() =>
@@ -217,22 +221,24 @@ final class _VideoPlayerSettingsSheetState
                   child: const Text('切换'),
                 ),
               ),
-              const SizedBox(height: 18),
-              const _SettingsSectionLabel('画质增强'),
-              const SizedBox(height: 8),
-              _SettingsRow(
-                icon: Icons.auto_awesome_rounded,
-                label: '动漫高清修复',
-                detail: _enhancementMode == VideoEnhancementMode.off
-                    ? '当前关闭'
-                    : 'Anime4K 快速模式',
-                trailing: Switch.adaptive(
-                  key: const Key('video-player-anime4k'),
-                  value: _enhancementMode != VideoEnhancementMode.off,
-                  activeTrackColor: videoPlayerAccent,
-                  onChanged: _setEnhancementMode,
+              if (widget.supportsEnhancement) ...<Widget>[
+                const SizedBox(height: 18),
+                const _SettingsSectionLabel('画质增强'),
+                const SizedBox(height: 8),
+                _SettingsRow(
+                  icon: Icons.auto_awesome_rounded,
+                  label: '动漫高清修复',
+                  detail: _enhancementMode == VideoEnhancementMode.off
+                      ? '当前关闭'
+                      : 'Anime4K 快速模式',
+                  trailing: Switch.adaptive(
+                    key: const Key('video-player-anime4k'),
+                    value: _enhancementMode != VideoEnhancementMode.off,
+                    activeTrackColor: videoPlayerAccent,
+                    onChanged: _setEnhancementMode,
+                  ),
                 ),
-              ),
+              ],
               const SizedBox(height: 18),
               const _SettingsSectionLabel('播放速度'),
               const SizedBox(height: 8),

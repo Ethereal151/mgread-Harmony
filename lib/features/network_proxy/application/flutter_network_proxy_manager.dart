@@ -42,6 +42,9 @@ final class FlutterNetworkProxyManager {
 
   /// Returns the actual user-configured upstream endpoint for [traffic].
   Uri? proxyUriFor(NetworkProxyTraffic traffic) {
+    if (Platform.isOhos && (traffic == NetworkProxyTraffic.video || traffic == NetworkProxyTraffic.audio)) {
+      return null;
+    }
     if (!_settings.isEnabled(traffic)) return null;
     return Uri(scheme: _settings.protocol.name, host: _settings.host, port: _settings.port);
   }
@@ -51,6 +54,10 @@ final class FlutterNetworkProxyManager {
     if (traffic != NetworkProxyTraffic.video && traffic != NetworkProxyTraffic.audio) {
       throw ArgumentError.value(traffic, 'traffic', 'A video or audio route is required.');
     }
+    // OHOS AVPlayer has no supported per-session HTTP proxy API.  Returning
+    // null here is paired with a disabled media-proxy control in the settings
+    // page; the configured source proxy remains independent.
+    if (Platform.isOhos) return null;
     final proxy = proxyUriFor(traffic);
     return proxy?.scheme == 'http' ? proxy : null;
   }
@@ -65,12 +72,14 @@ final class FlutterNetworkProxyManager {
     return uri;
   }
 
-  /// Returns the explicit Runtime source override, or Android's system route.
-  /// Windows Runtime inherits its full environment map at process startup so
-  /// per-scheme proxy and NO_PROXY behavior remain intact there.
+  /// Returns the explicit Runtime source override, or the active mobile
+  /// system route. Windows Runtime inherits its full environment map at
+  /// process startup so per-scheme proxy and NO_PROXY behavior remain intact.
   Future<Uri?> runtimeSourceProxyUri() async {
     final custom = proxyUriFor(NetworkProxyTraffic.sourceHttp);
-    if (custom != null || !Platform.isAndroid) return custom;
+    if (custom != null || (!Platform.isAndroid && !Platform.isOhos)) {
+      return custom;
+    }
     return systemProxyUriFor(Uri.parse('https://system-proxy.invalid'));
   }
 

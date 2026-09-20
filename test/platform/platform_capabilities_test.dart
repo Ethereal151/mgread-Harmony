@@ -18,6 +18,15 @@ void main() {
     expect(capabilities.supportsPluginRuntime, isTrue);
     expect(capabilities.supportsPluginRuntimeNode, isTrue);
     expect(capabilities.supportsApplicationBrightness, isTrue);
+    expect(capabilities.supportsOhosSourceHttpTransport, isTrue);
+    expect(capabilities.supportsOhosWebViewProfileIsolation, isFalse);
+    expect(capabilities.supportsOhosWebViewCancellation, isTrue);
+    expect(capabilities.supportsOhosSourceSystemProxy, isTrue);
+    expect(capabilities.supportsOhosPlayerHttpProxy, isFalse);
+    expect(capabilities.supportsOhosVideoBufferedPosition, isFalse);
+    expect(capabilities.supportsOhosVideoEnhancement, isFalse);
+    expect(capabilities.supportsOhosSystemVolume, isFalse);
+    expect(capabilities.supportsOhosReaderVolumeKeys, isFalse);
   });
 
   test('desktop capabilities retain their existing responsibilities', () {

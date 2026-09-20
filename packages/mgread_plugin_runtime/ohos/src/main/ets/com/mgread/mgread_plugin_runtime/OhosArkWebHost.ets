@@ -17,6 +17,7 @@ import webview from '@ohos.web.webview'
 const VIEW_TYPE = 'mgread_ohos_arkweb'
 const MAX_WAIT_MS = 120_000
 const POLL_MS = 80
+const MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 interface WebHeaderPayload {
   headerKey: string
   headerValue: string
@@ -71,12 +72,15 @@ export class OhosArkWebSessionStreamHandler implements StreamHandler {
  *
  * The Node Runtime never receives a WebView object, cookie, profile or window
  * handle. Flutter only receives the bounded result maps defined by the
- * browser-session contract.
+ * browser-session contract. The supported ArkWeb API exposes global normal
+ * and incognito stores rather than named persistent profiles, so the Dart
+ * capability probe deliberately reports profile isolation as unavailable.
  */
 export default class OhosArkWebHost implements MethodCallHandler {
   private readonly sessions = new Map<string, OhosArkWebPlatformView>()
   private readonly pendingPluginIds = new Array<string>()
   private readonly cancelled = new Set<string>()
+  private readonly activeJobs = new Map<string, OhosArkWebPlatformView>()
   private readonly stream = new OhosArkWebSessionStreamHandler()
 
   getStreamHandler(): OhosArkWebSessionStreamHandler {
@@ -157,6 +161,7 @@ export default class OhosArkWebHost implements MethodCallHandler {
       await page.setVisible(true)
       return {version: 1, accepted: true, action: this.stringValue(raw, 'action')}
     }
+    if (jobId.length > 0) this.activeJobs.set(jobId, page)
     try {
       let response: Any
       if (operation.startsWith('page.')) response = await this.pageOperation(page, raw, jobId)
@@ -166,6 +171,10 @@ export default class OhosArkWebHost implements MethodCallHandler {
     } catch (error) {
       if (error instanceof OhosArkWebError) throw error
       throw new OhosArkWebError('plugin_execution_failed')
+    } finally {
+      if (jobId.length > 0 && this.activeJobs.get(jobId) === page) {
+        this.activeJobs.delete(jobId)
+      }
     }
   }
 
@@ -232,6 +241,7 @@ export default class OhosArkWebHost implements MethodCallHandler {
     }
     if (operation === 'page.navigate') {
       await page.load(this.stringValue(raw, 'url'), this.headers(raw.get('headers')))
+      await this.ensureNotCancelled(jobId, deadline)
       await this.waitReady(page, jobId, deadline, this.stringValue(raw, 'url'))
       return {}
     }
@@ -276,9 +286,13 @@ export default class OhosArkWebHost implements MethodCallHandler {
     const deadline = this.deadline(raw)
     const presentation = this.stringValue(raw, 'presentation')
     await page.setVisible(presentation === 'visible')
-    if (transport === 'http') throw new OhosArkWebError('unsupported')
+    // ArkWeb fetch uses the same page Cookie jar, redirect policy and user
+    // agent as the visible WebView.  It is the OHOS equivalent of Android's
+    // host HTTP transport; do not navigate the page for this branch.
+    if (transport === 'http') return await this.fetch(page, raw, jobId, deadline)
     const url = this.stringValue(raw, 'url')
     await page.load(url, this.headers(raw.get('headers')))
+    await this.ensureNotCancelled(jobId, deadline)
     await this.waitReady(page, jobId, deadline, url)
     if (transport === 'html') {
       const body: HtmlPayload = await page.html() as HtmlPayload
@@ -317,12 +331,14 @@ export default class OhosArkWebHost implements MethodCallHandler {
     await this.ensureNotCancelled(jobId, deadline)
     const url = this.stringValue(raw, 'url')
     const method = this.stringValue(raw, 'method') || 'GET'
-    const headers = this.headers(raw.get('headers'))
+    const headers = this.fetchHeaders(raw.get('headers'))
     const body: Any = raw.get('body')
     const responseType = this.stringValue(raw, 'responseType') || 'text'
-    const script = `fetch(${JSON.stringify(url)},{method:${JSON.stringify(method)},headers:${JSON.stringify(headers)},body:${body === null || body === undefined ? 'null' : JSON.stringify(body)},credentials:'include',redirect:'follow'}).then(async r=>{const h={};r.headers.forEach((v,k)=>h[k]=v);let b;${responseType === 'json' ? "b=await r.json()" : responseType === 'base64' ? "b=btoa(String.fromCharCode(...new Uint8Array(await r.arrayBuffer())))" : "b=await r.text()"};return JSON.stringify({status:r.status,url:r.url,headers:h,body:b})}).catch(_=>JSON.stringify({__mgreadBrowserSessionError:'plugin_execution_failed'}))`
+    const maxResponseBytes = this.numberValue(raw, 'maxResponseBytes') || MAX_RESPONSE_BYTES
+    const script = `(()=>{const c=new AbortController();const t=setTimeout(()=>c.abort(),${Math.max(1, deadline - Date.now())});return fetch(${JSON.stringify(url)},{method:${JSON.stringify(method)},headers:${JSON.stringify(headers)},body:${body === null || body === undefined ? 'null' : JSON.stringify(body)},credentials:'include',redirect:'follow',signal:c.signal}).then(async r=>{const source=new URL(${JSON.stringify(url)});const finalUrl=new URL(r.url);if(source.origin!==finalUrl.origin)throw new Error('cross_origin');const bytes=await r.arrayBuffer();if(bytes.byteLength>${maxResponseBytes})throw new Error('overloaded');const h={};for(const k of ['cache-control','content-type','etag','expires','last-modified']){const v=r.headers.get(k);if(v!==null)h[k]=v.slice(0,1024)};const text=new TextDecoder().decode(bytes);let b;${responseType === 'json' ? "b=JSON.parse(text)" : responseType === 'base64' ? "b=btoa(Array.from(new Uint8Array(bytes),x=>String.fromCharCode(x)).join(''))" : "b=text"};return JSON.stringify({status:r.status,url:r.url,headers:h,body:b})}).catch(error=>JSON.stringify({__mgreadBrowserSessionError:error?.message==='overloaded'?'overloaded':'plugin_execution_failed'})).finally(()=>clearTimeout(t))})()`
      const payload: FetchPayload | null = await this.decode(await page.script(script)) as FetchPayload | null
-     if (payload !== null && payload.__mgreadBrowserSessionError !== undefined) throw new OhosArkWebError('plugin_execution_failed')
+     await this.ensureNotCancelled(jobId, deadline)
+     if (payload !== null && payload.__mgreadBrowserSessionError !== undefined) throw new OhosArkWebError(payload.__mgreadBrowserSessionError)
      if (payload === null) throw new OhosArkWebError('plugin_execution_failed')
      return responseType === 'text' ? {version: 1, status: payload.status, finalUrl: payload.url, headers: payload.headers, body: payload.body} : payload
   }
@@ -369,7 +385,12 @@ export default class OhosArkWebHost implements MethodCallHandler {
 
   private cancel(args: Map<string, Any> | null): void {
     const jobId = this.stringValue(args ?? new Map<string, Any>(), 'jobId')
-    if (jobId.length > 0) this.cancelled.add(jobId)
+    if (jobId.length === 0) return
+    this.cancelled.add(jobId)
+    // stop() is the only ArkWeb primitive that releases an in-flight
+    // load/script/fetch promptly on the supported API surface.  The job set
+    // remains authoritative so a late Promise cannot publish a result.
+    this.activeJobs.get(jobId)?.stop()
   }
 
   private fromJsonValue(value: Any): Any {
@@ -386,6 +407,7 @@ export default class OhosArkWebHost implements MethodCallHandler {
 
   dispose(): void {
     this.cancelled.clear()
+    this.activeJobs.clear()
     this.sessions.forEach((page: OhosArkWebPlatformView, pluginId: string): void => {
       page.close()
     })
@@ -413,6 +435,15 @@ export default class OhosArkWebHost implements MethodCallHandler {
         const payload: WebHeaderPayload = {headerKey: name, headerValue: header}
         result.push(payload as webview.WebHeader)
       }
+    })
+    return result
+  }
+
+  private fetchHeaders(value: Any): Record<string, string> {
+    const result: Record<string, string> = {}
+    if (!(value instanceof Map)) return result
+    value.forEach((header: Any, name: string): void => {
+      if (typeof name === 'string' && typeof header === 'string') result[name] = header
     })
     return result
   }
@@ -603,6 +634,11 @@ export class OhosArkWebPlatformView extends PlatformView {
     try { return this.controller.getUrl() } catch (_) { return '' }
   }
 
+  stop(): void {
+    if (this.disposed) return
+    try { this.controller.stop() } catch (_) { /* best effort */ }
+  }
+
   async setVisible(value: boolean): Promise<void> {
     this.visible = value
     this.host.emitVisibility(this.pluginId, value)
@@ -610,8 +646,8 @@ export class OhosArkWebPlatformView extends PlatformView {
 
   async close(): Promise<void> {
     if (this.disposed) return
+    this.stop()
     this.disposed = true
-    try { this.controller.stop() } catch (_) { /* best effort */ }
     this.host.detach(this.pluginId, this)
     this.host.emitRemoved(this.pluginId)
   }

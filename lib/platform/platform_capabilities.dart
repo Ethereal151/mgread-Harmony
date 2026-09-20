@@ -58,6 +58,21 @@ final class OhosCapabilitySnapshot {
   };
 }
 
+/// Product-facing OHOS feature gates.  A gate is deliberately separate from
+/// the native probe above: a native API may exist while its semantics are not
+/// strong enough for MgRead's public contract.
+enum OhosPlatformCapability {
+  sourceHttpTransport,
+  webViewProfileIsolation,
+  webViewCancellation,
+  sourceSystemProxy,
+  playerHttpProxy,
+  videoBufferedPosition,
+  videoEnhancement,
+  systemVolume,
+  readerVolumeKeys,
+}
+
 /// The platform services that the current Flutter host can safely use.
 final class PlatformCapabilities {
   PlatformCapabilities._(this.operatingSystem);
@@ -97,6 +112,39 @@ final class PlatformCapabilities {
   bool get supportsAudioPlayback => true;
   bool get supportsVideoPlayback => true;
   bool get supportsBarcodeScanning => true;
+
+  /// OHOS capabilities whose UI and public actions must agree with the
+  /// implementation.  Unsupported entries are intentionally explicit rather
+  /// than inferred from plugin registration.
+  bool supportsOhosCapability(OhosPlatformCapability capability) {
+    if (!isOhos) return true;
+    return switch (capability) {
+      OhosPlatformCapability.sourceHttpTransport => true,
+      OhosPlatformCapability.webViewProfileIsolation => false,
+      OhosPlatformCapability.webViewCancellation => true,
+      OhosPlatformCapability.sourceSystemProxy => true,
+      // AVPlayer has no supported per-session HTTP proxy contract on OHOS.
+      OhosPlatformCapability.playerHttpProxy => false,
+      // AVPlayer reports buffering percentage only; it does not expose a
+      // stable time-based buffered position on the supported device matrix.
+      OhosPlatformCapability.videoBufferedPosition => false,
+      OhosPlatformCapability.videoEnhancement => false,
+      // HarmonyOS application APIs can read but cannot directly adjust the
+      // global system media volume for a normal third-party application.
+      OhosPlatformCapability.systemVolume => false,
+      OhosPlatformCapability.readerVolumeKeys => false,
+    };
+  }
+
+  bool get supportsOhosSourceHttpTransport => supportsOhosCapability(OhosPlatformCapability.sourceHttpTransport);
+  bool get supportsOhosWebViewProfileIsolation => supportsOhosCapability(OhosPlatformCapability.webViewProfileIsolation);
+  bool get supportsOhosWebViewCancellation => supportsOhosCapability(OhosPlatformCapability.webViewCancellation);
+  bool get supportsOhosSourceSystemProxy => supportsOhosCapability(OhosPlatformCapability.sourceSystemProxy);
+  bool get supportsOhosPlayerHttpProxy => supportsOhosCapability(OhosPlatformCapability.playerHttpProxy);
+  bool get supportsOhosVideoBufferedPosition => supportsOhosCapability(OhosPlatformCapability.videoBufferedPosition);
+  bool get supportsOhosVideoEnhancement => supportsOhosCapability(OhosPlatformCapability.videoEnhancement);
+  bool get supportsOhosSystemVolume => supportsOhosCapability(OhosPlatformCapability.systemVolume);
+  bool get supportsOhosReaderVolumeKeys => supportsOhosCapability(OhosPlatformCapability.readerVolumeKeys);
 
   /// Whether the Flutter Runtime bridge is registered.
   bool get supportsPluginRuntime => isAndroid || isWindows || isMacOS || isOhos;

@@ -34,6 +34,9 @@ final class VideoPlayerView extends StatefulWidget {
     this.startupSession,
     this.controller,
     this.backendFactory = createMediaKitVideoPlaybackBackend,
+    this.supportsBufferedPosition = true,
+    this.supportsEnhancement = true,
+    this.supportsSystemVolume = true,
     this.autoPlay = true,
     this.autoAdvance = true,
     this.progressSaveThrottle = const Duration(seconds: 2),
@@ -67,6 +70,15 @@ final class VideoPlayerView extends StatefulWidget {
   ///
   /// Tests should inject a deterministic fake and remount to replace it.
   final VideoPlaybackBackendFactory backendFactory;
+
+  /// Whether the host can provide a real time-based buffered position.
+  final bool supportsBufferedPosition;
+
+  /// Whether the selected backend has a real video enhancement implementation.
+  final bool supportsEnhancement;
+
+  /// Whether vertical gestures may control global system media volume.
+  final bool supportsSystemVolume;
 
   /// Whether the restored episode should start automatically.
   final bool autoPlay;
@@ -738,6 +750,9 @@ final class _VideoPlayerViewState extends State<VideoPlayerView>
     onNextEpisode: playNextEpisode,
     onAutoAdvance: setAutoAdvance,
     onControlsLocked: setControlsLocked,
+    supportsBufferedPosition: widget.supportsBufferedPosition,
+    supportsEnhancement: widget.supportsEnhancement,
+    supportsSystemVolume: widget.supportsSystemVolume,
     onInteractionStart: _handleInteractionStart,
     onInteractionEnd: _handleInteractionEnd,
     onFit: cycleFitMode,

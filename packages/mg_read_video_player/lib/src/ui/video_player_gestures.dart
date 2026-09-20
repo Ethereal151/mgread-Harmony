@@ -32,6 +32,7 @@ final class VideoPlayerGestureLayer extends StatefulWidget {
     required this.onRate,
     required this.onReadSystemVolume,
     required this.onSystemVolume,
+    this.supportsSystemVolume = true,
     required this.onReadBrightness,
     required this.onBrightness,
     required this.locked,
@@ -49,6 +50,7 @@ final class VideoPlayerGestureLayer extends StatefulWidget {
   final ValueChanged<double> onRate;
   final Future<double?> Function() onReadSystemVolume;
   final Future<void> Function(double) onSystemVolume;
+  final bool supportsSystemVolume;
   final Future<double?> Function() onReadBrightness;
   final ValueChanged<double> onBrightness;
   final bool locked;
@@ -147,6 +149,12 @@ final class _VideoPlayerGestureLayerState
     _verticalDistance = 0;
     _brightnessGesture =
         details.localPosition.dx < (context.size?.width ?? 0) / 2;
+    if (!_brightnessGesture && !widget.supportsSystemVolume) {
+      _verticalGestureActive = false;
+      _finishHudSoon();
+      widget.onInteractionEnd();
+      return;
+    }
     final generation = ++_verticalReadGeneration;
     if (_brightnessGesture) {
       _brightnessBase = null;

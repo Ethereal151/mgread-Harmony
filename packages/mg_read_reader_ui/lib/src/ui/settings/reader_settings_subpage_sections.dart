@@ -243,12 +243,13 @@ extension _ReaderSettingsSubpageSections on _ReaderSettingsSheetState {
           onChanged: (bool value) =>
               _commit(_preferences.copyWith(singleHandMode: value)),
         ),
-        _settingsSwitch(
-          title: ReaderStrings.pageTurnShortcuts,
-          value: _preferences.pageTurnShortcuts,
-          onChanged: (bool value) =>
-              _commit(_preferences.copyWith(pageTurnShortcuts: value)),
-        ),
+        if (widget.platformCapabilities.volumeKeyPageTurning)
+          _settingsSwitch(
+            title: ReaderStrings.pageTurnShortcuts,
+            value: _preferences.pageTurnShortcuts,
+            onChanged: (bool value) =>
+                _commit(_preferences.copyWith(pageTurnShortcuts: value)),
+          ),
         if (widget.platformCapabilities.keepScreenOn)
           _settingsSwitch(
             title: ReaderStrings.keepScreenOn,

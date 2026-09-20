@@ -1,8 +1,13 @@
 part of mgread_plugin_runtime;
 
-const MethodChannel _ohosRuntimeChannel = MethodChannel('mgread_plugin_runtime/ohos');
-const EventChannel _ohosRuntimeProgressChannel = EventChannel('mgread_plugin_runtime/ohos/progress');
+const MethodChannel _ohosRuntimeChannel = MethodChannel(
+  'mgread_plugin_runtime/ohos',
+);
+const EventChannel _ohosRuntimeProgressChannel = EventChannel(
+  'mgread_plugin_runtime/ohos/progress',
+);
 const Duration _ohosRuntimeTimeout = Duration(seconds: 30);
+const int _maxOhosDiagnosticEntries = 32;
 
 @immutable
 final class _OhosProxyInvocation extends PluginInvocation<_OhosProxyResult> {
@@ -14,12 +19,17 @@ final class _OhosProxyInvocation extends PluginInvocation<_OhosProxyResult> {
   String get _wireMethod => 'runtime.pluginHttpProxy.configure.v1';
 
   @override
-  Map<String, Object?> get _wireParams => <String, Object?>{'proxyUrl': proxyUri?.toString()};
+  Map<String, Object?> get _wireParams => <String, Object?>{
+    'proxyUrl': proxyUri?.toString(),
+  };
 
   @override
   _OhosProxyResult _decodeResult(Object? value) {
     if (value is! Map<Object?, Object?> || value['enabled'] is! bool) {
-      throw const PluginRuntimeException('invalid_response', 'The OHOS Runtime returned an invalid plugin HTTP proxy result.');
+      throw const PluginRuntimeException(
+        'invalid_response',
+        'The OHOS Runtime returned an invalid plugin HTTP proxy result.',
+      );
     }
     return _OhosProxyResult(value['enabled'] as bool);
   }
@@ -65,14 +75,16 @@ final class _OhosRawResult {
 /// The native plugin owns all process/VM details. Dart only sees the same
 /// typed invocation envelope used by the other Runtime hosts.
 final class _OhosRuntimeSupervisor implements _RuntimeSupervisor {
-  final StreamController<RuntimeDiagnostic> _diagnosticsController = StreamController<RuntimeDiagnostic>.broadcast();
-  final StreamController<RuntimeInitializationProgress> _initializationController =
+  final StreamController<RuntimeDiagnostic> _diagnosticsController =
+      StreamController<RuntimeDiagnostic>.broadcast();
+  final List<RuntimeDiagnostic> _latestDiagnostics = <RuntimeDiagnostic>[];
+  final StreamController<RuntimeInitializationProgress>
+  _initializationController =
       StreamController<RuntimeInitializationProgress>.broadcast();
   _OhosRuntimeSupervisor() {
-    _progressSubscription = _ohosRuntimeProgressChannel.receiveBroadcastStream().listen(
-      _onNativeProgress,
-      onError: (Object _, StackTrace __) {},
-    );
+    _progressSubscription = _ohosRuntimeProgressChannel
+        .receiveBroadcastStream()
+        .listen(_onNativeProgress, onError: (Object _, StackTrace __) {});
   }
 
   late final StreamSubscription<dynamic> _progressSubscription;
@@ -84,7 +96,9 @@ final class _OhosRuntimeSupervisor implements _RuntimeSupervisor {
     if (raw is! Map) return;
     final progress = RuntimeInitializationProgress.fromPlatform(
       catalogState: raw['catalogState'] as String?,
-      completedBytes: raw['completedBytes'] is int ? raw['completedBytes'] as int : 0,
+      completedBytes: raw['completedBytes'] is int
+          ? raw['completedBytes'] as int
+          : 0,
       detail: raw['detail'] as String?,
       durationMicros: raw['durationMicros'] as int?,
       itemCount: raw['itemCount'] as int?,
@@ -98,109 +112,229 @@ final class _OhosRuntimeSupervisor implements _RuntimeSupervisor {
   Stream<RuntimeDiagnostic> get diagnostics => _diagnosticsController.stream;
 
   @override
-  Stream<RuntimeInitializationProgress> get initialization => _initializationController.stream;
+  Stream<RuntimeInitializationProgress> get initialization =>
+      _initializationController.stream;
 
   @override
-  Stream<DevelopmentPluginChangeBatch> get developmentChanges => const Stream<DevelopmentPluginChangeBatch>.empty();
+  Stream<DevelopmentPluginChangeBatch> get developmentChanges =>
+      const Stream<DevelopmentPluginChangeBatch>.empty();
 
   @override
-  List<RuntimeDiagnostic> get latestDiagnostics => const <RuntimeDiagnostic>[];
+  List<RuntimeDiagnostic> get latestDiagnostics =>
+      List<RuntimeDiagnostic>.unmodifiable(_latestDiagnostics);
 
   @override
   int get debugProcessStartCount => 0;
 
   @override
-  Future<T> invoke<T>(PluginInvocation<T> invocation, {PluginInvocationCancellation? cancellation}) async {
+  Future<T> invoke<T>(
+    PluginInvocation<T> invocation, {
+    PluginInvocationCancellation? cancellation,
+  }) async {
     if (_disposed) {
-      throw const PluginRuntimeException('runtime_unavailable', 'The OHOS Runtime has been closed.');
+      throw const PluginRuntimeException(
+        'runtime_unavailable',
+        'The OHOS Runtime has been closed.',
+      );
     }
     cancellation?._throwIfCancelled();
-    final requestId = 'ohos-${DateTime.now().microsecondsSinceEpoch.toRadixString(36)}-${++_invocationSequence}';
-    final timeout = invocation._timeout > _ohosRuntimeTimeout ? invocation._timeout : _ohosRuntimeTimeout;
+    final requestId =
+        'ohos-${DateTime.now().microsecondsSinceEpoch.toRadixString(36)}-${++_invocationSequence}';
+    final timeout = invocation._timeout > _ohosRuntimeTimeout
+        ? invocation._timeout
+        : _ohosRuntimeTimeout;
+    _recordDiagnostic(
+      const RuntimeDiagnostic(
+        code: 'runtime_facade_invoke_started',
+        level: RuntimeDiagnosticLevel.info,
+        message: 'The OHOS Runtime capability invocation started.',
+      ),
+    );
     try {
       final encoded =
           await _awaitPluginInvocation(
-            _ohosRuntimeChannel.invokeMethod<String>('invoke', <String, Object?>{
-              'requestId': requestId,
-              'method': invocation._wireMethod,
-              'params': invocation._wireParams,
-              'deadlineUnixMs': DateTime.now().add(timeout).millisecondsSinceEpoch,
-            }),
+            _ohosRuntimeChannel
+                .invokeMethod<String>('invoke', <String, Object?>{
+                  'requestId': requestId,
+                  'method': invocation._wireMethod,
+                  'params': invocation._wireParams,
+                  'deadlineUnixMs': DateTime.now()
+                      .add(timeout)
+                      .millisecondsSinceEpoch,
+                }),
             cancellation,
             onCancel: () => _cancel(requestId),
           ).timeout(
             timeout,
             onTimeout: () {
               _cancel(requestId);
-              throw const PluginRuntimeException('timeout', 'The OHOS Runtime capability call timed out.');
+              throw const PluginRuntimeException(
+                'timeout',
+                'The OHOS Runtime capability call timed out.',
+              );
             },
           );
       if (encoded == null) {
-        throw const PluginRuntimeException('runtime_no_response', 'The OHOS Runtime returned no result.');
+        throw const PluginRuntimeException(
+          'runtime_no_response',
+          'The OHOS Runtime returned no result.',
+        );
       }
       final decoded = jsonDecode(encoded);
       if (decoded is! Map<Object?, Object?>) {
-        throw const PluginRuntimeException('invalid_response', 'The OHOS Runtime returned an invalid result.');
+        throw const PluginRuntimeException(
+          'invalid_response',
+          'The OHOS Runtime returned an invalid result.',
+        );
       }
       if (decoded['ok'] != true) {
         final error = decoded['error'];
-        final code = error is Map<Object?, Object?> && error['code'] is String ? error['code'] as String : 'internal';
-        final message = error is Map<Object?, Object?> && error['message'] is String
+        final code = error is Map<Object?, Object?> && error['code'] is String
+            ? error['code'] as String
+            : 'internal';
+        final message =
+            error is Map<Object?, Object?> && error['message'] is String
             ? error['message'] as String
             : 'The OHOS Runtime rejected the request.';
         throw PluginRuntimeException(code, message);
       }
-      return invocation._decodeResult(decoded['result']);
+      final result = invocation._decodeResult(decoded['result']);
+      _recordDiagnostic(
+        const RuntimeDiagnostic(
+          code: 'runtime_facade_invoke_completed',
+          level: RuntimeDiagnosticLevel.info,
+          message: 'The OHOS Runtime capability invocation completed.',
+        ),
+      );
+      return result;
     } on PluginRuntimeException {
+      _recordDiagnostic(
+        const RuntimeDiagnostic(
+          code: 'runtime_facade_invoke_rejected',
+          level: RuntimeDiagnosticLevel.warning,
+          message: 'The OHOS Runtime rejected a capability invocation.',
+        ),
+      );
       rethrow;
     } on PlatformException catch (error) {
-      throw PluginRuntimeException(error.code, error.message ?? 'The OHOS Runtime platform bridge failed.');
+      _recordDiagnostic(
+        const RuntimeDiagnostic(
+          code: 'runtime_facade_invoke_bridge_failed',
+          level: RuntimeDiagnosticLevel.error,
+          message: 'The OHOS Runtime platform bridge failed.',
+        ),
+      );
+      throw PluginRuntimeException(
+        error.code,
+        error.message ?? 'The OHOS Runtime platform bridge failed.',
+      );
     } on TimeoutException {
-      throw const PluginRuntimeException('timeout', 'The OHOS Runtime capability call timed out.');
+      _recordDiagnostic(
+        const RuntimeDiagnostic(
+          code: 'runtime_facade_invoke_timeout',
+          level: RuntimeDiagnosticLevel.warning,
+          message: 'The OHOS Runtime capability invocation timed out.',
+        ),
+      );
+      throw const PluginRuntimeException(
+        'timeout',
+        'The OHOS Runtime capability call timed out.',
+      );
     } on Object {
-      throw const PluginRuntimeException('runtime_unavailable', 'The OHOS Runtime capability call failed.');
+      _recordDiagnostic(
+        const RuntimeDiagnostic(
+          code: 'runtime_facade_invoke_failed',
+          level: RuntimeDiagnosticLevel.error,
+          message: 'The OHOS Runtime capability invocation failed.',
+        ),
+      );
+      throw const PluginRuntimeException(
+        'runtime_unavailable',
+        'The OHOS Runtime capability call failed.',
+      );
     }
+  }
+
+  void _recordDiagnostic(RuntimeDiagnostic diagnostic) {
+    if (_latestDiagnostics.length == _maxOhosDiagnosticEntries) {
+      _latestDiagnostics.removeAt(0);
+    }
+    _latestDiagnostics.add(diagnostic);
+    if (!_diagnosticsController.isClosed)
+      _diagnosticsController.add(diagnostic);
   }
 
   void _cancel(String requestId) {
     unawaited(
-      _ohosRuntimeChannel.invokeMethod<void>('cancelInvocation', <String, Object?>{'requestId': requestId}).catchError((Object _) {}),
+      _ohosRuntimeChannel
+          .invokeMethod<void>('cancelInvocation', <String, Object?>{
+            'requestId': requestId,
+          })
+          .catchError((Object _) {}),
     );
   }
 
   Future<Map<String, String>> _ensureRuntimeRoots() async {
     return _runtimeRoots ??= () async {
-      final encoded = await _ohosRuntimeChannel.invokeMethod<String>('runtimePaths');
+      final encoded = await _ohosRuntimeChannel.invokeMethod<String>(
+        'runtimePaths',
+      );
       if (encoded == null) {
-        throw const PluginRuntimeException('runtime_no_response', 'The OHOS Runtime did not return its private roots.');
+        throw const PluginRuntimeException(
+          'runtime_no_response',
+          'The OHOS Runtime did not return its private roots.',
+        );
       }
       final decoded = jsonDecode(encoded);
-      if (decoded is! Map<Object?, Object?> || decoded['dataRoot'] is! String || decoded['inboxRoot'] is! String) {
-        throw const PluginRuntimeException('invalid_response', 'The OHOS Runtime returned invalid private roots.');
+      if (decoded is! Map<Object?, Object?> ||
+          decoded['dataRoot'] is! String ||
+          decoded['inboxRoot'] is! String) {
+        throw const PluginRuntimeException(
+          'invalid_response',
+          'The OHOS Runtime returned invalid private roots.',
+        );
       }
-      return <String, String>{'dataRoot': decoded['dataRoot'] as String, 'inboxRoot': decoded['inboxRoot'] as String};
+      return <String, String>{
+        'dataRoot': decoded['dataRoot'] as String,
+        'inboxRoot': decoded['inboxRoot'] as String,
+      };
     }();
   }
 
-  Future<Object?> _invokeRaw(String method, Map<String, Object?> params, {Duration timeout = const Duration(minutes: 2)}) =>
-      invoke<_OhosRawResult>(_OhosRawInvocation(method, params, timeout: timeout)).then((value) => value.value);
+  Future<Object?> _invokeRaw(
+    String method,
+    Map<String, Object?> params, {
+    Duration timeout = const Duration(minutes: 2),
+  }) => invoke<_OhosRawResult>(
+    _OhosRawInvocation(method, params, timeout: timeout),
+  ).then((value) => value.value);
 
   Future<void> _restartNativeRuntime() async {
     try {
       await _ohosRuntimeChannel.invokeMethod<String>('restart');
     } on Object catch (error) {
-      throw PluginRuntimeException('runtime_shutdown_failed', 'The OHOS Runtime could not be restarted: $error');
+      throw PluginRuntimeException(
+        'runtime_shutdown_failed',
+        'The OHOS Runtime could not be restarted: $error',
+      );
     }
   }
 
-  Future<void> _copyStream(Stream<List<int>> source, File target, int expectedBytes) async {
+  Future<void> _copyStream(
+    Stream<List<int>> source,
+    File target,
+    int expectedBytes,
+  ) async {
     var copied = 0;
     final sink = target.openWrite();
     try {
       await for (final chunk in source) {
         copied += chunk.length;
         if (copied > expectedBytes || copied > maxPluginTransferBytes) {
-          throw const PluginRuntimeException('plugin_transfer_size_mismatch', 'The plugin transfer artifact exceeded its declared size.');
+          throw const PluginRuntimeException(
+            'plugin_transfer_size_mismatch',
+            'The plugin transfer artifact exceeded its declared size.',
+          );
         }
         sink.add(chunk);
       }
@@ -208,7 +342,10 @@ final class _OhosRuntimeSupervisor implements _RuntimeSupervisor {
       await sink.close();
     }
     if (copied != expectedBytes) {
-      throw const PluginRuntimeException('plugin_transfer_size_mismatch', 'The plugin transfer artifact was truncated.');
+      throw const PluginRuntimeException(
+        'plugin_transfer_size_mismatch',
+        'The plugin transfer artifact was truncated.',
+      );
     }
   }
 
@@ -220,7 +357,10 @@ final class _OhosRuntimeSupervisor implements _RuntimeSupervisor {
         yield chunk;
       }
       if (copied != expectedBytes) {
-        throw const PluginRuntimeException('plugin_transfer_size_mismatch', 'The OHOS Runtime transfer artifact was truncated.');
+        throw const PluginRuntimeException(
+          'plugin_transfer_size_mismatch',
+          'The OHOS Runtime transfer artifact was truncated.',
+        );
       }
     } finally {
       try {
@@ -238,20 +378,28 @@ final class _OhosRuntimeSupervisor implements _RuntimeSupervisor {
 
   @override
   Future<void> configurePluginHttpProxy(Uri? proxyUri) async {
-    final result = await invoke<_OhosProxyResult>(_OhosProxyInvocation(proxyUri));
+    final result = await invoke<_OhosProxyResult>(
+      _OhosProxyInvocation(proxyUri),
+    );
     if (result.enabled != (proxyUri != null)) {
-      throw const PluginRuntimeException('invalid_response', 'The OHOS Runtime returned an invalid plugin HTTP proxy result.');
+      throw const PluginRuntimeException(
+        'invalid_response',
+        'The OHOS Runtime returned an invalid plugin HTTP proxy result.',
+      );
     }
   }
 
   @override
-  Future<void> importLocalPlugin(String sourcePath) => _importLocalPlugin(sourcePath);
+  Future<void> importLocalPlugin(String sourcePath) =>
+      _importLocalPlugin(sourcePath);
 
   @override
   Future<bool> pickAndImportLocalPlugin() => _pickAndImportLocalPlugin();
 
   @override
-  Future<Stream<List<int>>> exportPluginArtifact(PluginTransferArtifact artifact) async {
+  Future<Stream<List<int>>> exportPluginArtifact(
+    PluginTransferArtifact artifact,
+  ) async {
     final materialized = await materializePluginArtifact(
       PluginTransferOffer(
         developmentFingerprint: artifact.developmentFingerprint,
@@ -262,7 +410,8 @@ final class _OhosRuntimeSupervisor implements _RuntimeSupervisor {
         version: artifact.version,
       ),
     );
-    if (materialized.artifact.bytes != artifact.bytes || materialized.artifact.checksum != artifact.checksum) {
+    if (materialized.artifact.bytes != artifact.bytes ||
+        materialized.artifact.checksum != artifact.checksum) {
       throw const PluginRuntimeException(
         'plugin_transfer_checksum_mismatch',
         'The Runtime transfer artifact identity did not match the request.',
@@ -272,32 +421,56 @@ final class _OhosRuntimeSupervisor implements _RuntimeSupervisor {
   }
 
   @override
-  Future<MaterializedPluginArtifact> materializePluginArtifact(PluginTransferOffer offer) => _materializePluginArtifact(offer);
+  Future<MaterializedPluginArtifact> materializePluginArtifact(
+    PluginTransferOffer offer,
+  ) => _materializePluginArtifact(offer);
 
   @override
-  Future<PluginDevelopmentPackage> packageDevelopmentPlugin(String pluginId, String directoryPath) =>
-      _packageDevelopmentPlugin(pluginId, directoryPath);
+  Future<PluginDevelopmentPackage> packageDevelopmentPlugin(
+    String pluginId,
+    String directoryPath,
+  ) => _packageDevelopmentPlugin(pluginId, directoryPath);
 
   @override
   Future<List<PluginTransferImportResult>> importPluginArtifacts(
-    List<({PluginTransferArtifact artifact, Stream<List<int>> bytes})> artifacts, {
+    List<({PluginTransferArtifact artifact, Stream<List<int>> bytes})>
+    artifacts, {
     Set<String> forceUpgradePluginIds = const <String>{},
-  }) => _importPluginArtifacts(artifacts, forceUpgradePluginIds: forceUpgradePluginIds);
+  }) => _importPluginArtifacts(
+    artifacts,
+    forceUpgradePluginIds: forceUpgradePluginIds,
+  );
 
   @override
-  Future<void> setDevelopmentDirectory(String path) =>
-      Future<void>.error(const PluginRuntimeException('invalid_request', 'OHOS development sources must be imported as plugin artifacts.'));
+  Future<void> setDevelopmentDirectory(String path) => Future<void>.error(
+    const PluginRuntimeException(
+      'invalid_request',
+      'OHOS development sources must be imported as plugin artifacts.',
+    ),
+  );
 
   Future<void> _importLocalPlugin(String sourcePath) async {
     final format = _formatForPath(sourcePath);
-    if (format == null) throw const PluginRuntimeException('file_name_invalid', 'The selected file is not a MgRead plugin artifact.');
+    if (format == null)
+      throw const PluginRuntimeException(
+        'file_name_invalid',
+        'The selected file is not a MgRead plugin artifact.',
+      );
     final source = File(sourcePath);
-    if (!await source.exists()) throw const PluginRuntimeException('not_found', 'The selected plugin artifact is unavailable.');
+    if (!await source.exists())
+      throw const PluginRuntimeException(
+        'not_found',
+        'The selected plugin artifact is unavailable.',
+      );
     final roots = await _ensureRuntimeRoots();
     final inbox = Directory(roots['inboxRoot']!);
     await inbox.create(recursive: true);
-    final suffix = format == PluginArtifactFormat.singleFile ? '.mgplugin.js' : '.mgplugin';
-    final target = File('${inbox.path}${Platform.pathSeparator}import-${DateTime.now().microsecondsSinceEpoch}$suffix');
+    final suffix = format == PluginArtifactFormat.singleFile
+        ? '.mgplugin.js'
+        : '.mgplugin';
+    final target = File(
+      '${inbox.path}${Platform.pathSeparator}import-${DateTime.now().microsecondsSinceEpoch}$suffix',
+    );
     final temporary = File('${target.path}.part');
     try {
       await source.copy(temporary.path);
@@ -305,7 +478,10 @@ final class _OhosRuntimeSupervisor implements _RuntimeSupervisor {
       await _restartNativeRuntime();
       await invoke(const RuntimePingInvocation());
     } on FileSystemException {
-      throw const PluginRuntimeException('disk_full', 'The selected plugin artifact could not be imported.');
+      throw const PluginRuntimeException(
+        'disk_full',
+        'The selected plugin artifact could not be imported.',
+      );
     } finally {
       if (await temporary.exists()) await temporary.delete();
     }
@@ -313,17 +489,27 @@ final class _OhosRuntimeSupervisor implements _RuntimeSupervisor {
 
   Future<bool> _pickAndImportLocalPlugin() async {
     try {
-      final encoded = await _ohosRuntimeChannel.invokeMethod<String>('pickLocalPlugin');
+      final encoded = await _ohosRuntimeChannel.invokeMethod<String>(
+        'pickLocalPlugin',
+      );
       if (encoded == null || encoded.isEmpty) return false;
       await _importLocalPlugin(encoded);
       return true;
     } on PlatformException catch (error) {
-      throw PluginRuntimeException(error.code, error.message ?? 'The OHOS file picker failed.');
+      throw PluginRuntimeException(
+        error.code,
+        error.message ?? 'The OHOS file picker failed.',
+      );
     }
   }
 
-  Future<MaterializedPluginArtifact> _materializePluginArtifact(PluginTransferOffer offer) async {
-    final raw = await _invokeRaw('plugins.transfer.export.v2', <String, Object?>{'id': offer.pluginId, 'version': offer.version});
+  Future<MaterializedPluginArtifact> _materializePluginArtifact(
+    PluginTransferOffer offer,
+  ) async {
+    final raw = await _invokeRaw(
+      'plugins.transfer.export.v2',
+      <String, Object?>{'id': offer.pluginId, 'version': offer.version},
+    );
     final result = _jsonObject(raw, 'Plugin transfer export result');
     final token = result['token'];
     final artifact = _decodePluginTransferArtifact(result);
@@ -340,35 +526,58 @@ final class _OhosRuntimeSupervisor implements _RuntimeSupervisor {
       );
     }
     final roots = await _ensureRuntimeRoots();
-    final directory = Directory('${roots['dataRoot']!}${Platform.pathSeparator}temporary${Platform.pathSeparator}ohos-transfer');
+    final directory = Directory(
+      '${roots['dataRoot']!}${Platform.pathSeparator}temporary${Platform.pathSeparator}ohos-transfer',
+    );
     await directory.create(recursive: true);
-    final file = File('${directory.path}${Platform.pathSeparator}export-${DateTime.now().microsecondsSinceEpoch}');
-    final encoded = await _ohosRuntimeChannel.invokeMethod<String>('materializeTransfer', <String, Object?>{
-      'token': token,
-      'destination': file.path,
-    });
-    if (encoded == null) throw const PluginRuntimeException('runtime_no_response', 'The OHOS Runtime did not return the transfer result.');
+    final file = File(
+      '${directory.path}${Platform.pathSeparator}export-${DateTime.now().microsecondsSinceEpoch}',
+    );
+    final encoded = await _ohosRuntimeChannel.invokeMethod<String>(
+      'materializeTransfer',
+      <String, Object?>{'token': token, 'destination': file.path},
+    );
+    if (encoded == null)
+      throw const PluginRuntimeException(
+        'runtime_no_response',
+        'The OHOS Runtime did not return the transfer result.',
+      );
     final copied = jsonDecode(encoded);
     if (copied is! Map<Object?, Object?> || copied['ok'] != true)
       throw const PluginRuntimeException(
         'plugin_transfer_artifact_missing',
         'The OHOS Runtime could not materialize the transfer artifact.',
       );
-    return MaterializedPluginArtifact(artifact: artifact, bytes: _readTemporary(file, artifact.bytes));
+    return MaterializedPluginArtifact(
+      artifact: artifact,
+      bytes: _readTemporary(file, artifact.bytes),
+    );
   }
 
-  Future<PluginDevelopmentPackage> _packageDevelopmentPlugin(String pluginId, String directoryPath) async {
+  Future<PluginDevelopmentPackage> _packageDevelopmentPlugin(
+    String pluginId,
+    String directoryPath,
+  ) async {
     final directory = Directory(directoryPath);
-    if (!await directory.exists()) throw const PluginRuntimeException('file_unavailable', 'The selected output directory is unavailable.');
+    if (!await directory.exists())
+      throw const PluginRuntimeException(
+        'file_unavailable',
+        'The selected output directory is unavailable.',
+      );
     final result = _jsonObject(
-      await _invokeRaw('plugins.development.package.v1', <String, Object?>{'pluginId': pluginId}, timeout: const Duration(minutes: 2)),
+      await _invokeRaw('plugins.development.package.v1', <String, Object?>{
+        'pluginId': pluginId,
+      }, timeout: const Duration(minutes: 2)),
       'Development plugin package result',
     );
     final token = result['token'];
     final fileName = result['fileName'];
     final artifact = _decodePluginTransferArtifact(result);
     if (token is! String || fileName is! String)
-      throw const PluginRuntimeException('invalid_response', 'The Runtime returned an invalid development package result.');
+      throw const PluginRuntimeException(
+        'invalid_response',
+        'The Runtime returned an invalid development package result.',
+      );
     final target = File('${directory.path}${Platform.pathSeparator}$fileName');
     if (await target.exists())
       throw const PluginRuntimeException(
@@ -381,11 +590,13 @@ final class _OhosRuntimeSupervisor implements _RuntimeSupervisor {
     );
     await temporary.parent.create(recursive: true);
     try {
-      final encoded = await _ohosRuntimeChannel.invokeMethod<String>('materializeTransfer', <String, Object?>{
-        'token': token,
-        'destination': temporary.path,
-      });
-      if (encoded == null || jsonDecode(encoded) is! Map<Object?, Object?> || (jsonDecode(encoded) as Map<Object?, Object?>)['ok'] != true)
+      final encoded = await _ohosRuntimeChannel.invokeMethod<String>(
+        'materializeTransfer',
+        <String, Object?>{'token': token, 'destination': temporary.path},
+      );
+      if (encoded == null ||
+          jsonDecode(encoded) is! Map<Object?, Object?> ||
+          (jsonDecode(encoded) as Map<Object?, Object?>)['ok'] != true)
         throw const PluginRuntimeException(
           'plugin_transfer_artifact_missing',
           'The Runtime could not materialize the development package.',
@@ -398,12 +609,20 @@ final class _OhosRuntimeSupervisor implements _RuntimeSupervisor {
   }
 
   Future<List<PluginTransferImportResult>> _importPluginArtifacts(
-    List<({PluginTransferArtifact artifact, Stream<List<int>> bytes})> artifacts, {
+    List<({PluginTransferArtifact artifact, Stream<List<int>> bytes})>
+    artifacts, {
     required Set<String> forceUpgradePluginIds,
   }) async {
-    if (artifacts.isEmpty) throw const PluginRuntimeException('plugin_transfer_batch_too_large', 'The plugin transfer batch is invalid.');
+    if (artifacts.isEmpty)
+      throw const PluginRuntimeException(
+        'plugin_transfer_batch_too_large',
+        'The plugin transfer batch is invalid.',
+      );
     final plan = await invoke(
-      PluginTransferPlanInvocation(artifacts: [for (final item in artifacts) item.artifact], forceUpgradePluginIds: forceUpgradePluginIds),
+      PluginTransferPlanInvocation(
+        artifacts: [for (final item in artifacts) item.artifact],
+        forceUpgradePluginIds: forceUpgradePluginIds,
+      ),
     );
     if (plan.any(
       (item) =>
@@ -412,21 +631,33 @@ final class _OhosRuntimeSupervisor implements _RuntimeSupervisor {
           item.action == PluginTransferPlanAction.same ||
           item.action == PluginTransferPlanAction.unavailable,
     ))
-      throw const PluginRuntimeException('invalid_request', 'The plugin transfer would downgrade or replace an equal Runtime version.');
+      throw const PluginRuntimeException(
+        'invalid_request',
+        'The plugin transfer would downgrade or replace an equal Runtime version.',
+      );
     var total = 0;
     for (final item in artifacts) {
-      if (item.artifact.bytes <= 0 || item.artifact.bytes > maxPluginTransferBytes)
-        throw const PluginRuntimeException('plugin_transfer_artifact_too_large', 'The plugin transfer artifact is too large.');
+      if (item.artifact.bytes <= 0 ||
+          item.artifact.bytes > maxPluginTransferBytes)
+        throw const PluginRuntimeException(
+          'plugin_transfer_artifact_too_large',
+          'The plugin transfer artifact is too large.',
+        );
       total += item.artifact.bytes;
       if (total > maxPluginTransferBatchBytes)
-        throw const PluginRuntimeException('plugin_transfer_batch_too_large', 'The plugin transfer batch is too large.');
+        throw const PluginRuntimeException(
+          'plugin_transfer_batch_too_large',
+          'The plugin transfer batch is too large.',
+        );
     }
     final roots = await _ensureRuntimeRoots();
     final inbox = Directory(roots['inboxRoot']!)..createSync(recursive: true);
     final temporaryFiles = <File>[];
     try {
       for (final item in artifacts) {
-        final suffix = item.artifact.format == PluginArtifactFormat.singleFile ? '.mgplugin.js' : '.mgplugin';
+        final suffix = item.artifact.format == PluginArtifactFormat.singleFile
+            ? '.mgplugin.js'
+            : '.mgplugin';
         final target = File(
           '${inbox.path}${Platform.pathSeparator}transfer-${item.artifact.pluginId}-${DateTime.now().microsecondsSinceEpoch}$suffix',
         );
@@ -436,7 +667,9 @@ final class _OhosRuntimeSupervisor implements _RuntimeSupervisor {
         await temporary.rename(target.path);
       }
       await _invokeRaw('plugins.transfer.verify.v2', <String, Object?>{
-        'artifacts': artifacts.map((item) => item.artifact.toJson()).toList(growable: false),
+        'artifacts': artifacts
+            .map((item) => item.artifact.toJson())
+            .toList(growable: false),
       }, timeout: const Duration(minutes: 2));
       await _restartNativeRuntime();
       await invoke(const RuntimePingInvocation());

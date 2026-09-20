@@ -31,6 +31,22 @@ Future<Map<String, String>> readSystemProxyEnvironment() async {
     } on Object {
       // System proxy discovery must never block application startup.
     }
+  } else if (Platform.operatingSystem == 'ohos') {
+    try {
+      final raw = await const MethodChannel(
+        'mgread/ohos_system',
+      ).invokeMapMethod<String, Object?>('getSystemProxyEnvironment');
+      if (raw != null) {
+        for (final entry in raw.entries) {
+          final value = entry.value;
+          if (value is String && value.isNotEmpty) {
+            values[entry.key.toUpperCase()] = value;
+          }
+        }
+      }
+    } on Object {
+      // OHOS network proxy discovery is optional and must not block startup.
+    }
   }
   _ensureLoopbackNoProxy(values);
   return Map<String, String>.unmodifiable(values);

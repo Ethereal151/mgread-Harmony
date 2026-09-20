@@ -49,7 +49,9 @@ export default class NovelReaderUiPlugin implements FlutterPlugin, MethodCallHan
   onMethodCall(call: MethodCall, result: MethodResult): void {
     switch (call.method) {
       case 'getCapabilities':
-        result.success({ keepScreenOn: true, immersiveMode: true })
+        // HarmonyOS does not expose a supported per-application volume-key
+        // interception API for this reader bridge.
+        result.success({ keepScreenOn: true, immersiveMode: true, volumeKeyPageTurning: false })
         break
       case 'setReaderSystemUi':
         this.setReaderSystemUi(call.args as Map<string, Object> | null, result)

@@ -10,13 +10,13 @@
 library;
 
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import 'package:mg_read/app/app_theme.dart';
 import 'package:mg_read/features/profile/presentation/widgets/feedback_thanks_banner.dart';
 import 'package:mg_read/features/profile/presentation/widgets/profile_detail_chrome.dart';
 import 'package:mg_read/shared/presentation/app_navigation_destination.dart';
 import 'package:mg_read/shared/presentation/widgets/app_secondary_page_chrome.dart';
+import 'package:mg_read/platform/platform_system_actions.dart';
 
 const String githubFeedbackUrl = 'https://github.com/lingy-Mg/mg_read/issues';
 
@@ -141,7 +141,7 @@ class _GithubFeedbackCard extends StatelessWidget {
 
 Future<void> _openGithubIssues(BuildContext context) async {
   try {
-    final bool launched = await launchUrl(Uri.parse(githubFeedbackUrl), mode: LaunchMode.externalApplication);
+    final bool launched = await openExternalUri(Uri.parse(githubFeedbackUrl));
     if (!launched && context.mounted) _showLaunchFailure(context);
   } catch (_) {
     if (context.mounted) _showLaunchFailure(context);

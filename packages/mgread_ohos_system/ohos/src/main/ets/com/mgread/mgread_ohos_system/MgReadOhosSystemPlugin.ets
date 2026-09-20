@@ -105,6 +105,9 @@ export default class MgReadOhosSystemPlugin implements FlutterPlugin, MethodCall
       case 'getCapabilities':
         this.getCapabilities(result)
         break
+      case 'getSystemProxyEnvironment':
+        this.getSystemProxyEnvironment(result)
+        break
       default:
         result.notImplemented()
         break
@@ -165,6 +168,32 @@ export default class MgReadOhosSystemPlugin implements FlutterPlugin, MethodCall
       ),
     }
     result.success(snapshot)
+  }
+
+  /**
+   * Projects the active OHOS HTTP proxy into the bounded environment shape
+   * consumed by Dart and the Runtime.  Credentials are intentionally omitted;
+   * the network service exposes them separately and MgRead must not persist or
+   * echo them through diagnostics.
+   */
+  private async getSystemProxyEnvironment(result: MethodResult): Promise<void> {
+    try {
+      const proxy = await connection.getDefaultHttpProxy()
+      const environment: Record<string, Object> = {}
+      if (proxy.host.length > 0 && proxy.port > 0) {
+        const endpoint = `http://${proxy.host}:${proxy.port}`
+        environment['HTTP_PROXY'] = endpoint
+        environment['HTTPS_PROXY'] = endpoint
+      }
+      if (proxy.exclusionList.length > 0) {
+        environment['NO_PROXY'] = proxy.exclusionList.join(',')
+      }
+      result.success(environment)
+    } catch (_) {
+      // A missing network or a permission/API error is a valid direct-connect
+      // fallback.  Do not make application startup depend on this probe.
+      result.success({})
+    }
   }
 
   private probe(available: boolean, reason: string, apiVersion: string, architecture: string): OhosCapabilityProbePayload {

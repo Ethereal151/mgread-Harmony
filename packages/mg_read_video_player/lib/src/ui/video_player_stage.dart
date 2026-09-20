@@ -63,6 +63,9 @@ final class VideoPlayerStage extends StatelessWidget {
     required this.onNextEpisode,
     required this.onAutoAdvance,
     required this.onControlsLocked,
+    this.supportsBufferedPosition = true,
+    this.supportsEnhancement = true,
+    this.supportsSystemVolume = true,
     required this.onInteractionStart,
     required this.onInteractionEnd,
     required this.onFit,
@@ -95,6 +98,9 @@ final class VideoPlayerStage extends StatelessWidget {
   final Future<void> Function() onNextEpisode;
   final Future<void> Function(bool) onAutoAdvance;
   final Future<void> Function(bool) onControlsLocked;
+  final bool supportsBufferedPosition;
+  final bool supportsEnhancement;
+  final bool supportsSystemVolume;
   final VoidCallback onInteractionStart;
   final VoidCallback onInteractionEnd;
   final Future<void> Function() onFit;
@@ -161,6 +167,9 @@ final class VideoPlayerStage extends StatelessWidget {
                         onEnhancementMode: onEnhancementMode,
                         onReadSystemVolume: onReadSystemVolume,
                         onSystemVolume: onSystemVolume,
+                        supportsBufferedPosition: supportsBufferedPosition,
+                        supportsEnhancement: supportsEnhancement,
+                        supportsSystemVolume: supportsSystemVolume,
                         onPreviousEpisode: onPreviousEpisode,
                         onNextEpisode: onNextEpisode,
                         onAutoAdvance: onAutoAdvance,
@@ -244,6 +253,9 @@ final class _VideoPlayerInteractionLayer extends StatefulWidget {
     required this.onFullscreen,
     required this.onReadBrightness,
     required this.onBrightness,
+    required this.supportsBufferedPosition,
+    required this.supportsEnhancement,
+    required this.supportsSystemVolume,
   });
 
   final VideoPlayerController controller;
@@ -268,6 +280,9 @@ final class _VideoPlayerInteractionLayer extends StatefulWidget {
   final Future<void> Function(bool) onFullscreen;
   final Future<double?> Function() onReadBrightness;
   final Future<void> Function(double) onBrightness;
+  final bool supportsBufferedPosition;
+  final bool supportsEnhancement;
+  final bool supportsSystemVolume;
 
   @override
   State<_VideoPlayerInteractionLayer> createState() =>
@@ -328,6 +343,7 @@ final class _VideoPlayerInteractionLayerState
           onRate: (value) => unawaited(widget.onRate(value)),
           onReadSystemVolume: widget.onReadSystemVolume,
           onSystemVolume: widget.onSystemVolume,
+          supportsSystemVolume: widget.supportsSystemVolume,
           onReadBrightness: widget.onReadBrightness,
           onBrightness: (value) => unawaited(widget.onBrightness(value)),
           locked: snapshot.controlsLocked,
@@ -354,6 +370,8 @@ final class _VideoPlayerInteractionLayerState
             onPreviousEpisode: widget.onPreviousEpisode,
             onNextEpisode: widget.onNextEpisode,
             onAutoAdvance: widget.onAutoAdvance,
+            supportsEnhancement: widget.supportsEnhancement,
+            supportsBufferedPosition: widget.supportsBufferedPosition,
             onInteractionStart: widget.onInteractionStart,
             onInteractionEnd: widget.onInteractionEnd,
           ),

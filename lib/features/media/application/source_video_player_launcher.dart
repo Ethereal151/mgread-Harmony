@@ -225,6 +225,9 @@ final class _SourceVideoPlayerDestinationState extends State<_SourceVideoPlayerD
         startupSession: widget.startupSession,
         backendFactory: () =>
             platformCapabilities.isOhos ? createOhosVideoPlaybackBackend() : createMediaKitVideoPlaybackBackend(proxyUri: setup.proxyUri),
+        supportsBufferedPosition: !platformCapabilities.isOhos || platformCapabilities.supportsOhosVideoBufferedPosition,
+        supportsEnhancement: !platformCapabilities.isOhos || platformCapabilities.supportsOhosVideoEnhancement,
+        supportsSystemVolume: !platformCapabilities.isOhos || platformCapabilities.supportsOhosSystemVolume,
       ),
     );
   }
