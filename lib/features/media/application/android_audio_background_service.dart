@@ -190,7 +190,10 @@ final class MgReadAudioHandler extends BaseAudioHandler {
   Future<void> _systemCommandTail = Future<void>.value();
   final Set<String> _queuedSystemCommands = <String>{};
   final Set<File> _artworkFiles = <File>{};
+  final Map<String, Future<File?>> _artworkFileLoads = <String, Future<File?>>{};
   int _artworkGeneration = 0;
+  String? _publishedArtworkTrackId;
+  Uri? _publishedArtworkUri;
 
   Future<void> attach(
     AudioPlayerController controller, {
@@ -312,15 +315,16 @@ final class MgReadAudioHandler extends BaseAudioHandler {
     final snapshot = _controller?.snapshot;
     if (snapshot == null) return;
     final systemQueueEntries = snapshot.queueEntries.where((item) => !item.isLocked).toList(growable: false);
-    final items = systemQueueEntries.map(_mediaItemForQueueEntry).toList(growable: false);
-    queue.add(items);
     final track = snapshot.currentTrack;
+    final localArtwork = track?.id == _publishedArtworkTrackId ? _publishedArtworkUri : null;
+    queue.add(_mediaItemsForQueue(systemQueueEntries, track: track, localArtwork: localArtwork));
     if (track == null) {
       mediaItem.add(null);
-    } else if (track.artworkBytes?.isNotEmpty == true) {
-      unawaited(_publishTrackWithLocalArtwork(track, duration: snapshot.duration));
     } else {
-      mediaItem.add(_mediaItemForTrack(track, duration: snapshot.duration));
+      mediaItem.add(_mediaItemForTrack(track, duration: snapshot.duration, artwork: localArtwork));
+      if (localArtwork == null && track.artworkBytes?.isNotEmpty == true) {
+        unawaited(_publishTrackWithLocalArtwork(track, duration: snapshot.duration));
+      }
     }
     final queueIndex = track == null ? -1 : systemQueueEntries.indexWhere((item) => item.id == track.id);
     final systemPlaybackActive =
@@ -363,14 +367,27 @@ final class MgReadAudioHandler extends BaseAudioHandler {
     final generation = _artworkGeneration;
     final bytes = track.artworkBytes;
     if (controller == null || bytes == null || bytes.isEmpty) return;
-    final file = await _writeArtworkFile(track, bytes);
+    final artworkCacheKey = _artworkCacheKey(track, bytes);
+    final existingLoad = _artworkFileLoads[artworkCacheKey];
+    final fileLoad = existingLoad ?? _writeArtworkFile(track, bytes);
+    if (existingLoad == null) _artworkFileLoads[artworkCacheKey] = fileLoad;
+    final file = await fileLoad;
+    if (file == null && identical(_artworkFileLoads[artworkCacheKey], fileLoad)) {
+      _artworkFileLoads.remove(artworkCacheKey);
+    }
     if (file == null ||
         generation != _artworkGeneration ||
         !identical(_controller, controller) ||
         controller.snapshot.currentTrack?.id != track.id) {
       return;
     }
-    mediaItem.add(_mediaItemForTrack(track, duration: duration, artwork: file.uri));
+    final artwork = file.uri;
+    _publishedArtworkTrackId = track.id;
+    _publishedArtworkUri = artwork;
+    final snapshot = controller.snapshot;
+    final systemQueueEntries = snapshot.queueEntries.where((item) => !item.isLocked).toList(growable: false);
+    queue.add(_mediaItemsForQueue(systemQueueEntries, track: track, localArtwork: artwork));
+    mediaItem.add(_mediaItemForTrack(track, duration: duration, artwork: artwork));
   }
 
   Future<File?> _writeArtworkFile(AudioTrack track, List<int> bytes) async {
@@ -397,6 +414,9 @@ final class MgReadAudioHandler extends BaseAudioHandler {
 
   void _resetArtworkFiles() {
     _artworkGeneration++;
+    _artworkFileLoads.clear();
+    _publishedArtworkTrackId = null;
+    _publishedArtworkUri = null;
     final files = List<File>.of(_artworkFiles);
     _artworkFiles.clear();
     for (final file in files) {
@@ -430,6 +450,8 @@ final class MgReadAudioHandler extends BaseAudioHandler {
     return '.img';
   }
 
+  String _artworkCacheKey(AudioTrack track, List<int> bytes) => '${track.artwork ?? ''}|${bytes.length}|${Object.hashAll(bytes)}';
+
   MediaItem _mediaItemForTrack(AudioTrack track, {required Duration duration, Uri? artwork}) => MediaItem(
     id: track.id,
     album: track.collectionTitle,
@@ -439,8 +461,14 @@ final class MgReadAudioHandler extends BaseAudioHandler {
     duration: duration > Duration.zero ? duration : null,
   );
 
-  MediaItem _mediaItemForQueueEntry(AudioQueueEntry entry) =>
-      MediaItem(id: entry.id, title: entry.title, artist: entry.creator, artUri: entry.artwork);
+  List<MediaItem> _mediaItemsForQueue(List<AudioQueueEntry> entries, {required AudioTrack? track, required Uri? localArtwork}) =>
+      <MediaItem>[
+        for (final entry in entries)
+          _mediaItemForQueueEntry(entry, artwork: localArtwork != null && entry.artwork == track?.artwork ? localArtwork : null),
+      ];
+
+  MediaItem _mediaItemForQueueEntry(AudioQueueEntry entry, {Uri? artwork}) =>
+      MediaItem(id: entry.id, title: entry.title, artist: entry.creator, artUri: artwork ?? entry.artwork);
 
   @override
   Future<void> play() => _runSystemCommand(

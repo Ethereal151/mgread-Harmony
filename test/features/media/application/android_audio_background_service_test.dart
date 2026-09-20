@@ -38,6 +38,13 @@ void main() {
     final item = handler.mediaItem.value;
     expect(item?.artUri?.scheme, 'file');
     expect(await File(item!.artUri!.toFilePath()).exists(), isTrue);
+    expect(handler.queue.value.single.artUri?.scheme, 'file');
+
+    final firstArtworkPath = item.artUri!.toFilePath();
+    controller.publish(controller.snapshot.copyWith(position: const Duration(seconds: 12)));
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    expect(handler.mediaItem.value?.artUri?.toFilePath(), firstArtworkPath);
+    expect(handler.queue.value.single.artUri?.toFilePath(), firstArtworkPath);
   });
 
   test('projects the full catalog and routes system transport commands', () async {

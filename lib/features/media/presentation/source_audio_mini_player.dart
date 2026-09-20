@@ -1,5 +1,9 @@
 part of 'source_audio_playback_host.dart';
 
+Widget _buildSourceAudioMiniArtwork(BuildContext context, AudioTrack track, SourceAudioPlaybackRequest request) {
+  return KeyedSubtree(key: const Key('source-audio-mini-cover'), child: _sourceAudioArtwork(context, track, request));
+}
+
 Widget _buildSourceAudioMiniBar(
   BuildContext context,
   AudioPlayerSnapshot snapshot,

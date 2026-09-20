@@ -101,6 +101,8 @@ void main() {
     await tester.tap(find.byKey(const Key('audio-queue')));
     await _pumpUntil(tester, () => find.byKey(const Key('audio-queue-list')).evaluate().isNotEmpty);
     expect(find.byKey(const Key('audio-queue-list')), findsOneWidget);
+    expect(find.byKey(const Key('audio-queue-artwork-chapter-1')), findsOneWidget);
+    expect(find.byKey(const Key('source-audio-queue-cover-chapter-1')), findsOneWidget);
     final Future<bool> queueBackHandled = backButtonDispatcher.invokeCallback(Future<bool>.value(false));
     await tester.pump();
     expect(await queueBackHandled, isTrue);
@@ -150,6 +152,10 @@ void main() {
     await tester.pump();
     expect(tester.getSize(find.byKey(const Key('source-audio-mini-player'))), const Size(100, 100));
     expect(find.byKey(const Key('source-audio-mini-playing-indicator')), findsOneWidget);
+    expect(find.byKey(const Key('source-audio-mini-cover')), findsOneWidget);
+    final miniCover = find.descendant(of: find.byKey(const Key('source-audio-mini-cover')), matching: find.byType(Image));
+    expect(miniCover, findsOneWidget);
+    expect(tester.widget<Image>(miniCover).image, isA<MemoryImage>());
 
     final Rect miniBeforeDrag = tester.getRect(find.byKey(const Key('source-audio-mini-player')));
     final TestGesture dragGesture = await tester.startGesture(miniBeforeDrag.center);

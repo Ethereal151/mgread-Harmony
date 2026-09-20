@@ -8,3 +8,7 @@ import 'audio_models.dart';
 /// Builds artwork without making the package perform network or file I/O.
 typedef AudioArtworkBuilder =
     Widget Function(BuildContext context, AudioTrack track);
+
+/// Builds queue artwork without making the package perform network or file I/O.
+typedef AudioQueueArtworkBuilder =
+    Widget Function(BuildContext context, AudioQueueEntry entry);
