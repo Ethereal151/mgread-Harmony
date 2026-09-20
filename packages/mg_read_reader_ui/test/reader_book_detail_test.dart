@@ -6,11 +6,14 @@ void main() {
   testWidgets('reader source row and book details expose source metadata', (
     WidgetTester tester,
   ) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
           body: TextReaderView(
             bookId: 'detail-book',
+            coverBytes: _onePixelPng,
             dataSource: const _DetailDataSource(),
             stateStore: const _DetailStateStore(
               preferences: TextReaderPreferences(
@@ -92,9 +95,96 @@ void main() {
     expect(find.text('测试简介'), findsOneWidget);
     expect(find.text('玄幻'), findsOneWidget);
     expect(find.text('连载'), findsOneWidget);
-    expect(find.text('来源频道'), findsOneWidget);
+    expect(find.text('内容来源'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey<String>('reader-book-detail-cover-image')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(
+        const ValueKey<String>('reader-book-detail-cover-placeholder'),
+      ),
+      findsNothing,
+    );
+    final Image cover = tester.widget<Image>(
+      find.byKey(const ValueKey<String>('reader-book-detail-cover-image')),
+    );
+    expect(cover.image, isA<MemoryImage>());
   });
 }
+
+const List<int> _onePixelPng = <int>[
+  137,
+  80,
+  78,
+  71,
+  13,
+  10,
+  26,
+  10,
+  0,
+  0,
+  0,
+  13,
+  73,
+  72,
+  68,
+  82,
+  0,
+  0,
+  0,
+  1,
+  0,
+  0,
+  0,
+  1,
+  8,
+  6,
+  0,
+  0,
+  0,
+  31,
+  21,
+  196,
+  137,
+  0,
+  0,
+  0,
+  13,
+  73,
+  68,
+  65,
+  84,
+  120,
+  156,
+  99,
+  248,
+  207,
+  192,
+  240,
+  31,
+  0,
+  5,
+  0,
+  1,
+  255,
+  137,
+  153,
+  61,
+  29,
+  0,
+  0,
+  0,
+  0,
+  73,
+  69,
+  78,
+  68,
+  174,
+  66,
+  96,
+  130,
+];
 
 final class _DetailDataSource implements TextReaderDataSource {
   const _DetailDataSource();
@@ -133,6 +223,7 @@ final class _DetailDataSource implements TextReaderDataSource {
     description: '测试简介',
     sourceName: '演示数据源',
     sourceUrl: Uri.parse('https://source.example/books/detail-book'),
+    coverUrl: Uri.parse('https://temporary.example/expired-cover-token'),
     wordCount: 120000,
     chapterCount: 12,
     statusLabel: '连载',

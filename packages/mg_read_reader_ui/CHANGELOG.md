@@ -1,5 +1,8 @@
 ## Unreleased
 
+* Text reader book details now accept host-resolved cover bytes, render them
+  from memory without re-requesting expiring source URLs, and use a responsive
+  card layout with clearer metadata, statistics, source, and fallback states.
 * Expanded text-reader color presets with OLED pure black-and-white, indigo,
   forest, lavender, rose, and sea-glass themes; new dark presets participate
   in night-mode restoration and existing enum values remain unchanged.

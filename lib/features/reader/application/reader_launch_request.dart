@@ -35,7 +35,8 @@ sealed class ReaderLaunchRequest {
   final String bookId;
 
   /// Cover bytes already available in the host before the reader route opens.
-  /// The entry transition renders this local payload and never fetches it.
+  /// The entry transition and reader detail render this local payload and
+  /// never fetch its source URL again.
   final List<int>? entryCoverBytes;
 
   /// Bounded estimate used only by the process-local shelf warm LRU.

@@ -81,6 +81,7 @@ class TextReaderView extends StatefulWidget {
     required this.dataSource,
     required this.stateStore,
     this.seed,
+    this.coverBytes,
     this.chapterPreloadCount = 1,
     this.observer,
     this.controller,
@@ -99,6 +100,13 @@ class TextReaderView extends StatefulWidget {
 
   /// Optional host projection used to avoid duplicate metadata/content reads.
   final ReaderSessionSeed? seed;
+
+  /// Optional host-resolved cover bytes for reader-owned detail surfaces.
+  ///
+  /// The reader only decodes this local payload. It never fetches
+  /// [ReaderBookInfo.coverUrl], because source URLs may be authenticated or
+  /// expire after the host resolves them.
+  final List<int>? coverBytes;
 
   /// Number of following chapters to load speculatively, excluding current.
   ///
@@ -219,6 +227,7 @@ class _TextReaderViewState extends State<TextReaderView>
   Future<void>? _catalogCompletion;
 
   ReaderBookInfo? _book;
+  MemoryImage? _bookCoverImage;
   final List<ReaderChapterInfo> _catalog = <ReaderChapterInfo>[];
   final Map<String, ReaderChapterInfo> _catalogById =
       <String, ReaderChapterInfo>{};
@@ -356,6 +365,7 @@ class _TextReaderViewState extends State<TextReaderView>
   @override
   void initState() {
     super.initState();
+    _syncBookCoverImage();
     WidgetsBinding.instance.addObserver(this);
     _ownsController = widget.controller == null;
     _controller = widget.controller ?? TextReaderController();
@@ -471,6 +481,9 @@ class _TextReaderViewState extends State<TextReaderView>
   @override
   void didUpdateWidget(covariant TextReaderView oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.coverBytes, widget.coverBytes)) {
+      _syncBookCoverImage();
+    }
     if (oldWidget.controller != widget.controller) {
       _controller.unbind(_controllerBindingOwner);
       if (_ownsController) _controller.dispose();
@@ -550,6 +563,13 @@ class _TextReaderViewState extends State<TextReaderView>
         identical(oldWidget.dataSource, widget.dataSource)) {
       unawaited(_refreshCatalogFromHost());
     }
+  }
+
+  void _syncBookCoverImage() {
+    final List<int>? bytes = widget.coverBytes;
+    _bookCoverImage = bytes == null || bytes.isEmpty
+        ? null
+        : MemoryImage(Uint8List.fromList(bytes));
   }
 
   @override

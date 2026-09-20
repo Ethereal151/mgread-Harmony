@@ -168,14 +168,18 @@ void main() {
     expect(find.byType(TextReaderView), findsNothing);
   });
 
-  testWidgets('ReaderHostPage forwards the novel preload window', (WidgetTester tester) async {
+  testWidgets('ReaderHostPage forwards novel preload and cached cover', (WidgetTester tester) async {
     await tester.pumpWidget(
       MaterialApp(
-        home: ReaderHostPage(request: _request(dataSource: const _ImmediateDataSource(), chapterPreloadCount: 4)),
+        home: ReaderHostPage(
+          request: _request(dataSource: const _ImmediateDataSource(), chapterPreloadCount: 4, coverBytes: _onePixelPng),
+        ),
       ),
     );
 
-    expect(tester.widget<TextReaderView>(find.byType(TextReaderView)).chapterPreloadCount, 4);
+    final view = tester.widget<TextReaderView>(find.byType(TextReaderView));
+    expect(view.chapterPreloadCount, 4);
+    expect(view.coverBytes, same(_onePixelPng));
   });
 
   testWidgets('ReaderHostPage forwards the comic preload window', (WidgetTester tester) async {
