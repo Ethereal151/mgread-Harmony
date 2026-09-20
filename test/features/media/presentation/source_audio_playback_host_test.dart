@@ -146,7 +146,10 @@ void main() {
 
     expect(settings.get(AppSettingKeys.audioExitBehavior), 'continue');
     expect(find.text('详情页'), findsOneWidget);
-    expect(tester.getSize(find.byKey(const Key('source-audio-mini-player'))).width, lessThanOrEqualTo(520));
+    await settings.set(AppSettingKeys.audioMiniPlayerStyle, 'square');
+    await tester.pump();
+    expect(tester.getSize(find.byKey(const Key('source-audio-mini-player'))), const Size(100, 100));
+    expect(find.byKey(const Key('source-audio-mini-playing-indicator')), findsOneWidget);
 
     final Rect miniBeforeDrag = tester.getRect(find.byKey(const Key('source-audio-mini-player')));
     final TestGesture dragGesture = await tester.startGesture(miniBeforeDrag.center);
@@ -165,9 +168,8 @@ void main() {
 
     backend.emitError('lock-screen next decoder failed');
     await tester.pump();
-    expect(find.text('播放遇到错误，请稍后重试。 · 播放器读取音频资源 · audio_backend_error'), findsOneWidget);
-
-    await tester.tap(find.byKey(const Key('source-audio-mini-player')));
+    expect(find.byTooltip('播放遇到错误，请稍后重试。\n发生位置：播放器读取音频资源\n诊断编号：audio_backend_error\n技术原因：lock-screen next decoder failed'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('source-audio-mini-drag-region')));
     await _pumpUntil(tester, () => find.byKey(const Key('audio-back')).evaluate().isNotEmpty);
     expect(backend.openCalls, 1);
     expect(systemUiModes.last, 'SystemUiMode.immersiveSticky');

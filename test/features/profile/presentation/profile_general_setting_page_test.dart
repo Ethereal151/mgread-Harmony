@@ -48,6 +48,12 @@ void main() {
     await tester.pumpAndSettle();
     expect(settings.get(AppSettingKeys.audioExitBehavior), 'continue');
 
+    final Finder squareMiniPlayer = find.byKey(const Key('audio-mini-player-style-square'));
+    await tester.scrollUntilVisible(squareMiniPlayer, 300, scrollable: scrollable);
+    await tester.tap(squareMiniPlayer);
+    await tester.pumpAndSettle();
+    expect(settings.get(AppSettingKeys.audioMiniPlayerStyle), 'square');
+
     expect(settings.get(AppSettingKeys.bookshelfCatalogRefreshIntervalHours), 24);
   });
 

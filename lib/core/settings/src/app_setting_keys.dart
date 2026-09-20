@@ -223,6 +223,18 @@ final class AppSettingKeys {
     validator: _validateBool,
   );
 
+  /// Shape of the app-global in-app audio playback overlay.
+  ///
+  /// `bar` keeps the title and collection visible, while `square` uses the
+  /// compact draggable control for users who want less obstruction.
+  static const audioMiniPlayerStyle = SettingKey<String>(
+    id: 'mediaPlayback.audioMiniPlayerStyle',
+    documentKind: 'settings.mediaPlayback',
+    defaultValue: 'bar',
+    codec: SettingCodec<String>(_stringEncode, _stringDecode),
+    validator: _validateAudioMiniPlayerStyle,
+  );
+
   static const all = <SettingKey<dynamic>>[
     themeMode,
     themeColor,
@@ -245,6 +257,7 @@ final class AppSettingKeys {
     comicReaderPreferences,
     audioExitBehavior,
     audioKeepScreenOn,
+    audioMiniPlayerStyle,
   ];
 
   static final registry = SettingsRegistry(
@@ -478,6 +491,12 @@ void _validateNovelPreloadChapterCount(int value) {
 
 void _validateAudioExitBehavior(String value) {
   if (value != 'ask' && value != 'continue' && value != 'stop') {
+    throw ArgumentError.value(value);
+  }
+}
+
+void _validateAudioMiniPlayerStyle(String value) {
+  if (value != 'bar' && value != 'square') {
     throw ArgumentError.value(value);
   }
 }

@@ -78,12 +78,19 @@ class ProfileGeneralSettingPage extends ConsumerWidget {
       },
     ),
     const SizedBox(height: AppSpacing.section),
-    const _SectionHeading(title: '音频播放器', description: '选择离开音频播放器时的默认行为'),
+    const _SectionHeading(title: '音频播放器', description: '选择退出行为和应用内迷你播放条样式'),
     const SizedBox(height: AppSpacing.regular),
     _AudioExitBehaviorCard(
       value: settings.get(AppSettingKeys.audioExitBehavior),
       onChanged: (String value) async {
         await settings.set(AppSettingKeys.audioExitBehavior, value);
+      },
+    ),
+    const SizedBox(height: AppSpacing.regular),
+    _AudioMiniPlayerStyleCard(
+      value: settings.get(AppSettingKeys.audioMiniPlayerStyle),
+      onChanged: (String value) async {
+        await settings.set(AppSettingKeys.audioMiniPlayerStyle, value);
       },
     ),
     const SizedBox(height: AppSpacing.regular),

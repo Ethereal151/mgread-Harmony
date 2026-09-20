@@ -270,6 +270,7 @@ final class SourceAudioPlaylistDataSource implements AudioPlaylistQueueDataSourc
       creator: detail.summary.author,
       resource: media.url,
       artwork: detail.summary.coverUrl,
+      artworkBytes: detail.summary.coverBytes,
       resourcePolicy: media.resourcePolicy == PluginMediaResourcePolicy.refreshable
           ? AudioResourcePolicy.refreshable
           : AudioResourcePolicy.sessionOnly,

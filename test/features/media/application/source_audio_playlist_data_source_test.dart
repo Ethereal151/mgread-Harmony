@@ -21,6 +21,7 @@ void main() {
     final playlist = await source.loadPlaylist('audio:book-1');
 
     expect(playlist.tracks.map((track) => track.id), <String>['chapter:free-2']);
+    expect(playlist.tracks.single.artworkBytes, orderedEquals(<int>[1, 2, 3]));
     expect(playlist.queueEntries.map((entry) => entry.id), <String>[
       'chapter:free-1',
       'chapter:locked',
@@ -230,6 +231,7 @@ PluginContentDetail _detail() => PluginContentDetail(
     author: '测试主播',
     url: null,
     coverUrl: null,
+    coverBytes: const <int>[1, 2, 3],
     description: null,
     language: 'zh-CN',
     status: PluginContentStatus.ongoing,
