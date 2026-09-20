@@ -2,9 +2,10 @@
 
 ## 共同规则
 
-自动检测先完成 `discover -> search -> detail -> catalog`，确认稳定 ID、`contentKind`、目录完整有序且 ID 唯一，
-再按类型选择样本。搜索词从当前发现标题或建议派生，并找回同一稳定 ID；固定 ID 只允许作为无法自动发现时的
-显式诊断输入，不能成为默认通过路径。
+自动检测先完成 `discover.root -> discover.target.* -> discover.append.* -> search -> detail -> catalog`，确认
+稳定 ID、`contentKind`、目录完整有序且 ID 唯一，再按类型选择样本。target 和 continuation 都必须有界，
+但不得找到第一个有内容的子列表就停止。搜索词从当前发现标题或建议派生，并找回同一稳定 ID；固定 ID
+只允许作为无法自动发现时的显式诊断输入，不能成为默认通过路径。
 
 封面、漫画页图、音频、视频/HLS 是独立资源组，报告必须分别给出 `passed/failed/notRegistered/notTested`。
 一个可达封面不能让媒体通过，一条可播媒体也不能证明漫画页图或所有封面有效。所有远程探测都有候选数、
@@ -16,9 +17,12 @@ media 组始终适用。严格验证只有在内容链路与全部适用组通�
 
 ## 封面
 
-从发现、搜索和详情各取少量代表性非空封面，验证来源登记的真实上游 URL、kind、Referer/Accept 等 headers。
-通过条件是成功响应、图片 MIME、非空前缀且文件签名与声明格式相容；有解码器时再验证正尺寸。分别记录
-`404/403`、挑战页、错误 HTML、空对象和格式伪装，不能只信扩展名或 `Content-Type`。
+将封面拆为 `discover.root`、每个已抽样 `discover.target`、`search` 和 `detail` 表面。每个非空内容表面都记录
+内容数、封面 URL 数、成功登记数和有界探测结果；某个表面封面全部失效时，不得被另一表面的可达封面掩盖。
+
+验证来源登记的真实上游 URL、kind、Referer/Accept 等 headers。通过条件是成功响应、图片 MIME、非空前缀且
+文件签名与声明格式相容；有解码器时再验证正尺寸。分别记录 `404/403`、挑战页、错误 HTML、空对象和格式伪装，
+不能只信扩展名或 `Content-Type`。内容表面有项但未提供封面时记为“未登记”而不是“已通过”。
 
 ## 小说与图书
 
@@ -34,20 +38,21 @@ media 组始终适用。严格验证只有在内容链路与全部适用组通�
 
 ## 漫画与写真
 
-选择首/中/末可读章节；每章验证 pages 非空、page id/index 唯一有序、URL 经 proxy 登记。至少从不同章节和
-不同页位选择有界图片样本，验证图片 MIME、签名和非空前缀；不能只探测封面或只证明 pages 数组非空。
+选择首/中/末可读章节；每章验证 pages 非空、page id/index 唯一有序、URL 经 proxy 登记。至少从两个不同章节
+及各自不同页位选择有界图片样本（当实际可读章节/页数足够时），验证图片 MIME、签名和非空前缀；不能只探测封面
+或只证明 pages 数组非空。
 动态页面只在必须执行脚本时使用最小 WebView，并同时保留解析 fixture。
 
 ## 音频与音乐
 
-验证详情、曲目/章节顺序、当前曲目标识和 `media.type=audio`。对实际媒体登记验证 headers、Range 行为、
+验证详情、曲目/章节顺序、锁定语义、扁平 items 与 groups 对应、当前曲目标识和 `media.resourceType=audio`。对实际媒体登记验证 headers、Range 行为、
 音频 MIME 或可接受的 octet-stream、非空媒体前缀；不下载完整音频。若地址带签名或会话期限，验证刷新后重新
 调用 `getContent`，并区分 `sessionOnly` 与有证据支持的 `refreshable + expiresAt`。封面仍按独立封面组验证。
 
 ## 视频
 
 验证详情、扁平 episodes 与 `groups[]` 一一对应、`groupId + episodeId` 可稳定回传，且当前选集返回
-`media.type=video|hls`。直链视频使用有界 Range/前缀探测，接受来源契约允许的 `206` 或可流式 `200`；检查
+`media.resourceType=video|hls`。直链视频使用有界 Range/前缀探测，接受来源契约允许的 `206` 或可流式 `200`；检查
 视频 MIME、octet-stream 与容器签名的一致性，不下载整片。
 
 HLS 至少验证主/媒体 playlist 是文本且以 `#EXTM3U` 开始，URI 能按基址解析；按需有界探测一个 variant、key

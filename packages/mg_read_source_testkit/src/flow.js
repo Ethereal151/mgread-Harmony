@@ -1,7 +1,7 @@
 /**
- * 小说/漫画数据源的标准公共阅读链路。
+ * 数据源的标准公共阅读链路。
  *
- * 职责：按阶段运行发现、搜索、建议、详情、目录和正文，并返回完整结果及计数摘要。
+ * 职责：收集发现分支/追加入口，再按阶段运行搜索、详情、完整目录和按类型内容抽样。
  */
 import { SourceTestFailure, failureFromCause } from './diagnostics.js';
 
@@ -38,6 +38,39 @@ export function collectDiscoveryTargets(result) {
   return Object.freeze(targets);
 }
 
+export function collectDiscoveryContinuations(result) {
+  const continuations = [];
+  const add = (collectionId, continuation) => {
+    if (
+      typeof collectionId !== 'string'
+      || collectionId.length === 0
+      || typeof continuation?.target !== 'string'
+      || continuation.target.length === 0
+      || typeof continuation?.cursor !== 'string'
+      || continuation.cursor.length === 0
+    ) return;
+    if (continuations.some((value) =>
+      value.collectionId === collectionId
+      && value.target === continuation.target
+      && value.cursor === continuation.cursor)) return;
+    continuations.push(Object.freeze({
+      collectionId,
+      target: continuation.target,
+      cursor: continuation.cursor,
+    }));
+  };
+  if (result?.kind === 'append') {
+    add(result.collectionId, result.continuation);
+  } else {
+    const visit = (component) => {
+      if (component?.type === 'contentCollection') add(component.id, component.continuation);
+      for (const child of component?.children ?? []) visit(child);
+    };
+    for (const component of result?.document?.components ?? []) visit(component);
+  }
+  return Object.freeze(continuations);
+}
+
 export async function runReadingSourceFlow({
   plugin,
   contentId = null,
@@ -54,9 +87,28 @@ export async function runReadingSourceFlow({
     requireNonEmpty(discoveryItems, 'source_discovery_empty', 'discover');
   }
   if (searchRequest !== null) {
-    const search = await runStage('search', () => plugin.search(searchRequest));
-    searchItems = search?.items ?? [];
-    requireNonEmpty(searchItems, 'source_search_empty', 'search');
+    const requests = Array.isArray(searchRequest) ? searchRequest : [searchRequest];
+    let foundNonEmpty = false;
+    for (let index = 0; index < requests.length; index += 1) {
+      const search = await runStage(
+        requests.length === 1 ? 'search' : `search.${index + 1}`,
+        () => plugin.search(requests[index]),
+      );
+      const items = Array.isArray(search?.items) ? search.items : [];
+      if (items.length === 0) continue;
+      foundNonEmpty = true;
+      if (contentId === null || items.some((item) => item?.id === contentId)) {
+        searchItems = items;
+        break;
+      }
+    }
+    if (!foundNonEmpty) requireNonEmpty([], 'source_search_empty', 'search');
+    if (searchItems.length === 0) {
+      throw new SourceTestFailure('source_search_identity_missing', 'search', {
+        expectedId: contentId,
+        attempts: requests.length,
+      });
+    }
   }
   if (suggestionsRequest !== null) {
     const suggestions = await runStage(
@@ -91,11 +143,26 @@ export async function runReadingSourceFlow({
     });
   }
 
-  const sampleIndexes = [...new Set([0, Math.floor((chapterIds.length - 1) / 2), chapterIds.length - 1])];
+  for (let index = 1; index < chapterItems.length; index += 1) {
+    const previous = chapterItems[index - 1]?.order;
+    const current = chapterItems[index]?.order;
+    if (Number.isFinite(previous) && Number.isFinite(current) && current < previous) {
+      throw new SourceTestFailure('source_chapters_unordered', 'chapters', { index });
+    }
+  }
+  validateMediaGroups(detail, chapters, chapterIds);
+
+  const readableChapters = chapterItems.filter((chapter) => chapter?.isLocked !== true);
+  if (readableChapters.length === 0) {
+    throw new SourceTestFailure('source_chapters_no_readable_sample', 'content', {
+      items: chapterItems.length,
+    });
+  }
+  const sampleIndexes = [...new Set([0, Math.floor((readableChapters.length - 1) / 2), readableChapters.length - 1])];
   const contents = [];
   let contentUnits = 0;
   for (const sampleIndex of sampleIndexes) {
-    const chapterId = chapterIds[sampleIndex];
+    const chapterId = readableChapters[sampleIndex].id;
     const content = await runStage(
       `content.${sampleIndex}`,
       () => plugin.getContent({ id: selectedId, chapterId }),
@@ -105,6 +172,14 @@ export async function runReadingSourceFlow({
         sampleIndex,
       });
     }
+    if (detail?.contentKind !== undefined && content?.contentKind !== detail.contentKind) {
+      throw new SourceTestFailure('source_content_kind_mismatch', 'content', {
+        expected: detail.contentKind,
+        actual: content?.contentKind ?? null,
+        sampleIndex,
+      });
+    }
+    validateTypedContent(content, sampleIndex);
     const units = contentUnitCount(content);
     if (units === 0) {
       throw new SourceTestFailure('source_content_empty', 'content', {
@@ -136,6 +211,66 @@ export async function runReadingSourceFlow({
       contentUnits,
     }),
   });
+}
+
+function validateTypedContent(content, sampleIndex) {
+  if (content?.contentKind === 'manga') {
+    const pages = Array.isArray(content.pages) ? content.pages : [];
+    const ids = pages.map((page) => page?.id);
+    const indexes = pages.map((page) => page?.index);
+    if (
+      ids.some((id) => typeof id !== 'string' || id.length === 0)
+      || new Set(ids).size !== ids.length
+      || indexes.some((index) => !Number.isSafeInteger(index))
+      || new Set(indexes).size !== indexes.length
+      || indexes.some((index, position) => position > 0 && index < indexes[position - 1])
+      || pages.some((page) => typeof page?.url !== 'string' || page.url.length === 0)
+    ) {
+      throw new SourceTestFailure('source_manga_pages_invalid', 'content', { sampleIndex });
+    }
+  }
+  if (content?.contentKind === 'audio' && content?.media?.resourceType !== 'audio') {
+    throw new SourceTestFailure('source_audio_media_invalid', 'content', { sampleIndex });
+  }
+  if (
+    content?.contentKind === 'video'
+    && content?.media?.resourceType !== 'video'
+    && content?.media?.resourceType !== 'hls'
+  ) {
+    throw new SourceTestFailure('source_video_media_invalid', 'content', { sampleIndex });
+  }
+}
+
+function validateMediaGroups(detail, chapters, chapterIds) {
+  if (detail?.contentKind !== 'audio' && detail?.contentKind !== 'video') return;
+  const groups = Array.isArray(chapters?.groups) ? chapters.groups : [];
+  const groupIds = groups.map((group) => group?.id);
+  const episodeIds = groups.flatMap((group) =>
+    Array.isArray(group?.episodes) ? group.episodes.map((episode) => episode?.id) : []
+  );
+  const chapterSet = new Set(chapterIds);
+  if (
+    groups.length === 0
+    || groupIds.some((id) => typeof id !== 'string' || id.length === 0)
+    || new Set(groupIds).size !== groupIds.length
+    || episodeIds.length !== chapterIds.length
+    || new Set(episodeIds).size !== episodeIds.length
+    || episodeIds.some((id) => !chapterSet.has(id))
+  ) {
+    throw new SourceTestFailure('source_media_groups_invalid', 'chapters', {
+      contentKind: detail.contentKind,
+      groups: groups.length,
+      chapters: chapterIds.length,
+      episodes: episodeIds.length,
+    });
+  }
+  for (let index = 1; index < groups.length; index += 1) {
+    const previous = groups[index - 1]?.order;
+    const current = groups[index]?.order;
+    if (Number.isFinite(previous) && Number.isFinite(current) && current < previous) {
+      throw new SourceTestFailure('source_media_groups_unordered', 'chapters', { index });
+    }
+  }
 }
 
 function contentUnitCount(content) {

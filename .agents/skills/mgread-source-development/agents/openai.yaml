@@ -1,4 +1,4 @@
 interface:
   display_name: "MgRead 数据源开发"
   short_description: "开发、修复、迁移、批量检测并验证 MgRead 数据源"
-  default_prompt: "Use $mgread-source-development to choose the relevant source scenario, load only its required contracts, implement the change, and verify each affected content type."
+  default_prompt: "Use $mgread-source-development to keep direct-Node quick checks separate from real MgRead EXE CLI checks and verify the bounded full chain, including discovery child lists, covers, detail, catalog, content, and type-specific media."

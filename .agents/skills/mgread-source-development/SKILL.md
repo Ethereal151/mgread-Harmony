@@ -17,7 +17,7 @@ description: Develop, migrate, repair, retire, audit, or batch-test MgRead real 
 | 批量健康检查、同类来源整顿、全源回归、简介审计 | [source-batch-audit.md](references/source-batch-audit.md) |
 | 从旧格式或第三方仓库迁移来源 | [source-migration-workflow.md](references/source-migration-workflow.md) |
 | 删除、退役或停止发布来源 | [source-retirement-workflow.md](references/source-retirement-workflow.md) |
-| 只设计或执行自动化、Node/App CLI 验收 | [source-testing-workflow.md](references/source-testing-workflow.md) |
+| 设计或执行快速检查、主程序 CLI 实际检查、全链路验收 | [source-testing-workflow.md](references/source-testing-workflow.md) |
 | 修改通用 Source API、资源契约、安装/开发加载或 Runtime 来源生命周期 | [source-plugin-contract.md](references/source-plugin-contract.md) |
 | 修改发现公开类型、Runtime/Facade 解码或 Flutter 宿主渲染 | [discovery-contract.md](references/discovery-contract.md) |
 | 修改 `ctx.webview` 公开 API | [webview-api.md](references/webview-api.md) |
@@ -47,11 +47,15 @@ description: Develop, migrate, repair, retire, audit, or batch-test MgRead real 
   插件不得整体缓冲或导出字节。
 - 浏览器会话不得让来源读取、记录、导出或手写 Cookie、验证令牌和伪造 UA；需要同 Profile HTTP 时使用
   当前公开 session API，页面必须执行脚本时才保留最小 WebView 操作。
-- Node 命令使用仓库固定 Node/npm。离线、live、Node CLI、artifact、Windows App CLI 和平台实机是不同证据，
-  任何一层都不能替代另一层。
+- 本技能中“快速检查”仅指仓库固定 Node 直接调用 `mgread-source-test.mjs`；“实际检查”仅指当前真实
+  MgRead 主程序 EXE 的 `--source-check` / `--source-check-all` CLI。不得用 Node、`flutter test`、mock、Runtime 私有端口
+  或单独构建成功冒充实际检查。
+- 离线测试、快速检查、实际检查、artifact、Windows/Android 实机是不同证据。只有完成发现根页、发现子列表、
+  搜索、详情、完整目录、按类型正文/媒体抽样与所有适用资源组后，才能称为全链路通过。
 
 ## 收尾
 
 按主参考定义的范围运行直接测试；公开契约、testkit 或跨来源共用逻辑变化时扩大到受影响来源和全源模式。
-交付时分开报告静态/离线、live、资源类型、artifact、Node CLI、Windows App CLI、Android/Windows 实机、
-外部阻塞和未执行项。只提交本次拥有的明确文件。
+交付时将“快速检查”与“实际检查”分成两组结果，再分列发现各表面封面、搜索封面、详情封面、目录、正文、
+漫画页图、音频、视频/HLS、外部阻塞和未执行项。任何适用项未验证都只能报 `partial`，不得写“全链路通过”。
+只提交本次拥有的明确文件。

@@ -10,12 +10,19 @@ import { pathToFileURL } from 'node:url';
 
 import { assertStandardSourceContract, loadSourcePackage } from './contract.js';
 import { SourceTestFailure, failureFromCause } from './diagnostics.js';
-import { collectDiscoveryContent, collectDiscoveryTargets, runReadingSourceFlow } from './flow.js';
+import {
+  collectDiscoveryContent,
+  collectDiscoveryContinuations,
+  collectDiscoveryTargets,
+  runReadingSourceFlow,
+} from './flow.js';
 import { createSourceTestHarness } from './harness.js';
 import { probeResourceGroups } from './resource.js';
 
 const maximumBuildOutputCharacters = 2400;
 const defaultStageTimeoutMs = 90000;
+const maximumDiscoveryTargets = 6;
+const maximumDiscoveryContinuations = 6;
 
 export function parseSourceTestArguments(arguments_, { cwd = process.cwd() } = {}) {
   let all = false;
@@ -145,17 +152,42 @@ async function runProject(project, options) {
       'discover.root',
       () => plugin.discover({ target: null, cursor: null, collectionId: null, pageSize: 20 }),
     );
-    let discoveryItems = collectDiscoveryContent(discovery);
-    if (discoveryItems.length === 0) {
-      for (const target of collectDiscoveryTargets(discovery).slice(0, 6)) {
-        const child = await runProjectStage(
-          'discover.target',
-          () => plugin.discover({ target, cursor: null, collectionId: null, pageSize: 20 }),
-        );
-        discoveryItems = collectDiscoveryContent(child);
-        if (discoveryItems.length > 0) break;
+    const discoverySurfaces = [{ name: 'discover.root', items: collectDiscoveryContent(discovery) }];
+    const continuations = collectDiscoveryContinuations(discovery).slice(0, maximumDiscoveryContinuations);
+    const targets = collectDiscoveryTargets(discovery).slice(0, maximumDiscoveryTargets);
+    for (let index = 0; index < targets.length; index += 1) {
+      const target = targets[index];
+      const child = await runProjectStage(
+        `discover.target.${index + 1}`,
+        () => plugin.discover({ target, cursor: null, collectionId: null, pageSize: 20 }),
+      );
+      discoverySurfaces.push({ name: `discover.target.${index + 1}`, items: collectDiscoveryContent(child) });
+      for (const continuation of collectDiscoveryContinuations(child)) {
+        if (continuations.length >= maximumDiscoveryContinuations) break;
+        continuations.push(continuation);
       }
     }
+    for (let index = 0; index < continuations.length; index += 1) {
+      const continuation = continuations[index];
+      const append = await runProjectStage(
+        `discover.append.${index + 1}`,
+        () => plugin.discover({
+          target: continuation.target,
+          cursor: continuation.cursor,
+          collectionId: continuation.collectionId,
+          pageSize: 20,
+        }),
+      );
+      if (append?.kind !== 'append' || append.collectionId !== continuation.collectionId) {
+        throw new SourceTestFailure('source_discovery_append_invalid', 'discover.append', {
+          expectedCollectionId: continuation.collectionId,
+          actualCollectionId: append?.collectionId ?? null,
+          kind: append?.kind ?? null,
+        });
+      }
+      discoverySurfaces.push({ name: `discover.append.${index + 1}`, items: collectDiscoveryContent(append) });
+    }
+    const discoveryItems = uniqueContent(discoverySurfaces.flatMap((surface) => surface.items));
     if (discoveryItems.length === 0) {
       throw new SourceTestFailure('source_discovery_empty', 'discover', {});
     }
@@ -167,14 +199,18 @@ async function runProject(project, options) {
       );
       suggestionItems = Array.isArray(suggestions?.items) ? suggestions.items : [];
     }
-    const query = discoveryItems.map((item) => nonBlank(item?.title)).find(Boolean)
-      ?? suggestionItems.map((item) => nonBlank(item?.query)).find(Boolean)
-      ?? nonBlank(acceptance.searchQuery);
-    if (query === null) throw new SourceTestFailure('source_search_query_missing', 'search', {});
+    const discoveryCandidate = discoveryItems.find((item) => nonBlank(item?.id) !== null && nonBlank(item?.title) !== null);
+    const searchQueries = buildSearchQueries({
+      title: discoveryCandidate?.title,
+      suggestionItems,
+      fallback: acceptance.searchQuery,
+    });
+    if (searchQueries.length === 0) throw new SourceTestFailure('source_search_query_missing', 'search', {});
     const flow = await withTimeout(
       runReadingSourceFlow({
         plugin,
-        searchRequest: { query, cursor: null, pageSize: 8 },
+        contentId: nonBlank(discoveryCandidate?.id),
+        searchRequest: searchQueries.map((query) => ({ query, cursor: null, pageSize: 8 })),
       }),
       'flow',
       defaultStageTimeoutMs * 4,
@@ -183,6 +219,7 @@ async function runProject(project, options) {
       requests: harness.resourceRequests,
       detail: flow.detail,
       discoveryItems,
+      discoverySurfaces,
       searchItems: flow.searchItems,
       contents: flow.contents,
       contentKind: flow.summary.contentKind,
@@ -201,6 +238,9 @@ async function runProject(project, options) {
       durationMs: Date.now() - started,
       summary: Object.freeze({
         discoveryItems: discoveryItems.length,
+        discoverySurfaces: discoverySurfaces.length,
+        discoveryTargets: targets.length,
+        discoveryContinuations: continuations.length,
         searchItems: flow.summary.searchItems,
         suggestionItems: suggestionItems.length,
         chapterItems: flow.summary.chapterItems,
@@ -355,4 +395,33 @@ function nonBlank(value) {
   if (typeof value !== 'string') return null;
   const normalized = value.trim();
   return normalized.length === 0 ? null : normalized;
+}
+
+function uniqueContent(items) {
+  const seen = new Set();
+  const values = [];
+  for (const item of items) {
+    const id = nonBlank(item?.id);
+    if (id === null || seen.has(id)) continue;
+    seen.add(id);
+    values.push(item);
+  }
+  return Object.freeze(values);
+}
+
+function buildSearchQueries({ title, suggestionItems, fallback }) {
+  const queries = [];
+  const add = (value) => {
+    const normalized = nonBlank(value);
+    if (normalized !== null && !queries.includes(normalized) && queries.length < 4) queries.push(normalized);
+  };
+  const normalizedTitle = nonBlank(title);
+  add(normalizedTitle);
+  if (normalizedTitle !== null) {
+    add(normalizedTitle.replace(/^[《「『【](.*)[》」』】]$/u, '$1'));
+    add(normalizedTitle.split(/[：:（(]/u, 1)[0]);
+  }
+  for (const item of suggestionItems) add(item?.query);
+  add(fallback);
+  return Object.freeze(queries);
 }

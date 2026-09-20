@@ -1,86 +1,103 @@
-# 自动检测与正式验收
+# 快速检查与实际检查
 
-## 两层入口
+## 先固定名词
 
-1. 开发阶段使用 `packages/mg_read_source_testkit` 的纯 Node CLI，检查 build、公开导出、临时宿主和 live 内容链路。
-2. 开发完成后使用 Windows Release App 正式 CLI，经生产
-   `SourceContentGateway -> Runtime Facade -> Runtime -> 已启用插件` 验证真实宿主。
+| 名称 | 唯一入口 | 能证明什么 | 不能代替什么 |
+| --- | --- | --- | --- |
+| 快速检查 | 仓库固定 Node 直接运行 `packages/mg_read_source_testkit/bin/mgread-source-test.mjs` | 来源 build、公开导出、临时宿主与有界 live 内容/资源链路 | 真实 App 启动、已安装/已启用插件、Runtime Facade 校验和主程序资源代理 |
+| 实际检查 | 当前真实 MgRead 主程序 EXE 的 `--source-check` / `--source-check-all` | 生产 `SourceContentGateway -> Runtime Facade -> Runtime -> 已启用插件` 链路 | Windows/Android 可见 UI、人工验证、真机播放或长时稳定性 |
 
-Node 层不依赖 Flutter、PowerShell 包装或 Runtime 私有端口；App 层不是 `flutter test` 或
-`integration_test`。先读取 [content-validation-matrix.md](content-validation-matrix.md)选择内容类型的通过标准。
+不要再把 Node CLI 称为“正式验收”，也不要用 `flutter test`、`integration_test`、Runtime 私有端口、
+mock 或单独 build 替代主程序 EXE CLI。两层都可访问真站，“快速”指它绕过 Flutter/主程序宿主，
+不表示只做静态检查。
 
-## Node 单源与全源
+## 全链路通过标准
 
-从仓库根目录直接使用当前平台对应的仓库固定 Node，不回退系统 Node；Windows 示例：
+快速检查和实际检查都按同一业务矩阵记录证据，只是宿主不同：
+
+1. `discover.root`：根发现文档可解码，组件、target、collection 和 continuation 合法。
+2. `discover.target.*`：有界遍历根页暴露的 tab/category target，不得在找到第一个非空列表后就假定其他子列表正常。
+3. `discover.append.*`：对带 continuation 的代表列表至少验证一次追加，核对 target/cursor/collectionId 和稳定 ID。
+4. `search`：从当前发现标题生成少量有界查询，搜索结果必须找回同一稳定 ID，不能无条件取首项。
+5. `detail`：使用上述稳定 ID，校验标题、`contentKind`、访问性和关键元数据。
+6. `chapters`：读取完整目录，校验非空 ID、唯一性、顺序、锁定语义；音频/视频还要校验 `groups[]` 与扁平 items 对应。
+7. `content.first|middle|last`：从可读项抽取去重的首/中/末样本，核对 chapterId、`contentKind` 和真实正文/页图/媒体描述。
+8. 资源组：封面、漫画页图、音频、视频/HLS 分组验证，只读格式识别所需前缀并立即取消。
+
+封面不是一个聚合“有一张能打开”的检查。至少分开记录 `discover.root`、每个已抽样
+`discover.target`、`search` 和 `detail` 的封面候选数、已登记数、探测数和结果。某个发现子列表封面全部失效时，
+不能因详情封面可达而通过。
+
+严格通过需要内容链路和全部适用资源子组均为 `passed`。适用子组为 `notRegistered`、`notTested`、
+`unverified` 或当前工具只做了聚合探测时，整个来源最多只能记为 `partial`。详细类型标准读取
+[content-validation-matrix.md](content-validation-matrix.md)。
+
+## 快速检查：直接 Node
+
+从仓库根目录使用当前平台对应的仓库固定 Node，不回退系统 Node。Windows 单源：
 
 ```text
-packages\mg_read_node_runtime\tools\node-v24.16.0-win-x64\node.exe --use-env-proxy packages\mg_read_source_testkit\bin\mgread-source-test.mjs --source aisishuwu --report artifacts\source-tests\node-aisishuwu.json
+packages\mg_read_node_runtime\tools\node-v24.16.0-win-x64\node.exe --use-env-proxy packages\mg_read_source_testkit\bin\mgread-source-test.mjs --source aisishuwu --report artifacts\source-tests\quick-aisishuwu.json
 ```
 
-开发循环默认单源。testkit、公共 Source 契约或跨来源共用代码变化时追加：
+全源：
 
 ```text
-packages\mg_read_node_runtime\tools\node-v24.16.0-win-x64\node.exe --use-env-proxy packages\mg_read_source_testkit\bin\mgread-source-test.mjs --all --report artifacts\source-tests\node-all.json
+packages\mg_read_node_runtime\tools\node-v24.16.0-win-x64\node.exe --use-env-proxy packages\mg_read_source_testkit\bin\mgread-source-test.mjs --all --report artifacts\source-tests\quick-all.json
 ```
 
-`--source` 接受来源目录、package 名或 pluginId。CLI 默认执行来源声明的 build，再从 `dist` 检查 metadata、
-标准导出、`activate(ctx)`、发现与有限 target、动态搜索、详情、完整目录、首/中/末有界内容样本和登记资源。
-`test/acceptance.json.searchQuery` 只作无法派生查询时的后备；不得用固定 `contentId` 绕过自动发现与搜索。
-`--skip-build` 只用于已确认 dist 与源码一致的重复诊断。
+`--source` 接受来源目录、package 名或 pluginId。默认先执行来源声明的 build，然后从 `dist` 装载。
+`--skip-build` 只用于已证明 dist 与源码一致的重复诊断。`test/acceptance.json.searchQuery` 只是无法从当前发现/建议
+派生查询时的后备，不得固定 `contentId` 绕过发现与搜索。
 
-小说要按图书策略选择可读章节并验证文本；漫画、音频、视频与封面要分资源组报告。当前 CLI 报告
-`summary.resourceGroups` 中的 `cover`、`comicImages`、`audio`、`video`，每组独立返回
-`passed/failed/notRegistered/notTested`；`resourceStatus` 仅是兼容聚合字段，不能推断全组通过。
+CLI 退出码：`0` 所有来源严格通过、`1` 已完成但存在 `failed/partial`、`2` 参数或启动失败。全源必须
+遇错继续到最后一个来源。缺 `node_modules` 导致的 build `127` 先按 lock 恢复依赖，不记为来源代码失败。
 
-### 当前 CLI 的解释边界
-
-- `--all` 会枚举带 `contentKinds` 的 fixture/demo；生产来源健康率与测试基础设施契约状态分开统计。
-- CLI 会执行 build，但不会替调用方准备缺失的 `node_modules`；全源前先检查依赖，`127` 先归类环境问题并按
-  lock 恢复，再进行有效复跑。
-- 当前自动搜索只使用一个派生查询，标准链路选择搜索首项；`search_empty` 或选中错误条目时，用来源 live 测试
-  按内容矩阵的有界查询和稳定 ID 规则复核，不能直接断言解析器损坏。
-- 当前章节抽样不自动跳过锁定项；严格验证仍必须补齐可读章节和各适用资源组。资源分组失败会使来源失败，
-  适用组为 `notRegistered/notTested` 时来源降为 `partial`。
-- 当前全源报告和 stdout 可能在任务末尾才出现；监控进程而不是猜进度。修改 testkit 时优先增加逐源进度或
-  原子检查点，不能改变“遇错继续”和最终退出码。
-
-因此当前 `--all` 是完整项目筛查入口，不单独构成内容矩阵的完整验收；只有内容链路和全部适用资源组均为
-`passed` 时才是严格通过。
-
-testkit 自身变化还运行固定 Node 的直接测试：
+testkit 自身变化时运行固定 Node 的离线直接测试：
 
 ```text
 packages\mg_read_node_runtime\tools\node-v24.16.0-win-x64\node.exe --test packages\mg_read_source_testkit\test\*.test.mjs
 ```
 
-Node CLI 退出码：`0` 全部通过、`1` 已完成且存在来源失败、`2` 参数或启动失败。全源模式必须继续到最后一个
-来源并保留所有失败。
+## 实际检查：真实主程序 EXE CLI
 
-## Windows 正式 App CLI
-
-App、Runtime 或 Facade 改动后先构建与交付一致的 Release：
+使用用户指定或当前要交付的真实 `mg_read.exe`；报告必须记录 EXE 绝对路径、产品版本与报告时间。
+如任务包含 App、Runtime、Facade 或发布产物改动，先生成与交付一致的 Windows Release；否则不为了“测试”偷换成
+临时 Debug 宿主。
 
 ```text
-flutter build windows --release
-build\windows\x64\runner\Release\mg_read.exe --source-check=org.mgread.aisishuwu --source-check-report=artifacts\source-tests\app-aisishuwu.json
-build\windows\x64\runner\Release\mg_read.exe --source-check-all --source-check-report=artifacts\source-tests\app-all.json
+build\windows\x64\runner\Release\mg_read.exe --source-check=org.mgread.aisishuwu --source-check-report=artifacts\source-tests\actual-aisishuwu.json
+build\windows\x64\runner\Release\mg_read.exe --source-check-all --source-check-report=artifacts\source-tests\actual-all.json
 ```
 
 Windows Release 是 GUI 子系统进程；自动化用 `Start-Process -WindowStyle Hidden -Wait -PassThru` 等待真实退出，
-再读取报告和 `ExitCode`。单源始终执行；testkit、Runtime 公共边界、宿主或跨来源逻辑变化时追加全源。
+再读取 JSON 报告和 `ExitCode`。单源修复先跑单源；全源审计、testkit/Runtime/宿主公共逻辑变化再跑全源。
 
-App 引擎验证 Runtime 状态、发现、搜索、详情、目录、按类型内容样本和 Runtime 代理后的资源。退出码：`0`
-通过、`1` 完成但有失败/取消、`2` 内部或报告错误、`3` 需要交互、`4` 参数错误或平台不支持。
+当前 App CLI 退出码：`0` 引擎内阶段通过、`1` 完成但有失败/取消、`2` 内部或报告错误、`3` 需要交互、
+`4` 参数错误或平台不支持。读取报告后还要按本文矩阵重新归一化；如 EXE 报告仍只有聚合
+`resource.cover/resource.content`，没有发现表面和类型子组，调用方必须降级为 `partial` 并列出缺失项；
+不得因 EXE 返回 `0` 就宣称全链路通过。
 
-## 判读与报告
+## 漫画、音频和视频的额外检查
 
-先看 `status/totals`，再按 `pluginId -> stages` 定位首错：
+- 漫画：除封面外，首/中/末可读章节都要有 pages；按不同章节和页位分层抽样页图，校验 page id/index、
+  登记描述、MIME、文件签名与非空前缀。
+- 音频/音乐：校验曲目顺序、锁定项、groups 对应、`media.resourceType=audio`、headers、Range、媒体 MIME/签名；
+  有时效签名时重新 `getContent` 验证刷新语义。封面仍是独立子组。
+- 视频：校验扁平 episodes 与 `groups[]`、稳定 `groupId + episodeId`、`media.resourceType=video|hls`。直链检查有界 Range、
+  MIME 与容器签名；HLS 检查 `#EXTM3U`、主/媒体 playlist、基址解析，并有界探测一个 variant、key 或 segment。
 
-- Node/App 同阶段失败：检查来源解析、网络或公共返回值，单源有界复现一次。
-- Node 过、App 为 `invalid_format`：检查 Runtime 公开校验，不能以 Node 代替宿主。
-- Node 过、App 在 `resource.*` 失败：检查 proxy 描述和 Runtime 数据面。
-- WebView/人工交互受限：记录 Node 能力边界，以 App 的 `interactionRequired` 或实际结果验收。
+上述额外检查不得被“详情可读”“有 media URL”或“封面可达”替代。
+
+## 判读与停止条件
+
+先看 `status/totals`，再按 `pluginId -> stages -> resource groups/surfaces` 定位首错：
+
+- 快速/实际同阶段失败：优先检查来源解析、网络或公开返回值。
+- 快速过、实际为 `invalid_format`：检查 Runtime/Facade 公开校验。
+- 快速过、实际在资源失败：检查 proxy 描述、headers 与 Runtime 数据面。
+- WebView/人工交互受限：记录 `interactionRequired`，不归为普通解析缺陷。
 - 单次 live 失败：保留首次报告，只有界复跑一次，不无限重试到绿。
 
-测试框架验收还需：离线自测；小说、漫画、音频、视频各一健康代表；每类至少一故意失败 fixture；全源遇错后
-仍完成且返回非零。最终分开报告离线、live、各资源组、Node、App CLI、Windows/Android、外部阻塞和未执行项。
+全源必须遇错继续、保留每源首错和中间报告。最终将快速检查、实际检查、各封面表面、正文、漫画页图、
+音频、视频/HLS、Windows/Android 实机、外部阻塞和未执行项分开报告。
