@@ -12,40 +12,27 @@ import 'package:mg_read/shared/presentation/app_navigation_destination.dart';
 void main() {
   setUpAll(() async {
     final FontLoader miSans = FontLoader('packages/novel_reader_ui/MiSans')
-      ..addFont(
-        rootBundle.load('packages/novel_reader_ui/assets/fonts/MiSansVF.ttf'),
-      );
-    final FontLoader materialIcons = FontLoader('MaterialIcons')
-      ..addFont(rootBundle.load('fonts/MaterialIcons-Regular.otf'));
+      ..addFont(rootBundle.load('packages/novel_reader_ui/assets/fonts/MiSansVF.ttf'));
+    final FontLoader materialIcons = FontLoader('MaterialIcons')..addFont(rootBundle.load('fonts/MaterialIcons-Regular.otf'));
     await Future.wait(<Future<void>>[miSans.load(), materialIcons.load()]);
   });
 
-  testWidgets('matches the compact light source picker visual baseline', (
-    tester,
-  ) async {
+  testWidgets('matches the compact light source picker visual baseline', (tester) async {
     await _setViewport(tester, const Size(768, 1496));
     await tester.pumpWidget(const _SourcePickerGoldenHost());
     await tester.tap(find.byKey(const Key('discovery-source-selector')));
     await tester.pumpAndSettle();
 
-    await expectLater(
-      find.byType(MaterialApp),
-      matchesGoldenFile('goldens/source_picker_compact_light.png'),
-    );
+    await expectLater(find.byType(MaterialApp), matchesGoldenFile('goldens/source_picker_compact_light.png'));
   });
 
-  testWidgets('matches the compact dark source picker visual baseline', (
-    tester,
-  ) async {
+  testWidgets('matches the compact dark source picker visual baseline', (tester) async {
     await _setViewport(tester, const Size(768, 1496));
     await tester.pumpWidget(const _SourcePickerGoldenHost(dark: true));
     await tester.tap(find.byKey(const Key('discovery-source-selector')));
     await tester.pumpAndSettle();
 
-    await expectLater(
-      find.byType(MaterialApp),
-      matchesGoldenFile('goldens/source_picker_compact_dark.png'),
-    );
+    await expectLater(find.byType(MaterialApp), matchesGoldenFile('goldens/source_picker_compact_dark.png'));
   });
 }
 
@@ -63,10 +50,7 @@ class _SourcePickerGoldenHost extends StatelessWidget {
       builder: (context, child) {
         final mediaQuery = MediaQuery.of(context);
         return MediaQuery(
-          data: mediaQuery.copyWith(
-            padding: const EdgeInsets.only(top: 24),
-            viewPadding: const EdgeInsets.only(top: 24),
-          ),
+          data: mediaQuery.copyWith(padding: const EdgeInsets.only(top: 24), viewPadding: const EdgeInsets.only(top: 24)),
           child: child ?? const SizedBox.shrink(),
         );
       },
@@ -78,6 +62,8 @@ class _SourcePickerGoldenHost extends StatelessWidget {
             context,
             sources: _sources,
             selectedSourceId: _sources.first.id,
+            pinnedSourceIds: <String>[_sources.first.id],
+            recentSourceIds: _sources.take(4).map((source) => source.id),
           ),
         ),
       ),
@@ -86,27 +72,22 @@ class _SourcePickerGoldenHost extends StatelessWidget {
 }
 
 final List<PluginSourceDescriptor> _sources = <PluginSourceDescriptor>[
-  for (final (String id, String name, PluginContentKind kind)
-      in <(String, String, PluginContentKind)>[
-        ('org.mgread.qidian', '起点中文网', PluginContentKind.novel),
-        ('org.mgread.fanqie', '番茄小说', PluginContentKind.novel),
-        ('org.mgread.qimao', '七猫中文网', PluginContentKind.novel),
-        ('org.mgread.zongheng', '纵横中文网', PluginContentKind.novel),
-        ('org.mgread.jinjiang', '晋江文学城', PluginContentKind.novel),
-        ('org.mgread.17k', '17K 小说网', PluginContentKind.novel),
-        ('org.mgread.xiaoxiang', '潇湘书院', PluginContentKind.novel),
-        ('org.mgread.feilu', '飞卢小说网', PluginContentKind.novel),
-        ('org.mgread.douban', '豆瓣阅读', PluginContentKind.novel),
-        ('org.mgread.shuqi', '书旗小说', PluginContentKind.novel),
-        ('org.mgread.ciweimao', '刺猬猫阅读', PluginContentKind.novel),
-        ('org.mgread.zhangyue', '掌阅精选', PluginContentKind.novel),
-        ('org.mgread.comic', '示例漫画源', PluginContentKind.manga),
-      ])
-    PluginSourceDescriptor(
-      id: id,
-      displayName: name,
-      contentKinds: <PluginContentKind>[kind],
-    ),
+  for (final (String id, String name, PluginContentKind kind) in <(String, String, PluginContentKind)>[
+    ('org.mgread.qidian', '起点中文网', PluginContentKind.novel),
+    ('org.mgread.fanqie', '番茄小说', PluginContentKind.novel),
+    ('org.mgread.qimao', '七猫中文网', PluginContentKind.novel),
+    ('org.mgread.zongheng', '纵横中文网', PluginContentKind.novel),
+    ('org.mgread.jinjiang', '晋江文学城', PluginContentKind.novel),
+    ('org.mgread.17k', '17K 小说网', PluginContentKind.novel),
+    ('org.mgread.xiaoxiang', '潇湘书院', PluginContentKind.novel),
+    ('org.mgread.feilu', '飞卢小说网', PluginContentKind.novel),
+    ('org.mgread.douban', '豆瓣阅读', PluginContentKind.novel),
+    ('org.mgread.shuqi', '书旗小说', PluginContentKind.novel),
+    ('org.mgread.ciweimao', '刺猬猫阅读', PluginContentKind.novel),
+    ('org.mgread.zhangyue', '掌阅精选', PluginContentKind.novel),
+    ('org.mgread.comic', '示例漫画源', PluginContentKind.manga),
+  ])
+    PluginSourceDescriptor(id: id, displayName: name, contentKinds: <PluginContentKind>[kind]),
 ];
 
 Future<void> _setViewport(WidgetTester tester, Size size) async {
