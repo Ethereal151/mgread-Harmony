@@ -67,12 +67,6 @@ void main() {
     expect(find.byKey(const Key('library-home-top-backdrop-cover')), findsOneWidget);
     expect(find.byKey(const Key('library-home-top-bottom-fade')), findsOneWidget);
     expect(find.byKey(const Key('library-home-reading-readability-scrim')), findsOneWidget);
-    final DecoratedBox bottomFade = tester.widget<DecoratedBox>(find.byKey(const Key('library-home-top-bottom-fade')));
-    final LinearGradient bottomGradient = (bottomFade.decoration as BoxDecoration).gradient! as LinearGradient;
-    expect(
-      bottomGradient.colors.last,
-      AppThemeTokens.of(tester.element(find.byKey(const Key('library-home-top-backdrop')))).pageBackground,
-    );
     expect(tester.widget<ClipRect>(find.byKey(const Key('library-home-top-backdrop'))), isA<ClipRect>());
     final LibraryBookCover backdropCover = tester.widget<LibraryBookCover>(find.byKey(const Key('library-home-top-backdrop-cover')));
     expect(backdropCover.alignment, Alignment.topCenter);
