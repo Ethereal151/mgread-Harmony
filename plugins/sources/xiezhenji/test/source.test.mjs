@@ -27,7 +27,7 @@ test('fixture chain uses one browser session for discovery, detail and gallery H
         status: 200,
         url: request.url,
         headers: { 'content-type': 'text/html' },
-        body: path.endsWith('/page/2/') ? second : path === '/article/42/' ? detail : list,
+        body: /\/article\/42\/page\/\d+\/$/u.test(path) ? second : path === '/article/42/' ? detail : list,
       };
     },
     async getUrl() { return 'https://xx.knit.bid/'; },
@@ -55,6 +55,7 @@ test('fixture chain uses one browser session for discovery, detail and gallery H
   const chapters = await plugin.getChapters({ id: info.id });
   const content = await plugin.getContent({ id: info.id, chapterId: chapters.items[0].id });
   assert.equal(content.pages.length, 2);
+  assert.equal(browserRequests.filter((request) => /\/article\/42\/page\/\d+\/$/u.test(new URL(request.url).pathname)).length, 15);
   assert.equal(opened, 1);
   assert.deepEqual(navigations, ['https://xx.knit.bid/']);
   assert.ok(browserRequests.length >= 4);
