@@ -35,6 +35,11 @@ migrate_working_dir/
 /artifacts/
 /.flutter_ohos_plugins/
 /ohos_dir.txt
+
+# OHOS build output and local Runtime smoke data.
+/packages/**/ohos/build/
+/packages/**/ohos/oh_modules/
+/packages/mg_read_node_runtime/.tmp-ohos-debug-data/
 **/failures/*.png
 
 # Symbolication related
