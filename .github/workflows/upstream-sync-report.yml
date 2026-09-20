@@ -1,0 +1,122 @@
+name: Upstream sync report
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 1 * * *'
+  push:
+    branches:
+      - main
+      - 'harmony/**'
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out Harmony branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Build upstream change report
+        id: report
+        shell: pwsh
+        env:
+          UPSTREAM_URL: https://github.com/lingy-Mg/mg_read.git
+        run: |
+          git remote add upstream $env:UPSTREAM_URL
+          git fetch --no-tags upstream main
+
+          $base = git merge-base HEAD upstream/main
+          $count = [int](git rev-list --count "$base..upstream/main")
+          $head = git rev-parse --short upstream/main
+          $reportPath = Join-Path $env:GITHUB_WORKSPACE 'upstream-sync-report.md'
+
+          @(
+            "# MgRead 主线同步报告"
+            ""
+            "- 鸿蒙分支：$(git rev-parse --abbrev-ref HEAD)"
+            "- 主线提交：$head"
+            "- 共同基点：$(git rev-parse --short $base)"
+            "- 待处理主线提交数：$count"
+            ""
+          ) | Set-Content -Path $reportPath -Encoding utf8
+
+          if ($count -eq 0) {
+            "当前没有新的主线提交。" | Add-Content -Path $reportPath -Encoding utf8
+          } else {
+            "## 提交列表" | Add-Content -Path $reportPath -Encoding utf8
+            "" | Add-Content -Path $reportPath -Encoding utf8
+            (git log --format='- `%h` %s' --reverse "$base..upstream/main") | Add-Content -Path $reportPath -Encoding utf8
+            "" | Add-Content -Path $reportPath -Encoding utf8
+            "## 影响范围" | Add-Content -Path $reportPath -Encoding utf8
+            "" | Add-Content -Path $reportPath -Encoding utf8
+
+            $groups = @{}
+            git diff --name-only "$base..upstream/main" | ForEach-Object {
+              $path = $_
+              $category = if ($path -like 'plugins/sources/*') {
+                '数据源插件'
+              } elseif ($path -like 'packages/mg_read_node_runtime/*') {
+                'Node Runtime'
+              } elseif ($path -like 'packages/*/ohos/*' -or $path -like 'ohos/*') {
+                '鸿蒙原生'
+              } elseif ($path -like 'packages/*/lib/*' -or $path -like 'lib/*' -or $path -eq 'pubspec.yaml') {
+                '共享 Flutter/API'
+              } elseif ($path -like 'test/*' -or $path -like 'packages/*/test/*' -or $path -like '.github/*') {
+                '测试与 CI'
+              } else {
+                '其他'
+              }
+              if (-not $groups.ContainsKey($category)) { $groups[$category] = [System.Collections.Generic.List[string]]::new() }
+              $groups[$category].Add($path)
+            }
+
+            foreach ($category in @('共享 Flutter/API', 'Node Runtime', '数据源插件', '鸿蒙原生', '测试与 CI', '其他')) {
+              if (-not $groups.ContainsKey($category)) { continue }
+              "### $category" | Add-Content -Path $reportPath -Encoding utf8
+              "" | Add-Content -Path $reportPath -Encoding utf8
+              $groups[$category] | Sort-Object | ForEach-Object { "- `$_`" } | Add-Content -Path $reportPath -Encoding utf8
+              "" | Add-Content -Path $reportPath -Encoding utf8
+            }
+          }
+
+          "count=$count" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "head=$head" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "report_path=$reportPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          Get-Content -Raw $reportPath | Add-Content -Path $env:GITHUB_STEP_SUMMARY -Encoding utf8
+
+      - name: Upload report artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: upstream-sync-report
+          path: upstream-sync-report.md
+
+      - name: Update upstream sync issue
+        if: steps.report.outputs.count != '0'
+        uses: actions/github-script@v7
+        env:
+          REPORT_PATH: upstream-sync-report.md
+          UPSTREAM_HEAD: ${{ steps.report.outputs.head }}
+        with:
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync(process.env.REPORT_PATH, 'utf8');
+            const title = '[主线同步] 待适配的 MgRead 更新';
+            const { owner, repo } = context.repo;
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner,
+              repo,
+              state: 'open',
+              per_page: 100,
+            });
+            const existing = issues.find((issue) => issue.title === title);
+            if (existing) {
+              await github.rest.issues.update({ owner, repo, issue_number: existing.number, body });
+            } else {
+              await github.rest.issues.create({ owner, repo, title, body });
+            }
