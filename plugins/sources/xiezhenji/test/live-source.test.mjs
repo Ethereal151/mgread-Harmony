@@ -1,3 +1,8 @@
-import assert from 'node:assert/strict'; import test from 'node:test'; import { mkdtemp, rm } from 'node:fs/promises'; import { tmpdir } from 'node:os'; import { join } from 'node:path'; import * as plugin from '../dist/index.mjs';
-const desktopUserAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36';
-test('live source and first cover work through direct HTTP with the Runtime default UA', { timeout: 30_000 }, async (t) => { const cacheDir = await mkdtemp(join(tmpdir(), 'xiezhenji-live-')); t.after(() => rm(cacheDir, { recursive: true, force: true })); const proxied = []; const runtimeFetch = (input, init = {}) => { const headers = new Headers(init.headers); if (!headers.has('user-agent')) headers.set('user-agent', desktopUserAgent); return fetch(input, { ...init, headers }); }; await plugin.activate({ dataDir: cacheDir, cacheDir, app: {}, plugin: {}, log: { debug(){},info(){},warn(){},error(){} }, resource: { proxy(request){ proxied.push(request); return `http://127.0.0.1/resource/${proxied.length}`; } }, http: { fetch: runtimeFetch } }); const result = await plugin.discover({ target: null, cursor: null, collectionId: null, pageSize: 10 }); assert.equal(result.kind, 'document'); assert.ok(result.document.components[0].children[0].items.length > 0); const cover = proxied[0]; assert.equal(cover.kind, 'image'); assert.equal(new URL(cover.url).origin, 'https://xx.knit.bid'); const response = await runtimeFetch(cover.url, { headers: cover.headers, redirect: 'follow' }); assert.equal(response.ok, true); assert.match(response.headers.get('content-type') ?? '', /^image\//u); await response.body?.cancel(); });
+import assert from 'node:assert/strict';
+import test from 'node:test';
+
+test('live direct HTTP probe records the Cloudflare gate without claiming browser verification', { timeout: 30_000 }, async () => {
+  const response = await fetch('https://xx.knit.bid/', { signal: AbortSignal.timeout(20_000) });
+  const body = await response.text();
+  assert.ok(response.status === 403 || /(?:cf-challenge|cf-turnstile|Just a moment|Checking your browser)/iu.test(body));
+});

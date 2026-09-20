@@ -70,8 +70,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(ProfileSettingPlaceholderPage), findsOneWidget);
-    expect(find.text('阅读播放设置'), findsOneWidget);
-    expect(find.byKey(const Key('reading-settings-preview')), findsOneWidget);
+    expect(find.descendant(of: find.byKey(const Key('secondary-placeholder-top-bar')), matching: find.text('阅读器与播放器')), findsOneWidget);
+    expect(find.byKey(const Key('reading-settings-preview')), findsNothing);
     expect(find.text('功能建设中'), findsNothing);
     expect(tester.getTopLeft(find.byKey(const Key('secondary-placeholder-top-bar'))).dy, 0);
     expect(find.byKey(const Key('secondary-placeholder-back')), findsOneWidget);

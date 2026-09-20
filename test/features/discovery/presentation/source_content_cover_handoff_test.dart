@@ -112,7 +112,7 @@ class _DetailEntryHostState extends State<_DetailEntryHost> {
                 },
           onAudioChapterRequested: widget.kind != PluginContentKind.audio
               ? null
-              : ({required detail, required firstCatalogPage, required chapter}) async {
+              : ({required detail, required firstCatalogPage, required chapter, required pluginVersion}) async {
                   await _openContent(detail.summary.coverBytes);
                 },
           onVideoEpisodeRequested: widget.kind != PluginContentKind.video

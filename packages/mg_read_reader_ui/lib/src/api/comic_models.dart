@@ -72,8 +72,23 @@ class ComicChapterInfo {
     required this.index,
     this.availability = ReaderChapterAvailability.unknown,
     this.imageCount,
+    this.cachedImageCount,
+    this.failedImageCount = 0,
+    this.manifestCached = false,
     this.hasBeenRead = false,
-  });
+  }) : assert(cachedImageCount == null || cachedImageCount >= 0),
+       assert(failedImageCount >= 0),
+       assert(
+         imageCount == null ||
+             cachedImageCount == null ||
+             cachedImageCount <= imageCount,
+       ),
+       assert(imageCount == null || failedImageCount <= imageCount),
+       assert(
+         imageCount == null ||
+             cachedImageCount == null ||
+             cachedImageCount + failedImageCount <= imageCount,
+       );
 
   /// Stable chapter identifier.
   final String id;
@@ -90,6 +105,18 @@ class ComicChapterInfo {
   /// Optional total number of images.
   final int? imageCount;
 
+  /// Number of image bodies confirmed in the host cache for this session.
+  ///
+  /// Null means the host has not measured image-level progress yet. Zero is a
+  /// measured value and is distinct from a cached chapter manifest.
+  final int? cachedImageCount;
+
+  /// Number of image cache attempts that failed in the latest preload pass.
+  final int failedImageCount;
+
+  /// Whether the ordered image manifest is cached independently of bodies.
+  final bool manifestCached;
+
   /// Whether the host considers this chapter read.
   final bool hasBeenRead;
 
@@ -101,11 +128,23 @@ class ComicChapterInfo {
       index == other.index &&
       availability == other.availability &&
       imageCount == other.imageCount &&
+      cachedImageCount == other.cachedImageCount &&
+      failedImageCount == other.failedImageCount &&
+      manifestCached == other.manifestCached &&
       hasBeenRead == other.hasBeenRead;
 
   @override
-  int get hashCode =>
-      Object.hash(id, title, index, availability, imageCount, hasBeenRead);
+  int get hashCode => Object.hash(
+    id,
+    title,
+    index,
+    availability,
+    imageCount,
+    cachedImageCount,
+    failedImageCount,
+    manifestCached,
+    hasBeenRead,
+  );
 }
 
 @immutable
@@ -385,6 +424,9 @@ class ComicReaderBookmark {
   );
 }
 
+/// The screen axis used by comic edge taps when single-hand mode is off.
+enum ComicPageTurnLayout { vertical, horizontal }
+
 @immutable
 /// Persisted presentation settings for the vertical comic reader.
 class ComicReaderPreferences {
@@ -393,11 +435,18 @@ class ComicReaderPreferences {
     this.brightness = 1,
     this.keepScreenOn = true,
     this.immersiveMode = false,
+    this.pageTurnShortcuts = true,
+    this.pageTurnFraction = .9,
+    this.pageTurnLayout = ComicPageTurnLayout.vertical,
+    this.singleHandMode = false,
     this.imageSpacing = 0,
   });
 
   /// Default settings used when the host has no saved value.
   static const defaults = ComicReaderPreferences();
+
+  /// Supported scroll distances for one page-turn action.
+  static const pageTurnFractions = <double>[.3, .5, .8, .9, 1];
 
   /// Reader overlay brightness from 0.25 to 1.0.
   final double brightness;
@@ -407,6 +456,18 @@ class ComicReaderPreferences {
 
   /// Requests immersive mode on supported platforms.
   final bool immersiveMode;
+
+  /// Whether volume keys and common hardware keyboard shortcuts turn pages.
+  final bool pageTurnShortcuts;
+
+  /// Fraction of the viewport to move for one page-turn action.
+  final double pageTurnFraction;
+
+  /// Whether the normal edge-tap rails are vertical or horizontal.
+  final ComicPageTurnLayout pageTurnLayout;
+
+  /// Makes both side rails advance, for one-handed use.
+  final bool singleHandMode;
 
   /// Legacy setting retained for persistence compatibility. Comic pages always
   /// render edge-to-edge, so normalized values are zero.
@@ -419,19 +480,42 @@ class ComicReaderPreferences {
         : ComicReaderPreferences.defaults.brightness,
     keepScreenOn: keepScreenOn,
     immersiveMode: immersiveMode,
+    pageTurnShortcuts: pageTurnShortcuts,
+    pageTurnFraction: _nearestPageTurnFraction(pageTurnFraction),
+    pageTurnLayout: pageTurnLayout,
+    singleHandMode: singleHandMode,
     imageSpacing: 0,
   );
+
+  static double _nearestPageTurnFraction(double value) {
+    if (!value.isFinite) return defaults.pageTurnFraction;
+    var nearest = pageTurnFractions.first;
+    for (final double candidate in pageTurnFractions.skip(1)) {
+      if ((candidate - value).abs() < (nearest - value).abs()) {
+        nearest = candidate;
+      }
+    }
+    return nearest;
+  }
 
   /// Returns a copy with the supplied fields replaced.
   ComicReaderPreferences copyWith({
     double? brightness,
     bool? keepScreenOn,
     bool? immersiveMode,
+    bool? pageTurnShortcuts,
+    double? pageTurnFraction,
+    ComicPageTurnLayout? pageTurnLayout,
+    bool? singleHandMode,
     double? imageSpacing,
   }) => ComicReaderPreferences(
     brightness: brightness ?? this.brightness,
     keepScreenOn: keepScreenOn ?? this.keepScreenOn,
     immersiveMode: immersiveMode ?? this.immersiveMode,
+    pageTurnShortcuts: pageTurnShortcuts ?? this.pageTurnShortcuts,
+    pageTurnFraction: pageTurnFraction ?? this.pageTurnFraction,
+    pageTurnLayout: pageTurnLayout ?? this.pageTurnLayout,
+    singleHandMode: singleHandMode ?? this.singleHandMode,
     imageSpacing: imageSpacing ?? this.imageSpacing,
   );
 
@@ -441,11 +525,23 @@ class ComicReaderPreferences {
       brightness == other.brightness &&
       keepScreenOn == other.keepScreenOn &&
       immersiveMode == other.immersiveMode &&
+      pageTurnShortcuts == other.pageTurnShortcuts &&
+      pageTurnFraction == other.pageTurnFraction &&
+      pageTurnLayout == other.pageTurnLayout &&
+      singleHandMode == other.singleHandMode &&
       imageSpacing == other.imageSpacing;
 
   @override
-  int get hashCode =>
-      Object.hash(brightness, keepScreenOn, immersiveMode, imageSpacing);
+  int get hashCode => Object.hash(
+    brightness,
+    keepScreenOn,
+    immersiveMode,
+    pageTurnShortcuts,
+    pageTurnFraction,
+    pageTurnLayout,
+    singleHandMode,
+    imageSpacing,
+  );
 }
 
 @immutable

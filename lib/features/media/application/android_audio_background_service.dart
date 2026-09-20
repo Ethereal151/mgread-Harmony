@@ -189,6 +189,11 @@ final class MgReadAudioHandler extends BaseAudioHandler {
   Future<void> Function(AudioSystemCommandFeedback feedback)? _commandFeedback;
   Future<void> _systemCommandTail = Future<void>.value();
   final Set<String> _queuedSystemCommands = <String>{};
+  final Set<File> _artworkFiles = <File>{};
+  final Map<String, Future<File?>> _artworkFileLoads = <String, Future<File?>>{};
+  int _artworkGeneration = 0;
+  String? _publishedArtworkTrackId;
+  Uri? _publishedArtworkUri;
 
   Future<void> attach(
     AudioPlayerController controller, {
@@ -199,6 +204,7 @@ final class MgReadAudioHandler extends BaseAudioHandler {
   }) async {
     if (identical(_controller, controller)) return;
     await pauseActiveController();
+    _resetArtworkFiles();
     _controller?.removeListener(_publish);
     _controller = controller;
     _synchronizeFocus = synchronizeFocus;
@@ -218,6 +224,7 @@ final class MgReadAudioHandler extends BaseAudioHandler {
     _onSystemStop = null;
     _onPlatformEvent = null;
     _commandFeedback = null;
+    _resetArtworkFiles();
     mediaItem.add(null);
     queue.add(const <MediaItem>[]);
     playbackState.add(PlaybackState());
@@ -308,10 +315,17 @@ final class MgReadAudioHandler extends BaseAudioHandler {
     final snapshot = _controller?.snapshot;
     if (snapshot == null) return;
     final systemQueueEntries = snapshot.queueEntries.where((item) => !item.isLocked).toList(growable: false);
-    final items = systemQueueEntries.map(_mediaItemForQueueEntry).toList(growable: false);
-    queue.add(items);
     final track = snapshot.currentTrack;
-    mediaItem.add(track == null ? null : _mediaItemForTrack(track, duration: snapshot.duration));
+    final localArtwork = track?.id == _publishedArtworkTrackId ? _publishedArtworkUri : null;
+    queue.add(_mediaItemsForQueue(systemQueueEntries, track: track, localArtwork: localArtwork));
+    if (track == null) {
+      mediaItem.add(null);
+    } else {
+      mediaItem.add(_mediaItemForTrack(track, duration: snapshot.duration, artwork: localArtwork));
+      if (localArtwork == null && track.artworkBytes?.isNotEmpty == true) {
+        unawaited(_publishTrackWithLocalArtwork(track, duration: snapshot.duration));
+      }
+    }
     final queueIndex = track == null ? -1 : systemQueueEntries.indexWhere((item) => item.id == track.id);
     final systemPlaybackActive =
         snapshot.playbackDesired &&
@@ -348,17 +362,113 @@ final class MgReadAudioHandler extends BaseAudioHandler {
     unawaited(_synchronizeFocus?.call(systemPlaybackActive));
   }
 
-  MediaItem _mediaItemForTrack(AudioTrack track, {required Duration duration}) => MediaItem(
+  Future<void> _publishTrackWithLocalArtwork(AudioTrack track, {required Duration duration}) async {
+    final controller = _controller;
+    final generation = _artworkGeneration;
+    final bytes = track.artworkBytes;
+    if (controller == null || bytes == null || bytes.isEmpty) return;
+    final artworkCacheKey = _artworkCacheKey(track, bytes);
+    final existingLoad = _artworkFileLoads[artworkCacheKey];
+    final fileLoad = existingLoad ?? _writeArtworkFile(track, bytes);
+    if (existingLoad == null) _artworkFileLoads[artworkCacheKey] = fileLoad;
+    final file = await fileLoad;
+    if (file == null && identical(_artworkFileLoads[artworkCacheKey], fileLoad)) {
+      _artworkFileLoads.remove(artworkCacheKey);
+    }
+    if (file == null ||
+        generation != _artworkGeneration ||
+        !identical(_controller, controller) ||
+        controller.snapshot.currentTrack?.id != track.id) {
+      return;
+    }
+    final artwork = file.uri;
+    _publishedArtworkTrackId = track.id;
+    _publishedArtworkUri = artwork;
+    final snapshot = controller.snapshot;
+    final systemQueueEntries = snapshot.queueEntries.where((item) => !item.isLocked).toList(growable: false);
+    queue.add(_mediaItemsForQueue(systemQueueEntries, track: track, localArtwork: artwork));
+    mediaItem.add(_mediaItemForTrack(track, duration: duration, artwork: artwork));
+  }
+
+  Future<File?> _writeArtworkFile(AudioTrack track, List<int> bytes) async {
+    final generation = _artworkGeneration;
+    final directory = Directory('${Directory.systemTemp.path}${Platform.pathSeparator}mgread-audio-artwork');
+    final file = File(
+      '${directory.path}${Platform.pathSeparator}'
+      '$generation-${track.id.hashCode.toUnsigned(32)}${_artworkExtension(bytes)}',
+    );
+    try {
+      await directory.create(recursive: true);
+      await file.writeAsBytes(bytes, flush: true);
+      if (generation != _artworkGeneration) {
+        await _deleteArtworkFile(file);
+        return null;
+      }
+      _artworkFiles.add(file);
+      return file;
+    } on Object {
+      await _deleteArtworkFile(file);
+      return null;
+    }
+  }
+
+  void _resetArtworkFiles() {
+    _artworkGeneration++;
+    _artworkFileLoads.clear();
+    _publishedArtworkTrackId = null;
+    _publishedArtworkUri = null;
+    final files = List<File>.of(_artworkFiles);
+    _artworkFiles.clear();
+    for (final file in files) {
+      unawaited(_deleteArtworkFile(file));
+    }
+  }
+
+  Future<void> _deleteArtworkFile(File file) async {
+    try {
+      if (await file.exists()) await file.delete();
+    } on Object {
+      // Artwork cleanup must never affect playback or media-session commands.
+    }
+  }
+
+  String _artworkExtension(List<int> bytes) {
+    if (bytes.length >= 8 && bytes[0] == 0x89 && bytes[1] == 0x50 && bytes[2] == 0x4E && bytes[3] == 0x47) return '.png';
+    if (bytes.length >= 3 && bytes[0] == 0xFF && bytes[1] == 0xD8 && bytes[2] == 0xFF) return '.jpg';
+    if (bytes.length >= 4 && bytes[0] == 0x47 && bytes[1] == 0x49 && bytes[2] == 0x46) return '.gif';
+    if (bytes.length >= 12 &&
+        bytes[0] == 0x52 &&
+        bytes[1] == 0x49 &&
+        bytes[2] == 0x46 &&
+        bytes[3] == 0x46 &&
+        bytes[8] == 0x57 &&
+        bytes[9] == 0x45 &&
+        bytes[10] == 0x42 &&
+        bytes[11] == 0x50) {
+      return '.webp';
+    }
+    return '.img';
+  }
+
+  String _artworkCacheKey(AudioTrack track, List<int> bytes) => '${track.artwork ?? ''}|${bytes.length}|${Object.hashAll(bytes)}';
+
+  MediaItem _mediaItemForTrack(AudioTrack track, {required Duration duration, Uri? artwork}) => MediaItem(
     id: track.id,
     album: track.collectionTitle,
     title: track.title,
     artist: track.creator,
-    artUri: track.artwork,
+    artUri: artwork ?? track.artwork,
     duration: duration > Duration.zero ? duration : null,
   );
 
-  MediaItem _mediaItemForQueueEntry(AudioQueueEntry entry) =>
-      MediaItem(id: entry.id, title: entry.title, artist: entry.creator, artUri: entry.artwork);
+  List<MediaItem> _mediaItemsForQueue(List<AudioQueueEntry> entries, {required AudioTrack? track, required Uri? localArtwork}) =>
+      <MediaItem>[
+        for (final entry in entries)
+          _mediaItemForQueueEntry(entry, artwork: localArtwork != null && entry.artwork == track?.artwork ? localArtwork : null),
+      ];
+
+  MediaItem _mediaItemForQueueEntry(AudioQueueEntry entry, {Uri? artwork}) =>
+      MediaItem(id: entry.id, title: entry.title, artist: entry.creator, artUri: artwork ?? entry.artwork);
 
   @override
   Future<void> play() => _runSystemCommand(

@@ -107,7 +107,7 @@ class _DeviceSummaryTile extends StatelessWidget {
               decoration: BoxDecoration(color: online ? tokens.accentSoft : tokens.mutedSurface, borderRadius: AppRadii.detailControl),
               child: SizedBox.square(
                 dimension: 42,
-                child: Icon(_platformIcon(device.platform), color: online ? tokens.dataSourceAccent : tokens.mutedText),
+                child: Icon(_platformIcon(device.platform), color: online ? tokens.success : tokens.mutedText),
               ),
             ),
             const SizedBox(width: AppSpacing.regular),
@@ -168,7 +168,7 @@ class _CapabilityCard extends StatelessWidget {
             children: <Widget>[
               DecoratedBox(
                 decoration: BoxDecoration(color: tokens.accentSoft, borderRadius: AppRadii.detailControl),
-                child: SizedBox.square(dimension: 44, child: Icon(icon, color: tokens.dataSourceAccent)),
+                child: SizedBox.square(dimension: 44, child: Icon(icon, color: tokens.accent)),
               ),
               const SizedBox(width: AppSpacing.regular),
               Expanded(
@@ -181,7 +181,7 @@ class _CapabilityCard extends StatelessWidget {
                   ],
                 ),
               ),
-              Text(actionLabel, style: Theme.of(context).textTheme.labelLarge?.copyWith(color: tokens.dataSourceAccent)),
+              Text(actionLabel, style: Theme.of(context).textTheme.labelLarge?.copyWith(color: tokens.accent)),
               const Icon(Icons.chevron_right_rounded),
             ],
           ),

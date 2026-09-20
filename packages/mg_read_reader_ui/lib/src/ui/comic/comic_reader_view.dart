@@ -2,7 +2,7 @@
 ///
 /// 职责：
 /// - 协调漫画章节窗口、图片缓存、语义进度和阅读器 chrome。
-/// - 通过宿主端口获取内容，只向下拼接有限的后续章节资源。
+/// - 通过宿主端口获取内容，只向下拼接有限的后续章节资源，并按宿主配置顺序预缓存后续章节。
 /// - 为漫画内容提供固定白色底层，并让触控与桌面鼠标共享纵向拖动语义。
 ///
 /// 注意：
@@ -34,20 +34,35 @@ import '../reader_theme.dart';
 import '../reader_source_strip.dart';
 import 'comic_image_cache.dart';
 import 'comic_chapter_preloader.dart';
+import 'comic_image_retry_coordinator.dart';
 import 'comic_image_tile.dart';
 import 'comic_reader_strings.dart';
 import 'comic_scroll_physics.dart';
 
 part 'comic_reader_session.dart';
 part 'comic_reader_preferences.dart';
+part 'comic_reader_catalog.dart';
 part 'comic_reader_chrome.dart';
 
-const _comicReaderSystemUiStyle = SystemUiOverlayStyle(
+const Color _comicReaderChromeColor = Color(0xFF17191B);
+
+const _comicReaderImmersiveSystemUiStyle = SystemUiOverlayStyle(
   statusBarColor: Colors.transparent,
   statusBarIconBrightness: Brightness.light,
   statusBarBrightness: Brightness.dark,
   systemNavigationBarColor: Colors.transparent,
   systemNavigationBarDividerColor: Colors.transparent,
+  systemNavigationBarIconBrightness: Brightness.light,
+  systemStatusBarContrastEnforced: false,
+  systemNavigationBarContrastEnforced: false,
+);
+
+const _comicReaderControlsSystemUiStyle = SystemUiOverlayStyle(
+  statusBarColor: _comicReaderChromeColor,
+  statusBarIconBrightness: Brightness.light,
+  statusBarBrightness: Brightness.dark,
+  systemNavigationBarColor: _comicReaderChromeColor,
+  systemNavigationBarDividerColor: _comicReaderChromeColor,
   systemNavigationBarIconBrightness: Brightness.light,
   systemStatusBarContrastEnforced: false,
   systemNavigationBarContrastEnforced: false,
@@ -65,10 +80,13 @@ class ComicReaderView extends StatefulWidget {
     required this.bookId,
     required this.dataSource,
     required this.stateStore,
+    this.chapterPreloadCount = 1,
     this.observer,
     this.controller,
     this.commentFeed,
-  });
+    this.bookRefreshCapability,
+    this.catalogRefreshToken = 0,
+  }) : assert(chapterPreloadCount >= 0 && chapterPreloadCount <= 5);
 
   /// Stable host identifier for the comic.
   final String bookId;
@@ -78,6 +96,12 @@ class ComicReaderView extends StatefulWidget {
 
   /// Host-owned persistence for progress, preferences, and bookmarks.
   final ComicReaderStateStore stateStore;
+
+  /// Number of following comic chapters cached after the current chapter.
+  ///
+  /// The current chapter is always cached. Zero disables only speculative
+  /// following-chapter work.
+  final int chapterPreloadCount;
 
   /// Optional notification sink. Callback failures never block reading.
   final ComicReaderObserver? observer;
@@ -89,6 +113,12 @@ class ComicReaderView extends StatefulWidget {
   ///
   /// The reader never reserves image layout space when this is null.
   final ReaderCommentFeed? commentFeed;
+
+  /// Optional host-owned full book refresh. The action is hidden when absent.
+  final ReaderBookRefreshCapability? bookRefreshCapability;
+
+  /// Monotonic host signal for an already-open background catalog append.
+  final int catalogRefreshToken;
 
   @override
   State<ComicReaderView> createState() => _ComicReaderViewState();
@@ -108,8 +138,11 @@ class _ComicReaderViewState extends State<ComicReaderView>
   final Object _controllerOwner = Object();
   final Object _awakeHolder = Object();
   final FocusNode _focusNode = FocusNode(debugLabel: 'ComicReader');
+  StreamSubscription<ReaderVolumeKey>? _volumeKeySubscription;
   final ScrollController _scrollController = ScrollController();
   final ComicDecodedImageBudget _decodeBudget = ComicDecodedImageBudget();
+  final ComicImageRetryCoordinator _imageRetryCoordinator =
+      ComicImageRetryCoordinator();
   final List<ComicChapterInfo> _catalog = <ComicChapterInfo>[];
   final Map<String, ComicChapterInfo> _catalogById =
       <String, ComicChapterInfo>{};
@@ -123,7 +156,7 @@ class _ComicReaderViewState extends State<ComicReaderView>
   final Map<String, int> _contentEpochs = <String, int>{};
   final List<_LoadedComicChapter> _window = <_LoadedComicChapter>[];
   final Map<int, ReaderFailure> _boundaryFailures = <int, ReaderFailure>{};
-  final Set<int> _boundaryLoads = <int>{};
+  final Map<int, int> _boundaryLoadOwners = <int, int>{};
   final Set<String> _catalogCursors = <String>{};
   int _catalogPageCoverage = 0;
   int? _afterBoundaryIndex;
@@ -143,12 +176,14 @@ class _ComicReaderViewState extends State<ComicReaderView>
   ReaderPlatformCapabilities _platformCapabilities =
       const ReaderPlatformCapabilities();
   ReaderFailure? _failure;
+  ComicChapterInfo? _pendingChapter;
   String? _catalogCursor;
   int _catalogTotal = 0;
   bool _catalogHasMore = false;
   bool _catalogLoading = false;
   bool _loading = true;
   bool _controlsVisible = false;
+  bool _bookRefreshLoading = false;
   bool _settingsVisible = false;
   bool _foreground = true;
   bool _disposed = false;
@@ -157,6 +192,7 @@ class _ComicReaderViewState extends State<ComicReaderView>
   bool _preferencesAuthoritative = false;
   bool _firstContentPresented = false;
   ComicChapterPreloader? _preloader;
+  ValueNotifier<int>? _activeCatalogRevision;
   bool _dimensionsUpdateScheduled = false;
   double _viewportWidth = 0;
   double _viewportHeight = 0;
@@ -164,6 +200,7 @@ class _ComicReaderViewState extends State<ComicReaderView>
   double _horizontalInset = 0;
   int _sessionGeneration = 0;
   int _navigationGeneration = 0;
+  int _nextBoundaryLoadOwner = 0;
   ReaderLifecycleState _lifecycleState = ReaderLifecycleState.foreground;
   final Map<_BookStoreKey, Future<void>> _progressWrites =
       <_BookStoreKey, Future<void>>{};
@@ -183,6 +220,10 @@ class _ComicReaderViewState extends State<ComicReaderView>
     debugLabel: 'ComicReaderContentSurface',
   );
   final Map<String, GlobalKey> _imageKeys = <String, GlobalKey>{};
+  final GlobalKey<PopupMenuButtonState<_ComicOverflowAction>>
+  _comicOverflowMenuKey = GlobalKey<PopupMenuButtonState<_ComicOverflowAction>>(
+    debugLabel: 'comic-reader-overflow-menu',
+  );
   int _entryCacheSignature = 0;
   int _layoutDimensionsRevision = 0;
   double _layoutCorrection = 0;
@@ -201,6 +242,9 @@ class _ComicReaderViewState extends State<ComicReaderView>
       onDimensionsChanged: _scheduleDimensionsUpdate,
     );
     _bindController();
+    _volumeKeySubscription = ReaderPlatform.volumeKeyEvents.listen(
+      _handleVolumeKey,
+    );
     _scrollController.addListener(_handleScroll);
     WidgetsBinding.instance.addObserver(this);
     _lifecycleListener = AppLifecycleListener(onStateChange: _handleLifecycle);
@@ -263,6 +307,14 @@ class _ComicReaderViewState extends State<ComicReaderView>
         onDimensionsChanged: _scheduleDimensionsUpdate,
       );
       unawaited(_restart(preferenceOverride: preferenceOverride));
+    } else if (oldWidget.chapterPreloadCount != widget.chapterPreloadCount) {
+      _preloader?.cancel();
+      _startChapterPreload();
+    }
+    if (oldWidget.catalogRefreshToken != widget.catalogRefreshToken &&
+        oldWidget.bookId == widget.bookId &&
+        identical(oldWidget.dataSource, widget.dataSource)) {
+      unawaited(_refreshCatalogFromHost());
     }
   }
 
@@ -296,7 +348,10 @@ class _ComicReaderViewState extends State<ComicReaderView>
     _scrollController
       ..removeListener(_handleScroll)
       ..dispose();
+    _imageRetryCoordinator.dispose();
     _focusNode.dispose();
+    _volumeKeySubscription?.cancel();
+    unawaited(_disableVolumeKeyHandling());
     _imageCache.dispose();
     _dismissSessionSheet();
     _controller.unbind(_controllerOwner);
@@ -310,7 +365,9 @@ class _ComicReaderViewState extends State<ComicReaderView>
       ReaderThemePreset.deepNight,
     );
     return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: _comicReaderSystemUiStyle,
+      value: _controlsVisible
+          ? _comicReaderControlsSystemUiStyle
+          : _comicReaderImmersiveSystemUiStyle,
       child: PopScope<void>(
         canPop: true,
         onPopInvokedWithResult: (bool didPop, void result) {
@@ -380,6 +437,7 @@ class _ComicReaderViewState extends State<ComicReaderView>
                             ),
                           ),
                         ),
+                        if (_controlsVisible) _buildControlsInteractionLock(),
                         _buildChrome(palette),
                         if (_loading && _window.isEmpty)
                           _buildLoadingOverlay(palette),
@@ -390,7 +448,12 @@ class _ComicReaderViewState extends State<ComicReaderView>
                         if (_loading && _window.isNotEmpty)
                           const Align(
                             alignment: Alignment.topCenter,
-                            child: LinearProgressIndicator(minHeight: 2),
+                            child: LinearProgressIndicator(
+                              key: ValueKey<String>(
+                                'comic-reader-chapter-loading',
+                              ),
+                              minHeight: 2,
+                            ),
                           ),
                       ],
                     );

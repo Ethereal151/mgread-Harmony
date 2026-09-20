@@ -4,12 +4,16 @@ import 'dart:typed_data';
 import 'comic_models.dart';
 import 'models.dart';
 
+export 'contracts.dart'
+    show ReaderBookRefreshCapability, ReaderCatalogRefreshDataSource;
+
 /// Supplies comic metadata and progressively loaded image bytes.
 ///
 /// Implementations own all networking, authentication, files, retries, and
 /// persistent caching. The reader prioritizes visible images and preloads the
-/// current chapter in page order, then one following chapter, with bounded
-/// concurrent calls. It never constructs URLs or opens host storage directly.
+/// current chapter in page order, then the host-configured following chapter
+/// count, with bounded concurrent calls. It never constructs URLs or opens
+/// host storage directly.
 abstract interface class ComicReaderDataSource {
   /// Loads lightweight metadata for [bookId].
   Future<ComicBookInfo> loadBookInfo(String bookId);
@@ -41,6 +45,19 @@ abstract interface class ComicReaderDataSource {
   /// A failure applies only to this image; the remaining chapter images stay
   /// available for reading.
   Future<Uint8List> loadImageBytes(
+    String bookId,
+    String chapterId,
+    String imageId,
+  );
+}
+
+/// Optional host capability for distinguishing readable bytes from a durable
+/// image-cache hit. A reader still displays valid bytes when persistence fails,
+/// but does not report that image as cached.
+abstract interface class ComicReaderImageCacheStateDataSource {
+  /// Returns whether the exact image bytes loaded in this session are present
+  /// in the host's persistent cache.
+  Future<bool> isImagePersistentlyCached(
     String bookId,
     String chapterId,
     String imageId,

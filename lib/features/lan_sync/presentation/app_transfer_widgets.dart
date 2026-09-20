@@ -253,7 +253,7 @@ class _AppRoleCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Card(
-    color: const Color(0xFFFFF7EE),
+    color: AppThemeTokens.of(context).featureSurface,
     child: InkWell(
       borderRadius: AppRadii.detailControl,
       onTap: onTap,

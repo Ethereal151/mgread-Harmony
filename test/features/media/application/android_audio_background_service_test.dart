@@ -2,6 +2,7 @@
 library;
 
 import 'dart:async';
+import 'dart:io';
 
 import 'package:audio_service/audio_service.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -10,6 +11,42 @@ import 'package:mg_read_audio_player/mg_read_audio_player.dart';
 import 'package:mg_read/features/media/application/android_audio_background_service.dart';
 
 void main() {
+  test('publishes host-local artwork as a file URI for the media session', () async {
+    final controller = _RecordingAudioController(
+      AudioPlayerSnapshot(
+        status: AudioPlayerStatus.ready,
+        queue: <AudioTrack>[
+          AudioTrack(
+            id: 'chapter-artwork',
+            title: '有封面章节',
+            resource: Uri.parse('https://example.test/chapter-artwork.mp3'),
+            artwork: Uri.parse('https://runtime.test/cover'),
+            artworkBytes: const <int>[1, 2, 3],
+          ),
+        ],
+      ),
+    );
+    addTearDown(controller.dispose);
+    final handler = MgReadAudioHandler();
+    addTearDown(() => handler.detach(controller));
+
+    await handler.attach(controller, synchronizeFocus: (_) async {}, onSystemStop: () async {});
+    for (var attempt = 0; attempt < 20 && handler.mediaItem.value?.artUri?.scheme != 'file'; attempt++) {
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+
+    final item = handler.mediaItem.value;
+    expect(item?.artUri?.scheme, 'file');
+    expect(await File(item!.artUri!.toFilePath()).exists(), isTrue);
+    expect(handler.queue.value.single.artUri?.scheme, 'file');
+
+    final firstArtworkPath = item.artUri!.toFilePath();
+    controller.publish(controller.snapshot.copyWith(position: const Duration(seconds: 12)));
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    expect(handler.mediaItem.value?.artUri?.toFilePath(), firstArtworkPath);
+    expect(handler.queue.value.single.artUri?.toFilePath(), firstArtworkPath);
+  });
+
   test('projects the full catalog and routes system transport commands', () async {
     final controller = _RecordingAudioController(
       AudioPlayerSnapshot(

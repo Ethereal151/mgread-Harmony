@@ -30,7 +30,7 @@ extension _ComicReaderSession on _ComicReaderViewState {
     _catalogByIndex.clear();
     _window.clear();
     _boundaryFailures.clear();
-    _boundaryLoads.clear();
+    _boundaryLoadOwners.clear();
     _catalogCursors.clear();
     _catalogCursor = null;
     _catalogTotal = 0;
@@ -40,12 +40,14 @@ extension _ComicReaderSession on _ComicReaderViewState {
     _afterBoundaryIndex = null;
     _book = null;
     _currentChapter = null;
+    _pendingChapter = null;
     _progress = null;
     _preferences = ComicReaderPreferences.defaults;
     _preferencesAuthoritative = false;
     _bookmarks = const <ComicReaderBookmark>[];
     _firstContentPresented = false;
     _preloader?.cancel();
+    _imageRetryCoordinator.clear();
     _layoutCorrection = 0;
     _failure = null;
     _loading = true;
@@ -55,6 +57,71 @@ extension _ComicReaderSession on _ComicReaderViewState {
       generation: generation,
       preferenceOverride: preferenceOverride,
     );
+  }
+
+  Future<void> _refreshCatalogFromHost() async {
+    if (_catalogLoading) return;
+    final int generation = _sessionGeneration;
+    final ComicReaderDataSource dataSource = widget.dataSource;
+    final String bookId = widget.bookId;
+    try {
+      if (dataSource case final ReaderCatalogRefreshDataSource refreshable) {
+        await refreshable.refreshCatalog(bookId);
+      }
+      if (!_isSessionForSource(generation, bookId, dataSource)) return;
+      final current = _currentChapter;
+      _catalog.clear();
+      _catalogById.clear();
+      _catalogByIndex.clear();
+      _catalogCursors.clear();
+      _catalogCursor = null;
+      _catalogTotal = 0;
+      _catalogHasMore = false;
+      _catalogPageCoverage = 0;
+      final page = await dataSource.loadChapterCatalog(
+        bookId,
+        pageSize: _ComicReaderViewState._catalogPageSize,
+      );
+      if (!_isSessionForSource(generation, bookId, dataSource)) return;
+      _mergeCatalog(page, requestedCursor: null);
+      if (current != null && !_catalogById.containsKey(current.id)) {
+        _rememberChapter(current);
+      }
+      if (current != null) {
+        _currentChapter = _catalogById[current.id] ?? current;
+      }
+      if (mounted) setState(() {});
+      _publishSnapshot();
+    } on Object {
+      // A silent background signal must never interrupt an active chapter.
+    }
+  }
+
+  Future<void> _refreshBookFromHost() async {
+    final ReaderBookRefreshCapability? capability =
+        widget.bookRefreshCapability;
+    if (capability == null || _bookRefreshLoading) return;
+    if (mounted) setState(() => _bookRefreshLoading = true);
+    _activeCatalogRevision?.value++;
+    try {
+      await capability.refresh(widget.bookId);
+      await _refreshCatalogFromHost();
+      final int generation = _sessionGeneration;
+      final ComicBookInfo book = await widget.dataSource.loadBookInfo(
+        widget.bookId,
+      );
+      if (!_isSessionForSource(generation, widget.bookId, widget.dataSource) ||
+          !mounted) {
+        return;
+      }
+      setState(() => _book = book);
+      _publishSnapshot();
+    } catch (error) {
+      await _reportFailure(_asFailure(error, ReaderFailureKind.data));
+    } finally {
+      if (mounted) setState(() => _bookRefreshLoading = false);
+      _activeCatalogRevision?.value++;
+    }
   }
 
   Future<void> _initialize({
@@ -222,6 +289,7 @@ extension _ComicReaderSession on _ComicReaderViewState {
   Future<void> _openChapterById(String chapterId) async {
     final String id = chapterId.trim();
     if (id.isEmpty) return;
+    _beginChapterLookup();
     ComicChapterInfo? chapter = _catalogById[id];
     while (chapter == null && _catalogHasMore && !_disposed) {
       final bool loaded = await _loadNextCatalogPage();
@@ -229,6 +297,7 @@ extension _ComicReaderSession on _ComicReaderViewState {
       chapter = _catalogById[id];
     }
     if (chapter == null) {
+      _endChapterLookup();
       unawaited(
         _reportFailure(
           const ReaderFailure(ReaderFailureKind.data, '找不到指定漫画章节'),
@@ -245,6 +314,7 @@ extension _ComicReaderSession on _ComicReaderViewState {
     required bool replaceWindow,
     bool forceRefresh = false,
   }) async {
+    _pendingChapter = info;
     final ComicReaderProgress? checkpoint = _progress;
     if (checkpoint != null) {
       unawaited(
@@ -264,7 +334,7 @@ extension _ComicReaderSession on _ComicReaderViewState {
         _loading = true;
         _failure = null;
         if (replaceWindow) {
-          _boundaryLoads.clear();
+          _boundaryLoadOwners.clear();
           _boundaryFailures.clear();
           _afterBoundaryIndex = null;
         }
@@ -284,6 +354,7 @@ extension _ComicReaderSession on _ComicReaderViewState {
         ..sort((a, b) => a.info.index.compareTo(b.info.index));
       _trimWindow(aroundIndex: info.index);
       _currentChapter = info;
+      _pendingChapter = null;
       _startChapterPreload();
       final ComicReaderProgress? resolvedRestore = _progressForContent(
         info,
@@ -415,9 +486,11 @@ extension _ComicReaderSession on _ComicReaderViewState {
         (_catalogTotal > 0 && index >= _catalogTotal) ||
         !_isNextBoundaryCursor(index) ||
         _window.any((chapter) => chapter.info.index == index) ||
-        !_boundaryLoads.add(index)) {
+        _boundaryLoadOwners.containsKey(index)) {
       return;
     }
+    final int owner = ++_nextBoundaryLoadOwner;
+    _boundaryLoadOwners[index] = owner;
     if (mounted) setState(() => _boundaryFailures.remove(index));
     final int navigation = _navigationGeneration;
     var scanAdvanced = false;
@@ -466,10 +539,10 @@ extension _ComicReaderSession on _ComicReaderViewState {
       setState(() => _boundaryFailures[index] = failure);
       unawaited(_reportFailure(failure));
     } finally {
-      if (_isNavigation(navigation)) {
-        _boundaryLoads.remove(index);
-        if (mounted) setState(() {});
-        if (scanAdvanced) {
+      if (_boundaryLoadOwners[index] == owner) {
+        _boundaryLoadOwners.remove(index);
+        if (mounted && _isNavigation(navigation)) setState(() {});
+        if (_isNavigation(navigation) && scanAdvanced) {
           unawaited(_loadNextAdjacent(index + 1));
         }
       }
@@ -524,9 +597,11 @@ extension _ComicReaderSession on _ComicReaderViewState {
     }
     final Set<String> retained = _window.map((e) => e.info.id).toSet();
     _imageCache.retainGeometry(retained);
-    _imageKeys.removeWhere(
-      (key, _) => !retained.contains(key.split('\u0000').first),
-    );
+    _imageKeys.removeWhere((key, _) {
+      final bool remove = !retained.contains(key.split('\u0000').first);
+      if (remove) _imageRetryCoordinator.remove(key);
+      return remove;
+    });
     for (final String id in _contentCache.keys.toList()) {
       if (!retained.contains(id)) _contentCache.remove(id);
     }
@@ -538,9 +613,11 @@ extension _ComicReaderSession on _ComicReaderViewState {
     if (current == null) return;
     final int next = current.index + 1;
     if (_catalogTotal > 0 && next >= _catalogTotal) return;
+    _beginChapterLookup();
     try {
       await _openChapterInfo(await _chapterAtIndex(next), replaceWindow: true);
     } catch (error) {
+      _endChapterLookup();
       unawaited(_reportFailure(_asFailure(error, ReaderFailureKind.data)));
     }
   }
@@ -548,23 +625,40 @@ extension _ComicReaderSession on _ComicReaderViewState {
   Future<void> _previousChapter() async {
     final ComicChapterInfo? current = _currentChapter;
     if (current == null || current.index <= 0) return;
+    _beginChapterLookup();
     try {
       await _openChapterInfo(
         await _chapterAtIndex(current.index - 1),
         replaceWindow: true,
       );
     } catch (error) {
+      _endChapterLookup();
       unawaited(_reportFailure(_asFailure(error, ReaderFailureKind.data)));
     }
   }
 
+  void _beginChapterLookup() {
+    if (!mounted) return;
+    setState(() {
+      _loading = true;
+      _failure = null;
+    });
+    _publishSnapshot();
+  }
+
+  void _endChapterLookup() {
+    if (!mounted) return;
+    setState(() => _loading = false);
+    _publishSnapshot();
+  }
+
   Future<void> _refreshCurrentChapter() async {
-    final ComicChapterInfo? current = _currentChapter;
-    if (current == null) return;
-    _imageCache.removeChapter(current.id);
+    final ComicChapterInfo? target = _pendingChapter ?? _currentChapter;
+    if (target == null) return;
+    _imageCache.removeChapter(target.id);
     await _openChapterInfo(
-      current,
-      restore: _progress,
+      target,
+      restore: target.id == _currentChapter?.id ? _progress : null,
       replaceWindow: true,
       forceRefresh: true,
     );
@@ -604,6 +698,7 @@ extension _ComicReaderSession on _ComicReaderViewState {
 
   void _handleScroll() {
     if (_disposed || _restoring || !_scrollController.hasClients) return;
+    _imageRetryCoordinator.onViewportChanged();
     _updateProgressFromScroll();
     final ScrollPosition position = _scrollController.position;
     final double trigger = position.viewportDimension * 1.5;
@@ -612,6 +707,24 @@ extension _ComicReaderSession on _ComicReaderViewState {
         _loadNextAdjacent(_afterBoundaryIndex ?? _window.last.info.index + 1),
       );
     }
+  }
+
+  bool _isImageNearViewport(String key) {
+    final RenderBox? surface =
+        _readingSurfaceKey.currentContext?.findRenderObject() as RenderBox?;
+    final RenderBox? image =
+        _imageKeys[key]?.currentContext?.findRenderObject() as RenderBox?;
+    if (surface == null ||
+        image == null ||
+        !surface.hasSize ||
+        !image.hasSize) {
+      return false;
+    }
+    final double surfaceTop = surface.localToGlobal(Offset.zero).dy;
+    final double imageTop = image.localToGlobal(Offset.zero).dy - surfaceTop;
+    final double padding = surface.size.height * .75;
+    return imageTop + image.size.height >= -padding &&
+        imageTop <= surface.size.height + padding;
   }
 
   void _updateProgressFromScroll() {
@@ -685,16 +798,80 @@ extension _ComicReaderSession on _ComicReaderViewState {
     if (chapters.isEmpty) return;
     final chapter = chapters.first;
     final int navigation = _navigationGeneration;
-    (_preloader ??= ComicChapterPreloader(_imageCache)).start(
+    (_preloader ??= ComicChapterPreloader(
+      _imageCache,
+      onProgress: _updateChapterCacheProgress,
+    )).start(
       chapter.content,
-      nextChapter: () async {
-        final int index = chapter.info.index + 1;
-        await _loadNextAdjacent(index);
+      followingChapterCount: widget.chapterPreloadCount,
+      followingChapter: (int offset) async {
+        final int index = chapter.info.index + offset;
+        if (!_isNavigation(navigation) ||
+            (_catalogTotal > 0 && index >= _catalogTotal)) {
+          return null;
+        }
+        if (offset == 1) {
+          await _loadNextAdjacent(index);
+          if (!_isNavigation(navigation)) return null;
+          final Iterable<_LoadedComicChapter> adjacent = _window.where(
+            (_LoadedComicChapter item) => item.info.index == index,
+          );
+          return adjacent.isEmpty ? null : adjacent.first.content;
+        }
+        final ComicChapterInfo info = await _chapterAtIndex(index);
         if (!_isNavigation(navigation)) return null;
-        final next = _window.where((c) => c.info.index == index);
-        return next.isEmpty ? null : next.first.content;
+        final ComicChapterContent content = await _loadContent(info);
+        return _isNavigation(navigation) ? content : null;
       },
     );
+  }
+
+  void _updateChapterCacheProgress(
+    ComicChapterContent content,
+    int cachedImageCount,
+    int failedImageCount,
+  ) {
+    if (_disposed) return;
+    final ComicChapterInfo? existing = _catalogById[content.chapterId];
+    if (existing == null) return;
+    final int imageCount = content.images.length;
+    final bool finished = cachedImageCount + failedImageCount >= imageCount;
+    final ReaderChapterAvailability availability =
+        failedImageCount > 0 && finished
+        ? ReaderChapterAvailability.failed
+        : cachedImageCount == imageCount
+        ? ReaderChapterAvailability.downloaded
+        : ReaderChapterAvailability.downloading;
+    final updated = ComicChapterInfo(
+      id: existing.id,
+      title: existing.title,
+      index: existing.index,
+      availability: availability,
+      imageCount: imageCount,
+      cachedImageCount: cachedImageCount,
+      failedImageCount: failedImageCount,
+      manifestCached: true,
+      hasBeenRead: existing.hasBeenRead,
+    );
+    _catalogById[updated.id] = updated;
+    _catalogByIndex[updated.index] = updated;
+    final int catalogIndex = _catalog.indexWhere(
+      (ComicChapterInfo chapter) => chapter.id == updated.id,
+    );
+    if (catalogIndex >= 0) _catalog[catalogIndex] = updated;
+    for (var index = 0; index < _window.length; index++) {
+      final loaded = _window[index];
+      if (loaded.info.id == updated.id) {
+        _window[index] = _LoadedComicChapter(updated, loaded.content);
+      }
+    }
+    if (_pendingChapter?.id == updated.id) _pendingChapter = updated;
+    if (_currentChapter?.id == updated.id) {
+      _currentChapter = updated;
+      if (finished || cachedImageCount == 0) _scheduleSnapshotPublish();
+    }
+    final revision = _activeCatalogRevision;
+    if (revision != null) revision.value++;
   }
 
   double _takeLayoutCorrection() {

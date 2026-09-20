@@ -8,6 +8,32 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mg_read_audio_player/mg_read_audio_player.dart';
 
 void main() {
+  testWidgets('top glass actions stay circular on portrait phones', (
+    tester,
+  ) async {
+    _setPortraitView(tester);
+    await tester.pumpWidget(_host(backend: _PresentationBackend()));
+    await tester.pump();
+    await tester.pump();
+
+    final backSize = tester.getSize(
+      find.descendant(
+        of: find.byKey(const Key('audio-back')),
+        matching: find.byType(ClipRRect),
+      ),
+    );
+    final queueSize = tester.getSize(
+      find.descendant(
+        of: find.byKey(const Key('audio-queue')),
+        matching: find.byType(ClipRRect),
+      ),
+    );
+    expect(backSize.width, closeTo(backSize.height, 0.001));
+    expect(queueSize.width, closeTo(queueSize.height, 0.001));
+    expect(backSize, const Size.square(44));
+    expect(queueSize, const Size.square(44));
+  });
+
   testWidgets('shows a dedicated empty queue recovery state', (tester) async {
     await tester.pumpWidget(
       _host(
@@ -286,19 +312,38 @@ void main() {
       findsOneWidget,
     );
     expect(
-      tester
-          .widget<SelectableText>(
-            find.byKey(const Key('audio-details-resource')),
-          )
-          .data,
+      tester.widget<Text>(find.byKey(const Key('audio-details-resource'))).data,
       'https://example.test/audio/1.mp3',
     );
+    expect(
+      tester
+          .widget<Text>(find.byKey(const Key('audio-details-resource')))
+          .maxLines,
+      1,
+    );
+    expect(
+      find.byKey(const Key('audio-details-resource-copy')),
+      findsOneWidget,
+    );
+    expect(
+      tester.widget<Text>(find.byKey(const Key('audio-details-source'))).data,
+      'https://example.test/books/book-1/chapters/chapter-1',
+    );
+    expect(
+      tester
+          .widget<Text>(find.byKey(const Key('audio-details-source')))
+          .maxLines,
+      1,
+    );
+    expect(find.byKey(const Key('audio-details-source-copy')), findsOneWidget);
+    expect(find.text('来源地址'), findsOneWidget);
+    expect(find.text('播放地址'), findsOneWidget);
     expect(find.byKey(const Key('audio-details-progress')), findsNothing);
     expect(find.text('播放信息'), findsNothing);
     expect(find.text('播放速度'), findsNothing);
     expect(find.text('音量'), findsNothing);
 
-    await tester.drag(details, const Offset(0, -260));
+    await tester.drag(details, const Offset(0, -420));
     await tester.pumpAndSettle();
     expect(
       find.byKey(const Key('audio-details-comment-composer')),
@@ -311,6 +356,43 @@ void main() {
     expect(find.text('即将开放'), findsOneWidget);
     expect(find.text('评论功能正在准备中'), findsOneWidget);
   });
+
+  testWidgets(
+    'runtime resource URL exposes copy and decoded parameter actions',
+    (tester) async {
+      await tester.pumpWidget(
+        _host(
+          backend: _PresentationBackend(),
+          resourceUrlDecoder: (resource) async =>
+              const AudioResourceDecodeResult(
+                pluginId: 'org.example.audio',
+                requestJson: '{\n  "kind": "audio"\n}',
+              ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('audio-track-title')));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('audio-details-resource-copy')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('audio-details-source-copy')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('audio-details-resource-decoded')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('audio-details-resource-decoded-copy')),
+        findsOneWidget,
+      );
+    },
+  );
 
   testWidgets(
     'large catalog uses a subtle indicator instead of a giant badge',
@@ -612,6 +694,7 @@ Widget _host({
   AudioPlayerDataSource dataSource = const _PresentationDataSource(),
   AudioPlayerController? controller,
   AudioArtworkBuilder? artworkBuilder,
+  AudioResourceUrlDecoder? resourceUrlDecoder,
   Size size = const Size(390, 844),
   double textScale = 1.15,
   bool disableAnimations = true,
@@ -633,6 +716,7 @@ Widget _host({
         controller: controller,
         backend: backend,
         artworkBuilder: artworkBuilder,
+        resourceUrlDecoder: resourceUrlDecoder,
         autoplay: false,
         saveInterval: const Duration(hours: 1),
       ),
@@ -650,6 +734,9 @@ AudioPlaylist _presentationPlaylist() => AudioPlaylist(
       title: '第一章 从这里开始',
       collectionTitle: '风声书场',
       creator: '讲述者',
+      sourceUrl: Uri.parse(
+        'https://example.test/books/book-1/chapters/chapter-1',
+      ),
       resource: Uri.parse('https://example.test/audio/1.mp3'),
     ),
     AudioTrack(

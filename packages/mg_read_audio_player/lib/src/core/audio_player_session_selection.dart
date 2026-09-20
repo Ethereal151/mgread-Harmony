@@ -17,7 +17,7 @@ extension _AudioPlayerSessionSelection on AudioPlayerSession {
     _recordPlaybackIntent(true);
     _cancelRecoveryTimers(resetAttempts: true);
     final intentRevision = _playbackIntentRevision;
-    _emit(_snapshot.copyWith(clearFailure: true));
+    _emit(_snapshot.copyWith(resourceLoading: true, clearFailure: true));
     _recordOperation('trackSelectionStarted', targetTrackId: trackId);
     final loadedIndex = playlist.tracks.indexWhere(
       (track) => track.id == trackId,
@@ -70,14 +70,16 @@ extension _AudioPlayerSessionSelection on AudioPlayerSession {
       return;
     }
     final source = dataSource;
-    if (source is! AudioPlaylistQueueDataSource) return;
+    if (source is! AudioPlaylistQueueDataSource) {
+      _emit(_snapshot.copyWith(resourceLoading: false));
+      return;
+    }
     _cancelContinuationLoad(retry: true);
     var targetInstalled = false;
     var failureCode = 'audio_selected_resource_unavailable';
     var failureLocation = '所选章节的播放地址';
     var failureMessage = '当前章节暂时无法播放，请稍后重试。';
     await flushProgress();
-    _emit(_snapshot.copyWith(resourceLoading: true, clearFailure: true));
     try {
       _recordOperation('resourceLoadStarted', targetTrackId: trackId);
       final track = await source.loadTrackById(collectionId, trackId: trackId);

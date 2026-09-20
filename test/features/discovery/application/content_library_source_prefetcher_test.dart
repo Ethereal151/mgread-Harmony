@@ -1,16 +1,20 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mgread_plugin_runtime/mgread_plugin_runtime.dart';
 
 import 'package:mg_read/core/content_library/content_library.dart';
 import 'package:mg_read/core/diagnostics/diagnostics.dart';
+import 'package:mg_read/core/settings/settings.dart';
 import 'package:mg_read/features/discovery/application/content_library_source_prefetcher.dart';
 import 'package:mg_read/features/discovery/application/source_content_gateway.dart';
+import 'package:mg_read/features/reader/data/content_library_source_manga_prewarmer.dart';
 
 import '../../../core/diagnostics/diagnostics_testkit.dart';
+import '../../../core/settings/settings_testkit.dart';
 
 void main() {
   test('prefetches detail, the complete catalog, and the first chapter', () async {
@@ -31,14 +35,18 @@ void main() {
       ),
     );
     final gateway = _PrefetchGateway();
-    final prefetcher = ContentLibrarySourcePrefetcher(library, gateway);
+    final settings = AppSettingsManager(store: FakeSettingsStore(), registry: AppSettingKeys.registry);
+    await settings.initialize();
+    await settings.set(AppSettingKeys.novelPreloadChapterCount, 1);
+    addTearDown(settings.close);
+    final prefetcher = ContentLibrarySourcePrefetcher(library, gateway, settings: settings);
 
     prefetcher.start(item);
     await prefetcher.waitFor(item.id.value);
 
     final catalog = await library.listAllCatalog(item.id);
     expect(catalog.map((entry) => entry.remoteIdentity), <String>['chapter:1', 'chapter:2']);
-    expect(catalog.first.contentStatus, 'ready');
+    expect(catalog.map((entry) => entry.contentStatus), everyElement('ready'));
     final hydrated = await library.getLibraryItem(item.id);
     expect(hydrated?.title, '远程详情书名');
     expect(hydrated?.description, '简介');
@@ -53,7 +61,7 @@ void main() {
     expect(await library.openContent(catalog.first.id), isA<NovelChapterContent>());
     expect(gateway.detailCalls, 1);
     expect(gateway.catalogCalls, 1);
-    expect(gateway.contentChapterIds, <String>['chapter:1']);
+    expect(gateway.contentChapterIds, <String>['chapter:1', 'chapter:2']);
   });
 
   test('manga shares the detail, complete catalog, and first chapter prefetch pipeline', () async {
@@ -74,19 +82,54 @@ void main() {
       ),
     );
     final gateway = _MangaPrefetchGateway();
-    final prefetcher = ContentLibrarySourcePrefetcher(library, gateway);
+    final settings = AppSettingsManager(store: FakeSettingsStore(), registry: AppSettingKeys.registry);
+    await settings.initialize();
+    await settings.set(AppSettingKeys.novelPreloadChapterCount, 1);
+    addTearDown(settings.close);
+    final fetchedImages = <Uri>[];
+    final secondImageRequested = Completer<void>();
+    final releaseSecondImage = Completer<void>();
+    final mangaPrewarmer = ContentLibrarySourceMangaPrewarmer(
+      library: library,
+      gateway: gateway,
+      imageFetcher: (uri) async {
+        fetchedImages.add(uri);
+        if (fetchedImages.length == 2) {
+          secondImageRequested.complete();
+          await releaseSecondImage.future;
+        }
+        return Uint8List.fromList(<int>[0xff, 0xd8, 0xff, 0xd9]);
+      },
+    );
+    final prefetcher = ContentLibrarySourcePrefetcher(library, gateway, settings: settings, mangaWarm: mangaPrewarmer.warm);
 
     prefetcher.start(item);
+    await prefetcher.prepareForReading(item).timeout(const Duration(seconds: 1));
+    await secondImageRequested.future.timeout(const Duration(seconds: 1));
+    releaseSecondImage.complete();
     await prefetcher.waitFor(item.id.value);
 
     final catalog = await library.listAllCatalog(item.id);
     expect(catalog.map((entry) => entry.remoteIdentity), <String>['manga:1', 'manga:2']);
-    expect(catalog.first.contentStatus, 'ready');
-    expect(await library.openContent(catalog.first.id), isA<MangaChapterContent>());
+    expect(catalog.map((entry) => entry.contentStatus), everyElement('ready'));
+    for (final entry in catalog) {
+      final manifest = await library.openContent(entry.id) as MangaChapterContent;
+      final page = manifest.pages.single;
+      expect(
+        await library.readMangaImage(
+          itemId: item.id,
+          chapterId: entry.remoteIdentity,
+          pageId: page.pageId,
+          contentVersion: page.contentVersion,
+        ),
+        isNotEmpty,
+      );
+    }
     expect((await library.getLibraryItem(item.id))?.description, '漫画简介');
     expect(gateway.detailCalls, 1);
     expect(gateway.catalogCalls, 1);
-    expect(gateway.contentChapterIds, <String>['manga:1']);
+    expect(gateway.contentChapterIds, <String>['manga:1', 'manga:2']);
+    expect(fetchedImages, hasLength(2));
   });
 
   test('audio and video stay outside the reader prefetch pipeline', () async {

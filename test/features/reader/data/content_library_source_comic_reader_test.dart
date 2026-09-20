@@ -94,6 +94,21 @@ void main() {
     expect(calls, 3);
   });
 
+  test('accepts a valid image whose CDN declares application/octet-stream', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => server.close(force: true));
+    server.listen((request) async {
+      request.response.headers.contentType = ContentType('application', 'octet-stream');
+      request.response.add(<int>[0xff, 0xd8, 0xff, 0xd9]);
+      await request.response.close();
+    });
+    final client = HttpClient()..findProxy = (_) => 'DIRECT';
+    addTearDown(() => client.close(force: true));
+
+    final uri = Uri.parse('http://${server.address.address}:${server.port}/image');
+    expect(await fetchComicImage(uri, client: client), <int>[0xff, 0xd8, 0xff, 0xd9]);
+  });
+
   test('syncs the full catalog and round-trips a session manifest', () async {
     final fixture = await _LibraryFixture.open();
     addTearDown(fixture.close);
@@ -154,10 +169,12 @@ void main() {
     final first = ContentLibraryComicReaderDataSource(library: fixture.library, gateway: gateway, item: fixture.manga, fetcher: fetch);
     await first.loadChapterContent(fixture.manga.id.value, 'chapter-1');
     await first.loadImageBytes(fixture.manga.id.value, 'chapter-1', 'image-1');
+    expect(await first.isImagePersistentlyCached(fixture.manga.id.value, 'chapter-1', 'image-1'), isTrue);
     expect(gateway.contentCalls, 1);
 
     final rebuilt = ContentLibraryComicReaderDataSource(library: fixture.library, gateway: gateway, item: fixture.manga, fetcher: fetch);
     expect(await rebuilt.loadImageBytes(fixture.manga.id.value, 'chapter-1', 'image-1'), <int>[1, 2, 3]);
+    expect(await rebuilt.isImagePersistentlyCached(fixture.manga.id.value, 'chapter-1', 'image-1'), isTrue);
     expect(gateway.contentCalls, 1, reason: 'the persisted first image must not refresh its session-only URL');
     await rebuilt.loadImageBytes(fixture.manga.id.value, 'chapter-1', 'image-2');
     expect(gateway.contentCalls, 2);
@@ -220,15 +237,23 @@ void main() {
     final fixture = await _LibraryFixture.open(withSettings: true);
     addTearDown(fixture.close);
     final gateway = _Gateway(pages: <PluginMangaPage>[_page(policy: PluginMangaPageResourcePolicy.durable)]);
-    final adapter = ContentLibraryComicReaderDataSource(library: fixture.library, gateway: gateway, item: fixture.manga);
+    final adapter = ContentLibraryComicReaderDataSource(
+      library: fixture.library,
+      gateway: gateway,
+      item: fixture.manga,
+      fetcher: (_) async => Uint8List.fromList(<int>[1, 2, 3]),
+    );
 
     await adapter.loadChapterCatalog(fixture.manga.id.value);
     await fixture.persistence!.contentObjects.close();
 
     final content = await adapter.loadChapterContent(fixture.manga.id.value, 'chapter-1');
+    await fixture.persistence!.fileObjects.close();
+    await adapter.loadImageBytes(fixture.manga.id.value, 'chapter-1', 'image-1');
 
     expect(content.images.single.id, 'image-1');
     expect(gateway.contentCalls, 1);
+    expect(await adapter.isImagePersistentlyCached(fixture.manga.id.value, 'chapter-1', 'image-1'), isFalse);
   });
 
   test('refreshes an expired refreshable URL before downloading', () async {
@@ -431,7 +456,16 @@ void main() {
     addTearDown(fixture.close);
     final store = ContentLibraryComicReaderStateStore(fixture.library, itemId: fixture.manga.id, settings: fixture.settings);
     const progress = ComicReaderProgress(chapterId: 'chapter-1', imageId: 'image-1', imageFraction: .4, chapterIndex: 0, bookFraction: .4);
-    const preferences = ComicReaderPreferences(brightness: .6, keepScreenOn: false, immersiveMode: true, imageSpacing: 12);
+    const preferences = ComicReaderPreferences(
+      brightness: .6,
+      keepScreenOn: false,
+      immersiveMode: true,
+      pageTurnShortcuts: false,
+      pageTurnFraction: .5,
+      pageTurnLayout: ComicPageTurnLayout.horizontal,
+      singleHandMode: true,
+      imageSpacing: 12,
+    );
     final bookmark = ComicReaderBookmark(
       id: 'bookmark-1',
       bookId: fixture.manga.id.value,
@@ -469,6 +503,10 @@ void main() {
     },
     'non-image': (response) async {
       response.headers.contentType = ContentType.text;
+      response.write('not an image');
+    },
+    'generic binary without an image signature': (response) async {
+      response.headers.contentType = ContentType('application', 'octet-stream');
       response.write('not an image');
     },
     'empty': (response) async {

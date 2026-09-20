@@ -80,10 +80,12 @@ class TextReaderView extends StatefulWidget {
     required this.dataSource,
     required this.stateStore,
     this.seed,
+    this.coverBytes,
     this.chapterPreloadCount = 1,
     this.observer,
     this.controller,
     this.extensions = const ReaderExtensions(),
+    this.catalogRefreshToken = 0,
   }) : assert(chapterPreloadCount >= 0 && chapterPreloadCount <= 5);
 
   /// Stable host identifier for the book being read.
@@ -97,6 +99,13 @@ class TextReaderView extends StatefulWidget {
 
   /// Optional host projection used to avoid duplicate metadata/content reads.
   final ReaderSessionSeed? seed;
+
+  /// Optional host-resolved cover bytes for reader-owned detail surfaces.
+  ///
+  /// The reader only decodes this local payload. It never fetches
+  /// [ReaderBookInfo.coverUrl], because source URLs may be authenticated or
+  /// expire after the host resolves them.
+  final List<int>? coverBytes;
 
   /// Number of following chapters to load speculatively, excluding current.
   ///
@@ -112,6 +121,9 @@ class TextReaderView extends StatefulWidget {
 
   /// Optional capabilities such as the read-only comment feed.
   final ReaderExtensions extensions;
+
+  /// Monotonic host signal for an already-open background catalog append.
+  final int catalogRefreshToken;
 
   @override
   State<TextReaderView> createState() => _TextReaderViewState();
@@ -130,6 +142,10 @@ class _TextReaderViewState extends State<TextReaderView>
   static const int _verticalRestoreMeasureBatchSize = 128;
   static const int _progressiveParagraphBatchSize = 8;
   static const Duration _adjacentQuietDelay = Duration(milliseconds: 350);
+  // Product requirement explicitly confirmed by the user: the configured
+  // chapter count is the fast window, while idle slow preloading intentionally
+  // reaches ten times farther so the reader prepares as much future text as
+  // practical. This is not a storage-cap calculation.
   static const int _slowPreloadMultiplier = 10;
   static const int _slowPreloadMinimumDelaySeconds = 10;
   static const int _slowPreloadDelayRangeSeconds = 21;
@@ -139,6 +155,10 @@ class _TextReaderViewState extends State<TextReaderView>
   // exactly fits during pagination cannot overflow by a rounding pixel.
   static const double _horizontalPageLayoutSafety = 2;
   static const double _mouseTapSlop = 18;
+  // Keep the centre toolbar toggle zone narrow so taps near the page edges
+  // remain deliberate page-turn actions.
+  static const double _horizontalTapSideBoundary = .4;
+  static const double _horizontalTapCenterBoundary = .6;
   // PointerEvent.buttons uses a bit mask; 1 denotes the primary mouse button.
   static const int _primaryMouseButton = 1;
   static const double _inlineCommentHitSize = 48;
@@ -153,6 +173,7 @@ class _TextReaderViewState extends State<TextReaderView>
   final Object _awakeHolder = Object();
   final Object _controllerBindingOwner = Object();
   final FocusNode _focusNode = FocusNode(debugLabel: 'TextReader');
+  StreamSubscription<ReaderVolumeKey>? _volumeKeySubscription;
   final ScrollController _verticalController = ScrollController();
   final ScrollController _catalogScrollController = ScrollController(
     keepScrollOffset: true,
@@ -205,6 +226,7 @@ class _TextReaderViewState extends State<TextReaderView>
   Future<void>? _catalogCompletion;
 
   ReaderBookInfo? _book;
+  MemoryImage? _bookCoverImage;
   final List<ReaderChapterInfo> _catalog = <ReaderChapterInfo>[];
   final Map<String, ReaderChapterInfo> _catalogById =
       <String, ReaderChapterInfo>{};
@@ -236,6 +258,8 @@ class _TextReaderViewState extends State<TextReaderView>
   int _verticalRestoreGeneration = 0;
   bool _loading = true;
   bool _controlsVisible = false;
+  bool _bookRefreshLoading = false;
+  bool _layoutDebugMode = false;
   bool _readerSettingsVisible = false;
   bool _readerOverflowMenuExpanded = false;
   bool _foreground = true;
@@ -243,6 +267,9 @@ class _TextReaderViewState extends State<TextReaderView>
   ReaderPlatformCapabilities _platformCapabilities =
       const ReaderPlatformCapabilities();
   Future<void> _awakeWrite = Future<void>.value();
+  Future<void> _brightnessWrite = Future<void>.value();
+  int _brightnessGeneration = 0;
+  bool _applicationBrightnessOwned = false;
   Future<void> _bookmarkWrite = Future<void>.value();
   final Map<TextReaderStateStore, Future<void>> _preferenceWritesByStore =
       Map<TextReaderStateStore, Future<void>>.identity();
@@ -276,7 +303,6 @@ class _TextReaderViewState extends State<TextReaderView>
   String? _noticeMessage;
   DateTime _clock = DateTime.now();
   ReaderAutoReadingPace _autoReadingPace = ReaderAutoReadingPace.normal;
-  ReaderThemePreset _lastNonNightTheme = ReaderThemePreset.day;
   TextScaler? _dependencyTextScaler;
   String? _runtimeFontFamily;
   ReaderFontDescriptor? _runtimeFontDescriptor;
@@ -338,6 +364,7 @@ class _TextReaderViewState extends State<TextReaderView>
   @override
   void initState() {
     super.initState();
+    _syncBookCoverImage();
     WidgetsBinding.instance.addObserver(this);
     _ownsController = widget.controller == null;
     _controller = widget.controller ?? TextReaderController();
@@ -355,6 +382,9 @@ class _TextReaderViewState extends State<TextReaderView>
     );
     _configureChapterAccessCoordinator();
     _bindController();
+    _volumeKeySubscription = ReaderPlatform.volumeKeyEvents.listen(
+      _handleVolumeKey,
+    );
     _verticalController.addListener(_handleVerticalScroll);
     _lifecycleListener = AppLifecycleListener(onStateChange: _handleLifecycle);
     _clockTimer = Timer.periodic(const Duration(minutes: 1), (_) {
@@ -450,6 +480,9 @@ class _TextReaderViewState extends State<TextReaderView>
   @override
   void didUpdateWidget(covariant TextReaderView oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.coverBytes, widget.coverBytes)) {
+      _syncBookCoverImage();
+    }
     if (oldWidget.controller != widget.controller) {
       _controller.unbind(_controllerBindingOwner);
       if (_ownsController) _controller.dispose();
@@ -524,6 +557,18 @@ class _TextReaderViewState extends State<TextReaderView>
       final ReaderChapterInfo? chapter = _currentChapterInfo;
       if (chapter != null) unawaited(_prefetchNext(chapter.index));
     }
+    if (oldWidget.catalogRefreshToken != widget.catalogRefreshToken &&
+        oldWidget.bookId == widget.bookId &&
+        identical(oldWidget.dataSource, widget.dataSource)) {
+      unawaited(_refreshCatalogFromHost());
+    }
+  }
+
+  void _syncBookCoverImage() {
+    final List<int>? bytes = widget.coverBytes;
+    _bookCoverImage = bytes == null || bytes.isEmpty
+        ? null
+        : MemoryImage(Uint8List.fromList(bytes));
   }
 
   @override
@@ -574,8 +619,11 @@ class _TextReaderViewState extends State<TextReaderView>
     _noticeTimer?.cancel();
     _clockTimer?.cancel();
     _wheelResetTimer?.cancel();
+    _volumeKeySubscription?.cancel();
+    unawaited(_disableVolumeKeyHandling());
     _adjacentQuietTimer?.cancel();
     unawaited(_releaseAwake());
+    unawaited(_releaseApplicationBrightness());
     unawaited(_notify(() => observer.onSessionEnded(bookId, progress)));
     _lifecycleListener.dispose();
     _verticalController
@@ -638,7 +686,7 @@ class _TextReaderViewState extends State<TextReaderView>
         commentsAvailable: widget.extensions.commentFeed != null,
         autoReading: _autoReadingCoordinator.isRunning,
         autoReadingPace: _autoReadingPace,
-        lastNonNightTheme: _lastNonNightTheme,
+        layoutDebugMode: _layoutDebugMode,
         fontRepository: widget.extensions.fontRepository,
         onCustomFontSelected:
             (ReaderFontDescriptor descriptor, String runtimeFamily) {
@@ -675,6 +723,10 @@ class _TextReaderViewState extends State<TextReaderView>
             unawaited(_startAutoReading());
           }
         },
+        onLayoutDebugModeChanged: (bool enabled) {
+          if (!routeIsCurrent() || _layoutDebugMode == enabled) return;
+          setState(() => _layoutDebugMode = enabled);
+        },
         onCatalogPressed: () {
           if (!routeIsCurrent()) return;
           Navigator.of(context).pop();
@@ -696,13 +748,16 @@ class _TextReaderViewState extends State<TextReaderView>
   void _toggleNightTheme() {
     _stopAutoReading();
     final ReaderThemePreset next = _isNightTheme(_preferences.theme)
-        ? _lastNonNightTheme
-        : ReaderThemePreset.night;
+        ? _preferences.lastNonNightTheme
+        : _preferences.lastNightTheme;
     unawaited(_updatePreferences(_preferences.copyWith(theme: next)));
   }
 
   bool _isNightTheme(ReaderThemePreset theme) =>
       theme == ReaderThemePreset.night ||
       theme == ReaderThemePreset.deepNight ||
-      theme == ReaderThemePreset.charcoal;
+      theme == ReaderThemePreset.charcoal ||
+      theme == ReaderThemePreset.oled ||
+      theme == ReaderThemePreset.midnight ||
+      theme == ReaderThemePreset.forestNight;
 }

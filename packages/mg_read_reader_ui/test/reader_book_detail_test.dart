@@ -6,13 +6,20 @@ void main() {
   testWidgets('reader source row and book details expose source metadata', (
     WidgetTester tester,
   ) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
           body: TextReaderView(
             bookId: 'detail-book',
+            coverBytes: _onePixelPng,
             dataSource: const _DetailDataSource(),
-            stateStore: const _DetailStateStore(),
+            stateStore: const _DetailStateStore(
+              preferences: TextReaderPreferences(
+                theme: ReaderThemePreset.night,
+              ),
+            ),
           ),
         ),
       ),
@@ -29,10 +36,10 @@ void main() {
 
     await tester.tap(find.text('目录'));
     await tester.pumpAndSettle();
-    expect(find.text('已下载'), findsWidgets);
-    expect(find.text('已读'), findsWidgets);
-    expect(find.text('未下载'), findsOneWidget);
-    expect(find.text('未读'), findsOneWidget);
+    expect(
+      Theme.of(tester.element(find.byType(TabBar))).brightness,
+      Brightness.dark,
+    );
     expect(find.text('1200 字'), findsOneWidget);
     final ListTile readTile = tester.widget<ListTile>(
       find.byKey(const ValueKey<String>('reader-catalog-chapter-chapter-3')),
@@ -47,6 +54,38 @@ void main() {
     expect(unreadTile.tileColor, isNull);
     expect(readTile.hoverColor, isNotNull);
     expect(unreadTile.hoverColor, isNotNull);
+    expect(
+      find.descendant(
+        of: readTileFinder,
+        matching: find.byIcon(Icons.done_rounded),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: readTileFinder,
+        matching: find.byIcon(Icons.download_done_rounded),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(
+          const ValueKey<String>('reader-catalog-chapter-chapter-2'),
+        ),
+        matching: find.byIcon(Icons.radio_button_unchecked_rounded),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(
+          const ValueKey<String>('reader-catalog-chapter-chapter-2'),
+        ),
+        matching: find.byIcon(Icons.cloud_download_outlined),
+      ),
+      findsOneWidget,
+    );
     expect(tester.getSize(readTileFinder).height, 54);
     await tester.tap(find.text('书籍详情'));
     await tester.pumpAndSettle();
@@ -56,9 +95,96 @@ void main() {
     expect(find.text('测试简介'), findsOneWidget);
     expect(find.text('玄幻'), findsOneWidget);
     expect(find.text('连载'), findsOneWidget);
-    expect(find.text('来源频道'), findsOneWidget);
+    expect(find.text('内容来源'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey<String>('reader-book-detail-cover-image')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(
+        const ValueKey<String>('reader-book-detail-cover-placeholder'),
+      ),
+      findsNothing,
+    );
+    final Image cover = tester.widget<Image>(
+      find.byKey(const ValueKey<String>('reader-book-detail-cover-image')),
+    );
+    expect(cover.image, isA<MemoryImage>());
   });
 }
+
+const List<int> _onePixelPng = <int>[
+  137,
+  80,
+  78,
+  71,
+  13,
+  10,
+  26,
+  10,
+  0,
+  0,
+  0,
+  13,
+  73,
+  72,
+  68,
+  82,
+  0,
+  0,
+  0,
+  1,
+  0,
+  0,
+  0,
+  1,
+  8,
+  6,
+  0,
+  0,
+  0,
+  31,
+  21,
+  196,
+  137,
+  0,
+  0,
+  0,
+  13,
+  73,
+  68,
+  65,
+  84,
+  120,
+  156,
+  99,
+  248,
+  207,
+  192,
+  240,
+  31,
+  0,
+  5,
+  0,
+  1,
+  255,
+  137,
+  153,
+  61,
+  29,
+  0,
+  0,
+  0,
+  0,
+  73,
+  69,
+  78,
+  68,
+  174,
+  66,
+  96,
+  130,
+];
 
 final class _DetailDataSource implements TextReaderDataSource {
   const _DetailDataSource();
@@ -97,6 +223,7 @@ final class _DetailDataSource implements TextReaderDataSource {
     description: '测试简介',
     sourceName: '演示数据源',
     sourceUrl: Uri.parse('https://source.example/books/detail-book'),
+    coverUrl: Uri.parse('https://temporary.example/expired-cover-token'),
     wordCount: 120000,
     chapterCount: 12,
     statusLabel: '连载',
@@ -139,14 +266,16 @@ final class _DetailDataSource implements TextReaderDataSource {
 }
 
 final class _DetailStateStore implements TextReaderStateStore {
-  const _DetailStateStore();
+  const _DetailStateStore({this.preferences});
+
+  final TextReaderPreferences? preferences;
 
   @override
   Future<List<ReaderBookmark>> loadBookmarks(String bookId) async =>
       const <ReaderBookmark>[];
 
   @override
-  Future<TextReaderPreferences?> loadPreferences() async => null;
+  Future<TextReaderPreferences?> loadPreferences() async => preferences;
 
   @override
   Future<ReaderProgress?> loadProgress(String bookId) async =>

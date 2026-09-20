@@ -308,25 +308,19 @@ final class _VideoPlayerViewState extends State<VideoPlayerView>
     required bool flushCurrent,
     int? loadGeneration,
   }) async {
+    final int? generation = _actionBeginEpisodeOpening(loadGeneration);
+    if (generation == null) return;
     if (flushCurrent) {
       await _pauseBackend(reportFailure: false);
       await _flushProgress(force: true);
     }
-    if (_disposed ||
+    if (!_isCurrentEpisode(generation) ||
         (loadGeneration != null && !_isCurrentLoad(loadGeneration))) {
       return;
     }
-    final generation = ++_episodeGeneration;
-    _cancelFirstFrameTimeout();
-    _completionGeneration = 0;
-    _reportedFirstFrameSelection = null;
-    _reportedBackendError = null;
     _update(() {
       _group = group;
       _episode = episode;
-      _status = VideoPlayerStatus.loading;
-      _failure = null;
-      _controlsVisible = true;
     });
 
     _notifyStartup(
@@ -547,6 +541,13 @@ final class _VideoPlayerViewState extends State<VideoPlayerView>
   Future<void> setVolume(double volume) => _actionSetVolume(volume);
 
   @override
+  Future<void> setEnhancementMode(VideoEnhancementMode mode) async {
+    final backend = _backend;
+    if (backend is! MediaKitVideoPlaybackBackend) return;
+    await backend.setEnhancementMode(mode);
+  }
+
+  @override
   Future<void> toggleMute() => setVolume(
     _backendState.volume > 0 ? 0 : _volumeBeforeMute.clamp(1, 100).toDouble(),
   );
@@ -697,6 +698,7 @@ final class _VideoPlayerViewState extends State<VideoPlayerView>
         null,
     autoAdvance: _autoAdvance,
     controlsLocked: _controlsLocked,
+    enhancementMode: _backendState.enhancementMode,
     failure: _failure,
   );
 
@@ -716,8 +718,10 @@ final class _VideoPlayerViewState extends State<VideoPlayerView>
 
   @override
   Widget build(BuildContext context) => VideoPlayerStage(
+    controller: _controller,
     backend: _backend,
     snapshot: _snapshot,
+    activeEpisode: _episode,
     focusNode: _focusNode,
     exitAuthorized: _exitAuthorized,
     onPopAttempt: () => unawaited(requestExit()),
@@ -728,7 +732,7 @@ final class _VideoPlayerViewState extends State<VideoPlayerView>
     onPlayOrPause: playOrPause,
     onSeek: seek,
     onRate: setRate,
-    onVolume: setVolume,
+    onEnhancementMode: setEnhancementMode,
     onReplay: replay,
     onPreviousEpisode: playPreviousEpisode,
     onNextEpisode: playNextEpisode,
@@ -741,6 +745,8 @@ final class _VideoPlayerViewState extends State<VideoPlayerView>
     onFullscreen: requestFullscreen,
     onReadBrightness: _hostBridge.readBrightness,
     onBrightness: _hostBridge.setBrightness,
+    onReadSystemVolume: _hostBridge.readSystemVolume,
+    onSystemVolume: _hostBridge.setSystemVolume,
   );
 
   @override

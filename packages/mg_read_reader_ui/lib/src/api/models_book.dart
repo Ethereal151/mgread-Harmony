@@ -77,8 +77,11 @@ class ReaderBookInfo {
   /// The reader only displays and opens this URL after an explicit user tap.
   final Uri? sourceUrl;
 
-  /// Optional source-provided cover reference used by the host-facing detail
-  /// presentation. The reader may fall back to its neutral cover placeholder.
+  /// Optional source-provided cover reference retained as host metadata.
+  ///
+  /// The reader never fetches this URL because it may require host-owned
+  /// credentials or expire. Hosts can pass already-resolved bytes to the text
+  /// reader view for reader-owned detail presentation.
   final Uri? coverUrl;
 
   /// Optional book word count for the detail statistics row.

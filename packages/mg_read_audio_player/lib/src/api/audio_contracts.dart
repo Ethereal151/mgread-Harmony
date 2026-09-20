@@ -13,6 +13,21 @@ import 'dart:async';
 
 import 'audio_models.dart';
 
+/// Host-provided decoder for Runtime-generated media resource URLs.
+typedef AudioResourceUrlDecoder =
+    Future<AudioResourceDecodeResult?> Function(Uri resource);
+
+/// Public projection of one decoded Runtime source-resource URL.
+final class AudioResourceDecodeResult {
+  const AudioResourceDecodeResult({
+    required this.pluginId,
+    required this.requestJson,
+  });
+
+  final String pluginId;
+  final String requestJson;
+}
+
 /// Loads one ordered audio queue by stable collection identity.
 abstract interface class AudioPlayerDataSource {
   Future<AudioPlaylist> loadPlaylist(String collectionId);

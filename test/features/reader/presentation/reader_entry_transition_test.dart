@@ -28,7 +28,7 @@ import 'package:mg_read/features/reader/presentation/reader_host_page.dart';
 import '../../../core/diagnostics/diagnostics_testkit.dart';
 
 void main() {
-  testWidgets('route preparation uses immersive transparent system bars', (WidgetTester tester) async {
+  testWidgets('route preparation uses immersive black fallback system bars', (WidgetTester tester) async {
     final systemUi = _recordReaderSystemUi();
     await tester.pumpWidget(
       MaterialApp(
@@ -41,8 +41,8 @@ void main() {
     expect(systemUi.first['keepScreenOn'], isFalse);
     expect(systemUi.first['immersiveMode'], isTrue);
     final region = tester.widget<AnnotatedRegion<SystemUiOverlayStyle>>(find.byType(AnnotatedRegion<SystemUiOverlayStyle>));
-    expect(region.value.statusBarColor, Colors.transparent);
-    expect(region.value.systemNavigationBarColor, Colors.transparent);
+    expect(region.value.statusBarColor, Colors.black);
+    expect(region.value.systemNavigationBarColor, Colors.black);
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump();
@@ -59,10 +59,22 @@ void main() {
     expect(systemUi.first['immersiveMode'], isTrue);
     expect(systemUi.last['immersiveMode'], isTrue);
     expect(find.byType(AnnotatedRegion<SystemUiOverlayStyle>), findsWidgets);
+    expect(find.byKey(const ValueKey<String>('default-cover-kind-novel')), findsOneWidget);
 
     dataSource.complete();
     await _pumpReader(tester);
     expect(systemUi.last['immersiveMode'], isFalse);
+  });
+
+  testWidgets('reader entry keeps its baseline outside the application theme', (WidgetTester tester) async {
+    final _ControlledDataSource dataSource = _ControlledDataSource();
+    await tester.pumpWidget(_readerApp(_request(dataSource: dataSource), appTheme: AppTheme.dark()));
+    await tester.pump();
+
+    final BuildContext entryContext = tester.element(find.byKey(const Key('reader-entry-back')));
+    expect(Theme.of(entryContext).brightness, Brightness.light);
+    expect(Theme.of(entryContext).colorScheme.primary, AppThemeColor.warm.accent);
+    dataSource.complete();
   });
 
   testWidgets('comic loading holds immersion until the first image handoff', (WidgetTester tester) async {
@@ -75,6 +87,7 @@ void main() {
     expect(systemUi.first['immersiveMode'], isTrue);
     expect(systemUi.last['immersiveMode'], isTrue);
     expect(find.byType(AnnotatedRegion<SystemUiOverlayStyle>), findsWidgets);
+    expect(find.byKey(const ValueKey<String>('default-cover-kind-manga')), findsOneWidget);
 
     dataSource.completeImage();
     await tester.pumpAndSettle();
@@ -155,14 +168,24 @@ void main() {
     expect(find.byType(TextReaderView), findsNothing);
   });
 
-  testWidgets('ReaderHostPage forwards the novel preload window', (WidgetTester tester) async {
+  testWidgets('ReaderHostPage forwards novel preload and cached cover', (WidgetTester tester) async {
     await tester.pumpWidget(
       MaterialApp(
-        home: ReaderHostPage(request: _request(dataSource: const _ImmediateDataSource(), chapterPreloadCount: 4)),
+        home: ReaderHostPage(
+          request: _request(dataSource: const _ImmediateDataSource(), chapterPreloadCount: 4, coverBytes: _onePixelPng),
+        ),
       ),
     );
 
-    expect(tester.widget<TextReaderView>(find.byType(TextReaderView)).chapterPreloadCount, 4);
+    final view = tester.widget<TextReaderView>(find.byType(TextReaderView));
+    expect(view.chapterPreloadCount, 4);
+    expect(view.coverBytes, same(_onePixelPng));
+  });
+
+  testWidgets('ReaderHostPage forwards the comic preload window', (WidgetTester tester) async {
+    await tester.pumpWidget(MaterialApp(home: ReaderHostPage(request: _comicRequest(chapterPreloadCount: 4))));
+
+    expect(tester.widget<ComicReaderView>(find.byType(ComicReaderView)).chapterPreloadCount, 4);
   });
 
   testWidgets('disposes a comic session data source when the entry host unmounts', (WidgetTester tester) async {
@@ -317,8 +340,8 @@ List<Map<Object?, Object?>> _recordReaderSystemUi() {
   return calls;
 }
 
-Widget _readerApp(ReaderLaunchRequest request, {bool reduceMotion = false}) => MaterialApp(
-  theme: AppTheme.light(),
+Widget _readerApp(ReaderLaunchRequest request, {bool reduceMotion = false, ThemeData? appTheme}) => MaterialApp(
+  theme: appTheme ?? AppTheme.light(),
   builder: (BuildContext context, Widget? child) => MediaQuery(
     data: MediaQuery.of(context).copyWith(disableAnimations: reduceMotion),
     child: child!,
@@ -348,14 +371,19 @@ NovelReaderLaunchRequest _request({
   entryCoverBytes: coverBytes,
 );
 
-ComicReaderLaunchRequest _comicRequest({ComicReaderDataSource? dataSource, ComicReaderObserver? observer, List<int>? coverBytes}) =>
-    ComicReaderLaunchRequest(
-      bookId: 'reader-entry-test-comic',
-      dataSource: dataSource ?? _ImmediateComicDataSource(),
-      stateStore: const _ComicStateStore(),
-      observer: observer,
-      entryCoverBytes: coverBytes,
-    );
+ComicReaderLaunchRequest _comicRequest({
+  ComicReaderDataSource? dataSource,
+  ComicReaderObserver? observer,
+  List<int>? coverBytes,
+  int chapterPreloadCount = 1,
+}) => ComicReaderLaunchRequest(
+  bookId: 'reader-entry-test-comic',
+  dataSource: dataSource ?? _ImmediateComicDataSource(),
+  stateStore: const _ComicStateStore(),
+  chapterPreloadCount: chapterPreloadCount,
+  observer: observer,
+  entryCoverBytes: coverBytes,
+);
 
 const List<int> _onePixelPng = <int>[
   137,

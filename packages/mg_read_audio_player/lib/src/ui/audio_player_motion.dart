@@ -179,7 +179,9 @@ class _AudioAnimatedPlayPauseButtonState
                         duration: widget.disableAnimations
                             ? Duration.zero
                             : const Duration(milliseconds: 160),
-                        child: widget.snapshot.buffering
+                        child:
+                            (widget.snapshot.buffering ||
+                                widget.snapshot.resourceLoading)
                             ? const SizedBox.square(
                                 key: Key('audio-buffering'),
                                 dimension: 30,

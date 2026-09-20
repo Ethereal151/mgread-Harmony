@@ -7,7 +7,8 @@ export async function search(request) { const query = request.query.trim(); if (
 export async function searchSuggestions(_request) { return frozen({ items: [], nextCursor: null }); }
 export async function discover(request) { if (request.target === null)
     return frozen({ kind: 'document', document: { components: [{ type: 'section', id: 'mifun-channels', title: 'MiFun', subtitle: '动漫分类', icon: 'video', children: [{ type: 'categoryCollection', id: 'mifun-channel-list', layout: 'chips', categories: channels.map(channel => ({ id: channel.id, title: channel.title, target: `channel:${channel.id}`, count: null, url: null, icon: 'video' })) }] }] } }); const channel = channels.find(value => request.target === `channel:${value.id}`); if (!channel)
-    throw new Error('Discovery target is invalid.'); const page = cursorPage(request.cursor, request.target), size = clamp(request.pageSize), path = channel.id === '0' ? (page === 1 ? '/' : `/index-${page}.html`) : (page === 1 ? `/vodtype/${channel.id}/` : `/vodtype/${channel.id}-${page}/`), values = parseItems(await html(path)), contents = values.map(summary).slice(0, size), collectionId = `mifun:${channel.id}`, items = contents.map(content => frozen({ content, rank: null, metric: null, recommendation: null })), continuation = values.length >= size ? frozen({ target: request.target, cursor: `channel:${channel.id}:${page + 1}` }) : null; if (request.collectionId !== null) {
+    throw new Error('Discovery target is invalid.'); const page = cursorPage(request.cursor, request.target), size = clamp(request.pageSize); if (channel.id === '0' && (request.cursor !== null || request.collectionId !== null))
+    throw new Error('Discovery continuation is not supported.'); const path = channel.id === '0' ? '/' : (page === 1 ? `/vodtype/${channel.id}/` : `/vodtype/${channel.id}-${page}/`), source = await html(path), values = parseItems(source), contents = values.map(summary).slice(0, size), collectionId = `mifun:${channel.id}`, items = contents.map(content => frozen({ content, rank: null, metric: null, recommendation: null })), nextPath = channel.id === '0' ? null : `/vodtype/${channel.id}-${page + 1}/`, continuation = nextPath !== null && hasLink(source, nextPath) ? frozen({ target: request.target, cursor: `channel:${channel.id}:${page + 1}` }) : null; if (request.collectionId !== null) {
     if (request.collectionId !== collectionId)
         throw new Error('Discovery collection is invalid.');
     return frozen({ kind: 'append', collectionId, items, continuation });
@@ -89,6 +90,7 @@ function safeUrl(value) { try {
 catch {
     return false;
 } }
+function hasLink(source, path) { return new RegExp(`href=["']${path.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')}["']`, 'u').test(source); }
 function pick(value, pattern) { return pattern.exec(value)?.[1] ?? ''; }
 function clean(value) { return decode(value.replaceAll(/<[^>]+>/gu, ' ').replaceAll('&nbsp;', ' ').replaceAll(/\s+/gu, ' ').trim()); }
 function decode(value) { return value.replaceAll(/\\u([0-9a-fA-F]{4})/gu, (_all, hex) => String.fromCharCode(Number.parseInt(hex, 16))).replaceAll('\\/', '/').replaceAll('\\"', '"').replaceAll('&amp;', '&'); }

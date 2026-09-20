@@ -1,3 +1,5 @@
+// ignore_for_file: prefer_initializing_formals
+
 /// 应用生命周期内的数据源书籍预取器所有者。
 ///
 /// 职责：
@@ -11,16 +13,28 @@ library;
 
 import 'package:mg_read/core/content_library/content_library.dart';
 import 'package:mg_read/core/diagnostics/diagnostics.dart';
+import 'package:mg_read/core/settings/settings.dart';
 import 'package:mg_read/features/discovery/application/content_library_source_prefetcher.dart';
 import 'package:mg_read/features/discovery/application/source_content_gateway.dart';
+import 'package:mg_read/features/network_proxy/application/flutter_network_proxy_manager.dart';
+import 'package:mg_read/features/reader/data/content_library_source_comic_reader.dart';
+import 'package:mg_read/features/reader/data/content_library_source_manga_prewarmer.dart';
 
 final class AppContentLibrarySourcePrefetcherCoordinator {
-  AppContentLibrarySourcePrefetcherCoordinator(this._diagnostics);
+  AppContentLibrarySourcePrefetcherCoordinator(this._diagnostics, {AppSettingsManager? settings}) : _settings = settings;
 
   final DiagnosticsManager _diagnostics;
+  final AppSettingsManager? _settings;
+  FlutterNetworkProxyManager? _proxyManager;
   ContentLibrary? _library;
   SourceContentGateway? _gateway;
   ContentLibrarySourcePrefetcher? _prefetcher;
+
+  void configureProxyManager(FlutterNetworkProxyManager manager) {
+    if (identical(_proxyManager, manager)) return;
+    _proxyManager = manager;
+    _prefetcher = null;
+  }
 
   ContentLibrarySourcePrefetcher resolve(ContentLibrary library, SourceContentGateway gateway) {
     final current = _prefetcher;
@@ -29,6 +43,18 @@ final class AppContentLibrarySourcePrefetcherCoordinator {
     }
     _library = library;
     _gateway = gateway;
-    return _prefetcher = ContentLibrarySourcePrefetcher(library, gateway, diagnostics: _diagnostics);
+    final proxyManager = _proxyManager;
+    final mangaPrewarmer = ContentLibrarySourceMangaPrewarmer(
+      library: library,
+      gateway: gateway,
+      httpClientFactory: proxyManager == null ? null : createProxyAwareComicHttpClientFactory(proxyManager),
+    );
+    return _prefetcher = ContentLibrarySourcePrefetcher(
+      library,
+      gateway,
+      settings: _settings,
+      mangaWarm: mangaPrewarmer.warm,
+      diagnostics: _diagnostics,
+    );
   }
 }

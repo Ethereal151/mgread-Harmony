@@ -120,6 +120,12 @@ abstract class _LibraryOverviewPageController
     return _load(generation, retainedOverview: _projectedOverview());
   }
 
+  /// Reconciles durable shelf metadata without exposing a refresh state.
+  Future<void> silentRefresh() {
+    final int generation = ++_latestGeneration;
+    return _load(generation, retainedOverview: _projectedOverview(), silent: true);
+  }
+
   Future<void> _reconcileAfterMutation() {
     final int generation = ++_latestGeneration;
     return _load(
@@ -133,6 +139,7 @@ abstract class _LibraryOverviewPageController
     int generation, {
     LibraryOverview? retainedOverview,
     bool preserveProjectedStateOnFailure = false,
+    bool silent = false,
   }) async {
     if (!_isCurrent(generation)) return;
 
@@ -164,7 +171,9 @@ abstract class _LibraryOverviewPageController
       );
     }
 
-    if (initialLoad) {
+    if (silent) {
+      // Automatic catalog checks must not show a loading or refreshing frame.
+    } else if (initialLoad) {
       state = const LibraryPageState.initialLoading();
     } else {
       state = LibraryPageState.refreshing(
@@ -213,7 +222,7 @@ abstract class _LibraryOverviewPageController
         return;
       }
       final appError = AppError.fromUnknown(error);
-      if (preserveProjectedStateOnFailure) {
+      if (silent || preserveProjectedStateOnFailure) {
         state = LibraryPageState.loaded(_projectedOverview());
       } else {
         state = LibraryPageState.failure(

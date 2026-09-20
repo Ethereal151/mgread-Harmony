@@ -1,8 +1,11 @@
-import 'package:flutter/services.dart';
-import 'package:flutter/foundation.dart';
-import 'package:plugin_platform_interface/plugin_platform_interface.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'dart:async';
 import 'dart:io';
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
+import 'package:plugin_platform_interface/plugin_platform_interface.dart';
+import 'package:screen_brightness/screen_brightness.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 abstract class ReaderPlatform extends PlatformInterface {
   ReaderPlatform() : super(token: _token);
@@ -34,11 +37,28 @@ abstract class ReaderPlatform extends PlatformInterface {
   Future<void> setVideoWindowMode({required bool fullscreen}) =>
       Future<void>.value();
 
+  /// Enables the host's native volume-key interception while a reader is
+  /// actively accepting page-turn shortcuts.
+  Future<void> setVolumeKeyPageTurningEnabled(bool enabled) async {}
+
+  /// Whether this host can override the application's screen brightness.
+  bool get supportsApplicationBrightness => false;
+
+  /// Sets the application's display brightness for the active reader route.
+  Future<void> setApplicationBrightness(double brightness) async {}
+
+  /// Releases the application's display brightness override.
+  Future<void> resetApplicationBrightness() async {}
+
   bool get supportsKeepScreenOn => false;
 
   /// Opens a source-owned URL in the platform browser.
   Future<bool> openExternalUrl(Uri uri) =>
       launchUrl(uri, mode: LaunchMode.externalApplication);
+
+  /// Volume keys intercepted by a native host reader bridge.
+  static Stream<ReaderVolumeKey> get volumeKeyEvents =>
+      MethodChannelReaderPlatform.volumeKeyEvents;
 
   /// Compatibility shorthand for existing platform fakes and clients.
   Future<void> setKeepScreenOn(bool enabled) =>
@@ -51,6 +71,7 @@ class ReaderPlatformCapabilities {
     this.keepScreenOn = false,
     this.immersiveMode = false,
   });
+
   final bool keepScreenOn;
   final bool immersiveMode;
 }
@@ -60,11 +81,40 @@ class MethodChannelReaderPlatform extends ReaderPlatform {
   static const MethodChannel _systemChannel = MethodChannel(
     'mgread/ohos_system',
   );
+  static final StreamController<ReaderVolumeKey> _volumeKeyController =
+      StreamController<ReaderVolumeKey>.broadcast();
+
+  MethodChannelReaderPlatform() {
+    _channel.setMethodCallHandler(_handleInputMethodCall);
+  }
+
+  static Stream<ReaderVolumeKey> get volumeKeyEvents =>
+      _volumeKeyController.stream;
+
+  static Future<void> _handleInputMethodCall(MethodCall call) async {
+    if (call.method != 'volumeKey') return;
+    final Object? rawDirection = call.arguments is Map
+        ? (call.arguments as Map<Object?, Object?>)['direction']
+        : call.arguments;
+    final ReaderVolumeKey? direction = switch (rawDirection) {
+      'up' => ReaderVolumeKey.up,
+      'down' => ReaderVolumeKey.down,
+      _ => null,
+    };
+    if (direction != null) _volumeKeyController.add(direction);
+  }
 
   bool get _isOhos => !kIsWeb && Platform.operatingSystem == 'ohos';
 
   @override
   bool get supportsKeepScreenOn =>
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.windows ||
+          _isOhos);
+
+  @override
+  bool get supportsApplicationBrightness =>
       !kIsWeb &&
       (defaultTargetPlatform == TargetPlatform.android ||
           defaultTargetPlatform == TargetPlatform.windows ||
@@ -103,13 +153,11 @@ class MethodChannelReaderPlatform extends ReaderPlatform {
     required bool keepScreenOn,
     required bool immersiveMode,
     bool allowScreenDimming = false,
-  }) {
-    return _channel.invokeMethod<void>('setReaderSystemUi', <String, bool>{
-      'keepScreenOn': keepScreenOn,
-      'immersiveMode': immersiveMode,
-      'allowScreenDimming': allowScreenDimming,
-    });
-  }
+  }) => _channel.invokeMethod<void>('setReaderSystemUi', <String, bool>{
+    'keepScreenOn': keepScreenOn,
+    'immersiveMode': immersiveMode,
+    'allowScreenDimming': allowScreenDimming,
+  });
 
   @override
   Future<void> setVideoWindowMode({required bool fullscreen}) {
@@ -120,6 +168,28 @@ class MethodChannelReaderPlatform extends ReaderPlatform {
   }
 
   @override
+  Future<void> setVolumeKeyPageTurningEnabled(bool enabled) {
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) {
+      return Future<void>.value();
+    }
+    return _channel.invokeMethod<void>(
+      'setVolumeKeyPageTurningEnabled',
+      <String, bool>{'enabled': enabled},
+    );
+  }
+
+  @override
+  Future<void> setApplicationBrightness(double brightness) => ScreenBrightness
+      .instance
+      .setApplicationScreenBrightness(brightness.clamp(0.05, 1).toDouble());
+
+  @override
+  Future<void> resetApplicationBrightness() =>
+      ScreenBrightness.instance.resetApplicationScreenBrightness();
+
+  @override
   Future<void> setKeepScreenOn(bool enabled) =>
       setReaderSystemUi(keepScreenOn: enabled, immersiveMode: false);
 }
+
+enum ReaderVolumeKey { up, down }

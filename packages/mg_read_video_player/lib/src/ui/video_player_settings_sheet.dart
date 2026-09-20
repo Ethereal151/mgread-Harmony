@@ -21,6 +21,7 @@ Future<void> showVideoPlayerSettingsSheet({
   required BuildContext context,
   required VideoPlayerSnapshot snapshot,
   required Future<void> Function(double) onRate,
+  required Future<void> Function(VideoEnhancementMode) onEnhancementMode,
   required Future<void> Function() onFit,
   required Future<void> Function() onPreviousEpisode,
   required Future<void> Function() onNextEpisode,
@@ -38,6 +39,7 @@ Future<void> showVideoPlayerSettingsSheet({
     child: _VideoPlayerSettingsSheet(
       snapshot: snapshot,
       onRate: onRate,
+      onEnhancementMode: onEnhancementMode,
       onFit: onFit,
       onPreviousEpisode: onPreviousEpisode,
       onNextEpisode: onNextEpisode,
@@ -50,6 +52,7 @@ final class _VideoPlayerSettingsSheet extends StatefulWidget {
   const _VideoPlayerSettingsSheet({
     required this.snapshot,
     required this.onRate,
+    required this.onEnhancementMode,
     required this.onFit,
     required this.onPreviousEpisode,
     required this.onNextEpisode,
@@ -58,6 +61,7 @@ final class _VideoPlayerSettingsSheet extends StatefulWidget {
 
   final VideoPlayerSnapshot snapshot;
   final Future<void> Function(double) onRate;
+  final Future<void> Function(VideoEnhancementMode) onEnhancementMode;
   final Future<void> Function() onFit;
   final Future<void> Function() onPreviousEpisode;
   final Future<void> Function() onNextEpisode;
@@ -73,6 +77,7 @@ final class _VideoPlayerSettingsSheetState
   late double _rate = widget.snapshot.rate;
   late VideoFitMode _fitMode = widget.snapshot.fitMode;
   late bool _autoAdvance = widget.snapshot.autoAdvance;
+  late VideoEnhancementMode _enhancementMode = widget.snapshot.enhancementMode;
 
   Future<void> _setRate(double rate) async {
     await widget.onRate(rate);
@@ -92,6 +97,18 @@ final class _VideoPlayerSettingsSheetState
   Future<void> _setAutoAdvance(bool enabled) async {
     await widget.onAutoAdvance(enabled);
     if (mounted) setState(() => _autoAdvance = enabled);
+  }
+
+  Future<void> _setEnhancementMode(bool enabled) async {
+    final mode = enabled
+        ? VideoEnhancementMode.anime4kFast
+        : VideoEnhancementMode.off;
+    try {
+      await widget.onEnhancementMode(mode);
+      if (mounted) setState(() => _enhancementMode = mode);
+    } on Object {
+      // A missing or unsupported native shader leaves the current mode intact.
+    }
   }
 
   @override
@@ -198,6 +215,22 @@ final class _VideoPlayerSettingsSheetState
                     foregroundColor: videoPlayerAccent,
                   ),
                   child: const Text('切换'),
+                ),
+              ),
+              const SizedBox(height: 18),
+              const _SettingsSectionLabel('画质增强'),
+              const SizedBox(height: 8),
+              _SettingsRow(
+                icon: Icons.auto_awesome_rounded,
+                label: '动漫高清修复',
+                detail: _enhancementMode == VideoEnhancementMode.off
+                    ? '当前关闭'
+                    : 'Anime4K 快速模式',
+                trailing: Switch.adaptive(
+                  key: const Key('video-player-anime4k'),
+                  value: _enhancementMode != VideoEnhancementMode.off,
+                  activeTrackColor: videoPlayerAccent,
+                  onChanged: _setEnhancementMode,
                 ),
               ),
               const SizedBox(height: 18),

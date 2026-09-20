@@ -9,6 +9,8 @@ import test from "node:test";
 import {
   DesktopRuntime,
   createPluginArchive,
+  decodeSourceResourceUrl,
+  encodeSourceResourceToken,
   PluginInstaller,
   protocolVersion,
   runtimeVersion,
@@ -409,6 +411,13 @@ test("source resource URLs are reusable, bounded, and forward binary responses",
   assert.equal(response.type, "response", JSON.stringify(response));
   const resourceUrl = response.result.items[0].coverUrl;
   assert.match(resourceUrl, new RegExp(`^http://${ready.host}:${ready.port}/v1/source-resource/[A-Za-z0-9_-]{64,}$`));
+  const decoded = await sendRequest(socket, makeRequest(ready, "c:resource-decode", "runtime.sourceResource.decode.v1", {
+    params: { url: resourceUrl },
+  }));
+  assert.equal(decoded.type, "response", JSON.stringify(decoded));
+  assert.equal(decoded.result.pluginId, desktopFixture.plugin.id);
+  assert.equal(decoded.result.request.kind, "image");
+  assert.equal(decoded.result.request.url, upstreamUrl);
   for (let index = 0; index < 2; index += 1) {
     const fetched = await fetch(resourceUrl);
     assert.equal(fetched.status, 206);
@@ -418,6 +427,17 @@ test("source resource URLs are reusable, bounded, and forward binary responses",
   assert.equal(upstreamCalls.length, 2);
   assert.equal(upstreamCalls[0].accept, "image/test");
   assert.equal((await fetch(`${resourceUrl}x`)).status, 404);
+});
+
+test("source-resource token generation remains reversible for supported payloads", () => {
+  const request = { kind: "audio", url: "https://media.example/audio.mp3", headers: {} };
+  const token = encodeSourceResourceToken("org.example.audio", request);
+  assert.match(token, /^[A-Za-z0-9_-]+$/u);
+  assert.deepEqual(
+    decodeSourceResourceUrl(`http://127.0.0.1:39227/v1/source-resource/${token}`),
+    { pluginId: "org.example.audio", request },
+  );
+  assert.equal(decodeSourceResourceUrl("https://example.test/not-a-resource"), undefined);
 });
 
 test("desktop Runtime resolves the installed source directory for its Flutter Supervisor", async (t) => {

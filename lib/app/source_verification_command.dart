@@ -10,9 +10,13 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mg_read_video_player/mg_read_video_player.dart';
 
 import 'package:mg_read/app/app_startup.dart';
 import 'package:mg_read/app/app_theme.dart';
+import 'package:mg_read/app/source_verification_video_probe_surface.dart';
+import 'package:mg_read/features/network_proxy/application/flutter_network_proxy_manager.dart';
+import 'package:mg_read/features/network_proxy/application/network_proxy_settings.dart';
 import 'package:mg_read/features/plugins/application/source_verification.dart';
 
 typedef SourceVerificationProcessTerminator = void Function(int exitCode);
@@ -85,8 +89,10 @@ class _SourceVerificationCommandScreen extends ConsumerStatefulWidget {
 }
 
 class _SourceVerificationCommandScreenState extends ConsumerState<_SourceVerificationCommandScreen> {
+  final SourceVerificationVideoPlaybackProbeController _videoPlaybackProbe = SourceVerificationVideoPlaybackProbeController();
   SourceVerificationProgress? _progress;
   String _message = '正在初始化 MgRead 正式运行环境';
+  bool _videoPlaybackProbeReady = false;
 
   @override
   void initState() {
@@ -109,10 +115,15 @@ class _SourceVerificationCommandScreenState extends ConsumerState<_SourceVerific
       _writeCliRecord(<String, Object?>{'event': 'startup', 'status': 'running'});
       await ref.read(appStartupControllerProvider).start();
       _writeCliRecord(<String, Object?>{'event': 'startup', 'status': 'passed'});
+      if (mounted) {
+        setState(() => _videoPlaybackProbeReady = true);
+        await WidgetsBinding.instance.endOfFrame;
+      }
       report = await ref
           .read(sourceVerificationEngineProvider)
           .run(
             pluginId: widget.command.pluginId,
+            videoPlaybackProbe: _videoPlaybackProbe,
             onDebug: (record) {
               trace.add(_traceRecord(record));
               _writeCliDebug(record);
@@ -209,6 +220,21 @@ class _SourceVerificationCommandScreenState extends ConsumerState<_SourceVerific
               if (_progress != null) ...<Widget>[
                 const SizedBox(height: AppSpacing.unit),
                 Text(_progress!.pluginId, style: Theme.of(context).textTheme.bodySmall, textAlign: TextAlign.center),
+              ],
+              if (_videoPlaybackProbeReady) ...<Widget>[
+                const SizedBox(height: AppSpacing.regular),
+                const Text('视频来源将执行静音首帧与播放进度验证'),
+                const SizedBox(height: AppSpacing.unit),
+                SizedBox(
+                  width: 240,
+                  height: 135,
+                  child: SourceVerificationVideoPlaybackProbeSurface(
+                    controller: _videoPlaybackProbe,
+                    backendFactory: () => createMediaKitVideoPlaybackBackend(
+                      proxyUri: ref.read(configuredFlutterNetworkProxyManagerProvider).playerProxyUriFor(NetworkProxyTraffic.video),
+                    ),
+                  ),
+                ),
               ],
             ],
           ),
@@ -347,6 +373,7 @@ String _commandStageLabel(String stage) {
     'content' => '正文或媒体',
     'resource.cover' => '封面资源',
     'resource.content' => '内容资源',
+    'playback.video' => '视频首帧与播放进度',
     _ => 'Runtime',
   };
 }

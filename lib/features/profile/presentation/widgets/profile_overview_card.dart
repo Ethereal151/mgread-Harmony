@@ -115,7 +115,7 @@ class _ProfileAvatar extends StatelessWidget {
             filterQuality: FilterQuality.medium,
             semanticLabel: '本地资料头像',
             errorBuilder: (BuildContext context, Object error, StackTrace? stackTrace) {
-              return const ColoredBox(color: Color(0xFFEDE7DE));
+              return ColoredBox(color: AppThemeTokens.of(context).mutedSurface);
             },
           ),
         ),
@@ -206,7 +206,7 @@ class _ProfileEditButton extends StatelessWidget {
                 children: <Widget>[
                   Text(
                     '编辑资料',
-                    style: theme.textTheme.bodyMedium?.copyWith(color: tokens.warning, fontWeight: FontWeight.w500, height: 1),
+                    style: theme.textTheme.bodyMedium?.copyWith(color: tokens.accent, fontWeight: FontWeight.w500, height: 1),
                   ),
                   Icon(Icons.chevron_right_rounded, color: tokens.mutedText, size: AppSpacing.profileChevronSize),
                 ],
@@ -285,12 +285,12 @@ class _ProfileSyncRow extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: AppSpacing.profileCardHorizontalPadding),
             child: Row(
               children: <Widget>[
-                Icon(Icons.cloud_done_outlined, color: tokens.warning, size: AppSpacing.profileSyncIconSize),
+                Icon(Icons.cloud_done_outlined, color: tokens.accent, size: AppSpacing.profileSyncIconSize),
                 const SizedBox(width: AppSpacing.compact),
                 Expanded(
                   child: Text(
                     data.syncLabel,
-                    style: theme.textTheme.bodyMedium?.copyWith(color: tokens.warning, fontWeight: FontWeight.w500, height: 1.1),
+                    style: theme.textTheme.bodyMedium?.copyWith(color: tokens.accent, fontWeight: FontWeight.w500, height: 1.1),
                   ),
                 ),
                 Text(

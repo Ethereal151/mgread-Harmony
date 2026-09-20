@@ -41,12 +41,14 @@ final class SourceAudioPlaybackRequest {
     required this.firstCatalogPage,
     required this.chapter,
     required this.libraryItemId,
+    this.pluginVersion = 'unknown',
   });
 
   final PluginContentDetail detail;
   final PluginChaptersResult firstCatalogPage;
   final PluginChapterSummary chapter;
   final String? libraryItemId;
+  final String pluginVersion;
 }
 
 enum SourceAudioPresentation { inactive, expanded, minimized }
@@ -182,6 +184,24 @@ final class SourceAudioPlaybackService extends Notifier<SourceAudioPlaybackState
     );
     unawaited(_prepare(sessionId, request));
     await completion.future;
+  }
+
+  /// Expands the existing shelf playback without resolving the source again.
+  ///
+  /// A shelf item can be opened while its audio session is minimized (or
+  /// still preparing). In that case the active session already owns the
+  /// resolved source and must remain the single playback owner. The content
+  /// ID fallback covers sessions opened from a non-shelf route that did not
+  /// have a persistent library ID yet.
+  bool revealExistingForShelfItem({required String libraryItemId, required String contentId}) {
+    if (_disposed || !state.isActive) return false;
+    final request = state.request;
+    if (request == null) return false;
+    final sameShelfItem = request.libraryItemId == libraryItemId;
+    final sameUnpersistedContent = request.libraryItemId == null && request.detail.summary.id == contentId;
+    if (!sameShelfItem && !sameUnpersistedContent) return false;
+    expand();
+    return true;
   }
 
   Future<void> retryPreparation() async {

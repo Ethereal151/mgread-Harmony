@@ -212,6 +212,46 @@ void main() {
 
     await _disposeReader(tester, controller);
   });
+
+  testWidgets('next chapter shows the loader while chapter metadata resolves', (
+    WidgetTester tester,
+  ) async {
+    final _ExplicitNavigationDataSource dataSource =
+        _ExplicitNavigationDataSource(
+          delayedChapterId: 'chapter-3',
+          initialCatalogCount: 1,
+          delayedInfoIndex: 1,
+        );
+    final TextReaderController controller = TextReaderController();
+    await _mountReader(
+      tester,
+      dataSource: dataSource,
+      controller: controller,
+      store: const _ExplicitNavigationStateStore(),
+    );
+
+    unawaited(controller.nextChapter());
+    await tester.pump();
+
+    expect(
+      find.byKey(const ValueKey<String>('reader-chapter-loading-mask')),
+      findsOneWidget,
+    );
+    expect(controller.snapshot.chapter?.id, 'chapter-1');
+
+    dataSource.completeDelayedChapterInfo();
+    await _pumpUntil(
+      tester,
+      () =>
+          controller.snapshot.chapter?.id == 'chapter-2' &&
+          find
+              .byKey(const ValueKey<String>('reader-chapter-loading-mask'))
+              .evaluate()
+              .isEmpty,
+    );
+
+    await _disposeReader(tester, controller);
+  });
 }
 
 const String _bookId = 'explicit-navigation-book';
@@ -324,6 +364,8 @@ final class _ExplicitNavigationDataSource implements TextReaderDataSource {
   _ExplicitNavigationDataSource({
     required this.delayedChapterId,
     this.delayedFromAttempt = 1,
+    this.initialCatalogCount = 3,
+    this.delayedInfoIndex,
   });
 
   static const List<ReaderChapterInfo> _chapters = <ReaderChapterInfo>[
@@ -334,8 +376,12 @@ final class _ExplicitNavigationDataSource implements TextReaderDataSource {
 
   final String delayedChapterId;
   final int delayedFromAttempt;
+  final int initialCatalogCount;
+  final int? delayedInfoIndex;
   final Completer<TextChapterContent> _delayed =
       Completer<TextChapterContent>();
+  final Completer<ReaderChapterInfo> _delayedInfo =
+      Completer<ReaderChapterInfo>();
   final Map<String, int> _attempts = <String, int>{};
 
   void completeDelayedChapter() {
@@ -344,6 +390,11 @@ final class _ExplicitNavigationDataSource implements TextReaderDataSource {
       (ReaderChapterInfo chapter) => chapter.id == delayedChapterId,
     );
     _delayed.complete(_contentFor(index));
+  }
+
+  void completeDelayedChapterInfo() {
+    if (_delayedInfo.isCompleted || delayedInfoIndex == null) return;
+    _delayedInfo.complete(_chapters[delayedInfoIndex!]);
   }
 
   @override
@@ -359,16 +410,17 @@ final class _ExplicitNavigationDataSource implements TextReaderDataSource {
     String? cursor,
     int pageSize = 100,
   }) async => ChapterCatalogPage(
-    items: _chapters,
+    items: _chapters.take(initialCatalogCount).toList(growable: false),
     total: _chapters.length,
-    hasMore: false,
+    nextCursor: initialCatalogCount < _chapters.length ? 'remaining' : null,
+    hasMore: initialCatalogCount < _chapters.length,
   );
 
   @override
-  Future<ReaderChapterInfo> loadChapterAtIndex(
-    String bookId,
-    int index,
-  ) async => _chapters[index];
+  Future<ReaderChapterInfo> loadChapterAtIndex(String bookId, int index) =>
+      index == delayedInfoIndex
+      ? _delayedInfo.future
+      : Future<ReaderChapterInfo>.value(_chapters[index]);
 
   @override
   Future<TextChapterContent> loadChapterContent(

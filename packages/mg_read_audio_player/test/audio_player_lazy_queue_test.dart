@@ -55,11 +55,94 @@ void main() {
       expect(backend.nextCalls, 0);
     },
   );
+
+  testWidgets('chapter switch shows loading before resource resolution ends', (
+    tester,
+  ) async {
+    final backend = _LazyQueueBackend();
+    final dataSource = _LazyCatalogAudioDataSource(blockedTrackId: 'track-1');
+    final controller = AudioPlayerController();
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(disableAnimations: true),
+          child: AudioPlayerView(
+            collectionId: 'book',
+            dataSource: dataSource,
+            stateStore: const _MemoryStateStore(),
+            backend: backend,
+            controller: controller,
+            autoplay: false,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('audio-previous')));
+    await tester.pump();
+
+    expect(controller.snapshot.resourceLoading, isTrue);
+    expect(find.byKey(const Key('audio-buffering')), findsOneWidget);
+    expect(controller.snapshot.currentTrack?.id, 'track-2');
+
+    dataSource.completeBlockedTrack();
+    await tester.pumpAndSettle();
+
+    expect(controller.snapshot.resourceLoading, isFalse);
+    expect(controller.snapshot.currentTrack?.id, 'track-1');
+  });
+
+  testWidgets('catalog selection closes immediately and reveals loading', (
+    tester,
+  ) async {
+    final backend = _LazyQueueBackend();
+    final dataSource = _LazyCatalogAudioDataSource(blockedTrackId: 'track-1');
+    final controller = AudioPlayerController();
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(disableAnimations: true),
+          child: AudioPlayerView(
+            collectionId: 'book',
+            dataSource: dataSource,
+            stateStore: const _MemoryStateStore(),
+            backend: backend,
+            controller: controller,
+            autoplay: false,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('audio-queue')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('audio-queue-track-track-1')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.byKey(const Key('audio-queue-list')), findsNothing);
+    expect(controller.snapshot.resourceLoading, isTrue);
+    expect(find.byKey(const Key('audio-buffering')), findsOneWidget);
+
+    dataSource.completeBlockedTrack();
+    await tester.pumpAndSettle();
+    expect(controller.snapshot.currentTrack?.id, 'track-1');
+  });
 }
 
 final class _LazyCatalogAudioDataSource
     implements AudioPlaylistQueueDataSource {
+  _LazyCatalogAudioDataSource({this.blockedTrackId});
+
   final List<String> loadedTrackIds = <String>[];
+  final String? blockedTrackId;
+  final Completer<AudioTrack> _blockedTrack = Completer<AudioTrack>();
 
   static const _entries = <AudioQueueEntry>[
     AudioQueueEntry(id: 'track-1', title: '第一章 上一章'),
@@ -81,11 +164,20 @@ final class _LazyCatalogAudioDataSource
   Future<AudioTrack> loadTrackById(
     String collectionId, {
     required String trackId,
-  }) async {
+  }) {
     loadedTrackIds.add(trackId);
     final entry = _entries.singleWhere((candidate) => candidate.id == trackId);
     if (entry.isLocked) throw StateError('Locked tracks must not be loaded.');
-    return _track(entry.id, entry.title);
+    if (trackId == blockedTrackId) return _blockedTrack.future;
+    return Future<AudioTrack>.value(_track(entry.id, entry.title));
+  }
+
+  void completeBlockedTrack() {
+    if (_blockedTrack.isCompleted || blockedTrackId == null) return;
+    final entry = _entries.singleWhere(
+      (candidate) => candidate.id == blockedTrackId,
+    );
+    _blockedTrack.complete(_track(entry.id, entry.title));
   }
 
   @override

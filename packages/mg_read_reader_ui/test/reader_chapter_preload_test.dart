@@ -79,7 +79,10 @@ void main() {
       const ValueKey<String>('reader-catalog-chapter-chapter-1'),
     );
     expect(
-      find.descendant(of: nextChapter, matching: find.text('已下载')),
+      find.descendant(
+        of: nextChapter,
+        matching: find.byIcon(Icons.download_done_rounded),
+      ),
       findsOneWidget,
     );
 

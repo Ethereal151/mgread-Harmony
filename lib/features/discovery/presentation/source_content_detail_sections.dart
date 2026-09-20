@@ -1,9 +1,10 @@
 part of 'source_content_detail_sheet.dart';
 
 class _DetailHeader extends StatelessWidget {
-  const _DetailHeader({required this.isModalSheet});
+  const _DetailHeader({required this.isModalSheet, required this.readerOwnedTheme});
 
   final bool isModalSheet;
+  final bool readerOwnedTheme;
 
   @override
   Widget build(BuildContext context) => DiscoveryTopBar(
@@ -11,16 +12,15 @@ class _DetailHeader extends StatelessWidget {
     sourceName: '当前来源',
     onSourcePressed: () {},
     onSearchPressed: () {},
-    onToggleTheme: () {},
+    onToggleTheme: () => AppThemeModeScope.of(context).onToggleTheme(Theme.of(context).brightness),
     onBackPressed: () => Navigator.of(context).pop(),
     backButtonKey: const Key('source-detail-back'),
     barKey: const Key('source-detail-header'),
     titleKey: const Key('source-detail-header-title'),
     showSourceSelector: false,
     showSearchAction: false,
-    trailingActions: isModalSheet
-        ? <Widget>[]
-        : <Widget>[DiscoveryTopAction(tooltip: '更多', icon: Icons.more_vert_rounded, onPressed: () {})],
+    showThemeToggle: !readerOwnedTheme,
+    trailingActions: const <Widget>[],
   );
 }
 
@@ -127,22 +127,34 @@ class _DetailCoverLink extends StatelessWidget {
   final VoidCallback? onTap;
 
   @override
-  Widget build(BuildContext context) => InkWell(
-    key: const Key('source-detail-open-cover-url'),
-    onTap: onTap,
-    borderRadius: presentation == DiscoveryCoverPresentation.landscape ? BorderRadius.circular(10) : AppRadii.discoveryCover,
-    child: DiscoveryBookCover(
-      key: const Key('source-detail-cover'),
-      title: content.title,
-      coverBytes: content.coverBytes,
-      remoteContentId: content.id,
-      coverUrl: content.coverUrl,
-      variant: _coverVariant(content.id),
-      width: width,
-      height: height,
-      presentation: presentation,
-    ),
-  );
+  Widget build(BuildContext context) {
+    final enabled = onTap != null;
+    return Semantics(
+      button: enabled,
+      enabled: enabled,
+      label: '打开封面链接',
+      child: Opacity(
+        opacity: enabled ? 1 : .56,
+        child: InkWell(
+          key: const Key('source-detail-open-cover-url'),
+          onTap: onTap,
+          borderRadius: presentation == DiscoveryCoverPresentation.landscape ? BorderRadius.circular(10) : AppRadii.discoveryCover,
+          child: DiscoveryBookCover(
+            key: const Key('source-detail-cover'),
+            title: content.title,
+            contentKind: content.contentKind,
+            coverBytes: content.coverBytes,
+            remoteContentId: content.id,
+            coverUrl: content.coverUrl,
+            variant: _coverVariant(content.id),
+            width: width,
+            height: height,
+            presentation: presentation,
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _DetailHeaderMetadata extends StatelessWidget {
@@ -282,8 +294,8 @@ class _ShelfActionBarState extends State<_ShelfActionBar> {
     ButtonStyle style(Color foreground, Color border) => OutlinedButton.styleFrom(
       minimumSize: const Size.fromHeight(50),
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.unit),
-      foregroundColor: foreground,
-      side: BorderSide(color: border),
+      foregroundColor: _isRunning ? tokens.mutedText : foreground,
+      side: BorderSide(color: _isRunning ? tokens.divider : border),
       shape: shape,
     );
     return LayoutBuilder(
@@ -558,49 +570,57 @@ class _RecommendationCard extends StatelessWidget {
   final SourceRecommendationRequested? onPressed;
 
   @override
-  Widget build(BuildContext context) => Semantics(
-    button: onPressed != null,
-    label: '查看${content.title}详情',
-    child: InkWell(
-      key: ValueKey<String>('source-detail-recommendation-${content.id}'),
-      onTap: onPressed == null ? null : () => unawaited(onPressed!(content)),
-      borderRadius: AppRadii.discoveryCover,
-      child: SizedBox(
-        width: 96,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            DiscoveryBookCover(
-              title: content.title,
-              coverBytes: content.coverBytes,
-              remoteContentId: content.id,
-              coverUrl: content.coverUrl,
-              variant: _coverVariant(content.id),
-              presentation: discoveryCoverPresentation(content.coverOrientation),
-              width: 96,
-              height: 140,
+  Widget build(BuildContext context) {
+    final enabled = onPressed != null;
+    return Semantics(
+      button: enabled,
+      enabled: enabled,
+      label: '查看${content.title}详情',
+      child: Opacity(
+        opacity: enabled ? 1 : .56,
+        child: InkWell(
+          key: ValueKey<String>('source-detail-recommendation-${content.id}'),
+          onTap: enabled ? () => unawaited(onPressed!(content)) : null,
+          borderRadius: AppRadii.discoveryCover,
+          child: SizedBox(
+            width: 96,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                DiscoveryBookCover(
+                  title: content.title,
+                  contentKind: content.contentKind,
+                  coverBytes: content.coverBytes,
+                  remoteContentId: content.id,
+                  coverUrl: content.coverUrl,
+                  variant: _coverVariant(content.id),
+                  presentation: discoveryCoverPresentation(content.coverOrientation),
+                  width: 96,
+                  height: 140,
+                ),
+                const SizedBox(height: 7),
+                Text(
+                  content.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  softWrap: false,
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  content.author ?? '作者未知',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  softWrap: false,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppThemeTokens.of(context).mutedText),
+                ),
+              ],
             ),
-            const SizedBox(height: 7),
-            Text(
-              content.title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              softWrap: false,
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
-            const SizedBox(height: 2),
-            Text(
-              content.author ?? '作者未知',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              softWrap: false,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppThemeTokens.of(context).mutedText),
-            ),
-          ],
+          ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 class _DetailTag extends StatelessWidget {
@@ -624,28 +644,56 @@ class _ExternalRow extends StatelessWidget {
   final Uri? url;
   final Future<void> Function(BuildContext context, Uri? url) onOpenUrl;
   @override
-  Widget build(BuildContext context) => InkWell(
-    onTap: url == null ? null : () => unawaited(onOpenUrl(context, url)),
-    child: Padding(
-      padding: const EdgeInsets.symmetric(vertical: AppSpacing.regular),
-      child: Row(
-        children: <Widget>[
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                if (title != null) Text(title!, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
-                Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
-                if (subtitle != null)
-                  Text(subtitle!, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppThemeTokens.of(context).mutedText)),
-              ],
-            ),
+  Widget build(BuildContext context) {
+    final tokens = AppThemeTokens.of(context);
+    final theme = Theme.of(context);
+    final enabled = _isOpenableExternalUrl(url);
+    final disabledTextColor = tokens.mutedText;
+    return Semantics(
+      button: enabled,
+      enabled: enabled,
+      label: title == null ? label : '$title，$label',
+      child: InkWell(
+        onTap: enabled ? () => unawaited(onOpenUrl(context, url)) : null,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: AppSpacing.regular),
+          child: Row(
+            children: <Widget>[
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    if (title != null)
+                      Text(
+                        title!,
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          color: enabled ? null : disabledTextColor,
+                        ),
+                      ),
+                    Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: enabled ? null : TextStyle(color: disabledTextColor),
+                    ),
+                    if (subtitle != null)
+                      Text(
+                        subtitle!,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: enabled ? disabledTextColor : disabledTextColor.withValues(alpha: .68),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right_rounded, color: enabled ? disabledTextColor : disabledTextColor.withValues(alpha: .5)),
+            ],
           ),
-          Icon(Icons.chevron_right_rounded, color: AppThemeTokens.of(context).mutedText),
-        ],
+        ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 class _ChapterRow extends StatelessWidget {
@@ -659,8 +707,8 @@ class _ChapterRow extends StatelessWidget {
     contentPadding: EdgeInsets.zero,
     title: Text(chapter.title),
     subtitle: Text(_chapterSubtitle(chapter)),
-    trailing: chapter.url == null
-        ? const Icon(Icons.chevron_right_rounded)
+    trailing: !_isOpenableExternalUrl(chapter.url)
+        ? Icon(Icons.chevron_right_rounded, color: AppThemeTokens.of(context).mutedText)
         : IconButton(
             key: ValueKey<String>('source-chapter-url-${chapter.id}'),
             tooltip: '在浏览器打开章节',
@@ -670,6 +718,8 @@ class _ChapterRow extends StatelessWidget {
     onTap: onRead,
   );
 }
+
+bool _isOpenableExternalUrl(Uri? url) => url != null && (url.scheme == 'http' || url.scheme == 'https');
 
 Future<void> _openTextChapter(
   BuildContext context, {
@@ -694,7 +744,8 @@ Future<void> _openTextChapter(
     // Audio and video entry covers live on detail.summary. Both branches must
     // attach the resolved bytes before entering their host-owned surface.
     final playbackDetail = _withResolvedEntryCover(detail, context);
-    await callback(detail: playbackDetail, firstCatalogPage: firstCatalogPage, chapter: chapter);
+    final pluginVersion = BookCoverSourceScope.maybeOf(context)?.pluginVersion ?? 'unknown';
+    await callback(detail: playbackDetail, firstCatalogPage: firstCatalogPage, chapter: chapter, pluginVersion: pluginVersion);
     return;
   }
   if (detail.summary.contentKind == PluginContentKind.video) {

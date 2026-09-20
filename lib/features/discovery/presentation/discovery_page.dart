@@ -74,6 +74,7 @@ class _DiscoveryPageState extends State<DiscoveryPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      extendBody: true,
       body: AppPageBackdrop(
         style: AppPageBackdropStyle.discover,
         child: SafeArea(
@@ -97,7 +98,7 @@ class _DiscoveryPageState extends State<DiscoveryPage> {
                           pagePadding,
                           AppSpacing.pageHeaderTopPaddingFor(context),
                           pagePadding,
-                          AppSpacing.page,
+                          AppSpacing.bottomNavigationContentBottomPadding + MediaQuery.viewPaddingOf(context).bottom,
                         ),
                         children: <Widget>[
                           DiscoveryTopBar(
@@ -225,6 +226,7 @@ class DiscoveryTopBar extends StatelessWidget {
     this.onBackPressed,
     this.showSourceSelector = true,
     this.showSearchAction = true,
+    this.showThemeToggle = true,
     this.trailingActions = const <Widget>[],
     this.backButtonKey,
     this.barKey,
@@ -241,6 +243,7 @@ class DiscoveryTopBar extends StatelessWidget {
   final VoidCallback? onBackPressed;
   final bool showSourceSelector;
   final bool showSearchAction;
+  final bool showThemeToggle;
   final List<Widget> trailingActions;
   final Key? backButtonKey;
   final Key? barKey;
@@ -283,7 +286,7 @@ class DiscoveryTopBar extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: <Widget>[
                 ...trailingActions,
-                if (AppTheme.darkModeEnabled) ...<Widget>[
+                if (AppTheme.darkModeEnabled && showThemeToggle) ...<Widget>[
                   DiscoveryTopAction(
                     key: const Key('theme-mode-toggle'),
                     tooltip: theme.brightness == Brightness.dark ? '切换至浅色模式' : '切换至深色模式',
@@ -582,6 +585,7 @@ class DiscoveryHeroCard extends StatelessWidget {
                     top: 10,
                     child: DiscoveryBookCover(
                       title: data.title,
+                      contentKind: data.contentKind,
                       variant: data.coverVariant,
                       coverBytes: data.coverBytes,
                       remoteContentId: data.remoteContentId,

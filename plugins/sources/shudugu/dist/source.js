@@ -231,6 +231,13 @@ export class ShuduguSource {
             const response = await this.context.http.fetch(url, { headers: { Accept: 'text/html,application/xhtml+xml', 'Accept-Language': 'zh-CN,zh;q=0.9' } });
             if (!response.ok)
                 throw new Error(`Source request failed with HTTP ${response.status}.`);
+            if (response.url !== '' && new URL(response.url).origin !== this.#baseUrl.origin) {
+                this.context.errors.raise({
+                    code: 'source_access_blocked',
+                    message: '速读谷站点当前被重定向到站外页面，暂时无法读取。',
+                    annotation: `最终地址：${response.url}`,
+                });
+            }
             return response.text();
         };
         return policy === undefined

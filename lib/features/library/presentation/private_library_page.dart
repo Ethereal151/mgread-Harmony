@@ -21,6 +21,7 @@ import 'package:mg_read/core/content_library/content_library.dart';
 import 'package:mg_read/core/errors/app_error.dart';
 import 'package:mg_read/features/library/application/library_book_remover.dart';
 import 'package:mg_read/features/library/application/library_book_visibility_changer.dart';
+import 'package:mg_read/features/library/application/library_catalog_refresh_coordinator.dart';
 import 'package:mg_read/features/library/application/library_page_controller.dart';
 import 'package:mg_read/features/library/application/library_page_state.dart';
 import 'package:mg_read/features/library/presentation/library_book_list_view_data.dart';
@@ -55,8 +56,27 @@ class PrivateLibraryPage extends ConsumerWidget {
     final PrivateLibraryPageController controller = ref.read(privateLibraryPageControllerProvider.notifier);
     final LibraryBookRemover? remover = ref.read(libraryBookRemoverProvider);
     final LibraryBookVisibilityChanger? visibilityChanger = ref.read(libraryBookVisibilityChangerProvider);
+    final LibraryCatalogRefreshCoordinator? catalogRefreshCoordinator = ref.read(libraryCatalogRefreshCoordinatorProvider);
+    final overview = state.overview;
+    if (catalogRefreshCoordinator != null && overview != null) {
+      final List<String> bookIds = overview.items.map((item) => item.id).toList(growable: false);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!context.mounted) return;
+        unawaited(
+          catalogRefreshCoordinator.maybeRefresh(
+            bookIds: bookIds,
+            onChanged: (changedBookIds) async {
+              if (!context.mounted) return;
+              ref.read(libraryCatalogChangeProvider.notifier).publish(changedBookIds);
+              await controller.silentRefresh();
+            },
+          ),
+        );
+      });
+    }
 
     return Scaffold(
+      extendBody: true,
       body: SafeArea(
         bottom: false,
         child: AppSecondaryPageContent(
@@ -146,11 +166,11 @@ class _PrivateLibraryBodyState extends ConsumerState<_PrivateLibraryBody> {
       onRefresh: widget.controller.refresh,
       child: ListView(
         key: const Key('private-library-content'),
-        padding: const EdgeInsets.fromLTRB(
+        padding: EdgeInsets.fromLTRB(
           AppSpacing.compactPagePadding,
           AppSpacing.compact,
           AppSpacing.compactPagePadding,
-          AppSpacing.page,
+          AppSpacing.bottomNavigationContentBottomPadding + MediaQuery.viewPaddingOf(context).bottom,
         ),
         children: <Widget>[
           if (_feedback != null) ...<Widget>[

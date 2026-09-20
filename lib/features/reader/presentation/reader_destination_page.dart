@@ -19,6 +19,7 @@ import 'package:novel_reader_ui/novel_reader_ui.dart';
 
 import 'package:mg_read/core/diagnostics/diagnostics.dart';
 import 'package:mg_read/features/library/application/library_page_controller.dart';
+import 'package:mg_read/features/library/application/library_catalog_refresh_coordinator.dart';
 import 'package:mg_read/features/reader/application/library_reader_launcher.dart';
 import 'package:mg_read/features/reader/application/reader_launch_failure.dart';
 import 'package:mg_read/features/reader/application/reader_launch_request.dart';
@@ -58,6 +59,7 @@ class _ReaderDestinationPageState extends ConsumerState<ReaderDestinationPage> {
   var _generation = 0;
   var _usesShelfCoordinator = false;
   var _readerMode = 'unknown';
+  var _catalogRefreshToken = 0;
 
   @override
   void initState() {
@@ -158,9 +160,11 @@ class _ReaderDestinationPageState extends ConsumerState<ReaderDestinationPage> {
         entryCoverBytes: comic.entryCoverBytes,
         dataSource: comic.dataSource,
         stateStore: comic.stateStore,
+        chapterPreloadCount: comic.chapterPreloadCount,
         observer: _ComicReaderObserverChain(<ComicReaderObserver>[?comic.observer, _ComicReaderExitObserver(_leaveComicReader)]),
         controller: comic.controller,
         commentFeed: comic.commentFeed,
+        bookRefreshCapability: comic.bookRefreshCapability,
         estimatedWarmBytes: comic.estimatedWarmBytes,
         preparationKind: comic.preparationKind,
         networkPreparationElapsed: comic.networkPreparationElapsed,
@@ -317,6 +321,10 @@ class _ReaderDestinationPageState extends ConsumerState<ReaderDestinationPage> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<LibraryCatalogChange>(libraryCatalogChangeProvider, (_, next) {
+      if (!mounted || next.revision == 0 || !next.bookIds.contains(widget.bookId)) return;
+      setState(() => _catalogRefreshToken = next.revision);
+    });
     final request = _request;
     if (request != null) {
       final mountStage = _readerMountStage;
@@ -325,6 +333,7 @@ class _ReaderDestinationPageState extends ConsumerState<ReaderDestinationPage> {
       }
       return ReaderEntryTransition(
         request: request,
+        catalogRefreshToken: _catalogRefreshToken,
         onFirstContentPresented: _completeLaunch,
         onFirstComicContentPresented: _completeComicLaunch,
         onInitialFailure: _failLaunchFromReader,
@@ -373,7 +382,7 @@ final class _ReaderLaunchStageReporter {
   }
 }
 
-final class _MeasuredTextReaderDataSource implements TextReaderDataSource {
+final class _MeasuredTextReaderDataSource implements TextReaderDataSource, ReaderCatalogRefreshDataSource {
   const _MeasuredTextReaderDataSource(this._delegate, this._stages);
 
   final TextReaderDataSource _delegate;
@@ -381,6 +390,14 @@ final class _MeasuredTextReaderDataSource implements TextReaderDataSource {
 
   @override
   Future<ReaderBookInfo> loadBookInfo(String bookId) => _stages.measure('metadata', () => _delegate.loadBookInfo(bookId));
+
+  @override
+  Future<void> refreshCatalog(String bookId) async {
+    final delegate = _delegate;
+    if (delegate case final ReaderCatalogRefreshDataSource refreshable) {
+      await _stages.measure('catalogRefresh', () => refreshable.refreshCatalog(bookId));
+    }
+  }
 
   @override
   Future<ChapterCatalogPage> loadChapterCatalog(String bookId, {String? cursor, int pageSize = 100}) =>

@@ -9,11 +9,13 @@ import * as plugin from '../dist/index.mjs';
 
 test('synthetic fixture covers public discovery, search, detail, catalog, image manifest, proxy and restricted chapter refusal', async (t) => {
   const cacheDir = await mkdtemp(join(tmpdir(), '66manhua-cache-')); t.after(() => rm(cacheDir, { recursive: true, force: true }));
-  const [homeFixture, list, detail, chapter, locked] = await Promise.all(['home.html', 'list.html', 'detail.html', 'chapter.html', 'locked-chapter.html'].map((name) => readFile(new URL(`./fixtures/${name}`, import.meta.url), 'utf8')));
+  const [homeFixture, listFixture, detail, chapter, locked] = await Promise.all(['home.html', 'list.html', 'detail.html', 'chapter.html', 'locked-chapter.html'].map((name) => readFile(new URL(`./fixtures/${name}`, import.meta.url), 'utf8')));
   const home = saturateHomeFixture(homeFixture);
+  const list = listFixture.replace('<main>', '<main><article class="common-comic-item"><a href="/index.php/comic/distractor"></a><div class="comic__title"><a href="/index.php/comic/distractor">Unrelated Sample World</a></div></article>');
   const proxied = []; const requests = [];
   await plugin.activate({ dataDir: cacheDir, cacheDir, app: {}, plugin: {}, log: { debug(){}, info(){}, warn(){}, error(){} }, resource: { proxy(request) { proxied.push(request); const token = Buffer.from(JSON.stringify({ pluginId: 'org.mgread.66manhua-cc', request, version: 1 }), 'utf8').toString('base64url'); return `http://127.0.0.1:43210/v1/source-resource/${token}`; } }, http: { async fetch(input, init) { const url = new URL(input); requests.push({ url, init }); if (url.hostname === 'mh.aikanhanman.top') return new Response(new Uint8Array([7, 8]), { headers: { 'content-type': 'image/jpeg' } }); if (url.pathname === '/') return new Response(home); if (url.pathname === '/index.php/comic/sample') return new Response(detail); if (url.pathname === '/index.php/chapter/123') return new Response(chapter); if (url.pathname === '/index.php/chapter/124') return new Response(locked); return new Response(list); } } });
-  const search = await plugin.search({ query: 'fixture', cursor: null, pageSize: 20 }); assert.equal(search.items.length, 1); assert.equal(search.nextCursor, null);
+  const search = await plugin.search({ query: 'Sample', cursor: null, pageSize: 1 }); assert.equal(search.items.length, 1); assert.equal(search.items[0].id, 'comic:L2luZGV4LnBocC9jb21pYy9zYW1wbGU'); assert.equal(search.nextCursor, null);
+  assert.equal(requests[0].url.origin, 'https://66manhua.ua'); assert.equal(requests[0].url.pathname, '/index.php/search/Sample');
   const discover = await plugin.discover({ target: null, cursor: null, collectionId: null, pageSize: 20 }); assert.equal(discover.kind, 'document');
   assert.deepEqual(discover.document.components.map((component) => component.type === 'group' ? `${component.type}:${component.layout}` : `${component.type}:${component.children[0].layout}`), ['section:carousel', 'section:coverGrid', 'group:vertical', 'section:shelf', 'group:vertical']);
   const sections = discover.document.components.flatMap((component) => component.type === 'group' ? component.children : [component]);
@@ -29,6 +31,7 @@ test('synthetic fixture covers public discovery, search, detail, catalog, image 
   assert.equal(detailResult.title, 'Sample'); assert.equal(detailResult.author, 'Fixture Author'); assert.equal(detailResult.description, 'Complete fixture summary.'); assert.deepEqual(detailResult.categories, ['都市']);
   assert.equal(chapters.items.length, 2); assert.equal(chapters.items[1].isLocked, true);
   const content = await plugin.getContent({ id: detailResult.id, chapterId: chapters.items[0].id }); assert.equal(content.text, null); assert.equal(content.pages.length, 2);
+  assert.deepEqual(proxied.slice(-2).map((request) => request.url), ['https://mh.aikanhanman.top/images/sample-1.jpg', 'https://mh.aikanhanman.top/images/sample-2.webp']);
   await assert.rejects(plugin.getContent({ id: detailResult.id, chapterId: chapters.items[1].id }), /requires public access/u);
   assert.equal(new URL(proxied.at(-1).url).hostname, 'mh.aikanhanman.top');
   assert.equal(requests.some(({ url }) => url.hostname === 'mh.aikanhanman.top'), false);

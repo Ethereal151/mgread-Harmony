@@ -17,16 +17,18 @@
 
 1. 元数据与构建：descriptor、入口、公开导出、固定 Node/npm、build、typecheck、离线测试、artifact。
 2. 内容链路：根发现、有限 target、搜索、详情、完整目录、按 `contentKind` 选择的有界内容样本。
-3. 资源链路：封面、漫画页图、音频、视频/HLS 分组独立探测；一个健康资源组不能代表其他组通过。
-4. 宿主链路：Node CLI 后再跑正式 Windows App CLI；WebView/人工交互来源单列能力边界。
+3. 资源链路：封面按根发现、发现子列表、搜索、详情分表面探测；漫画页图、音频、视频/HLS 再分组独立探测。
+4. 宿主链路：先用固定 Node 直接跑“快速检查”，再用真实 MgRead 主程序 EXE CLI 跑“实际检查”；
+   WebView/人工交互来源单列能力边界。
 
 具体样本和通过标准读取 [content-validation-matrix.md](content-validation-matrix.md)，命令和报告语义读取
 [source-testing-workflow.md](source-testing-workflow.md)。批量运行输出结构化报告，至少包含总数、通过/失败/跳过、
 每来源阶段、contentKind、样本数、各资源组状态、耗时和未验证平台。
 
-严格验证时重新归一化工具结果：内容链路和所有适用资源组都通过才是 `verified`；工具返回 `passed` 但适用资源
-为 `unverified/notTested` 时是 `partial`；Node 明确返回 WebView 交互/脚本能力不足时是 `appRequired`，等待正式
-App CLI，不归为解析缺陷。生产来源与 fixture/demo 分别给出总数和状态。
+严格验证时重新归一化工具结果：内容链路、各封面表面和所有适用资源组都通过才是 `verified`；工具返回 `passed`
+但适用项为 `unverified/notRegistered/notTested`、只在任意候选成功后就停止，或没有覆盖发现子列表时都是 `partial`；
+Node 明确返回 WebView 交互/脚本能力不足时是 `appRequired`，等待主程序 EXE CLI，不归为解析缺陷。生产来源与
+fixture/demo 分别给出总数和状态。
 
 长批量任务需要每来源进度或可恢复的中间报告。当前工具若只在全部结束后输出，监控真实进程并等待最终报告，
 不能虚构逐源进度；若任务本身修改 testkit，应补充增量进度/检查点且保持最终报告和退出码语义不变。

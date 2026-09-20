@@ -15,21 +15,23 @@ import 'package:mg_read/features/profile/presentation/profile_general_setting_pa
 import '../../../core/settings/settings_testkit.dart';
 
 void main() {
-  testWidgets('reading settings presents real reader-owned capabilities', (WidgetTester tester) async {
+  testWidgets('reading and player settings only present controls owned by this page', (WidgetTester tester) async {
     final AppSettingsManager settings = await _settings();
     addTearDown(settings.close);
     await tester.pumpWidget(_host(settings, settingId: 'reading-settings'));
     await tester.pumpAndSettle();
 
-    expect(find.text('阅读播放设置'), findsOneWidget);
-    expect(find.byKey(const Key('reading-settings-preview')), findsOneWidget);
+    expect(find.descendant(of: find.byKey(const Key('secondary-placeholder-top-bar')), matching: find.text('阅读器与播放器')), findsOneWidget);
+    expect(find.byKey(const Key('reading-settings-preview')), findsNothing);
+    expect(find.text('书架目录更新'), findsNothing);
+    expect(find.text('字体与字号'), findsNothing);
+    expect(find.text('应用内播放条'), findsNothing);
     final Finder scrollable = find.descendant(
       of: find.byKey(const Key('profile-general-setting-reading-settings')),
       matching: find.byType(Scrollable),
     );
-    await tester.scrollUntilVisible(find.text('字体与字号'), 200, scrollable: scrollable);
-    expect(find.text('字体与字号'), findsOneWidget);
-    expect(find.text('翻页与滚动'), findsOneWidget);
+    expect(find.text('小说阅读'), findsOneWidget);
+    expect(find.text('音频播放器'), findsOneWidget);
     expect(find.text('功能建设中'), findsNothing);
 
     final Finder preloadIncrease = find.byKey(const Key('novel-preload-count-increase'));
@@ -45,6 +47,14 @@ void main() {
     await tester.tap(continueBehavior);
     await tester.pumpAndSettle();
     expect(settings.get(AppSettingKeys.audioExitBehavior), 'continue');
+
+    final Finder squareMiniPlayer = find.byKey(const Key('audio-mini-player-style-square'));
+    await tester.scrollUntilVisible(squareMiniPlayer, 300, scrollable: scrollable);
+    await tester.tap(squareMiniPlayer);
+    await tester.pumpAndSettle();
+    expect(settings.get(AppSettingKeys.audioMiniPlayerStyle), 'square');
+
+    expect(settings.get(AppSettingKeys.bookshelfCatalogRefreshIntervalHours), 24);
   });
 
   testWidgets('appearance settings persists the real shelf layout preference', (WidgetTester tester) async {
@@ -54,10 +64,57 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('appearance-settings-preview')), findsOneWidget);
+    final Finder scrollable = find.descendant(
+      of: find.byKey(const Key('profile-general-setting-theme-appearance')),
+      matching: find.byType(Scrollable),
+    );
+    await tester.scrollUntilVisible(find.text('卡片'), 200, scrollable: scrollable);
     await tester.tap(find.text('卡片'));
     await tester.pumpAndSettle();
 
     expect(settings.get(AppSettingKeys.homeLayoutMode), 'card');
+
+    await tester.scrollUntilVisible(find.text('封面内叠加'), 200, scrollable: scrollable);
+    await tester.tap(find.text('封面内叠加'));
+    await tester.pumpAndSettle();
+    expect(settings.get(AppSettingKeys.homeCoverMetadataMode), 'insideCover');
+  });
+
+  testWidgets('appearance settings persists the host theme color', (WidgetTester tester) async {
+    final AppSettingsManager settings = await _settings();
+    addTearDown(settings.close);
+    await tester.pumpWidget(_host(settings, settingId: 'theme-appearance'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('appearance-theme-color-blue')));
+    await tester.pumpAndSettle();
+
+    expect(settings.get(AppSettingKeys.themeColor), 'blue');
+  });
+
+  testWidgets('appearance settings persists the independent night theme color', (WidgetTester tester) async {
+    final AppSettingsManager settings = await _settings();
+    addTearDown(settings.close);
+    await tester.pumpWidget(_host(settings, settingId: 'theme-appearance'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('appearance-dark-theme-color-coolBlack')));
+    await tester.pumpAndSettle();
+
+    expect(settings.get(AppSettingKeys.darkThemeColor), 'coolBlack');
+  });
+
+  testWidgets('appearance settings persists the host day and night mode', (WidgetTester tester) async {
+    final AppSettingsManager settings = await _settings();
+    addTearDown(settings.close);
+    await tester.pumpWidget(_host(settings, settingId: 'theme-appearance'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('appearance-theme-mode')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('appearance-theme-mode-dark')));
+    await tester.pumpAndSettle();
+
+    expect(settings.get(AppSettingKeys.themeMode), 'dark');
   });
 
   testWidgets('privacy settings controls diagnostics and opens the policy', (WidgetTester tester) async {

@@ -206,6 +206,7 @@ class _PortraitContentListItem extends StatelessWidget {
                       ],
                       DiscoveryBookCover(
                         title: content.title,
+                        contentKind: content.contentKind,
                         coverBytes: content.coverBytes,
                         remoteContentId: content.id,
                         coverUrl: content.coverUrl,

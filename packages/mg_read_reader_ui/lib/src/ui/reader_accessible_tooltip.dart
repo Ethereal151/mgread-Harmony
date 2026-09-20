@@ -170,6 +170,7 @@ class _ReaderAccessibleTooltipState extends State<ReaderAccessibleTooltip> {
       child: MouseRegion(
         onEnter: _handleMouseEnter,
         onExit: _handleMouseExit,
+        hitTestBehavior: HitTestBehavior.opaque,
         child: GestureDetector(
           behavior: HitTestBehavior.deferToChild,
           excludeFromSemantics: true,

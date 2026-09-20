@@ -207,7 +207,7 @@ function projectBook(raw: unknown): BookProjection | null {
     : [];
   const chapterCount = finiteNumber(value.chapterNum ?? value.chapter_num);
   return frozen({
-    id, title, author: clean(text(value.author)), cover: safeUrl(text(value.cover ?? value.coverUrl)),
+    id, title, author: clean(text(value.author)), cover: coverUrl(text(value.cover ?? value.coverUrl)),
     description: clean(text(value.description)) || clean(stripHtml(text(raw.emDescription ?? value.emDescription))),
     category: clean(text(value.category)), tags, chapterCount,
     status: Number(value.end_status) === 1 ? 'completed' : Number(value.end_status) === 0 ? 'ongoing' : 'unknown',
@@ -347,6 +347,16 @@ function contentUrl(book: string, chapter: string): string {
 function proxyImage(value: string): string | null {
   if (value === '') return null;
   return requireContext().resource.proxy({ kind: 'image', url: value, headers: { Referer: `${h5Base}/` } });
+}
+
+function coverUrl(value: string): string {
+  const normalized = safeUrl(value);
+  if (normalized === '') return '';
+  const url = new URL(normalized);
+  if (url.hostname === 'static.midureader.com' && !url.searchParams.has('x-oss-process')) {
+    url.searchParams.set('x-oss-process', 'image/format,webp');
+  }
+  return url.toString();
 }
 
 function uniqueBooks(values: readonly BookProjection[]): BookProjection[] {

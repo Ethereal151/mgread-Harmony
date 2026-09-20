@@ -7,10 +7,12 @@
 /// - Sheets issue commands through the public controller and own no media state.
 library;
 
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../api/audio_artwork.dart';
 import '../api/audio_controller.dart';
 import '../api/audio_models.dart';
 import 'audio_player_glass.dart';
@@ -20,20 +22,29 @@ Future<void> showAudioQueueSheet(
   BuildContext context, {
   required AudioPlayerSnapshot snapshot,
   required AudioPlayerController controller,
+  AudioQueueArtworkBuilder? artworkBuilder,
 }) => showModalBottomSheet<void>(
   context: context,
   isScrollControlled: true,
   backgroundColor: Colors.transparent,
   barrierColor: const Color(0x24000000),
-  builder: (sheetContext) =>
-      _AudioQueueSheet(snapshot: snapshot, controller: controller),
+  builder: (sheetContext) => _AudioQueueSheet(
+    snapshot: snapshot,
+    controller: controller,
+    artworkBuilder: artworkBuilder,
+  ),
 );
 
 class _AudioQueueSheet extends StatefulWidget {
-  const _AudioQueueSheet({required this.snapshot, required this.controller});
+  const _AudioQueueSheet({
+    required this.snapshot,
+    required this.controller,
+    required this.artworkBuilder,
+  });
 
   final AudioPlayerSnapshot snapshot;
   final AudioPlayerController controller;
+  final AudioQueueArtworkBuilder? artworkBuilder;
 
   @override
   State<_AudioQueueSheet> createState() => _AudioQueueSheetState();
@@ -144,15 +155,17 @@ class _AudioQueueSheetState extends State<_AudioQueueSheet> {
                               index: index,
                               selected: selected,
                               playing: selected && snapshot.playing,
+                              artworkBuilder: widget.artworkBuilder,
                               onTap: entry.isLocked
                                   ? null
-                                  : () async {
+                                  : () {
+                                      Navigator.of(context).pop();
                                       if (!selected) {
-                                        await widget.controller
-                                            .selectQueueEntry(entry.id);
-                                      }
-                                      if (context.mounted) {
-                                        Navigator.of(context).pop();
+                                        unawaited(
+                                          widget.controller.selectQueueEntry(
+                                            entry.id,
+                                          ),
+                                        );
                                       }
                                     },
                             );
@@ -174,6 +187,7 @@ class _AudioQueueTile extends StatelessWidget {
     required this.index,
     required this.selected,
     required this.playing,
+    required this.artworkBuilder,
     required this.onTap,
     super.key,
   });
@@ -182,6 +196,7 @@ class _AudioQueueTile extends StatelessWidget {
   final int index;
   final bool selected;
   final bool playing;
+  final AudioQueueArtworkBuilder? artworkBuilder;
   final VoidCallback? onTap;
 
   @override
@@ -216,29 +231,12 @@ class _AudioQueueTile extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
             child: Row(
               children: <Widget>[
-                SizedBox.square(
-                  dimension: 38,
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: selected
-                          ? AudioPlayerColors.accent
-                          : AudioPlayerColors.control,
-                      shape: BoxShape.circle,
-                    ),
-                    child: Center(
-                      child: selected
-                          ? _AudioPlayingIndicator(playing: playing)
-                          : Text(
-                              '${index + 1}',
-                              style: Theme.of(context).textTheme.labelLarge
-                                  ?.copyWith(
-                                    color: entry.isLocked
-                                        ? AudioPlayerColors.subtle
-                                        : AudioPlayerColors.ink,
-                                  ),
-                            ),
-                    ),
-                  ),
+                _AudioQueueArtwork(
+                  entry: entry,
+                  index: index,
+                  selected: selected,
+                  playing: playing,
+                  artworkBuilder: artworkBuilder,
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -287,6 +285,106 @@ class _AudioQueueTile extends StatelessWidget {
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AudioQueueArtwork extends StatelessWidget {
+  const _AudioQueueArtwork({
+    required this.entry,
+    required this.index,
+    required this.selected,
+    required this.playing,
+    required this.artworkBuilder,
+  });
+
+  final AudioQueueEntry entry;
+  final int index;
+  final bool selected;
+  final bool playing;
+  final AudioQueueArtworkBuilder? artworkBuilder;
+
+  @override
+  Widget build(BuildContext context) {
+    final artwork = artworkBuilder?.call(context, entry);
+    return SizedBox.square(
+      dimension: 42,
+      child: ClipRRect(
+        key: Key('audio-queue-artwork-${entry.id}'),
+        borderRadius: BorderRadius.circular(12),
+        child: Stack(
+          fit: StackFit.expand,
+          children: <Widget>[
+            artwork ?? const _AudioQueueArtworkPlaceholder(),
+            if (selected)
+              ColoredBox(color: Colors.black.withValues(alpha: 0.28)),
+            if (selected)
+              Center(child: _AudioPlayingIndicator(playing: playing))
+            else
+              Align(
+                alignment: Alignment.bottomRight,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.58),
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(8),
+                    ),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 5,
+                      vertical: 2,
+                    ),
+                    child: Text(
+                      '${index + 1}',
+                      style: Theme.of(
+                        context,
+                      ).textTheme.labelSmall?.copyWith(color: Colors.white),
+                    ),
+                  ),
+                ),
+              ),
+            if (entry.isLocked)
+              const ColoredBox(
+                color: Color(0x52000000),
+                child: Center(
+                  child: Icon(
+                    Icons.lock_outline_rounded,
+                    size: 18,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AudioQueueArtworkPlaceholder extends StatelessWidget {
+  const _AudioQueueArtworkPlaceholder();
+
+  @override
+  Widget build(BuildContext context) {
+    return const DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: <Color>[
+            AudioPlayerColors.coverStart,
+            AudioPlayerColors.coverEnd,
+          ],
+        ),
+      ),
+      child: Center(
+        child: Icon(
+          Icons.headphones_rounded,
+          size: 22,
+          color: AudioPlayerColors.ink,
         ),
       ),
     );

@@ -60,6 +60,7 @@ export declare function probeReachableResource(options: {
   readonly fetch?: typeof globalThis.fetch;
   readonly expectedKind?: string;
   readonly expectedContentType?: RegExp;
+  readonly validatePrefix?: ((bytes: Uint8Array, contentType: string, request: Readonly<Record<string, unknown>>) => boolean) | null;
   readonly maximumAttempts?: number;
 }): Promise<Readonly<Record<string, unknown>>>;
 
@@ -67,6 +68,10 @@ export declare function probeResourceGroups(options: {
   readonly requests: readonly Readonly<Record<string, unknown>>[];
   readonly detail?: Record<string, unknown> | null;
   readonly discoveryItems?: readonly unknown[];
+  readonly discoverySurfaces?: readonly Readonly<{
+    readonly name: string;
+    readonly items: readonly unknown[];
+  }>[];
   readonly searchItems?: readonly unknown[];
   readonly contents?: readonly unknown[];
   readonly contentKind?: string | null;
@@ -75,13 +80,19 @@ export declare function probeResourceGroups(options: {
 
 export declare function collectDiscoveryContent(result: unknown): readonly unknown[];
 
+export declare function collectDiscoveryContinuations(result: unknown): readonly Readonly<{
+  readonly collectionId: string;
+  readonly target: string;
+  readonly cursor: string;
+}>[];
+
 export declare function collectDiscoveryTargets(result: unknown): readonly string[];
 
 export declare function runReadingSourceFlow(options: {
   readonly plugin: SourcePlugin;
   readonly contentId?: string | null;
   readonly discoverRequest?: Record<string, unknown> | null;
-  readonly searchRequest?: Record<string, unknown> | null;
+  readonly searchRequest?: Record<string, unknown> | readonly Record<string, unknown>[] | null;
   readonly suggestionsRequest?: Record<string, unknown> | null;
 }): Promise<Readonly<{
   discoveryItems: readonly unknown[];

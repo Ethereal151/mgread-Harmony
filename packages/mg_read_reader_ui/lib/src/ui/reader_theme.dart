@@ -57,12 +57,14 @@ class ReaderPalette {
         systemBrightness: Brightness.light,
       ),
       ReaderThemePreset.night => const ReaderPalette(
-        background: Color(0xFF171918),
-        text: Color(0xFFB8BCB6),
-        secondaryText: Color(0xFF969B96),
-        panel: Color(0xFF222523),
-        divider: Color(0x267A817B),
-        accent: Color(0xFFBF765E),
+        // Warm plum: keep night mode soft without collapsing into the
+        // blue-black and neutral-charcoal presets below.
+        background: Color(0xFF2C2028),
+        text: Color(0xFFDED8DF),
+        secondaryText: Color(0xFFBDAFBD),
+        panel: Color(0xFF3B2D38),
+        divider: Color(0x4A9A8397),
+        accent: Color(0xFFD58B9A),
         systemBrightness: Brightness.dark,
       ),
       ReaderThemePreset.mistBlue => const ReaderPalette(
@@ -75,25 +77,136 @@ class ReaderPalette {
         systemBrightness: Brightness.light,
       ),
       ReaderThemePreset.deepNight => const ReaderPalette(
-        background: Color(0xFF10171D),
-        text: Color(0xFFAEBBC2),
-        secondaryText: Color(0xFF8B989F),
-        panel: Color(0xFF192228),
-        divider: Color(0x29778289),
-        accent: Color(0xFF7698AA),
+        // Blue-black: deliberately blue enough to remain identifiable in
+        // the compact settings swatch and on a dim reading surface.
+        background: Color(0xFF101C2C),
+        text: Color(0xFFC8D8EA),
+        secondaryText: Color(0xFF98B0C9),
+        panel: Color(0xFF1B2C43),
+        divider: Color(0x507FA7C8),
+        accent: Color(0xFF78A9D7),
         systemBrightness: Brightness.dark,
       ),
       ReaderThemePreset.charcoal => const ReaderPalette(
-        background: Color(0xFF242524),
-        text: Color(0xFFC0C0BB),
-        secondaryText: Color(0xFFA0A19B),
-        panel: Color(0xFF2E302E),
-        divider: Color(0x2E8D8E88),
-        accent: Color(0xFFC49170),
+        // Neutral charcoal: the lightest dark preset, with a neutral hue so
+        // it is visibly different from both warm night and blue deep-night.
+        background: Color(0xFF323538),
+        text: Color(0xFFE6E7E5),
+        secondaryText: Color(0xFFC2C5C5),
+        panel: Color(0xFF40454A),
+        divider: Color(0x4D9EA3A5),
+        accent: Color(0xFFD49B73),
         systemBrightness: Brightness.dark,
+      ),
+      ReaderThemePreset.oled => const ReaderPalette(
+        background: Color(0xFF000000),
+        text: Color(0xFFFFFFFF),
+        secondaryText: Color(0xFFD6D6D6),
+        panel: Color(0xFF000000),
+        divider: Color(0x66FFFFFF),
+        accent: Color(0xFFFFFFFF),
+        systemBrightness: Brightness.dark,
+      ),
+      ReaderThemePreset.midnight => const ReaderPalette(
+        background: Color(0xFF25143F),
+        text: Color(0xFFE4DBFF),
+        secondaryText: Color(0xFFBEB0DB),
+        panel: Color(0xFF36265A),
+        divider: Color(0x70705A9A),
+        accent: Color(0xFFB89AFF),
+        systemBrightness: Brightness.dark,
+      ),
+      ReaderThemePreset.forestNight => const ReaderPalette(
+        background: Color(0xFF123C2B),
+        text: Color(0xFFD8F2E3),
+        secondaryText: Color(0xFFA4D0B5),
+        panel: Color(0xFF21533E),
+        divider: Color(0x555A967A),
+        accent: Color(0xFF77D0A1),
+        systemBrightness: Brightness.dark,
+      ),
+      ReaderThemePreset.lavenderMist => const ReaderPalette(
+        background: Color(0xFFE2D8F2),
+        text: Color(0xFF332D4D),
+        secondaryText: Color(0xFF6D6487),
+        panel: Color(0xFFF8F6FF),
+        divider: Color(0x2639305F),
+        accent: Color(0xFF8066B8),
+        systemBrightness: Brightness.light,
+      ),
+      ReaderThemePreset.roseTea => const ReaderPalette(
+        background: Color(0xFFF7E5E6),
+        text: Color(0xFF4B2D34),
+        secondaryText: Color(0xFF7B5962),
+        panel: Color(0xFFFFF4F4),
+        divider: Color(0x264B2D34),
+        accent: Color(0xFFB65C73),
+        systemBrightness: Brightness.light,
+      ),
+      ReaderThemePreset.seaGlass => const ReaderPalette(
+        background: Color(0xFFC7E6D8),
+        text: Color(0xFF203D39),
+        secondaryText: Color(0xFF52766F),
+        panel: Color(0xFFEFF8F4),
+        divider: Color(0x26305D55),
+        accent: Color(0xFF3A8C7B),
+        systemBrightness: Brightness.light,
       ),
     };
   }
+}
+
+/// Builds the Material theme used by reader-owned surfaces and routes.
+///
+/// Reader routes are sometimes pushed from the state context above the local
+/// reader [Theme]. Keeping this factory here lets those routes carry the
+/// active reader palette instead of inheriting the host application's theme.
+ThemeData readerThemeData(
+  ReaderPalette palette, {
+  ReaderFontPreset font = ReaderFontPreset.system,
+}) {
+  final ColorScheme scheme =
+      ColorScheme.fromSeed(
+        seedColor: palette.accent,
+        brightness: palette.systemBrightness,
+      ).copyWith(
+        primary: palette.accent,
+        surface: palette.panel,
+        onSurface: palette.text,
+        outline: palette.divider,
+      );
+  final ThemeData baseTheme = ThemeData(
+    useMaterial3: true,
+    brightness: palette.systemBrightness,
+    colorScheme: scheme,
+    fontFamily: font == ReaderFontPreset.system
+        ? readerPackageFontFamily
+        : readerFontFamily(font),
+    fontFamilyFallback: readerFontFallback(font),
+    scaffoldBackgroundColor: palette.background,
+    dividerColor: palette.divider,
+  );
+  return baseTheme.copyWith(
+    textTheme: baseTheme.textTheme.apply(
+      bodyColor: palette.text,
+      displayColor: palette.text,
+    ),
+    iconTheme: IconThemeData(color: palette.text),
+    iconButtonTheme: IconButtonThemeData(
+      style: IconButton.styleFrom(minimumSize: const Size.square(48)),
+    ),
+    filledButtonTheme: FilledButtonThemeData(
+      style: FilledButton.styleFrom(
+        minimumSize: const Size(0, 48),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      ),
+    ),
+    listTileTheme: ListTileThemeData(
+      dense: true,
+      minTileHeight: 52,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    ),
+  );
 }
 
 /// Paints one of the six reader-owned background treatments.

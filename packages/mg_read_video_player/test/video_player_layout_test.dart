@@ -105,6 +105,7 @@ void main() {
       );
       expect(find.text('播放设置'), findsOneWidget);
       expect(find.byKey(const Key('video-player-rate-1-5')), findsOneWidget);
+      expect(find.byKey(const Key('video-player-anime4k')), findsOneWidget);
       expect(
         find.byKey(const Key('video-player-fit-default-hint')),
         findsOneWidget,
@@ -132,6 +133,28 @@ void main() {
       );
     },
   );
+
+  testWidgets('opens current playback details from the top bar', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_playerApp(backend: _Backend()));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('video-player-details')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('video-details-sheet')), findsOneWidget);
+    expect(find.text('视频详情'), findsOneWidget);
+    expect(
+      tester.widget<Text>(find.byKey(const Key('video-details-url'))).data,
+      'https://example.test/1.mp4',
+    );
+    expect(find.byKey(const Key('video-details-url-copy')), findsOneWidget);
+    expect(find.byKey(const Key('video-details-headers-copy')), findsOneWidget);
+    expect(find.text('show'), findsOneWidget);
+    expect(find.text('group-a'), findsOneWidget);
+    expect(find.text('episode-1'), findsOneWidget);
+  });
 
   testWidgets(
     'fullscreen keeps the same single progress control and top actions',
@@ -213,26 +236,28 @@ void main() {
     expect(observer.playbackActive.last, isFalse);
   });
 
-  testWidgets('horizontal and vertical gestures seek, dim, and change volume', (
-    tester,
-  ) async {
-    final backend = _Backend();
-    final observer = _Observer();
-    await tester.pumpWidget(_playerApp(backend: backend, observer: observer));
-    await tester.pumpAndSettle();
+  testWidgets(
+    'horizontal and vertical gestures seek, dim, and change system volume',
+    (tester) async {
+      final backend = _Backend();
+      final observer = _Observer();
+      await tester.pumpWidget(_playerApp(backend: backend, observer: observer));
+      await tester.pumpAndSettle();
 
-    await tester.dragFrom(const Offset(180, 260), const Offset(260, 0));
-    await tester.pumpAndSettle();
-    expect(backend.seeks.single, greaterThan(Duration.zero));
+      await tester.dragFrom(const Offset(180, 260), const Offset(260, 0));
+      await tester.pumpAndSettle();
+      expect(backend.seeks.single, greaterThan(Duration.zero));
 
-    await tester.dragFrom(const Offset(120, 280), const Offset(0, -180));
-    await tester.pumpAndSettle();
-    expect(observer.brightness.last, greaterThan(.5));
+      await tester.dragFrom(const Offset(120, 280), const Offset(0, -180));
+      await tester.pumpAndSettle();
+      expect(observer.brightness.last, greaterThan(.5));
 
-    await tester.dragFrom(const Offset(700, 280), const Offset(0, 180));
-    await tester.pumpAndSettle();
-    expect(backend.volumes.last, lessThan(100));
-  });
+      await tester.dragFrom(const Offset(700, 280), const Offset(0, 180));
+      await tester.pumpAndSettle();
+      expect(backend.volumes, isEmpty);
+      expect(observer.systemVolumes.last, lessThan(50));
+    },
+  );
 
   testWidgets('drag seek updates the bottom slider and central target live', (
     tester,
@@ -464,6 +489,7 @@ final class _Backend implements VideoPlaybackBackend {
 final class _Observer extends VideoPlayerObserver {
   final List<bool> playbackActive = <bool>[];
   final List<double> brightness = <double>[];
+  final List<double> systemVolumes = <double>[];
 
   @override
   void onPlaybackActiveChanged(bool active) => playbackActive.add(active);
@@ -473,4 +499,10 @@ final class _Observer extends VideoPlayerObserver {
 
   @override
   void onBrightnessRequested(double value) => brightness.add(value);
+
+  @override
+  double onSystemVolumeReadRequested() => 50;
+
+  @override
+  void onSystemVolumeRequested(double value) => systemVolumes.add(value);
 }

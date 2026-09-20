@@ -1,6 +1,6 @@
 {
   "name": "@mgread-plugin/4khd-photo",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "description": "MgRead native manga source for 4KHD photo albums.",
   "type": "module",

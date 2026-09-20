@@ -7,7 +7,7 @@ import * as plugin from '../dist/index.mjs';
 
 function context(fetch, cacheDir = 'cache') {
   const events = [];
-  return { events, value: { dataDir: 'data', cacheDir, http: { fetch }, resource: { proxy: () => 'http://127.0.0.1:1234/v1/source-resource/opaque' }, log: { debug: (e) => events.push(e), info: (e) => events.push(e), warn: (e) => events.push(e), error: (e) => events.push(e) }, app: { runtimeVersion: 'test', nodeVersion: process.versions.node, pluginApi: 1 }, plugin: { id: 'org.mgread.shudugu', version: '0.1.1' } } };
+  return { events, value: { dataDir: 'data', cacheDir, http: { fetch }, errors: { raise(error) { throw Object.assign(new Error(error.message), { name: 'PluginManagerError', ...error }); } }, resource: { proxy: () => 'http://127.0.0.1:1234/v1/source-resource/opaque' }, log: { debug: (e) => events.push(e), info: (e) => events.push(e), warn: (e) => events.push(e), error: (e) => events.push(e) }, app: { runtimeVersion: 'test', nodeVersion: process.versions.node, pluginApi: 1 }, plugin: { id: 'org.mgread.shudugu', version: '0.1.6' } } };
 }
 
 const detail = `<div class="item"><a href="/51/"><img src="https://www.shudugu.org/cover.jpg"></a><div class="itemtxt"><h1><i>12.5万字</i><a href="/51/">测试书</a></h1><p><span>连载中</span><span>都市小说</span></p><p><a href="/zuozhe/?tag=作者">作者：作者甲</a></p><ul><li><a href="/51/101.html">第一章</a></li></ul></div></div><div class="des bb"><p>简介</p></div><h2 id="dir"><span>更新时间：2026-08-24 12:10:35</span></h2><div id="list"><ul><li><a href="/51/101.html">第一章</a></li><li><a href="/51/102.html">第二章</a></li></ul></div>`;
@@ -101,6 +101,17 @@ test('source does not expose a plugin-owned resource byte handler', async () => 
 
   assert.equal('resource' in plugin, false);
   assert.equal(fetchCount, 0);
+});
+
+test('reports redirects outside the source origin as access blocked', async () => {
+  const redirected = new Response('<title>Google</title>');
+  Object.defineProperty(redirected, 'url', { value: 'https://www.google.com/' });
+  await plugin.activate(context(async () => redirected).value);
+
+  await assert.rejects(
+    () => plugin.search({ query: '测试', cursor: null, pageSize: 5 }),
+    (error) => error.code === 'source_access_blocked' && error.annotation === '最终地址：https://www.google.com/',
+  );
 });
 
 test('reuses a fresh parsed detail projection after a source restart', async (t) => {

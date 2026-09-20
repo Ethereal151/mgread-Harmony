@@ -512,8 +512,15 @@ final class AudioPlayerSession extends ChangeNotifier {
     required Future<void> Function() command,
   }) async {
     if (!canSwitch || _snapshot.status != AudioPlayerStatus.ready) return;
-    await flushProgress();
-    await _runTransport(command);
+    _emit(_snapshot.copyWith(resourceLoading: true, clearFailure: true));
+    try {
+      await flushProgress();
+      await _runTransport(command);
+    } finally {
+      if (_snapshot.resourceLoading) {
+        _applyReadySnapshot(backend.snapshot, resourceLoading: false);
+      }
+    }
   }
 
   Future<void> setRate(double rate) =>

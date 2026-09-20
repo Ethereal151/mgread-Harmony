@@ -9,6 +9,8 @@
 /// - 图片网络会话仍由漫画数据源随阅读路由成对释放。
 library;
 
+import 'package:novel_reader_ui/novel_reader_ui.dart';
+
 import 'package:mg_read/core/content_library/content_library.dart';
 import 'package:mg_read/core/errors/app_error.dart';
 import 'package:mg_read/core/settings/settings.dart';
@@ -22,13 +24,21 @@ import 'package:mg_read/features/reader/data/content_library_source_comic_reader
 
 /// Opens shelf manga through the same local-first preparation contract as novels.
 final class ContentLibrarySourceComicReader implements LibraryReaderLauncher, LocalShelfReaderPrewarmer {
-  const ContentLibrarySourceComicReader(this._library, this._gateway, {this.prefetcher, this.settings, this.httpClientFactory});
+  const ContentLibrarySourceComicReader(
+    this._library,
+    this._gateway, {
+    this.prefetcher,
+    this.settings,
+    this.httpClientFactory,
+    this.bookRefreshCapability,
+  });
 
   final ContentLibrary _library;
   final SourceContentGateway _gateway;
   final ContentLibrarySourcePrefetcher? prefetcher;
   final AppSettingsManager? settings;
   final ComicHttpClientFactory? httpClientFactory;
+  final ReaderBookRefreshCapability? bookRefreshCapability;
 
   @override
   Future<ComicReaderLaunchRequest> launch(String libraryItemId) async {
@@ -104,10 +114,12 @@ final class ContentLibrarySourceComicReader implements LibraryReaderLauncher, Lo
       bookId: item.id.value,
       dataSource: dataSource,
       stateStore: ContentLibraryComicReaderStateStore(_library, itemId: item.id, settings: settings),
+      chapterPreloadCount: settings?.get(AppSettingKeys.novelPreloadChapterCount) ?? 1,
       entryCoverBytes: await _cachedCover(item),
       estimatedWarmBytes: preparation.estimatedBytes,
       preparationKind: preparation.kind,
       networkPreparationElapsed: preparation.networkElapsed,
+      bookRefreshCapability: bookRefreshCapability,
     );
   }
 }

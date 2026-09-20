@@ -71,6 +71,15 @@ class VideoPlayerObserver {
   /// Requests a route-scoped application brightness from 0.0 to 1.0.
   FutureOr<void> onBrightnessRequested(double brightness) {}
 
+  /// Reads the device media-stream volume as a percentage from 0 to 100.
+  ///
+  /// This is separate from the backend output volume: video gestures adjust
+  /// the device volume rather than MediaKit's app-local gain.
+  FutureOr<double?> onSystemVolumeReadRequested() => null;
+
+  /// Requests a device media-stream volume as a percentage from 0 to 100.
+  FutureOr<void> onSystemVolumeRequested(double volume) {}
+
   /// Requests that the host leave this player route.
   FutureOr<void> onExitRequested(VideoPlaybackProgress? progress) {}
 }

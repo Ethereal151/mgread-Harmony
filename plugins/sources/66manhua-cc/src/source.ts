@@ -1,5 +1,5 @@
 /**
- * 66manhua.cc public HTML parser. It reads only site pages, preserves the
+ * 66manhua.ua public HTML parser. It reads only site pages, preserves the
  * homepage's real discovery sections, returns opaque IDs, and proxies verified
  * image hosts.
  */
@@ -39,16 +39,17 @@ export interface HomeDiscovery {
   readonly rankings: readonly RankingCollection[];
 }
 
-const origin = 'https://66manhua.cc';
-const imageOrigins = new Set([origin, 'https://mh.aikanhanman.top']);
+const origin = 'https://66manhua.ua';
+const legacyOrigin = 'https://66manhua.cc';
+const siteOrigins = new Set([origin, legacyOrigin]);
+const imageOrigins = new Set([...siteOrigins, 'https://mh.aikanhanman.top']);
 
 export class ManhuaSource {
   constructor(private readonly context: Context) {}
 
   async search(query: string): Promise<readonly Summary[]> {
-    const url = new URL('/index.php/search', origin);
-    url.searchParams.set('key', query);
-    return this.parseList(await this.#html(url), url);
+    const url = new URL(`/index.php/search/${encodeURIComponent(query)}`, origin);
+    return prioritizeSearchResults(this.parseList(await this.#html(url), url), query);
   }
 
   async discover(): Promise<HomeDiscovery> {
@@ -120,7 +121,20 @@ export class ManhuaSource {
 
   async #html(url: URL): Promise<string> {
     if (!isSite(url)) throw new Error('Source URL is invalid.');
-    const response = await this.context.http.fetch(url, { headers: { accept: 'text/html,application/xhtml+xml', referer: `${origin}/` } });
+    let response: Response;
+    try {
+      response = await this.context.http.fetch(url, { headers: { accept: 'text/html,application/xhtml+xml', referer: `${origin}/` } });
+    } catch (error) {
+      if (url.origin !== origin) throw error;
+      const legacyUrl = new URL(`${url.pathname}${url.search}`, legacyOrigin);
+      try {
+        const legacyResponse = await this.context.http.fetch(legacyUrl, { headers: { accept: 'text/html,application/xhtml+xml', referer: `${legacyOrigin}/` } });
+        if (!legacyResponse.ok) throw error;
+        return legacyResponse.text();
+      } catch {
+        throw error;
+      }
+    }
     if (!response.ok) throw new Error('Public page is unavailable.');
     return response.text();
   }
@@ -186,10 +200,15 @@ function encodeChapter(url: URL): string { return `chapter:${token(url)}`; }
 function decode(id: string, prefix: 'comic' | 'chapter'): URL { const match = new RegExp(`^${prefix}:([A-Za-z0-9_-]+)$`, 'u').exec(id); if (match?.[1] === undefined) throw new Error('Opaque ID is invalid.'); const url = new URL(Buffer.from(match[1], 'base64url').toString('utf8'), origin); if (prefix === 'comic' ? !isComic(url) : !isChapter(url)) throw new Error('Opaque ID is invalid.'); return url; }
 function decodeComic(id: string): URL { return decode(id, 'comic'); }
 function decodeChapter(id: string): URL { return decode(id, 'chapter'); }
-function isSite(url: URL): boolean { return url.origin === origin && url.protocol === 'https:'; }
+function isSite(url: URL): boolean { return siteOrigins.has(url.origin) && url.protocol === 'https:'; }
 function isComic(url: URL): boolean { return isSite(url) && /^\/index\.php\/comic\/[^/?#]+\/?$/u.test(url.pathname); }
 function isChapter(url: URL): boolean { return isSite(url) && /^\/index\.php\/chapter\/\d+\/?$/u.test(url.pathname); }
 function isImage(url: URL): boolean { return url.protocol === 'https:' && imageOrigins.has(url.origin) && /\.(?:jpe?g|png|webp|gif)(?:$|\?)/iu.test(url.pathname + url.search); }
 function imageMime(url: URL): string | null { const ext = /\.([a-z]+)(?:$|\?)/iu.exec(url.pathname + url.search)?.[1]?.toLowerCase(); return ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : ext === 'gif' ? 'image/gif' : null; }
+function prioritizeSearchResults(items: readonly Summary[], query: string): readonly Summary[] {
+  const expected = normalizeSearchText(query);
+  return Object.freeze([...items].sort((left, right) => Number(normalizeSearchText(right.title) === expected) - Number(normalizeSearchText(left.title) === expected)));
+}
+function normalizeSearchText(value: string): string { return value.normalize('NFKC').replace(/\s+/gu, '').toLocaleLowerCase('zh-CN'); }
 function clean(value: string | undefined): string | null { const result = value?.replace(/\s+/gu, ' ').trim() ?? ''; return result === '' ? null : result; }
 function hasAccessMarker(root: cheerio.Cheerio<any>): boolean { return root.is('[class*="vip" i], [class*="pay" i], [class*="lock" i]') || root.find('[class*="vip" i], [class*="pay" i], [class*="lock" i]').length > 0; }

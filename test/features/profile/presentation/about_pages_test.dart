@@ -63,7 +63,7 @@ void main() {
     expect(find.text('6. 管理与删除'), findsOneWidget);
   });
 
-  testWidgets('contact page opens the in-app feedback channel', (WidgetTester tester) async {
+  testWidgets('contact page opens the GitHub feedback page', (WidgetTester tester) async {
     await _setViewport(tester);
     var feedbackRequested = false;
     await tester.pumpWidget(
@@ -71,8 +71,8 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('应用内意见反馈'), findsOneWidget);
-    expect(find.text('前往意见反馈'), findsOneWidget);
+    expect(find.text('GitHub Issues 反馈'), findsOneWidget);
+    expect(find.text('打开 GitHub 反馈'), findsOneWidget);
     expect(find.text('统一阅读 · 版本 9.8.7'), findsOneWidget);
     await tester.tap(find.byKey(const Key('contact-open-feedback')));
     expect(feedbackRequested, isTrue);

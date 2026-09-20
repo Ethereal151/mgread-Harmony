@@ -24,12 +24,15 @@ import 'package:flutter/services.dart';
 import 'package:mgread_plugin_runtime/mgread_plugin_runtime.dart';
 
 import 'package:mg_read/app/app_theme.dart';
+import 'package:mg_read/app/app_theme_mode_scope.dart';
 import 'package:mg_read/core/content_library/content_library.dart';
 import 'package:mg_read/core/errors/app_error.dart';
+import 'package:mg_read/features/discovery/application/batch_search.dart';
 import 'package:mg_read/features/discovery/application/source_content_cover_handoff.dart';
 import 'package:mg_read/features/discovery/application/source_content_gateway.dart';
 import 'package:mg_read/features/discovery/presentation/discovery_view_data.dart';
 import 'package:mg_read/features/discovery/presentation/discovery_page.dart';
+import 'package:mg_read/features/discovery/presentation/source_content_detail_variant_picker.dart';
 import 'package:mg_read/features/discovery/presentation/widgets/discovery_book_cover.dart';
 import 'package:mg_read/features/library/presentation/widgets/bookshelf_removal_confirmation.dart';
 import 'package:mg_read/platform/platform_system_actions.dart';
@@ -63,6 +66,7 @@ typedef SourceAudioChapterRequested =
       required PluginContentDetail detail,
       required PluginChaptersResult firstCatalogPage,
       required PluginChapterSummary chapter,
+      required String pluginVersion,
     });
 
 /// Opens a source-owned video episode in the independently maintained player.
@@ -84,10 +88,14 @@ enum SourceShelfAction { refresh, setPrivate, cancelPrivate, toggleCoverBlur, de
 typedef SourceShelfActionRequested = Future<void> Function(SourceShelfAction action);
 typedef SourceStartReadingRequested = Future<void> Function();
 typedef SourceRecommendationRequested = Future<void> Function(PluginContentSummary content);
+typedef SourceSearchVariantRequested = Future<void> Function(SourceSearchHit variant);
 typedef SourceDetailFailureCopy = Future<void> Function(String payload);
 
 /// Whether this detail is being viewed from discovery or the local shelf.
 enum SourceDetailShelfState { canAdd, alreadyAdded, private }
+
+bool _usesReaderOwnedTheme(PluginContentKind contentKind) =>
+    contentKind == PluginContentKind.novel || contentKind == PluginContentKind.manga;
 
 Future<void> showSourceContentDetailSheet(
   BuildContext context, {
@@ -99,6 +107,8 @@ Future<void> showSourceContentDetailSheet(
   PluginContentDetail? initialDetail,
   PluginChaptersResult? initialCatalog,
   String? initialSourceName,
+  Iterable<SourceSearchHit> sourceVariants = const <SourceSearchHit>[],
+  SourceSearchVariantRequested? onSourceVariantRequested,
   Iterable<PluginContentSummary> relatedContents = const <PluginContentSummary>[],
   SourceTextChapterRequested? onTextChapterRequested,
   SourceComicChapterRequested? onComicChapterRequested,
@@ -124,6 +134,8 @@ Future<void> showSourceContentDetailSheet(
     initialDetail: initialDetail,
     initialCatalog: initialCatalog,
     initialSourceName: initialSourceName,
+    sourceVariants: sourceVariants,
+    onSourceVariantRequested: onSourceVariantRequested,
     relatedContents: relatedContents,
     onTextChapterRequested: onTextChapterRequested,
     onComicChapterRequested: onComicChapterRequested,
@@ -279,7 +291,7 @@ PluginChaptersResult _emptyChapters({required String pluginId, required String? 
     PluginChaptersResult(pluginId: pluginId, sourceName: sourceName ?? '当前来源', items: const <PluginChapterSummary>[]);
 
 class _SourceDetailScreen extends StatefulWidget {
-  const _SourceDetailScreen({
+  _SourceDetailScreen({
     required this.gateway,
     required this.pluginId,
     required this.pluginVersion,
@@ -288,6 +300,8 @@ class _SourceDetailScreen extends StatefulWidget {
     required this.initialDetail,
     required this.initialCatalog,
     required this.initialSourceName,
+    required Iterable<SourceSearchHit> sourceVariants,
+    required this.onSourceVariantRequested,
     required this.relatedContents,
     required this.onTextChapterRequested,
     required this.onComicChapterRequested,
@@ -303,7 +317,7 @@ class _SourceDetailScreen extends StatefulWidget {
     this.onCopyFailure = _copySourceDetailFailure,
     this.isCoverBlurred = false,
     required this.isModalSheet,
-  });
+  }) : sourceVariants = List<SourceSearchHit>.unmodifiable(sourceVariants);
   final SourceContentGateway gateway;
   final String pluginId;
   final String pluginVersion;
@@ -313,6 +327,8 @@ class _SourceDetailScreen extends StatefulWidget {
   final PluginChaptersResult? initialCatalog;
   final String? initialSourceName;
   final Iterable<PluginContentSummary> relatedContents;
+  final List<SourceSearchHit> sourceVariants;
+  final SourceSearchVariantRequested? onSourceVariantRequested;
   final SourceTextChapterRequested? onTextChapterRequested;
   final SourceComicChapterRequested? onComicChapterRequested;
   final SourceAudioChapterRequested? onAudioChapterRequested;
@@ -412,7 +428,8 @@ class _SourceDetailScreenState extends State<_SourceDetailScreen> {
             chapters:
                 _loadedChapters ?? widget.initialCatalog ?? _emptyChapters(pluginId: widget.pluginId, sourceName: widget.initialSourceName),
           );
-    return BookCoverSourceScope(
+    final bool readerOwnedTheme = previewDetail != null && _usesReaderOwnedTheme(previewDetail.summary.contentKind);
+    final Widget detailScreen = BookCoverSourceScope(
       pluginId: widget.pluginId,
       pluginVersion: widget.pluginVersion,
       child: Scaffold(
@@ -437,7 +454,7 @@ class _SourceDetailScreenState extends State<_SourceDetailScreen> {
                   AppSpacing.discoveryPagePadding,
                   AppSpacing.pageHeaderTopPadding,
                 ),
-                child: _DetailHeader(isModalSheet: widget.isModalSheet),
+                child: _DetailHeader(isModalSheet: widget.isModalSheet, readerOwnedTheme: readerOwnedTheme),
               ),
               Expanded(
                 child: FutureBuilder<_SourceDetailBundle>(
@@ -456,6 +473,8 @@ class _SourceDetailScreenState extends State<_SourceDetailScreen> {
                             bundle: loadingBundle,
                             gateway: widget.gateway,
                             relatedContents: widget.relatedContents,
+                            sourceVariants: widget.sourceVariants,
+                            onSourceVariantRequested: widget.onSourceVariantRequested,
                             isRefreshing: true,
                             onTextChapterRequested: widget.onTextChapterRequested,
                             onComicChapterRequested: widget.onComicChapterRequested,
@@ -464,7 +483,7 @@ class _SourceDetailScreenState extends State<_SourceDetailScreen> {
                             onAddToShelf: widget.onAddToShelf,
                             onRemoveFromShelf: widget.onRemoveFromShelf,
                             shelfState: widget.shelfState,
-                            onShelfAction: widget.onShelfAction,
+                            onShelfAction: widget.onShelfAction == null ? null : _handleShelfAction,
                             onStartReading: widget.onStartReading,
                             isCoverBlurred: widget.isCoverBlurred,
                             onRecommendationRequested: widget.onRecommendationRequested,
@@ -475,7 +494,7 @@ class _SourceDetailScreenState extends State<_SourceDetailScreen> {
                       return _SourceDetailLoadingView(
                         initialContent: widget.initialContent,
                         shelfState: widget.shelfState,
-                        onShelfAction: widget.onShelfAction,
+                        onShelfAction: widget.onShelfAction == null ? null : _handleShelfAction,
                         onStartReading: widget.onStartReading,
                         isCoverBlurred: widget.isCoverBlurred,
                       );
@@ -515,6 +534,8 @@ class _SourceDetailScreenState extends State<_SourceDetailScreen> {
                                 bundle: previewBundle,
                                 gateway: widget.gateway,
                                 relatedContents: widget.relatedContents,
+                                sourceVariants: widget.sourceVariants,
+                                onSourceVariantRequested: widget.onSourceVariantRequested,
                                 isRefreshing: false,
                                 onTextChapterRequested: widget.onTextChapterRequested,
                                 onComicChapterRequested: widget.onComicChapterRequested,
@@ -523,7 +544,7 @@ class _SourceDetailScreenState extends State<_SourceDetailScreen> {
                                 onAddToShelf: widget.onAddToShelf,
                                 onRemoveFromShelf: widget.onRemoveFromShelf,
                                 shelfState: widget.shelfState,
-                                onShelfAction: widget.onShelfAction,
+                                onShelfAction: widget.onShelfAction == null ? null : _handleShelfAction,
                                 onStartReading: widget.onStartReading,
                                 isCoverBlurred: widget.isCoverBlurred,
                                 onRecommendationRequested: widget.onRecommendationRequested,
@@ -553,6 +574,8 @@ class _SourceDetailScreenState extends State<_SourceDetailScreen> {
                         bundle: snapshot.requireData,
                         gateway: widget.gateway,
                         relatedContents: widget.relatedContents,
+                        sourceVariants: widget.sourceVariants,
+                        onSourceVariantRequested: widget.onSourceVariantRequested,
                         isRefreshing: false,
                         onTextChapterRequested: widget.onTextChapterRequested,
                         onComicChapterRequested: widget.onComicChapterRequested,
@@ -561,7 +584,7 @@ class _SourceDetailScreenState extends State<_SourceDetailScreen> {
                         onAddToShelf: widget.onAddToShelf,
                         onRemoveFromShelf: widget.onRemoveFromShelf,
                         shelfState: widget.shelfState,
-                        onShelfAction: widget.onShelfAction,
+                        onShelfAction: widget.onShelfAction == null ? null : _handleShelfAction,
                         onStartReading: widget.onStartReading,
                         isCoverBlurred: widget.isCoverBlurred,
                         onRecommendationRequested: widget.onRecommendationRequested,
@@ -576,6 +599,7 @@ class _SourceDetailScreenState extends State<_SourceDetailScreen> {
         ),
       ),
     );
+    return readerOwnedTheme ? Theme(data: AppTheme.novelReader(), child: detailScreen) : detailScreen;
   }
 }
 
@@ -584,6 +608,8 @@ class _SourceDetailView extends StatefulWidget {
     required this.bundle,
     required this.gateway,
     required this.relatedContents,
+    required this.sourceVariants,
+    required this.onSourceVariantRequested,
     required this.isRefreshing,
     required this.onTextChapterRequested,
     required this.onComicChapterRequested,
@@ -602,6 +628,8 @@ class _SourceDetailView extends StatefulWidget {
   final _SourceDetailBundle bundle;
   final SourceContentGateway gateway;
   final Iterable<PluginContentSummary> relatedContents;
+  final List<SourceSearchHit> sourceVariants;
+  final SourceSearchVariantRequested? onSourceVariantRequested;
   final bool isRefreshing;
   final SourceTextChapterRequested? onTextChapterRequested;
   final SourceComicChapterRequested? onComicChapterRequested;
@@ -707,6 +735,8 @@ class _SourceDetailViewState extends State<_SourceDetailView> {
     ),
     gateway: widget.gateway,
     relatedContents: widget.relatedContents,
+    sourceVariants: widget.sourceVariants,
+    onSourceVariantRequested: widget.onSourceVariantRequested,
     isRefreshing: widget.isRefreshing,
     onTextChapterRequested: widget.onTextChapterRequested,
     onComicChapterRequested: widget.onComicChapterRequested,
@@ -734,6 +764,8 @@ class _SourceDetailBody extends StatelessWidget {
     required this.bundle,
     required this.gateway,
     required this.relatedContents,
+    required this.sourceVariants,
+    required this.onSourceVariantRequested,
     required this.isRefreshing,
     required this.onTextChapterRequested,
     required this.onComicChapterRequested,
@@ -758,6 +790,8 @@ class _SourceDetailBody extends StatelessWidget {
   final _SourceDetailBundle bundle;
   final SourceContentGateway gateway;
   final Iterable<PluginContentSummary> relatedContents;
+  final List<SourceSearchHit> sourceVariants;
+  final SourceSearchVariantRequested? onSourceVariantRequested;
   final bool isRefreshing;
   final SourceTextChapterRequested? onTextChapterRequested;
   final SourceComicChapterRequested? onComicChapterRequested;
@@ -785,6 +819,17 @@ class _SourceDetailBody extends StatelessWidget {
     final tokens = AppThemeTokens.of(context);
     final theme = Theme.of(context);
     final firstChapter = bundle.chapters.items.isEmpty ? null : bundle.chapters.items.first;
+    final canStartReading =
+        !isRefreshing &&
+        firstChapter != null &&
+        switch (content.contentKind) {
+          PluginContentKind.audio => onAudioChapterRequested != null,
+          PluginContentKind.video => onVideoEpisodeRequested != null,
+          _ => true,
+        };
+    final canChangeShelf = shelfState != SourceDetailShelfState.canAdd
+        ? onRemoveFromShelf != null && !isRemovingFromShelf
+        : onAddToShelf != null && !isSavingToShelf;
     final labels = <String>{...content.categories, ...content.tags}.take(3).toList(growable: false);
     final attributes = _displayAttributes(content.attributes).toList(growable: false);
     final chapterTotal = _chapterTotal(detailTotal: content.chapterCount, loadedCount: bundle.chapters.items.length);
@@ -803,6 +848,21 @@ class _SourceDetailBody extends StatelessWidget {
           labels: labels,
           onCoverTap: content.coverUrl == null ? null : () => unawaited(_openUrl(context, content.coverUrl)),
         ),
+        if (sourceVariants.length > 1 && onSourceVariantRequested != null) ...<Widget>[
+          const SizedBox(height: AppSpacing.compact),
+          OutlinedButton.icon(
+            key: const Key('source-detail-source-variants'),
+            onPressed: () => showSourceContentVariantPicker(
+              context,
+              variants: sourceVariants,
+              selectedPluginId: bundle.detail.pluginId,
+              selectedContentId: bundle.detail.summary.id,
+              onSelected: onSourceVariantRequested!,
+            ),
+            icon: const Icon(Icons.layers_outlined),
+            label: Text('来源版本（${sourceVariants.length}）'),
+          ),
+        ],
         const SizedBox(height: AppSpacing.section),
         if (shelfState != SourceDetailShelfState.canAdd &&
             onShelfAction != null &&
@@ -821,16 +881,10 @@ class _SourceDetailBody extends StatelessWidget {
               Expanded(
                 child: OutlinedButton.icon(
                   key: const Key('source-detail-add-shelf'),
-                  onPressed: shelfState != SourceDetailShelfState.canAdd
-                      ? onRemoveFromShelf == null
-                            ? () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('移出书架功能暂不可用。')))
-                            : isRemovingFromShelf
-                            ? null
-                            : () => onRemoveFromShelfRequested(content)
-                      : onAddToShelf == null
-                      ? () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('书架保存功能尚未接入此数据源。')))
-                      : isSavingToShelf
+                  onPressed: !canChangeShelf
                       ? null
+                      : shelfState != SourceDetailShelfState.canAdd
+                      ? () => onRemoveFromShelfRequested(content)
                       : () => onSaveToShelf(detail),
                   icon: Icon(
                     shelfState != SourceDetailShelfState.canAdd
@@ -852,8 +906,8 @@ class _SourceDetailBody extends StatelessWidget {
                   ),
                   style: OutlinedButton.styleFrom(
                     minimumSize: const Size.fromHeight(54),
-                    foregroundColor: tokens.accent,
-                    side: BorderSide(color: tokens.accent),
+                    foregroundColor: canChangeShelf ? tokens.accent : tokens.mutedText,
+                    side: BorderSide(color: canChangeShelf ? tokens.accent : tokens.divider),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                   ),
                 ),
@@ -862,7 +916,7 @@ class _SourceDetailBody extends StatelessWidget {
               Expanded(
                 child: FilledButton(
                   key: const Key('source-detail-start-reading'),
-                  onPressed: isRefreshing || firstChapter == null
+                  onPressed: !canStartReading
                       ? null
                       : () => unawaited(
                           _openTextChapter(
@@ -879,9 +933,9 @@ class _SourceDetailBody extends StatelessWidget {
                         ),
                   style: FilledButton.styleFrom(
                     minimumSize: const Size.fromHeight(54),
-                    backgroundColor: tokens.accent,
-                    disabledBackgroundColor: tokens.accent,
-                    disabledForegroundColor: tokens.surface,
+                    backgroundColor: canStartReading ? tokens.accent : tokens.mutedSurface,
+                    disabledBackgroundColor: tokens.mutedSurface,
+                    disabledForegroundColor: tokens.mutedText,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                   ),
                   child: isRefreshing
@@ -939,20 +993,26 @@ class _SourceDetailBody extends StatelessWidget {
           _RecommendationsSection(candidates: recommendationCandidates, onRecommendationRequested: onRecommendationRequested),
           const SizedBox(height: AppSpacing.regular),
           Material(
-            color: tokens.accentSoft.withValues(alpha: .52),
+            color: tokens.mutedSurface,
             borderRadius: BorderRadius.circular(14),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(14),
-              onTap: () {},
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                child: Row(
-                  children: <Widget>[
-                    Expanded(child: Text('查看书友评论', style: theme.textTheme.bodyLarge)),
-                    Text('4.2万条评论', style: theme.textTheme.bodyMedium?.copyWith(color: tokens.mutedText)),
-                    const SizedBox(width: 6),
-                    Icon(Icons.chevron_right_rounded, color: tokens.mutedText),
-                  ],
+            child: Semantics(
+              enabled: false,
+              label: '查看书友评论，暂不可用',
+              child: InkWell(
+                borderRadius: BorderRadius.circular(14),
+                onTap: null,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                  child: Row(
+                    children: <Widget>[
+                      Expanded(
+                        child: Text('查看书友评论', style: theme.textTheme.bodyLarge?.copyWith(color: tokens.mutedText)),
+                      ),
+                      Text('4.2万条评论', style: theme.textTheme.bodyMedium?.copyWith(color: tokens.mutedText.withValues(alpha: .68))),
+                      const SizedBox(width: 6),
+                      Icon(Icons.chevron_right_rounded, color: tokens.mutedText.withValues(alpha: .5)),
+                    ],
+                  ),
                 ),
               ),
             ),

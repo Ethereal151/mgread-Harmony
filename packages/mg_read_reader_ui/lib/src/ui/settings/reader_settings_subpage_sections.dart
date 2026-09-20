@@ -24,7 +24,7 @@ extension _ReaderSettingsSubpageSections on _ReaderSettingsSheetState {
           ),
           palette,
         ),
-        _buildFontSizeSlider(palette),
+        _buildFontSizeControl(palette, showProgress: true),
         _labeledChoice<int>(
           ReaderStrings.fontWeight,
           const <int>[400, 500, 600],
@@ -104,9 +104,10 @@ extension _ReaderSettingsSubpageSections on _ReaderSettingsSheetState {
         ),
         _labeledChoice<double>(
           ReaderStrings.paragraphSpacing,
-          const <double>[8, 14, 22],
+          const <double>[0, 8, 14, 22],
           _preferences.paragraphSpacing,
-          _threeLevelLabel,
+          (double value) =>
+              value == 0 ? ReaderStrings.none : _threeLevelLabel(value),
           (double value) =>
               _commit(_preferences.copyWith(paragraphSpacing: value)),
           palette,
@@ -125,30 +126,34 @@ extension _ReaderSettingsSubpageSections on _ReaderSettingsSheetState {
         ),
         _labeledChoice<double>(
           ReaderStrings.pageMargin,
-          const <double>[16, 24, 40],
+          const <double>[0, 16, 24, 40],
           _preferences.horizontalPadding,
           (double value) => value == 16
               ? ReaderStrings.narrow
               : value == 24
               ? ReaderStrings.standard
-              : ReaderStrings.wide,
+              : value == 40
+              ? ReaderStrings.wide
+              : ReaderStrings.none,
           (double value) =>
               _commit(_preferences.copyWith(horizontalPadding: value)),
           palette,
         ),
         _labeledChoice<double>(
           ReaderStrings.topMargin,
-          const <double>[8, 24, 40, 64],
+          const <double>[0, 8, 24, 40, 64],
           _preferences.topPadding,
-          (double value) => value.round().toString(),
+          (double value) =>
+              value == 0 ? ReaderStrings.none : value.round().toString(),
           (double value) => _commit(_preferences.copyWith(topPadding: value)),
           palette,
         ),
         _labeledChoice<double>(
           ReaderStrings.bottomMargin,
-          const <double>[8, 24, 40, 64],
+          const <double>[0, 8, 24, 40, 64],
           _preferences.bottomPadding,
-          (double value) => value.round().toString(),
+          (double value) =>
+              value == 0 ? ReaderStrings.none : value.round().toString(),
           (double value) =>
               _commit(_preferences.copyWith(bottomPadding: value)),
           palette,
@@ -238,6 +243,12 @@ extension _ReaderSettingsSubpageSections on _ReaderSettingsSheetState {
           onChanged: (bool value) =>
               _commit(_preferences.copyWith(singleHandMode: value)),
         ),
+        _settingsSwitch(
+          title: ReaderStrings.pageTurnShortcuts,
+          value: _preferences.pageTurnShortcuts,
+          onChanged: (bool value) =>
+              _commit(_preferences.copyWith(pageTurnShortcuts: value)),
+        ),
         if (widget.platformCapabilities.keepScreenOn)
           _settingsSwitch(
             title: ReaderStrings.keepScreenOn,
@@ -252,6 +263,14 @@ extension _ReaderSettingsSubpageSections on _ReaderSettingsSheetState {
             onChanged: (bool value) =>
                 _commit(_preferences.copyWith(immersiveMode: value)),
           ),
+        _settingsSwitch(
+          title: ReaderStrings.layoutDebugMode,
+          value: _layoutDebugMode,
+          onChanged: (bool value) {
+            _updateState(() => _layoutDebugMode = value);
+            widget.onLayoutDebugModeChanged(value);
+          },
+        ),
       ],
     );
   }
@@ -316,52 +335,44 @@ extension _ReaderSettingsSubpageSections on _ReaderSettingsSheetState {
     );
   }
 
-  Widget _buildFontSizeSlider(ReaderPalette palette) {
+  Widget _buildFontSizeControl(
+    ReaderPalette palette, {
+    required bool showProgress,
+    bool showLabel = true,
+  }) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
+      padding: EdgeInsets.only(bottom: showLabel ? 6 : 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Padding(
-            padding: const EdgeInsets.fromLTRB(6, 0, 6, 4),
-            child: Text(
-              ReaderStrings.fontSize,
-              style: TextStyle(
-                color: palette.secondaryText,
-                fontSize: ReaderSettingsTokens.controlTextSize,
-                fontWeight: FontWeight.w600,
+          if (showLabel)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(6, 0, 6, 4),
+              child: Text(
+                ReaderStrings.fontSize,
+                style: TextStyle(
+                  color: palette.secondaryText,
+                  fontSize: ReaderSettingsTokens.controlTextSize,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
-          ),
-          ReaderSettingsCapsule(
+          ReaderSettingsFontSizeControl(
+            value: _preferences.fontSize,
+            min: _fontSizeMin,
+            max: _fontSizeMax,
             palette: palette,
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: Row(
-              children: <Widget>[
-                Expanded(
-                  child: Slider(
-                    value: _preferences.fontSize,
-                    min: _fontSizeMin,
-                    max: _fontSizeMax,
-                    label: _preferences.fontSize.round().toString(),
-                    semanticFormatterCallback: (double value) =>
-                        '${ReaderStrings.fontSize} ${value.round()}',
-                    onChanged: (double value) =>
-                        _preview(_preferences.copyWith(fontSize: value)),
-                    onChangeEnd: (double value) =>
-                        _commit(_preferences.copyWith(fontSize: value)),
-                  ),
-                ),
-                SizedBox(
-                  width: 30,
-                  child: Text(
-                    _preferences.fontSize.round().toString(),
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                ),
-              ],
-            ),
+            showProgress: showProgress,
+            onDecrease: () => _adjustFontSize(-1),
+            onIncrease: () => _adjustFontSize(1),
+            onProgressChanged: showProgress
+                ? (double value) =>
+                      _preview(_preferences.copyWith(fontSize: value))
+                : null,
+            onProgressChangeEnd: showProgress
+                ? (double value) =>
+                      _commit(_preferences.copyWith(fontSize: value))
+                : null,
           ),
         ],
       ),
@@ -373,20 +384,37 @@ extension _ReaderSettingsSubpageSections on _ReaderSettingsSheetState {
     required bool value,
     required ValueChanged<bool> onChanged,
   }) {
-    return SwitchListTile(
-      dense: true,
-      visualDensity: const VisualDensity(vertical: -4),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-      title: Text(
-        title,
-        style: const TextStyle(
-          fontSize: ReaderSettingsTokens.subpageLabelFontSize,
+    final ReaderPalette palette = widget.palette;
+    return Material(
+      type: MaterialType.transparency,
+      borderRadius: BorderRadius.circular(ReaderSettingsTokens.smallRadius),
+      clipBehavior: Clip.antiAlias,
+      child: SwitchListTile(
+        // Keep the switch rows on the same 48dp rhythm as the segmented
+        // controls above. The previous dense tile compressed the rows while the
+        // control itself kept its full size, which made the right edge feel
+        // uneven and left the off state to the app's default grey styling.
+        dense: false,
+        minTileHeight: ReaderSettingsTokens.touchTarget,
+        visualDensity: VisualDensity.standard,
+        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+        title: Text(
+          title,
+          style: const TextStyle(
+            fontSize: ReaderSettingsTokens.subpageLabelFontSize,
+          ),
         ),
-      ),
-      value: value,
-      onChanged: onChanged,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(ReaderSettingsTokens.smallRadius),
+        value: value,
+        onChanged: onChanged,
+        activeThumbColor: palette.panel,
+        activeTrackColor: palette.accent,
+        inactiveThumbColor: palette.panel,
+        inactiveTrackColor: ReaderSettingsTokens.mutedControl(palette),
+        trackOutlineColor: WidgetStatePropertyAll<Color?>(palette.divider),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(ReaderSettingsTokens.smallRadius),
+        ),
       ),
     );
   }

@@ -6,6 +6,9 @@ const double _catalogChapterItemExtent = 54;
 const double _catalogListTopPadding = 8;
 const double _catalogScrollbarThickness = 18;
 const double _catalogScrollbarMinThumbLength = 52;
+const double _catalogListHorizontalPadding = 8;
+const double _catalogScrollbarSafetyPadding = 20;
+const double _catalogTileHorizontalPadding = 6;
 
 extension _TextReaderLibrarySheet on _TextReaderViewState {
   void _showLibrarySheet({int initialIndex = 1}) {
@@ -18,6 +21,10 @@ extension _TextReaderLibrarySheet on _TextReaderViewState {
     // _restart, while a chapter change still recenters on the new chapter.
     _catalogCenterRetryCount = 0;
     bool sheetRefreshStarted = false;
+    final ThemeData readerTheme = readerThemeData(
+      _palette,
+      font: _preferences.font,
+    );
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -26,109 +33,112 @@ extension _TextReaderLibrarySheet on _TextReaderViewState {
       backgroundColor: Colors.transparent,
       barrierColor: ReaderSettingsTokens.sheetBarrier(_palette),
       builder: (BuildContext sheetContext) {
-        return StatefulBuilder(
-          builder: (BuildContext context, StateSetter setSheetState) {
-            if (!sheetRefreshStarted) {
-              sheetRefreshStarted = true;
-              WidgetsBinding.instance.addPostFrameCallback((_) async {
-                if (!_isRouteSessionCurrent(
-                  routeSession,
-                  routeBookId,
-                  store: routeStore,
-                )) {
-                  return;
-                }
-                await _refreshCommentSummaries();
-                if (sheetContext.mounted &&
-                    _isRouteSessionCurrent(
-                      routeSession,
-                      routeBookId,
-                      store: routeStore,
-                    )) {
-                  setSheetState(() {});
-                }
-              });
-            }
-            final MediaQueryData mediaQuery = MediaQuery.of(context);
-            final double sheetHeight = (mediaQuery.size.height * 0.74)
-                .clamp(0, 640)
-                .toDouble();
-            return MediaQuery(
-              data: mediaQuery.copyWith(
-                textScaler: mediaQuery.textScaler.clamp(maxScaleFactor: 1.3),
-              ),
-              // Limit the route child to the visible panel so the uncovered
-              // reader area remains the tappable modal barrier.
-              child: SizedBox(
-                width: double.infinity,
-                height: sheetHeight,
-                child: Align(
-                  alignment: Alignment.bottomCenter,
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 680),
-                    child: SizedBox(
-                      height: sheetHeight,
-                      child: ClipRRect(
-                        borderRadius: const BorderRadius.vertical(
-                          top: Radius.circular(20),
-                        ),
-                        child: Material(
-                          color: _palette.panel,
-                          child: SafeArea(
-                            top: false,
-                            child: DefaultTabController(
-                              length: 3,
-                              initialIndex: initialIndex,
-                              child: Column(
-                                children: <Widget>[
-                                  const SizedBox(height: 8),
-                                  Container(
-                                    width: 34,
-                                    height: 4,
-                                    decoration: BoxDecoration(
-                                      color: _palette.divider,
-                                      borderRadius: BorderRadius.circular(2),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  const TabBar(
-                                    dividerHeight: 1,
-                                    labelStyle: TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                    tabs: <Widget>[
-                                      Tab(text: ReaderStrings.bookDetails),
-                                      Tab(text: ReaderStrings.catalog),
-                                      Tab(text: ReaderStrings.bookmarks),
-                                    ],
-                                  ),
-                                  Expanded(
-                                    child: PageStorage(
-                                      bucket: _catalogPageStorageBucket,
-                                      child: TabBarView(
-                                        children: <Widget>[
-                                          _buildBookDetailTab(
-                                            routeSession,
-                                            routeBookId,
-                                          ),
-                                          _buildCatalogList(
-                                            sheetContext,
-                                            routeSession,
-                                            routeBookId,
-                                            routeStore,
-                                          ),
-                                          _buildBookmarkList(
-                                            sheetContext,
-                                            routeSession,
-                                            routeBookId,
-                                            routeStore,
-                                          ),
-                                        ],
+        return Theme(
+          data: readerTheme,
+          child: StatefulBuilder(
+            builder: (BuildContext context, StateSetter setSheetState) {
+              if (!sheetRefreshStarted) {
+                sheetRefreshStarted = true;
+                WidgetsBinding.instance.addPostFrameCallback((_) async {
+                  if (!_isRouteSessionCurrent(
+                    routeSession,
+                    routeBookId,
+                    store: routeStore,
+                  )) {
+                    return;
+                  }
+                  await _refreshCommentSummaries();
+                  if (sheetContext.mounted &&
+                      _isRouteSessionCurrent(
+                        routeSession,
+                        routeBookId,
+                        store: routeStore,
+                      )) {
+                    setSheetState(() {});
+                  }
+                });
+              }
+              final MediaQueryData mediaQuery = MediaQuery.of(context);
+              final double sheetHeight = (mediaQuery.size.height * 0.74)
+                  .clamp(0, 640)
+                  .toDouble();
+              return MediaQuery(
+                data: mediaQuery.copyWith(
+                  textScaler: mediaQuery.textScaler.clamp(maxScaleFactor: 1.3),
+                ),
+                // Limit the route child to the visible panel so the uncovered
+                // reader area remains the tappable modal barrier.
+                child: SizedBox(
+                  width: double.infinity,
+                  height: sheetHeight,
+                  child: Align(
+                    alignment: Alignment.bottomCenter,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 680),
+                      child: SizedBox(
+                        height: sheetHeight,
+                        child: ClipRRect(
+                          borderRadius: const BorderRadius.vertical(
+                            top: Radius.circular(20),
+                          ),
+                          child: Material(
+                            color: _palette.panel,
+                            child: SafeArea(
+                              top: false,
+                              child: DefaultTabController(
+                                length: 3,
+                                initialIndex: initialIndex,
+                                child: Column(
+                                  children: <Widget>[
+                                    const SizedBox(height: 8),
+                                    Container(
+                                      width: 34,
+                                      height: 4,
+                                      decoration: BoxDecoration(
+                                        color: _palette.divider,
+                                        borderRadius: BorderRadius.circular(2),
                                       ),
                                     ),
-                                  ),
-                                ],
+                                    const SizedBox(height: 4),
+                                    const TabBar(
+                                      dividerHeight: 1,
+                                      labelStyle: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                      tabs: <Widget>[
+                                        Tab(text: ReaderStrings.bookDetails),
+                                        Tab(text: ReaderStrings.catalog),
+                                        Tab(text: ReaderStrings.bookmarks),
+                                      ],
+                                    ),
+                                    Expanded(
+                                      child: PageStorage(
+                                        bucket: _catalogPageStorageBucket,
+                                        child: TabBarView(
+                                          children: <Widget>[
+                                            _buildBookDetailTab(
+                                              routeSession,
+                                              routeBookId,
+                                            ),
+                                            _buildCatalogList(
+                                              sheetContext,
+                                              routeSession,
+                                              routeBookId,
+                                              routeStore,
+                                            ),
+                                            _buildBookmarkList(
+                                              sheetContext,
+                                              routeSession,
+                                              routeBookId,
+                                              routeStore,
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
                           ),
@@ -137,9 +147,9 @@ extension _TextReaderLibrarySheet on _TextReaderViewState {
                     ),
                   ),
                 ),
-              ),
-            );
-          },
+              );
+            },
+          ),
         );
       },
     );
@@ -150,94 +160,49 @@ extension _TextReaderLibrarySheet on _TextReaderViewState {
     final List<String> labels = book == null
         ? const <String>[]
         : book.labels
-              .where((label) => label.trim().isNotEmpty)
-              .take(6)
-              .toList();
+              .map((String label) => label.trim())
+              .where((String label) => label.isNotEmpty)
+              .toSet()
+              .take(8)
+              .toList(growable: false);
     final int chapterCount = book?.chapterCount ?? _catalogTotal;
+    final String? description = book?.description?.trim();
     return ListView(
-      padding: const EdgeInsets.fromLTRB(18, 16, 18, 24),
+      padding: const EdgeInsets.fromLTRB(18, 18, 18, 28),
       children: <Widget>[
         Center(
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 520),
+            constraints: const BoxConstraints(maxWidth: 560),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    _buildDetailCover(book),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: <Widget>[
-                          Text(
-                            book?.title ?? ReaderStrings.bookPreview,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 22,
-                              height: 1.15,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-                          Text(
-                            book?.author?.isNotEmpty == true
-                                ? book!.author!
-                                : '作者未知',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: _palette.secondaryText,
-                              fontSize: 14,
-                            ),
-                          ),
-                          if (labels.isNotEmpty) ...<Widget>[
-                            const SizedBox(height: 12),
-                            Wrap(
-                              spacing: 6,
-                              runSpacing: 6,
-                              children: labels
-                                  .map(_buildDetailTag)
-                                  .toList(growable: false),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 18),
+                _buildDetailHero(book, labels, routeSession, routeBookId),
+                const SizedBox(height: 14),
                 _buildDetailStats(book, chapterCount),
-                const SizedBox(height: 12),
-                _buildDetailExternalRow(
-                  icon: Icons.language_rounded,
-                  title: '来源频道',
-                  label: book?.sourceName ?? ReaderStrings.sourceUnavailable,
-                  url: _sourceDisplayUri,
-                ),
-                if (book?.description?.isNotEmpty == true) ...<Widget>[
-                  const SizedBox(height: 20),
-                  Divider(color: _palette.divider, height: 1),
-                  const SizedBox(height: 18),
-                  const Text(
-                    '简介',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    book!.description!,
-                    style: TextStyle(
-                      color: _palette.secondaryText,
-                      fontSize: 14,
-                      height: 1.65,
+                if (description?.isNotEmpty == true) ...<Widget>[
+                  const SizedBox(height: 14),
+                  _buildDetailSection(
+                    icon: Icons.notes_rounded,
+                    title: '作品简介',
+                    child: Text(
+                      description!,
+                      style: TextStyle(
+                        color: _palette.secondaryText,
+                        fontSize: 14,
+                        height: 1.7,
+                      ),
                     ),
                   ),
                 ],
+                const SizedBox(height: 14),
+                _buildDetailExternalRow(
+                  icon: Icons.language_rounded,
+                  title: '内容来源',
+                  label: book?.sourceName ?? ReaderStrings.sourceUnavailable,
+                  url: _sourceDisplayUri,
+                ),
                 if (book?.latestChapterTitle?.isNotEmpty == true) ...<Widget>[
-                  const SizedBox(height: 18),
+                  const SizedBox(height: 10),
                   _buildDetailExternalRow(
                     icon: Icons.auto_stories_outlined,
                     title: '最新章节',
@@ -245,13 +210,6 @@ extension _TextReaderLibrarySheet on _TextReaderViewState {
                     url: book.latestChapterUrl,
                   ),
                 ],
-                const SizedBox(height: 18),
-                _buildDetailExternalRow(
-                  icon: Icons.menu_book_outlined,
-                  title: '阅读来源',
-                  label: book?.sourceName ?? ReaderStrings.sourceUnavailable,
-                  url: _sourceDisplayUri,
-                ),
                 if (widget.extensions.commentFeed != null &&
                     _preferences.showBookComments) ...<Widget>[
                   const SizedBox(height: 16),
@@ -276,28 +234,170 @@ extension _TextReaderLibrarySheet on _TextReaderViewState {
     );
   }
 
-  Widget _buildDetailCover(ReaderBookInfo? book) => Container(
-    width: 96,
-    height: 146,
+  Widget _buildDetailHero(
+    ReaderBookInfo? book,
+    List<String> labels,
+    int routeSession,
+    String routeBookId,
+  ) => Container(
+    key: const ValueKey<String>('reader-book-detail-hero'),
+    padding: const EdgeInsets.all(16),
     decoration: BoxDecoration(
-      borderRadius: BorderRadius.circular(12),
+      color: _palette.accent.withValues(alpha: .07),
+      borderRadius: BorderRadius.circular(22),
+      border: Border.all(color: _palette.accent.withValues(alpha: .18)),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Row(
+          children: <Widget>[
+            Container(
+              width: 30,
+              height: 30,
+              decoration: BoxDecoration(
+                color: _palette.accent.withValues(alpha: .14),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(
+                Icons.local_library_outlined,
+                size: 17,
+                color: _palette.accent,
+              ),
+            ),
+            const SizedBox(width: 9),
+            const Expanded(
+              child: Text(
+                '作品信息',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+              ),
+            ),
+            _buildDetailRefreshButton(routeSession, routeBookId),
+          ],
+        ),
+        const SizedBox(height: 14),
+        LayoutBuilder(
+          builder: (BuildContext context, BoxConstraints constraints) {
+            final Widget metadata = _buildDetailMetadata(book, labels);
+            if (constraints.maxWidth < 280) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Center(child: _buildDetailCover(book)),
+                  const SizedBox(height: 16),
+                  metadata,
+                ],
+              );
+            }
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                _buildDetailCover(book),
+                const SizedBox(width: 16),
+                Expanded(child: metadata),
+              ],
+            );
+          },
+        ),
+      ],
+    ),
+  );
+
+  Widget _buildDetailMetadata(ReaderBookInfo? book, List<String> labels) =>
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            book?.title ?? ReaderStrings.bookPreview,
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 22,
+              height: 1.2,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 9),
+          Row(
+            children: <Widget>[
+              Icon(
+                Icons.person_outline_rounded,
+                size: 16,
+                color: _palette.secondaryText,
+              ),
+              const SizedBox(width: 5),
+              Expanded(
+                child: Text(
+                  book?.author?.trim().isNotEmpty == true
+                      ? book!.author!.trim()
+                      : '作者未知',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: _palette.secondaryText, fontSize: 14),
+                ),
+              ),
+            ],
+          ),
+          if (labels.isNotEmpty) ...<Widget>[
+            const SizedBox(height: 14),
+            Wrap(
+              spacing: 7,
+              runSpacing: 7,
+              children: labels.map(_buildDetailTag).toList(growable: false),
+            ),
+          ],
+        ],
+      );
+
+  Widget _buildDetailCover(ReaderBookInfo? book) => Semantics(
+    image: true,
+    label: '${book?.title ?? ReaderStrings.bookPreview}的封面',
+    child: Container(
+      key: const ValueKey<String>('reader-book-detail-cover'),
+      width: 104,
+      height: 156,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: <BoxShadow>[
+          BoxShadow(
+            color: Colors.black.withValues(alpha: .18),
+            blurRadius: 18,
+            offset: const Offset(0, 7),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(14),
+        child: _bookCoverImage == null
+            ? _buildDetailCoverFallback(book)
+            : Image(
+                key: const ValueKey<String>('reader-book-detail-cover-image'),
+                image: _bookCoverImage!,
+                fit: BoxFit.cover,
+                filterQuality: FilterQuality.medium,
+                gaplessPlayback: true,
+                excludeFromSemantics: true,
+                errorBuilder:
+                    (BuildContext context, Object error, StackTrace? stack) =>
+                        _buildDetailCoverFallback(book),
+              ),
+      ),
+    ),
+  );
+
+  Widget _buildDetailCoverFallback(ReaderBookInfo? book) => Container(
+    key: const ValueKey<String>('reader-book-detail-cover-placeholder'),
+    padding: const EdgeInsets.all(11),
+    decoration: BoxDecoration(
       gradient: LinearGradient(
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
         colors: <Color>[
-          _palette.accent.withValues(alpha: .92),
-          _palette.text.withValues(alpha: .78),
+          _palette.accent.withValues(alpha: .94),
+          Color.lerp(_palette.accent, _palette.text, .58)!,
         ],
       ),
-      boxShadow: <BoxShadow>[
-        BoxShadow(
-          color: Colors.black.withValues(alpha: .16),
-          blurRadius: 14,
-          offset: const Offset(0, 6),
-        ),
-      ],
     ),
-    padding: const EdgeInsets.all(10),
     child: Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: <Widget>[
@@ -320,33 +420,60 @@ extension _TextReaderLibrarySheet on _TextReaderViewState {
   );
 
   Widget _buildDetailTag(String label) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
     decoration: BoxDecoration(
-      color: _palette.accent.withValues(alpha: .12),
-      borderRadius: BorderRadius.circular(12),
+      color: _palette.panel.withValues(alpha: .72),
+      borderRadius: BorderRadius.circular(999),
+      border: Border.all(color: _palette.accent.withValues(alpha: .18)),
     ),
-    child: Text(label, style: TextStyle(color: _palette.accent, fontSize: 11)),
+    child: Text(
+      label,
+      style: TextStyle(
+        color: _palette.accent,
+        fontSize: 11,
+        fontWeight: FontWeight.w600,
+      ),
+    ),
   );
 
   Widget _buildDetailStats(ReaderBookInfo? book, int chapterCount) {
-    final String wordCount = book?.wordCount == null
-        ? '—'
-        : '${(book!.wordCount! / 10000).toStringAsFixed(1)}万';
+    final String wordCount = _formatDetailWordCount(book?.wordCount);
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 12),
+      key: const ValueKey<String>('reader-book-detail-stats'),
+      padding: const EdgeInsets.symmetric(vertical: 14),
       decoration: BoxDecoration(
-        border: Border.symmetric(
-          horizontal: BorderSide(color: _palette.divider),
-        ),
+        color: _palette.panel,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _palette.divider),
       ),
       child: Row(
         children: <Widget>[
           _buildDetailStat(wordCount, '字数'),
+          SizedBox(
+            height: 30,
+            child: VerticalDivider(color: _palette.divider, width: 1),
+          ),
           _buildDetailStat(chapterCount > 0 ? '$chapterCount' : '—', '章节'),
-          _buildDetailStat(book?.statusLabel ?? '—', '状态'),
+          SizedBox(
+            height: 30,
+            child: VerticalDivider(color: _palette.divider, width: 1),
+          ),
+          _buildDetailStat(
+            book?.statusLabel?.trim().isNotEmpty == true
+                ? book!.statusLabel!.trim()
+                : '—',
+            '状态',
+          ),
         ],
       ),
     );
+  }
+
+  String _formatDetailWordCount(int? count) {
+    if (count == null || count <= 0) return '—';
+    if (count < 10000) return '$count';
+    final double value = count / 10000;
+    return '${value == value.roundToDouble() ? value.toStringAsFixed(0) : value.toStringAsFixed(1)}万';
   }
 
   Widget _buildDetailStat(String value, String label) => Expanded(
@@ -356,7 +483,7 @@ extension _TextReaderLibrarySheet on _TextReaderViewState {
           value,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
         ),
         const SizedBox(height: 3),
         Text(
@@ -367,59 +494,159 @@ extension _TextReaderLibrarySheet on _TextReaderViewState {
     ),
   );
 
+  Widget _buildDetailSection({
+    required IconData icon,
+    required String title,
+    required Widget child,
+  }) => Container(
+    width: double.infinity,
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(
+      color: _palette.panel,
+      borderRadius: BorderRadius.circular(16),
+      border: Border.all(color: _palette.divider),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Row(
+          children: <Widget>[
+            Icon(icon, size: 18, color: _palette.accent),
+            const SizedBox(width: 8),
+            Text(
+              title,
+              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        child,
+      ],
+    ),
+  );
+
   Widget _buildDetailExternalRow({
     required IconData icon,
     required String title,
     required String label,
     required Uri? url,
   }) {
-    final String? value = url?.toString();
     final VoidCallback? openSourceAction = url == null
         ? null
         : () => unawaited(_openSourceUrl(url));
-    return Row(
-      children: <Widget>[
-        Icon(icon, size: 18, color: _palette.secondaryText),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Text(
-                title,
-                style: TextStyle(color: _palette.secondaryText, fontSize: 11),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 13),
-              ),
-            ],
-          ),
-        ),
-        if (url != null)
-          ReaderAccessibleTooltip(
-            label: ReaderStrings.openSourceUrl,
-            onTap: openSourceAction!,
-            child: IconButton(
-              onPressed: openSourceAction,
-              icon: Icon(Icons.open_in_new_rounded, color: _palette.accent),
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
+      decoration: BoxDecoration(
+        color: _palette.panel,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _palette.divider),
+      ),
+      child: Row(
+        children: <Widget>[
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: _palette.accent.withValues(alpha: .1),
+              borderRadius: BorderRadius.circular(11),
             ),
-          )
-        else
-          Text(
-            value ?? ReaderStrings.sourceUrlUnavailable,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(color: _palette.secondaryText, fontSize: 11),
+            child: Icon(icon, size: 19, color: _palette.accent),
           ),
-      ],
+          const SizedBox(width: 11),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  title,
+                  style: TextStyle(color: _palette.secondaryText, fontSize: 11),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (url != null)
+            ReaderAccessibleTooltip(
+              label: ReaderStrings.openSourceUrl,
+              onTap: openSourceAction!,
+              child: IconButton(
+                onPressed: openSourceAction,
+                icon: Icon(
+                  Icons.open_in_new_rounded,
+                  size: 20,
+                  color: _palette.accent,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDetailRefreshButton(int routeSession, String routeBookId) {
+    if (widget.extensions.bookRefreshCapability == null) {
+      return const SizedBox.shrink();
+    }
+    return ValueListenableBuilder<int>(
+      valueListenable: _catalogRevision,
+      builder: (BuildContext context, int revision, Widget? child) {
+        final bool enabled =
+            !_bookRefreshLoading &&
+            _isRouteSessionCurrent(routeSession, routeBookId);
+        return ReaderAccessibleTooltip(
+          label: ReaderStrings.refreshBook,
+          onTap: () {
+            if (enabled) unawaited(_refreshBookFromHost());
+          },
+          child: IconButton(
+            key: const ValueKey<String>('reader-refresh-book-detail'),
+            visualDensity: VisualDensity.compact,
+            onPressed: enabled ? () => unawaited(_refreshBookFromHost()) : null,
+            icon: _bookRefreshLoading
+                ? const SizedBox.square(
+                    dimension: 17,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.sync_rounded, size: 19),
+          ),
+        );
+      },
     );
   }
 
   Widget _buildCatalogList(
+    BuildContext sheetContext,
+    int routeSession,
+    String routeBookId,
+    TextReaderStateStore routeStore,
+  ) => Column(
+    children: <Widget>[
+      _buildBookRefreshAction(
+        routeSession,
+        routeBookId,
+        title: ReaderStrings.catalog,
+      ),
+      Expanded(
+        child: _buildCatalogListBody(
+          sheetContext,
+          routeSession,
+          routeBookId,
+          routeStore,
+        ),
+      ),
+    ],
+  );
+
+  Widget _buildCatalogListBody(
     BuildContext sheetContext,
     int routeSession,
     String routeBookId,
@@ -492,6 +719,10 @@ extension _TextReaderLibrarySheet on _TextReaderViewState {
           mainAxisMargin: 8,
           crossAxisMargin: 2,
           thumbColor: _palette.secondaryText.withValues(alpha: .82),
+          // RawScrollbar paints over the scrollable instead of reserving a
+          // layout column. Keep only a small safety gutter so the trailing
+          // word count stays clear of the thumb while the title gets the
+          // remaining width.
           child: ScrollConfiguration(
             behavior: ScrollConfiguration.of(
               context,
@@ -499,7 +730,12 @@ extension _TextReaderLibrarySheet on _TextReaderViewState {
             child: ListView.builder(
               key: PageStorageKey<String>('reader-catalog-scroll-$routeBookId'),
               controller: _catalogScrollController,
-              padding: const EdgeInsets.fromLTRB(12, 8, 34, 20),
+              padding: const EdgeInsets.fromLTRB(
+                _catalogListHorizontalPadding,
+                _catalogListTopPadding,
+                _catalogScrollbarSafetyPadding,
+                20,
+              ),
               itemExtent: _catalogChapterItemExtent,
               itemCount: _catalog.length + (_catalogHasMore ? 1 : 0),
               itemBuilder: (BuildContext context, int index) {
@@ -559,112 +795,122 @@ extension _TextReaderLibrarySheet on _TextReaderViewState {
                     : hasBeenRead
                     ? _palette.secondaryText
                     : _palette.text;
-                return Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 560),
-                    child: ListTile(
-                      key: ValueKey<String>(
-                        'reader-catalog-chapter-${chapter.id}',
-                      ),
-                      dense: true,
-                      visualDensity: const VisualDensity(vertical: -2),
-                      minVerticalPadding: 0,
-                      titleAlignment: ListTileTitleAlignment.center,
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 2,
-                      ),
-                      tileColor: chapterBackground,
-                      hoverColor: _palette.accent.withValues(alpha: .08),
-                      selected: isCurrentChapter,
-                      selectedColor: _palette.accent,
-                      selectedTileColor: _palette.accent.withValues(alpha: .15),
-                      shape: const RoundedRectangleBorder(
-                        borderRadius: BorderRadius.all(Radius.circular(14)),
-                      ),
-                      leading: SizedBox(
-                        width: 34,
-                        child: Text(
-                          '${chapter.index + 1}',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: chapterTextColor,
-                            fontSize: isCurrentChapter ? 12.5 : 12,
-                            fontWeight: isCurrentChapter || !hasBeenRead
-                                ? FontWeight.w700
-                                : FontWeight.w500,
-                          ),
+                return Material(
+                  type: MaterialType.transparency,
+                  borderRadius: const BorderRadius.all(Radius.circular(14)),
+                  clipBehavior: Clip.antiAlias,
+                  child: ListTile(
+                    key: ValueKey<String>(
+                      'reader-catalog-chapter-${chapter.id}',
+                    ),
+                    dense: true,
+                    visualDensity: const VisualDensity(vertical: -2),
+                    minTileHeight: _catalogChapterItemExtent,
+                    minVerticalPadding: 0,
+                    titleAlignment: ListTileTitleAlignment.center,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: _catalogTileHorizontalPadding,
+                      vertical: 2,
+                    ),
+                    tileColor: chapterBackground,
+                    hoverColor: _palette.accent.withValues(alpha: .08),
+                    selected: isCurrentChapter,
+                    selectedColor: _palette.accent,
+                    selectedTileColor: _palette.accent.withValues(alpha: .15),
+                    shape: const RoundedRectangleBorder(
+                      borderRadius: BorderRadius.all(Radius.circular(14)),
+                    ),
+                    leading: SizedBox(
+                      width: 30,
+                      child: Text(
+                        '${chapter.index + 1}',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: chapterTextColor,
+                          fontSize: isCurrentChapter ? 12.5 : 12,
+                          fontWeight: isCurrentChapter || !hasBeenRead
+                              ? FontWeight.w700
+                              : FontWeight.w500,
                         ),
                       ),
-                      title: Text(
-                        chapter.title,
+                    ),
+                    title: Row(
+                      children: <Widget>[
+                        Expanded(
+                          child: Text(
+                            chapter.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: isCurrentChapter ? 14.5 : 14,
+                              fontWeight: isCurrentChapter
+                                  ? FontWeight.w700
+                                  : hasBeenRead
+                                  ? FontWeight.w400
+                                  : FontWeight.w600,
+                              color: chapterTextColor,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        ReaderChapterStateBadge(
+                          availability: availability,
+                          wordCount: wordCount,
+                          hasBeenRead: hasBeenRead,
+                          loading: stateLoading && refreshedState == null,
+                          palette: _palette,
+                          onRetry:
+                              availability == ReaderChapterAvailability.failed
+                              ? () => unawaited(
+                                  _refreshLoadedChapterStates(
+                                    chapterId: chapter.id,
+                                    force: true,
+                                  ),
+                                )
+                              : null,
+                        ),
+                      ],
+                    ),
+                    // Keep the word count in a fixed trailing slot so it
+                    // stays aligned at the far right while chapter titles
+                    // of different lengths share the same rhythm.
+                    trailing: SizedBox(
+                      width: 54,
+                      child: Text(
+                        wordCount != null && wordCount >= 0
+                            ? ReaderChapterStateStrings.wordCount(wordCount)
+                            : '—',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.right,
                         style: TextStyle(
-                          fontSize: isCurrentChapter ? 14.5 : 14,
+                          color: isCurrentChapter
+                              ? chapterTextColor
+                              : _palette.secondaryText,
+                          fontSize: 11.5,
                           fontWeight: isCurrentChapter
-                              ? FontWeight.w700
-                              : hasBeenRead
-                              ? FontWeight.w400
-                              : FontWeight.w600,
-                          color: chapterTextColor,
+                              ? FontWeight.w600
+                              : FontWeight.w500,
                         ),
                       ),
-                      // Keep the trailing slot for every row so the title
-                      // column and the current-chapter arrow share one
-                      // horizontal rhythm.
-                      trailing: SizedBox(
-                        width: 28,
-                        child: isCurrentChapter
-                            ? Center(
-                                child: Icon(
-                                  Icons.play_arrow_rounded,
-                                  size: 16,
-                                  color: _palette.accent,
-                                ),
-                              )
-                            : const SizedBox.shrink(),
-                      ),
-                      subtitle: ReaderChapterStateBadge(
-                        availability: availability,
-                        // Catalog metadata is already durable and available
-                        // in the first frame. Do not hide it while the
-                        // optional read/download-state enrichment runs.
-                        wordCount:
-                            availability == ReaderChapterAvailability.downloaded
-                            ? wordCount
-                            : null,
-                        hasBeenRead: hasBeenRead,
-                        loading: stateLoading && refreshedState == null,
-                        palette: _palette,
-                        onRetry:
-                            availability == ReaderChapterAvailability.failed
-                            ? () => unawaited(
-                                _refreshLoadedChapterStates(
-                                  chapterId: chapter.id,
-                                  force: true,
-                                ),
-                              )
-                            : null,
-                      ),
-                      onTap: () {
-                        if (!_isRouteSessionCurrent(
-                          routeSession,
-                          routeBookId,
-                          store: routeStore,
-                        )) {
-                          return;
-                        }
-                        Navigator.of(sheetContext).pop();
-                        unawaited(
-                          _openChapter(
-                            chapter.id,
-                            dismissControls: true,
-                            showLoadingOverlay: true,
-                          ),
-                        );
-                      },
                     ),
+                    onTap: () {
+                      if (!_isRouteSessionCurrent(
+                        routeSession,
+                        routeBookId,
+                        store: routeStore,
+                      )) {
+                        return;
+                      }
+                      Navigator.of(sheetContext).pop();
+                      unawaited(
+                        _openChapter(
+                          chapter.id,
+                          dismissControls: true,
+                          showLoadingOverlay: true,
+                        ),
+                      );
+                    },
                   ),
                 );
               },
@@ -679,6 +925,48 @@ extension _TextReaderLibrarySheet on _TextReaderViewState {
     return AnimatedBuilder(
       animation: coordinator,
       builder: (BuildContext context, Widget? child) => buildList(),
+    );
+  }
+
+  Widget _buildBookRefreshAction(
+    int routeSession,
+    String routeBookId, {
+    String title = ReaderStrings.bookDetails,
+  }) {
+    if (widget.extensions.bookRefreshCapability == null) {
+      return const SizedBox.shrink();
+    }
+    return ValueListenableBuilder<int>(
+      valueListenable: _catalogRevision,
+      builder: (BuildContext context, int revision, Widget? child) {
+        final bool enabled =
+            !_bookRefreshLoading &&
+            _isRouteSessionCurrent(routeSession, routeBookId);
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(18, 6, 12, 2),
+          child: Row(
+            children: <Widget>[
+              Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
+              const Spacer(),
+              TextButton.icon(
+                key: ValueKey<String>('reader-refresh-book-$title'),
+                onPressed: enabled
+                    ? () => unawaited(_refreshBookFromHost())
+                    : null,
+                icon: _bookRefreshLoading
+                    ? const SizedBox.square(
+                        dimension: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.sync_rounded, size: 18),
+                label: Text(
+                  _bookRefreshLoading ? '更新中' : ReaderStrings.refreshBook,
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 

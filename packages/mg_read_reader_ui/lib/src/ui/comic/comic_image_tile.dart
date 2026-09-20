@@ -49,6 +49,7 @@ class ComicProgressiveImageTile extends StatefulWidget {
     required this.onFailure,
     required this.decodeBudget,
     this.onPresented,
+    this.onAutomaticRetryAvailable,
     this.commentFeed,
     this.bookId,
     this.onOpenComments,
@@ -63,6 +64,7 @@ class ComicProgressiveImageTile extends StatefulWidget {
   final ValueChanged<Object> onFailure;
   final ComicDecodedImageBudget decodeBudget;
   final ValueChanged<bool>? onPresented;
+  final ValueChanged<Future<void> Function()>? onAutomaticRetryAvailable;
   final ReaderCommentFeed? commentFeed;
   final String? bookId;
   final ValueChanged<ReaderCommentTarget>? onOpenComments;
@@ -124,6 +126,7 @@ class _ComicProgressiveImageTileState extends State<ComicProgressiveImageTile> {
   }
 
   void _retry() {
+    if (!mounted) return;
     setState(() {
       _evictDecodedImage();
       _reportedError = false;
@@ -133,6 +136,12 @@ class _ComicProgressiveImageTileState extends State<ComicProgressiveImageTile> {
         forceRefresh: true,
       );
     });
+  }
+
+  Future<void> _retryForAutomatic() {
+    if (!mounted) return Future<void>.value();
+    _retry();
+    return _future.then<void>((_) {}, onError: (Object _, StackTrace _) {});
   }
 
   @override
@@ -299,7 +308,10 @@ class _ComicProgressiveImageTileState extends State<ComicProgressiveImageTile> {
     if (_reportedError) return;
     _reportedError = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) widget.onFailure(error);
+      if (mounted) {
+        widget.onAutomaticRetryAvailable?.call(_retryForAutomatic);
+        widget.onFailure(error);
+      }
     });
   }
 }

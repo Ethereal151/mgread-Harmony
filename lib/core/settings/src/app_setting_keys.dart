@@ -12,12 +12,42 @@ final class AppSettingKeys {
     validator: _validateThemeMode,
   );
 
+  /// Accent palette for host application light surfaces.
+  ///
+  /// Reader packages own their own appearance settings and do not consume
+  /// this value.
+  static const themeColor = SettingKey<String>(
+    id: 'appearance.themeColor',
+    documentKind: 'settings.appearance',
+    defaultValue: 'warm',
+    codec: SettingCodec<String>(_stringEncode, _stringDecode),
+    validator: _validateThemeColor,
+  );
+
+  /// Dark palette for host application surfaces.
+  static const darkThemeColor = SettingKey<String>(
+    id: 'appearance.darkThemeColor',
+    documentKind: 'settings.appearance',
+    defaultValue: 'blue',
+    codec: SettingCodec<String>(_stringEncode, _stringDecode),
+    validator: _validateDarkThemeColor,
+  );
+
   static const homeLayoutMode = SettingKey<String>(
     id: 'appearance.homeLayoutMode',
     documentKind: 'settings.appearance',
     defaultValue: 'list',
     codec: SettingCodec<String>(_stringEncode, _stringDecode),
     validator: _validateHomeLayoutMode,
+  );
+
+  /// Position of title and author metadata on bookshelf card covers.
+  static const homeCoverMetadataMode = SettingKey<String>(
+    id: 'appearance.homeCoverMetadataMode',
+    documentKind: 'settings.appearance',
+    defaultValue: 'belowCover',
+    codec: SettingCodec<String>(_stringEncode, _stringDecode),
+    validator: _validateHomeCoverMetadataMode,
   );
 
   /// Stable local book IDs whose covers are hidden with a blur on the shelf.
@@ -62,6 +92,26 @@ final class AppSettingKeys {
     defaultValue: <String>[],
     codec: SettingCodec<List<String>>(_discoveryRecentSourceIdsEncode, _discoveryRecentSourceIdsDecode, freeze: freezeSettingList<String>),
     validator: _validateDiscoveryRecentSourceIds,
+  );
+
+  static const libraryDocument = SettingsDocumentDefinition(id: 'app-settings:settings.library', kind: 'settings.library');
+
+  /// How often opening a bookshelf may check source catalogs for new chapters.
+  static const bookshelfCatalogRefreshIntervalHours = SettingKey<int>(
+    id: 'library.bookshelfCatalogRefreshIntervalHours',
+    documentKind: 'settings.library',
+    defaultValue: 24,
+    codec: SettingCodec<int>(_intEncode, _intDecode),
+    validator: _validateBookshelfCatalogRefreshIntervalHours,
+  );
+
+  /// UTC epoch milliseconds of the most recent automatic bookshelf check.
+  static const bookshelfCatalogLastCheckedAtMs = SettingKey<int>(
+    id: 'library.bookshelfCatalogLastCheckedAtMs',
+    documentKind: 'settings.library',
+    defaultValue: 0,
+    codec: SettingCodec<int>(_intEncode, _intDecode),
+    validator: _validateNonNegativeInt,
   );
 
   static const profileDocument = SettingsDocumentDefinition(id: 'app-settings:settings.profile', kind: 'settings.profile');
@@ -126,7 +176,8 @@ final class AppSettingKeys {
     validator: _validateReaderPreferences,
   );
 
-  /// Number of following novel chapters the host may load speculatively.
+  /// Number of following novel or comic chapters the host may load or cache
+  /// speculatively.
   ///
   /// The current chapter is not included. Zero disables speculative chapter
   /// loading, while the default of one preserves the reader's existing
@@ -172,14 +223,31 @@ final class AppSettingKeys {
     validator: _validateBool,
   );
 
+  /// Shape of the app-global in-app audio playback overlay.
+  ///
+  /// `bar` keeps the title and collection visible, while `square` uses the
+  /// compact draggable control for users who want less obstruction.
+  static const audioMiniPlayerStyle = SettingKey<String>(
+    id: 'mediaPlayback.audioMiniPlayerStyle',
+    documentKind: 'settings.mediaPlayback',
+    defaultValue: 'bar',
+    codec: SettingCodec<String>(_stringEncode, _stringDecode),
+    validator: _validateAudioMiniPlayerStyle,
+  );
+
   static const all = <SettingKey<dynamic>>[
     themeMode,
+    themeColor,
+    darkThemeColor,
     homeLayoutMode,
+    homeCoverMetadataMode,
     blurredCoverBookIds,
     searchHistory,
     discoverySourceId,
     discoveryPinnedSourceIds,
     discoveryRecentSourceIds,
+    bookshelfCatalogRefreshIntervalHours,
+    bookshelfCatalogLastCheckedAtMs,
     profileIdentity,
     diagnosticsEnabled,
     diagnosticsRealtimeDetailsEnabled,
@@ -189,6 +257,7 @@ final class AppSettingKeys {
     comicReaderPreferences,
     audioExitBehavior,
     audioKeepScreenOn,
+    audioMiniPlayerStyle,
   ];
 
   static final registry = SettingsRegistry(
@@ -197,6 +266,7 @@ final class AppSettingKeys {
       appearanceDocument,
       searchHistoryDocument,
       discoveryDocument,
+      libraryDocument,
       profileDocument,
       diagnosticsDocument,
       networkProxyDocument,
@@ -224,10 +294,38 @@ void _validateThemeMode(String value) {
   }
 }
 
+void _validateThemeColor(String value) {
+  if (value != 'warm' && value != 'blue' && value != 'green' && value != 'purple' && value != 'rose') {
+    throw ArgumentError.value(value);
+  }
+}
+
+void _validateDarkThemeColor(String value) {
+  if (value != 'blue' && value != 'coolBlack' && value != 'forestBlack' && value != 'purpleBlack' && value != 'amberBlack') {
+    throw ArgumentError.value(value);
+  }
+}
+
 void _validateHomeLayoutMode(String value) {
   if (value != 'list' && value != 'card') {
     throw ArgumentError.value(value);
   }
+}
+
+void _validateHomeCoverMetadataMode(String value) {
+  if (value != 'belowCover' && value != 'insideCover') {
+    throw ArgumentError.value(value);
+  }
+}
+
+void _validateBookshelfCatalogRefreshIntervalHours(int value) {
+  if (value != 2 && value != 6 && value != 12 && value != 24) {
+    throw ArgumentError.value(value);
+  }
+}
+
+void _validateNonNegativeInt(int value) {
+  if (value < 0) throw ArgumentError.value(value);
 }
 
 Object? _searchHistoryEncode(List<String> value) => List<String>.of(value);
@@ -393,6 +491,12 @@ void _validateNovelPreloadChapterCount(int value) {
 
 void _validateAudioExitBehavior(String value) {
   if (value != 'ask' && value != 'continue' && value != 'stop') {
+    throw ArgumentError.value(value);
+  }
+}
+
+void _validateAudioMiniPlayerStyle(String value) {
+  if (value != 'bar' && value != 'square') {
     throw ArgumentError.value(value);
   }
 }

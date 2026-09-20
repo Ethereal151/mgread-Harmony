@@ -55,6 +55,13 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('自动阅读速度'), findsOneWidget);
 
+    final Finder layoutDebugMode = find.ancestor(of: find.text('排版调试模式'), matching: find.byType(SwitchListTile));
+    expect(layoutDebugMode, findsOneWidget);
+    await tester.tap(find.descendant(of: layoutDebugMode, matching: find.byType(Switch)));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey<String>('reader-layout-debug-overlay')), findsOneWidget);
+    expect(find.textContaining('顶部空白'), findsOneWidget);
+
     final double subpageTop = tester.getTopLeft(settingsSheet).dy;
     await tester.tapAt(Offset(20, subpageTop - 8));
     await tester.pumpAndSettle();

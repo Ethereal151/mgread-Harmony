@@ -41,6 +41,10 @@ test('native source covers recommendation, search, cold detail, catalog and cont
   const search = await plugin.search({ query: 'Fixture', cursor: null, pageSize: 10 });
   assert.equal(search.items[0].id, `midu:${bookId}`);
   assert.equal(resources.length, 2);
+  assert.ok(resources.every((resource) => {
+    const url = new URL(resource.url);
+    return url.searchParams.get('x-oss-process') === 'image/format,webp';
+  }));
 
   await plugin.activate(context(async (input, init = {}) => {
     const url = new URL(input);
@@ -69,7 +73,7 @@ const fixtureBook = {
   book_id: bookId,
   title: 'Fixture Midu',
   author: 'Fixture Author',
-  cover: 'https://img.midukanshu.com/fixture.jpg',
+  cover: 'https://static.midureader.com/book/cover/fixture.png',
   description: 'Fixture description',
   category: '玄幻',
   chapterNum: 2,

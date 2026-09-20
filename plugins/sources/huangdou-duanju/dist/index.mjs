@@ -97,7 +97,10 @@ export async function getChapters(request) {
     const items = episodes.map((episode, index) => episodeSummary(id, episode, index));
     if (items.length === 0)
         throw new Error('Drama catalog is empty.');
-    return frozen({ items });
+    return frozen({
+        items,
+        groups: [frozen({ id: `group:${id}:default`, title: '默认线路', order: 0, episodes: items })],
+    });
 }
 export async function getContent(request) {
     const id = decodeDramaId(request.id);

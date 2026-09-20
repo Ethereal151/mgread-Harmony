@@ -25,13 +25,18 @@ final class AudioTrack {
     required this.resource,
     this.collectionTitle,
     this.creator,
+    this.sourceUrl,
     this.artwork,
+    List<int>? artworkBytes,
     this.resourcePolicy = AudioResourcePolicy.sessionOnly,
     this.expiresAt,
     Map<String, String> httpHeaders = const <String, String>{},
   }) : assert(
          resourcePolicy == AudioResourcePolicy.refreshable || expiresAt == null,
        ),
+       artworkBytes = artworkBytes == null
+           ? null
+           : UnmodifiableListView<int>(List<int>.of(artworkBytes)),
        httpHeaders = UnmodifiableMapView<String, String>(
          Map<String, String>.of(httpHeaders),
        );
@@ -40,8 +45,21 @@ final class AudioTrack {
   final String title;
   final String? collectionTitle;
   final String? creator;
+
+  /// Original source page for this chapter, when the host has one.
+  ///
+  /// This is separate from [resource], which may be a short-lived Runtime
+  /// proxy URL used only for playback.
+  final Uri? sourceUrl;
   final Uri resource;
   final Uri? artwork;
+
+  /// Host-local artwork bytes for consumers that cannot read [artwork] directly.
+  ///
+  /// Android's media session needs a local file URI for artwork that is behind
+  /// the host Runtime/proxy boundary. The app may use these bytes to create
+  /// that file without making this package perform network or file I/O.
+  final List<int>? artworkBytes;
   final AudioResourcePolicy resourcePolicy;
   final DateTime? expiresAt;
   final Map<String, String> httpHeaders;

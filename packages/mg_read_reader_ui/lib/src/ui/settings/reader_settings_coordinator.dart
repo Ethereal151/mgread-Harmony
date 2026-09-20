@@ -7,7 +7,7 @@ class _ReaderSettingsSheetState extends State<ReaderSettingsSheet> {
   late TextReaderPreferences _preferences;
   late ReaderAutoReadingPace _autoReadingPace;
   late bool _autoReading;
-  ReaderThemePreset _lastNonNightTheme = ReaderThemePreset.day;
+  late bool _layoutDebugMode;
   _SettingsPage _page = _SettingsPage.main;
 
   ReaderPalette get _palette => ReaderPalette.fromPreset(_preferences.theme);
@@ -18,12 +18,7 @@ class _ReaderSettingsSheetState extends State<ReaderSettingsSheet> {
     _preferences = widget.preferences.normalized();
     _autoReading = widget.autoReading;
     _autoReadingPace = widget.autoReadingPace;
-    _lastNonNightTheme = _isNightTheme(widget.lastNonNightTheme)
-        ? ReaderThemePreset.day
-        : widget.lastNonNightTheme;
-    if (!_isNightTheme(_preferences.theme)) {
-      _lastNonNightTheme = _preferences.theme;
-    }
+    _layoutDebugMode = widget.layoutDebugMode;
   }
 
   @override
@@ -38,6 +33,9 @@ class _ReaderSettingsSheetState extends State<ReaderSettingsSheet> {
     if (widget.autoReadingPace != oldWidget.autoReadingPace) {
       _autoReadingPace = widget.autoReadingPace;
     }
+    if (widget.layoutDebugMode != oldWidget.layoutDebugMode) {
+      _layoutDebugMode = widget.layoutDebugMode;
+    }
   }
 
   void _preview(TextReaderPreferences next) {
@@ -48,14 +46,15 @@ class _ReaderSettingsSheetState extends State<ReaderSettingsSheet> {
 
   void _commit(TextReaderPreferences next) {
     final TextReaderPreferences normalized = next.normalized();
-    if (!_isNightTheme(normalized.theme)) {
-      _lastNonNightTheme = normalized.theme;
-    }
     if (_preferences != normalized) {
       setState(() => _preferences = normalized);
       widget.onPreferencesPreview(normalized);
     }
     widget.onPreferencesCommit(normalized);
+  }
+
+  void _adjustFontSize(double delta) {
+    _commit(_preferences.copyWith(fontSize: _preferences.fontSize + delta));
   }
 
   void _openPage(_SettingsPage page) => setState(() => _page = page);
@@ -66,23 +65,7 @@ class _ReaderSettingsSheetState extends State<ReaderSettingsSheet> {
   Widget build(BuildContext context) {
     final ReaderPalette palette = _palette;
     final MediaQueryData mediaQuery = MediaQuery.of(context);
-    final ThemeData theme = Theme.of(context).copyWith(
-      brightness: palette.systemBrightness,
-      colorScheme:
-          ColorScheme.fromSeed(
-            seedColor: palette.accent,
-            brightness: palette.systemBrightness,
-          ).copyWith(
-            primary: palette.accent,
-            surface: palette.panel,
-            onSurface: palette.text,
-            outline: palette.divider,
-          ),
-      textTheme: Theme.of(
-        context,
-      ).textTheme.apply(bodyColor: palette.text, displayColor: palette.text),
-      iconTheme: IconThemeData(color: palette.text),
-    );
+    final ThemeData theme = readerThemeData(palette, font: _preferences.font);
     return MediaQuery(
       data: mediaQuery.copyWith(
         textScaler: mediaQuery.textScaler.clamp(maxScaleFactor: 1.3),
@@ -161,8 +144,8 @@ class _ReaderSettingsSheetState extends State<ReaderSettingsSheet> {
 
   void _toggleNight() {
     final ReaderThemePreset next = _isNightTheme(_preferences.theme)
-        ? _lastNonNightTheme
-        : ReaderThemePreset.night;
+        ? _preferences.lastNonNightTheme
+        : _preferences.lastNightTheme;
     _commit(_preferences.copyWith(theme: next));
   }
 
@@ -224,6 +207,12 @@ class _ReaderSettingsSheetState extends State<ReaderSettingsSheet> {
     ReaderThemePreset.mistBlue => ReaderStrings.mistBlue,
     ReaderThemePreset.deepNight => ReaderStrings.deepNight,
     ReaderThemePreset.charcoal => ReaderStrings.charcoal,
+    ReaderThemePreset.oled => ReaderStrings.oled,
+    ReaderThemePreset.midnight => ReaderStrings.midnight,
+    ReaderThemePreset.forestNight => ReaderStrings.forestNight,
+    ReaderThemePreset.lavenderMist => ReaderStrings.lavenderMist,
+    ReaderThemePreset.roseTea => ReaderStrings.roseTea,
+    ReaderThemePreset.seaGlass => ReaderStrings.seaGlass,
   };
 
   String _backgroundLabel(ReaderBackgroundPreset preset) => switch (preset) {
@@ -246,5 +235,8 @@ class _ReaderSettingsSheetState extends State<ReaderSettingsSheet> {
   bool _isNightTheme(ReaderThemePreset theme) =>
       theme == ReaderThemePreset.night ||
       theme == ReaderThemePreset.deepNight ||
-      theme == ReaderThemePreset.charcoal;
+      theme == ReaderThemePreset.charcoal ||
+      theme == ReaderThemePreset.oled ||
+      theme == ReaderThemePreset.midnight ||
+      theme == ReaderThemePreset.forestNight;
 }

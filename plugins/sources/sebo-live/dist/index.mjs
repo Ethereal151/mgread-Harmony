@@ -72,12 +72,12 @@ export async function getChapters(request) {
 export async function getContent(request) {
     const address = contentId(request.id);
     const key = chapterKey(request.chapterId, address);
-    const channels = await loadChannels(address);
-    const channel = channels.find((value) => streamKey(value.address) === key);
+    const channels = await loadChannels(address, true);
+    const channel = channels.find((value) => channelKey(value) === key);
     if (channel === undefined || !safeUrl(channel.address))
         throw new Error('Chapter ID is invalid.');
     const resourceType = /\.m3u8(?:$|[?#])/iu.test(channel.address) ? 'hls' : 'video';
-    return frozen({ chapterId: request.chapterId, contentKind: 'video', title: channel.title, updatedAt: null, text: null, pages: [], media: { url: requireContext().resource.proxy({ kind: resourceType, url: channel.address, headers: videoHeaders }), resourceType, resourcePolicy: 'sessionOnly', expiresAt: null, mimeType: resourceType === 'hls' ? 'application/vnd.apple.mpegurl' : 'video/mp4', headers: videoHeaders } });
+    return frozen({ chapterId: request.chapterId, contentKind: 'video', title: channel.title, updatedAt: null, text: null, pages: [], media: { url: requireContext().resource.proxy({ kind: resourceType, url: channel.address, headers: videoHeaders }), resourceType, resourcePolicy: 'sessionOnly', expiresAt: null, mimeType: mediaMimeType(channel.address, resourceType), headers: videoHeaders } });
 }
 async function loadPlatforms() {
     if (platformsCache !== undefined)
@@ -94,21 +94,28 @@ async function loadPlatforms() {
     platformsCache = Object.freeze(values);
     return platformsCache;
 }
-async function loadChannels(address) {
+async function loadChannels(address, refresh = false) {
     const cached = channelCache.get(address);
-    if (cached !== undefined)
+    if (!refresh && cached !== undefined)
         return cached;
-    const json = await fetchJson(joinUrl(address));
-    const values = [];
-    for (const item of records(json.zhubo)) {
-        const title = decoded(item.title);
-        const stream = text(item.address);
-        if (title !== '' && safeUrl(stream))
-            values.push({ title, address: stream, image: text(item.img) });
+    try {
+        const json = await fetchJson(joinUrl(address));
+        const values = [];
+        for (const item of records(json.zhubo)) {
+            const title = decoded(item.title);
+            const stream = text(item.address);
+            if (title !== '' && safeUrl(stream))
+                values.push({ title, address: stream, image: text(item.img) });
+        }
+        const result = Object.freeze(values);
+        channelCache.set(address, result);
+        return result;
     }
-    const result = Object.freeze(values);
-    channelCache.set(address, result);
-    return result;
+    catch (error) {
+        if (cached !== undefined)
+            return cached;
+        throw error;
+    }
 }
 async function fetchJson(url) {
     const response = await requireContext().http.fetch(url, { headers: { Accept: 'application/json,text/plain,*/*' } });
@@ -124,10 +131,32 @@ function summary(item) {
     return frozen({ id: `live:${id}`, title: item.title, contentKind: 'video', coverOrientation: 'landscape', author: 'Live', url: joinUrl(item.address), coverUrl: proxyImage(item.image), description: `${item.count} 个直播频道`, language: null, status: 'ongoing', access: 'free', wordCount: null, chapterCount: item.count || null, publishedAt: null, updatedAt: null, latestChapter: { id: null, title: `${item.count} 个频道`, url: null, updatedAt: null }, categories: ['直播'], tags: [], attributes: [] });
 }
 function chapter(address, channel, index) {
-    return frozen({ id: `live:${encodeKey(address)}:${streamKey(channel.address)}`, title: channel.title, order: index, url: null, volumeTitle: '直播频道', wordCount: null, updatedAt: null, isLocked: null, attributes: [] });
+    return frozen({ id: `live:${encodeKey(address)}:${channelKey(channel)}`, title: channel.title, order: index, url: null, volumeTitle: '直播频道', wordCount: null, updatedAt: null, isLocked: null, attributes: [] });
 }
 function joinUrl(path) { return new URL(path.replace(/^\/+/, ''), base).toString(); }
-function streamKey(url) { return createHash('sha256').update(url).digest('hex').slice(0, 24); }
+function channelKey(channel) { return createHash('sha256').update(`${channel.title}\n${stableStreamIdentity(channel.address)}`).digest('hex').slice(0, 24); }
+function stableStreamIdentity(value) {
+    const url = new URL(value);
+    const volatile = new Set(['auth_key', 'authkey', 'expire', 'expires', 'livekey', 'sign', 'signature', 'token', 'ts']);
+    for (const key of [...url.searchParams.keys()])
+        if (volatile.has(key.toLowerCase()))
+            url.searchParams.delete(key);
+    url.searchParams.sort();
+    url.hash = '';
+    return url.toString();
+}
+function mediaMimeType(value, resourceType) {
+    if (resourceType === 'hls')
+        return 'application/vnd.apple.mpegurl';
+    const pathname = new URL(value).pathname.toLowerCase();
+    if (pathname.endsWith('.flv'))
+        return 'video/x-flv';
+    if (pathname.endsWith('.mp4') || pathname.endsWith('.m4v'))
+        return 'video/mp4';
+    if (pathname.endsWith('.ts'))
+        return 'video/mp2t';
+    return null;
+}
 function contentId(id) { const encoded = /^live:([^:]+)$/u.exec(id)?.[1]; if (encoded === undefined)
     throw new Error('Content ID is invalid.'); return decodeKey(encoded); }
 function chapterKey(id, address) { const prefix = `live:${encodeKey(address)}:`; if (!id.startsWith(prefix) || id.length === prefix.length)

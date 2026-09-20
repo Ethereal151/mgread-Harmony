@@ -28,6 +28,7 @@ import 'package:mg_read/features/library/application/library_book_refresher.dart
 import 'package:mg_read/features/library/application/library_book_refresh_operation.dart';
 import 'package:mg_read/features/library/application/library_book_removal_operation.dart';
 import 'package:mg_read/features/library/application/library_book_visibility_changer.dart';
+import 'package:mg_read/features/library/application/library_catalog_refresh_coordinator.dart';
 import 'package:mg_read/features/library/application/library_entry_destination.dart';
 import 'package:mg_read/features/library/application/library_page_controller.dart';
 import 'package:mg_read/features/library/application/library_page_state.dart';
@@ -36,6 +37,7 @@ import 'package:mg_read/features/library/presentation/library_home_view_data.dar
 import 'package:mg_read/features/library/presentation/library_book_list_view_data.dart';
 import 'package:mg_read/features/library/presentation/library_media_entry_data.dart';
 import 'package:mg_read/features/library/presentation/widgets/library_home_shell.dart';
+import 'package:mg_read/features/media/application/source_audio_playback_service.dart';
 import 'package:mg_read/features/discovery/application/source_content_gateway.dart';
 import 'package:mg_read/features/discovery/presentation/source_content_detail_sheet.dart';
 import 'package:mg_read/features/reader/application/shelf_reader_launch_coordinator.dart';
@@ -48,6 +50,7 @@ typedef LibraryAudioChapterRequested =
       required PluginContentDetail detail,
       required PluginChaptersResult firstCatalogPage,
       required PluginChapterSummary chapter,
+      required String pluginVersion,
       String? libraryItemId,
     });
 
@@ -112,6 +115,9 @@ class LibraryPage extends ConsumerWidget {
     final AppThemeModeScope themeModeScope = AppThemeModeScope.of(context);
     final AppSettingsManager settings = ref.read(appSettingsProvider);
     final LibraryHomeLayoutMode initialLayoutMode = LibraryHomeLayoutMode.fromSetting(settings.snapshot.get(AppSettingKeys.homeLayoutMode));
+    final LibraryHomeCoverMetadataMode initialCoverMetadataMode = LibraryHomeCoverMetadataMode.fromSetting(
+      settings.snapshot.get(AppSettingKeys.homeCoverMetadataMode),
+    );
     final Set<String> blurredCoverBookIds = settings.snapshot.get(AppSettingKeys.blurredCoverBookIds).toSet();
     final LibraryPageState state = ref.watch(libraryPageControllerProvider);
     final LibraryPageController controller = ref.read(libraryPageControllerProvider.notifier);
@@ -119,6 +125,7 @@ class LibraryPage extends ConsumerWidget {
     final DiagnosticsManager diagnostics = ref.read(diagnosticsManagerProvider);
     final ShelfReaderLaunchState readerLaunch = ref.watch(shelfReaderLaunchCoordinatorProvider);
     final ShelfReaderLaunchCoordinator readerCoordinator = ref.read(shelfReaderLaunchCoordinatorProvider.notifier);
+    final SourceAudioPlaybackService audioPlayback = ref.read(sourceAudioPlaybackServiceProvider.notifier);
     final AppStartupController startup = ref.read(appStartupControllerProvider);
 
     if (state.status == LibraryPageStatus.initialLoading) {
@@ -140,6 +147,23 @@ class LibraryPage extends ConsumerWidget {
     final ValueChanged<String>? bookDetailRequested = onBookDetailRequested;
     final LibraryBookDetailLauncher? detailLauncher = ref.read(libraryBookDetailLauncherProvider);
     final LibraryBookRefresher? bookRefresher = ref.read(libraryBookRefresherProvider);
+    final LibraryCatalogRefreshCoordinator? catalogRefreshCoordinator = ref.read(libraryCatalogRefreshCoordinatorProvider);
+    if (catalogRefreshCoordinator != null) {
+      final List<String> bookIds = state.overview!.items.map((item) => item.id).toList(growable: false);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!context.mounted) return;
+        unawaited(
+          catalogRefreshCoordinator.maybeRefresh(
+            bookIds: bookIds,
+            onChanged: (changedBookIds) async {
+              if (!context.mounted) return;
+              ref.read(libraryCatalogChangeProvider.notifier).publish(changedBookIds);
+              await controller.silentRefresh();
+            },
+          ),
+        );
+      });
+    }
     final LibraryBookRefreshOperation? bookRefreshOperation = bookRefresher == null
         ? null
         : LibraryBookRefreshOperation(refresher: bookRefresher, diagnostics: diagnostics);
@@ -239,10 +263,16 @@ class LibraryPage extends ConsumerWidget {
         onTextChapterRequested: ({required detail, required firstCatalogPage, required chapter, required entryCoverBytes}) async {
           prepareAndOpen(book.id);
         },
-        onAudioChapterRequested: ({required detail, required firstCatalogPage, required chapter}) {
+        onAudioChapterRequested: ({required detail, required firstCatalogPage, required chapter, required pluginVersion}) {
           final callback = onAudioChapterRequested;
           if (callback == null) return Future<void>.error(StateError('An audio-player host has not been registered.'));
-          return callback(detail: detail, firstCatalogPage: firstCatalogPage, chapter: chapter, libraryItemId: book.id);
+          return callback(
+            detail: detail,
+            firstCatalogPage: firstCatalogPage,
+            chapter: chapter,
+            pluginVersion: pluginVersion,
+            libraryItemId: book.id,
+          );
         },
         onVideoEpisodeRequested: ({required detail, required firstCatalogPage, required chapter}) {
           final callback = onVideoEpisodeRequested;
@@ -270,30 +300,49 @@ class LibraryPage extends ConsumerWidget {
       );
     }
 
+    void requestBookDetail(LibraryBookListItemViewData book) {
+      final externalCallback = bookDetailRequested;
+      if (externalCallback != null) {
+        externalCallback(book.id);
+        return;
+      }
+      unawaited(openBookDetail(book));
+    }
+
     Future<void> openShelfAudio(LibraryBookListItemViewData book) async {
+      final item = state.overview!.items.cast<LibraryItemSummary?>().firstWhere(
+        (candidate) => candidate?.id == book.id,
+        orElse: () => null,
+      );
+      if (audioPlayback.revealExistingForShelfItem(libraryItemId: book.id, contentId: item?.coverRemoteContentId ?? book.id)) {
+        return;
+      }
       final callback = onAudioChapterRequested;
       if (callback == null || detailLauncher == null) {
         await openBookDetail(book);
         return;
       }
       try {
-        final item = state.overview!.items.cast<LibraryItemSummary?>().firstWhere(
-          (candidate) => candidate?.id == book.id,
-          orElse: () => null,
-        );
         final immediateEntry = immediateLibraryMediaEntry(item, book);
         if (immediateEntry != null) {
           await callback(
             detail: immediateEntry.detail,
             firstCatalogPage: immediateEntry.catalog,
             chapter: immediateEntry.chapter,
+            pluginVersion: item?.coverPluginVersion ?? book.coverRequest?.pluginVersion ?? 'unknown',
             libraryItemId: book.id,
           );
           return;
         }
         final seed = await detailLauncher.load(book.id);
         final entry = persistedLibraryMediaEntry(detail: seed.initialDetail, catalog: seed.initialCatalog, book: book);
-        await callback(detail: entry.detail, firstCatalogPage: entry.catalog, chapter: entry.chapter, libraryItemId: book.id);
+        await callback(
+          detail: entry.detail,
+          firstCatalogPage: entry.catalog,
+          chapter: entry.chapter,
+          pluginVersion: item?.coverPluginVersion ?? book.coverRequest?.pluginVersion ?? 'unknown',
+          libraryItemId: book.id,
+        );
       } on Object catch (error) {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_shelfMediaFailureMessage('无法打开上次的听书进度，请检查网络后重试。', error))));
@@ -369,8 +418,12 @@ class LibraryPage extends ConsumerWidget {
                   }
           : (book) {
               callbacks.onOpenBook?.call(book);
-              bookDetailRequested(book.id);
+              requestBookDetail(book);
             },
+      onBookDetail: (book) {
+        callbacks.onBookDetail?.call(book);
+        requestBookDetail(book);
+      },
       onBookLongPress: callbacks.onBookLongPress ?? openBookDetail,
       onRefreshBook: bookRefresher == null
           ? callbacks.onRefreshBook
@@ -453,6 +506,7 @@ class LibraryPage extends ConsumerWidget {
           data: data,
           initialLayoutMode: initialLayoutMode,
           onLayoutModeChanged: (LibraryHomeLayoutMode mode) => settings.set(AppSettingKeys.homeLayoutMode, mode.settingValue),
+          initialCoverMetadataMode: initialCoverMetadataMode,
           callbacks: resolvedCallbacks,
           preparingBookId: readerLaunch.status == ShelfReaderPreparationStatus.preparing ? readerLaunch.bookId : null,
           isRefreshing: state.status == LibraryPageStatus.refreshing,

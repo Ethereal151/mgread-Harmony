@@ -11,7 +11,9 @@ extension _ComicReaderPreferences on _ComicReaderViewState {
     final ComicReaderStateStore targetStore = store ?? widget.stateStore;
     final String writeKey =
         '${normalized.brightness}\u0000${normalized.imageSpacing}\u0000'
-        '${normalized.keepScreenOn}\u0000${normalized.immersiveMode}';
+        '${normalized.keepScreenOn}\u0000${normalized.immersiveMode}\u0000'
+        '${normalized.pageTurnShortcuts}\u0000${normalized.pageTurnFraction}\u0000'
+        '${normalized.pageTurnLayout.name}\u0000${normalized.singleHandMode}';
     if (_lastPreferenceWriteKeys[targetStore] == writeKey) {
       return _preferenceWrites[targetStore] ?? Future<void>.value();
     }
@@ -28,7 +30,11 @@ extension _ComicReaderPreferences on _ComicReaderViewState {
             normalized.brightness == _preferences.brightness &&
             normalized.imageSpacing == _preferences.imageSpacing &&
             normalized.keepScreenOn == _preferences.keepScreenOn &&
-            normalized.immersiveMode == _preferences.immersiveMode) {
+            normalized.immersiveMode == _preferences.immersiveMode &&
+            normalized.pageTurnShortcuts == _preferences.pageTurnShortcuts &&
+            normalized.pageTurnFraction == _preferences.pageTurnFraction &&
+            normalized.pageTurnLayout == _preferences.pageTurnLayout &&
+            normalized.singleHandMode == _preferences.singleHandMode) {
           _preferencesDirty = true;
         }
         if (!_disposed && identical(targetStore, widget.stateStore)) {
@@ -112,10 +118,39 @@ extension _ComicReaderPreferences on _ComicReaderViewState {
 
   Future<void> _syncAwake() {
     _awakeWrite = _awakeWrite.then(
-      (_) => _reconcileAwake(),
-      onError: (_) => _reconcileAwake(),
+      (_) async {
+        await _reconcileAwake();
+        await _syncVolumeKeyHandling();
+      },
+      onError: (_) async {
+        await _reconcileAwake();
+        await _syncVolumeKeyHandling();
+      },
     );
     return _awakeWrite;
+  }
+
+  Future<void> _syncVolumeKeyHandling() async {
+    final bool enabled =
+        !_disposed &&
+        _foreground &&
+        _currentChapter != null &&
+        !_settingsVisible &&
+        !_controlsVisible &&
+        _preferences.pageTurnShortcuts;
+    try {
+      await ReaderPlatform.instance.setVolumeKeyPageTurningEnabled(enabled);
+    } catch (_) {
+      // Hosts without the optional native volume bridge keep desktop input.
+    }
+  }
+
+  Future<void> _disableVolumeKeyHandling() async {
+    try {
+      await ReaderPlatform.instance.setVolumeKeyPageTurningEnabled(false);
+    } catch (_) {
+      // Test hosts and older embedders may not expose the optional method.
+    }
   }
 
   Future<void> _reconcileAwake() async {
@@ -183,13 +218,14 @@ extension _ComicReaderPreferences on _ComicReaderViewState {
   Future<void> _setSettingsVisible(bool value) async {
     if (_disposed || _settingsVisible == value) return;
     _settingsVisible = value;
+    final Future<void> sync = _syncAwake();
     if (!_preferences.immersiveMode ||
         !_platformCapabilities.immersiveMode ||
         !_foreground ||
         _currentChapter == null) {
       return;
     }
-    await _syncAwake();
+    await sync;
   }
 
   void _setControlsVisible(bool value) {
@@ -286,8 +322,9 @@ extension _ComicReaderPreferences on _ComicReaderViewState {
           (byIndex != null && byIndex.id != info.id)) {
         throw StateError('Comic catalog identifiers are inconsistent.');
       }
-      nextById[info.id] = info;
-      nextByIndex[info.index] = info;
+      final merged = _preserveMeasuredCacheProgress(info, byId ?? byIndex);
+      nextById[info.id] = merged;
+      nextByIndex[info.index] = merged;
     }
     final int knownCount = nextByIndex.keys.fold<int>(0, (count, index) {
       final int candidate = index + 1;
@@ -328,15 +365,34 @@ extension _ComicReaderPreferences on _ComicReaderViewState {
         (byIndex != null && byIndex.id != info.id)) {
       throw StateError('Comic catalog identifiers are inconsistent.');
     }
-    _catalogById[info.id] = info;
-    _catalogByIndex[info.index] = info;
+    final merged = _preserveMeasuredCacheProgress(info, byId ?? byIndex);
+    _catalogById[info.id] = merged;
+    _catalogByIndex[info.index] = merged;
     final int existing = _catalog.indexWhere((entry) => entry.id == info.id);
     if (existing < 0) {
-      _catalog.add(info);
+      _catalog.add(merged);
     } else {
-      _catalog[existing] = info;
+      _catalog[existing] = merged;
     }
     _catalog.sort((a, b) => a.index.compareTo(b.index));
+  }
+
+  ComicChapterInfo _preserveMeasuredCacheProgress(
+    ComicChapterInfo incoming,
+    ComicChapterInfo? current,
+  ) {
+    if (current?.cachedImageCount == null) return incoming;
+    return ComicChapterInfo(
+      id: incoming.id,
+      title: incoming.title,
+      index: incoming.index,
+      availability: current!.availability,
+      imageCount: current.imageCount ?? incoming.imageCount,
+      cachedImageCount: current.cachedImageCount,
+      failedImageCount: current.failedImageCount,
+      manifestCached: current.manifestCached || incoming.manifestCached,
+      hasBeenRead: current.hasBeenRead || incoming.hasBeenRead,
+    );
   }
 
   void _validateBook(ComicBookInfo book, String expectedId) {
@@ -350,7 +406,13 @@ extension _ComicReaderPreferences on _ComicReaderViewState {
         info.title.trim().isEmpty ||
         info.index < 0 ||
         (expectedIndex != null && info.index != expectedIndex) ||
-        (info.imageCount != null && info.imageCount! < 0)) {
+        (info.imageCount != null && info.imageCount! < 0) ||
+        (info.cachedImageCount != null && info.cachedImageCount! < 0) ||
+        info.failedImageCount < 0 ||
+        (info.imageCount != null &&
+            info.cachedImageCount != null &&
+            info.cachedImageCount! + info.failedImageCount >
+                info.imageCount!)) {
       throw StateError('Comic chapter metadata is invalid.');
     }
   }
@@ -490,7 +552,7 @@ extension _ComicReaderPreferences on _ComicReaderViewState {
           (item) => Object.hash(item.info.id, identityHashCode(item.content)),
         ),
       ),
-      Object.hashAll(_boundaryLoads),
+      Object.hashAll(_boundaryLoadOwners.keys),
       Object.hashAll(
         _boundaryFailures.entries.map(
           (entry) => Object.hash(entry.key, identityHashCode(entry.value)),
@@ -519,7 +581,7 @@ extension _ComicReaderPreferences on _ComicReaderViewState {
         result.add(
           _ComicBoundaryEntry(
             index: nextIndex,
-            loading: _boundaryLoads.contains(nextIndex),
+            loading: _boundaryLoadOwners.containsKey(nextIndex),
             failure: _boundaryFailures[nextIndex],
             atEnd: _catalogTotal > 0 && nextIndex >= _catalogTotal,
           ),

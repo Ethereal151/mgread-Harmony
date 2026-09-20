@@ -7,11 +7,11 @@
  * 稳定标识：作品和章节均使用站点 URL 中的数字 ID。
  */
 import { load } from 'cheerio';
-const base = 'https://www.tatays.com', headers = Object.freeze({ Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8', 'Accept-Language': 'zh-CN,zh;q=0.9', Referer: `${base}/`, 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }), categories = Object.freeze([['xuanhuan', '玄幻奇幻'], ['wuxia', '武侠修真'], ['yanqing', '都市言情'], ['lishi', '历史军事'], ['kehuan', '科幻小说'], ['wangyou', '网游小说'], ['nvsheng', '女生小说'], ['qita', '其他小说']]);
+const base = 'https://www.tatays.com', searchBase = 'https://m.tatays.com', headers = Object.freeze({ Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8', 'Accept-Language': 'zh-CN,zh;q=0.9', Referer: `${base}/`, 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }), categories = Object.freeze([['xuanhuan', '玄幻奇幻'], ['wuxia', '武侠修真'], ['yanqing', '都市言情'], ['lishi', '历史军事'], ['kehuan', '科幻小说'], ['wangyou', '网游小说'], ['nvsheng', '女生小说'], ['qita', '其他小说']]);
 let context;
 export async function activate(next) { context = next; next.log.info('source_activated'); }
 export async function search(request) { const query = request.query.trim(); if (query === '')
-    return frozen({ items: [], nextCursor: null, totalCount: 0 }); const page = cursorPage(request.cursor, 'search'), limit = clamp(request.pageSize), body = new URLSearchParams({ searchtype: 'all', searchkey: query, page: String(page) }), html = await fetchText(`${base}/modules/article/search.php`, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/x-www-form-urlencoded' }, body: body.toString() }), values = parseSearch(html).slice(0, limit); return frozen({ items: values, nextCursor: values.length >= limit ? `search:${page + 1}` : null, totalCount: null }); }
+    return frozen({ items: [], nextCursor: null, totalCount: 0 }); const page = cursorPage(request.cursor, 'search'), limit = clamp(request.pageSize), body = new URLSearchParams({ searchtype: 'all', searchkey: query, page: String(page) }), html = await fetchText(`${searchBase}/modules/article/search.php`, { method: 'POST', headers: { ...headers, Referer: `${searchBase}/`, 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' }, body: body.toString() }), values = parseSearch(html).slice(0, limit); return frozen({ items: values, nextCursor: values.length >= limit ? `search:${page + 1}` : null, totalCount: null }); }
 export async function searchSuggestions(_request) { return frozen({ items: [], nextCursor: null }); }
 export async function discover(request) { if (request.target === null) {
     if (request.cursor !== null || request.collectionId !== null)
@@ -28,11 +28,20 @@ export async function getChapters(request) { const id = contentId(request.id), r
     throw new Error('No chapters found.'); const group = frozen({ id: `group:${id}:default`, title: '正文', order: 0, episodes: chapters }); return frozen({ items: chapters, groups: [group] }); }
 export async function getContent(request) { const id = contentId(request.id), chapter = parseChapterId(request.chapterId, id), $ = load(await fetchText(chapterUrl(id, chapter))), html = $('.chapter-content').first().html() ?? '', paragraphs = decode(html.replace(/<br\s*\/?\s*>/giu, '\n').replace(/<\/?p[^>]*>/giu, '\n').replace(/<[^>]+>/gu, ' ')).split(/\n+/u).map(clean).filter(value => value !== '' && !/本章未完|加入书签|章节报错|126小说|tatays/iu.test(value)); if (paragraphs.length === 0)
     throw new Error('Chapter content is empty.'); return frozen({ chapterId: request.chapterId, contentKind: 'novel', title: null, updatedAt: null, text: paragraphs.join('\n\n'), pages: [], media: null }); }
-async function fetchText(url, init = { headers }) { const response = await requireContext().http.fetch(url, init); if (!response.ok)
-    throw new Error('Source request failed.'); return response.text(); }
+async function fetchText(url, init = { headers }) { const response = await requireContext().http.fetch(url, init); const text = await response.text(); if (!response.ok)
+    throw new Error(`Source request failed (${response.status}).`); if (/<title[^>]*>\s*Not Found\s*<\/title>/iu.test(text))
+    throw new Error('Source page is unavailable.'); return text; }
 function parseSearch(html) { const $ = load(html), result = []; $('.sort-list.search_words li').slice(1).each((_, node) => { const href = $(node).find('.one a').first().attr('href') ?? '', id = bookId(href); if (id === null)
     return; const title = clean($(node).find('.one a').first().text()), author = clean($(node).find('.three').first().text()), latest = clean($(node).find('.two a').first().text()); if (title !== '')
-    result.push(summary(id, title, author, '', '', latest)); }); return result; }
+    result.push(summary(id, title, author, '', '', latest)); }); $('.blockcontent .c_row').each((_, node) => { const root = $(node), link = root.find('a[href*="/book/"]').first(), id = bookId(link.attr('href') ?? ''); if (id === null)
+    return; const title = clean(root.find('.search_text h2').first().text()), cover = root.find('.row_cover img').first().attr('src') ?? '', spans = root.find('.search_text p').first().find('span'), author = clean(spans.eq(0).text()), category = clean(spans.eq(1).text()); if (title !== '')
+    result.push(summary(id, title, author, cover, category, '')); }); if (result.length === 0) {
+    const mobile = $('.novel-box .row_textl'), title = clean($('.chapter-list-info .mid h2').first().text()) || clean(mobile.find('h2').first().text()), self = $('link[rel="canonical"][href*="/book/"], a[href*="/book/"]').first().attr('href') ?? '', id = bookId(self);
+    if (id !== null && title !== '') {
+        const cover = $('.chapter-img img, .novel-box .row_coverl img').first().attr('src') ?? '', details = $('.chapter-list-info .mid .clearfix dd').toArray().map(node => clean($(node).text())), author = details.map(value => /作者[：:]\s*([^|]+)/u.exec(value)?.[1]?.trim() ?? '').find(Boolean) ?? clean(mobile.find('a[href*="authorarticle"]').first().text()), category = details.map(value => /类型[：:]\s*(.+)$/u.exec(value)?.[1]?.trim() ?? '').find(Boolean) ?? clean(mobile.find('.type').first().text().replace(/类型[：:]|[\[\]]/gu, '')), latest = clean($('.lastchapter a, .novel-box .c_row.nw a').first().text());
+        result.push(summary(id, title, author, cover, category, latest));
+    }
+} return [...new Map(result.map(item => [item.id, item])).values()]; }
 function parseListing(html) { const $ = load(html), result = []; $('.list-title li').each((_, node) => { const href = $(node).find('a').first().attr('href') ?? '', id = bookId(href); if (id === null)
     return; const title = clean($(node).find('h2').first().text()), cover = $(node).find('img').first().attr('src') ?? '', author = /作者[：:]\s*([^|]+)/u.exec(clean($(node).find('p.info').first().text()))?.[1]?.trim() ?? ''; if (title !== '')
     result.push(summary(id, title, author, cover, '', '')); }); return result; }

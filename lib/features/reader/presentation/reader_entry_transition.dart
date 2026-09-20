@@ -22,14 +22,17 @@ import 'package:novel_reader_ui/novel_reader_ui.dart';
 import 'package:mg_read/app/app_theme.dart';
 import 'package:mg_read/features/reader/application/reader_launch_request.dart';
 import 'package:mg_read/features/reader/presentation/reader_host_page.dart';
-import 'package:mg_read/shared/presentation/widgets/default_book_cover_artwork.dart';
+import 'package:mg_read/shared/presentation/widgets/default_content_cover_artwork.dart';
 
 const SystemUiOverlayStyle _readerEntrySystemUiStyle = SystemUiOverlayStyle(
-  statusBarColor: Colors.transparent,
+  // The immersive request is asynchronous. Keep the system-bar fallback
+  // aligned with the black letterbox around the entry artwork while Android
+  // is still showing the bars during that transition.
+  statusBarColor: Colors.black,
   statusBarIconBrightness: Brightness.light,
   statusBarBrightness: Brightness.dark,
-  systemNavigationBarColor: Colors.transparent,
-  systemNavigationBarDividerColor: Colors.transparent,
+  systemNavigationBarColor: Colors.black,
+  systemNavigationBarDividerColor: Colors.black,
   systemNavigationBarIconBrightness: Brightness.light,
   systemStatusBarContrastEnforced: false,
   systemNavigationBarContrastEnforced: false,
@@ -61,6 +64,7 @@ class ReaderEntryTransition extends StatefulWidget {
     this.onFirstContentPresented,
     this.onFirstComicContentPresented,
     this.onInitialFailure,
+    this.catalogRefreshToken = 0,
     super.key,
   });
 
@@ -75,6 +79,7 @@ class ReaderEntryTransition extends StatefulWidget {
 
   /// Receives a recoverable failure before readable content is shown.
   final ValueChanged<ReaderFailure>? onInitialFailure;
+  final int catalogRefreshToken;
 
   @override
   State<ReaderEntryTransition> createState() => _ReaderEntryTransitionState();
@@ -133,26 +138,30 @@ class _ReaderEntryPreparationSurfaceState extends State<ReaderEntryPreparationSu
   @override
   Widget build(BuildContext context) {
     final double progress = Curves.easeOutCubic.transform(_entryController.value);
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: _readerEntrySystemUiStyle,
-      child: PopScope<void>(
-        canPop: false,
-        onPopInvokedWithResult: (bool didPop, void result) {
-          if (!didPop) widget.onExit();
-        },
-        child: Stack(
-          fit: StackFit.expand,
-          children: <Widget>[
-            _ReaderEntryBackdrop(progress: progress),
-            _ReaderEntryCover(
-              progress: progress,
-              disappearance: 0,
-              coverImage: null,
-              failed: widget.failed ? const ReaderFailure(ReaderFailureKind.data, 'route_failure') : null,
-              onRetry: widget.onRetry,
-              onExit: widget.onExit,
-            ),
-          ],
+    return Theme(
+      data: AppTheme.novelReader(),
+      child: AnnotatedRegion<SystemUiOverlayStyle>(
+        value: _readerEntrySystemUiStyle,
+        child: PopScope<void>(
+          canPop: false,
+          onPopInvokedWithResult: (bool didPop, void result) {
+            if (!didPop) widget.onExit();
+          },
+          child: Stack(
+            fit: StackFit.expand,
+            children: <Widget>[
+              _ReaderEntryBackdrop(progress: progress),
+              _ReaderEntryCover(
+                progress: progress,
+                disappearance: 0,
+                kind: DefaultCoverKind.novel,
+                coverImage: null,
+                failed: widget.failed ? const ReaderFailure(ReaderFailureKind.data, 'route_failure') : null,
+                onRetry: widget.onRetry,
+                onExit: widget.onExit,
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -346,40 +355,47 @@ class _ReaderEntryTransitionState extends State<ReaderEntryTransition> with Tick
     final Animation<double> entryCurve = CurvedAnimation(parent: _entryController, curve: Curves.easeOutCubic);
     final Animation<double> handoffCurve = CurvedAnimation(parent: _handoffController, curve: Curves.easeOutQuart);
     final double handoff = handoffCurve.value;
-    return PopScope<void>(
-      canPop: false,
-      onPopInvokedWithResult: (bool didPop, void result) {
-        if (!didPop) _requestExit();
-      },
-      child: Semantics(
-        container: true,
-        child: Stack(
-          fit: StackFit.expand,
-          children: <Widget>[
-            _ReaderEntryBackdrop(progress: entryCurve.value),
-            Transform.translate(
-              offset: Offset(0, (1 - handoff) * 7),
-              child: Opacity(
-                opacity: _firstContentPresented ? handoff : 0,
-                child: KeyedSubtree(
-                  key: ValueKey<int>(_readerEpoch),
-                  child: ReaderHostPage(request: _boundRequest),
+    return Theme(
+      data: AppTheme.novelReader(),
+      child: PopScope<void>(
+        canPop: false,
+        onPopInvokedWithResult: (bool didPop, void result) {
+          if (!didPop) _requestExit();
+        },
+        child: Semantics(
+          container: true,
+          child: Stack(
+            fit: StackFit.expand,
+            children: <Widget>[
+              _ReaderEntryBackdrop(progress: entryCurve.value),
+              Transform.translate(
+                offset: Offset(0, (1 - handoff) * 7),
+                child: Opacity(
+                  opacity: _firstContentPresented ? handoff : 0,
+                  child: KeyedSubtree(
+                    key: ValueKey<int>(_readerEpoch),
+                    child: ReaderHostPage(request: _boundRequest, catalogRefreshToken: widget.catalogRefreshToken),
+                  ),
                 ),
               ),
-            ),
-            if (!_handoffComplete)
-              AnnotatedRegion<SystemUiOverlayStyle>(
-                value: _readerEntrySystemUiStyle,
-                child: _ReaderEntryCover(
-                  progress: entryCurve.value,
-                  disappearance: handoff,
-                  coverImage: _entryCoverImage,
-                  failed: _failure,
-                  onRetry: _failure == null ? null : _retry,
-                  onExit: _requestExit,
+              if (!_handoffComplete)
+                AnnotatedRegion<SystemUiOverlayStyle>(
+                  value: _readerEntrySystemUiStyle,
+                  child: _ReaderEntryCover(
+                    progress: entryCurve.value,
+                    disappearance: handoff,
+                    kind: switch (_boundRequest) {
+                      NovelReaderLaunchRequest() => DefaultCoverKind.novel,
+                      ComicReaderLaunchRequest() => DefaultCoverKind.manga,
+                    },
+                    coverImage: _entryCoverImage,
+                    failed: _failure,
+                    onRetry: _failure == null ? null : _retry,
+                    onExit: _requestExit,
+                  ),
                 ),
-              ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -413,6 +429,7 @@ class _ReaderEntryCover extends StatelessWidget {
   const _ReaderEntryCover({
     required this.progress,
     required this.disappearance,
+    required this.kind,
     required this.failed,
     required this.coverImage,
     required this.onRetry,
@@ -421,6 +438,7 @@ class _ReaderEntryCover extends StatelessWidget {
 
   final double progress;
   final double disappearance;
+  final DefaultCoverKind kind;
   final ImageProvider<Object>? coverImage;
   final ReaderFailure? failed;
   final VoidCallback? onRetry;
@@ -452,7 +470,13 @@ class _ReaderEntryCover extends StatelessWidget {
                   rect: rect,
                   child: ClipRRect(
                     borderRadius: radius,
-                    child: _ReaderEntryArtwork(width: rect.width, height: rect.height, borderRadius: radius, coverImage: coverImage),
+                    child: _ReaderEntryArtwork(
+                      width: rect.width,
+                      height: rect.height,
+                      borderRadius: radius,
+                      coverImage: coverImage,
+                      kind: kind,
+                    ),
                   ),
                 ),
                 SafeArea(
@@ -477,12 +501,19 @@ class _ReaderEntryCover extends StatelessWidget {
 }
 
 class _ReaderEntryArtwork extends StatelessWidget {
-  const _ReaderEntryArtwork({required this.width, required this.height, required this.borderRadius, required this.coverImage});
+  const _ReaderEntryArtwork({
+    required this.width,
+    required this.height,
+    required this.borderRadius,
+    required this.coverImage,
+    required this.kind,
+  });
 
   final double width;
   final double height;
   final BorderRadius borderRadius;
   final ImageProvider<Object>? coverImage;
+  final DefaultCoverKind kind;
 
   @override
   Widget build(BuildContext context) {
@@ -505,8 +536,9 @@ class _ReaderEntryArtwork extends StatelessWidget {
   }
 
   Widget _entryFallback(AppThemeTokens tokens) {
-    return DefaultBookCoverArtwork(
-      title: '阅读',
+    return DefaultContentCoverArtwork(
+      kind: kind,
+      title: '',
       width: width,
       height: height,
       startColor: tokens.coverIndigoStart,

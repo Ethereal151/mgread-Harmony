@@ -34,6 +34,7 @@ void main() {
     expect(gateway.queries, isEmpty);
     expect(find.text('输入关键词开始搜索'), findsOneWidget);
     expect(find.text('真实搜索结果'), findsNothing);
+    expect(find.text('热门搜索'), findsOneWidget);
     final historyScroll = tester.widget<SingleChildScrollView>(find.byKey(const Key('search-history-scroll')));
     expect(historyScroll.scrollDirection, Axis.horizontal);
 
@@ -42,6 +43,11 @@ void main() {
 
     expect(gateway.queries, <String>['诡秘之主']);
     expect(find.text('真实搜索结果'), findsWidgets);
+    expect(find.text('热门搜索'), findsNothing);
+    expect(find.text('（已聚合 1 条）'), findsOneWidget);
+    expect(find.text('已完成 1/1 个来源'), findsOneWidget);
+    expect(find.text('相关性'), findsOneWidget);
+    expect(find.byKey(const Key('search-result-sort')), findsOneWidget);
   });
 
   testWidgets('keeps the discovery source when opening search', (tester) async {
@@ -64,6 +70,12 @@ void main() {
 
     expect(gateway.pluginIds, isEmpty);
     expect(find.text('第二个数据源'), findsOneWidget);
+
+    await tester.tap(find.text('诡秘之主').first);
+    await tester.pumpAndSettle();
+
+    expect(gateway.pluginIds, <String>['source.second']);
+    expect(find.text('默认插件返回顺序'), findsOneWidget);
   });
 
   testWidgets('catalog change replaces a removed selected source immediately', (tester) async {
@@ -81,7 +93,7 @@ void main() {
         ),
         child: MaterialApp(
           theme: AppTheme.light(),
-          home: SearchPage(onDestinationRequested: (_) {}),
+          home: SearchPage(initialSourceId: 'source.first', onDestinationRequested: (_) {}),
         ),
       ),
     );
@@ -207,6 +219,74 @@ void main() {
 
     expect(find.byKey(const Key('source-search-progress')), findsNothing);
     expect(find.text('真实搜索结果'), findsWidgets);
+  });
+
+  testWidgets('cancels an all-source search from the search action', (tester) async {
+    final completion = Completer<PluginSearchResult>();
+    final gateway = _SearchGateway(
+      sources: <PluginSourceDescriptor>[_source('source.first', '第一个数据源'), _source('source.second', '第二个数据源')],
+      searchCompletion: completion,
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          sourceContentGatewayProvider.overrideWithValue(gateway),
+          searchHistoryStoreProvider.overrideWithValue(_MemorySearchHistoryStore(const <String>['诡秘之主'])),
+        ],
+        child: MaterialApp(
+          theme: AppTheme.light(),
+          home: SearchPage(onDestinationRequested: (_) {}),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('诡秘之主').first);
+    await tester.pump();
+    final cancellation = gateway.cancellations.last;
+    expect(find.text('取消搜索'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('source-search-submit')));
+    await tester.pump();
+
+    expect(cancellation.isCancelled, isTrue);
+    expect(find.byKey(const Key('source-search-progress')), findsNothing);
+    expect(find.byKey(const Key('search-cancelled')), findsOneWidget);
+    completion.complete(_searchResult('source.first'));
+  });
+
+  testWidgets('cancels a selected-source search from the search action', (tester) async {
+    final completion = Completer<PluginSearchResult>();
+    final gateway = _SearchGateway(
+      sources: <PluginSourceDescriptor>[_source('source.first', '第一个数据源'), _source('source.second', '第二个数据源')],
+      searchCompletion: completion,
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          sourceContentGatewayProvider.overrideWithValue(gateway),
+          searchHistoryStoreProvider.overrideWithValue(_MemorySearchHistoryStore(const <String>['诡秘之主'])),
+        ],
+        child: MaterialApp(
+          theme: AppTheme.light(),
+          home: SearchPage(initialSourceId: 'source.second', onDestinationRequested: (_) {}),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('诡秘之主').first);
+    await tester.pump();
+    final cancellation = gateway.cancellations.last;
+    expect(gateway.pluginIds, <String>['source.second']);
+
+    await tester.tap(find.byKey(const Key('source-search-submit')));
+    await tester.pump();
+
+    expect(cancellation.isCancelled, isTrue);
+    expect(find.text('取消搜索'), findsNothing);
+    expect(find.descendant(of: find.byKey(const Key('source-search-submit')), matching: find.text('搜索')), findsOneWidget);
+    completion.complete(_searchResult('source.second'));
   });
 
   testWidgets('leaving search cancels the active source request', (tester) async {

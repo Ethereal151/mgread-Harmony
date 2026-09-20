@@ -114,91 +114,98 @@ class _DeferredSourceDetailScreen extends StatelessWidget {
   );
 
   @override
-  Widget build(BuildContext context) => FutureBuilder<SourceContentDetailSeed>(
-    future: seed,
-    builder: (context, snapshot) {
-      if (snapshot.hasData) {
-        final data = snapshot.requireData;
-        // The persisted/Runtime seed may not contain host-local bytes. Keep the
-        // cover already visible on the shelf as the detail screen's handoff
-        // fallback so the later refresh cannot discard it.
-        final coveredInitialDetail = preserveSourceContentCover(detail: data.initialDetail, fallbackSummary: previewDetail.summary);
-        return _SourceDetailScreen(
-          gateway: gateway,
-          pluginId: data.pluginId,
-          pluginVersion: data.pluginVersion,
-          id: data.id,
-          initialContent: coveredInitialDetail.summary,
-          initialDetail: coveredInitialDetail,
-          initialCatalog: data.initialCatalog,
-          initialSourceName: data.initialDetail.sourceName,
-          relatedContents: const <PluginContentSummary>[],
-          onTextChapterRequested: onTextChapterRequested,
-          onComicChapterRequested: onComicChapterRequested,
-          onAudioChapterRequested: onAudioChapterRequested,
-          onVideoEpisodeRequested: onVideoEpisodeRequested,
-          onAddToShelf: null,
-          onRemoveFromShelf: null,
-          shelfState: shelfState,
-          onExternalUrlRequested: onExternalUrlRequested,
-          onShelfAction: onShelfAction,
-          onStartReading: onStartReading,
-          isCoverBlurred: isCoverBlurred,
-          isModalSheet: true,
-        );
-      }
-      return BookCoverSourceScope(
-        pluginId: previewDetail.pluginId,
-        pluginVersion: previewPluginVersion,
-        child: Scaffold(
-          body: SafeArea(
-            child: Column(
-              children: <Widget>[
-                const Padding(
-                  padding: EdgeInsets.only(top: 10, bottom: 2),
-                  child: SizedBox(
-                    width: 42,
-                    height: 5,
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.all(Radius.circular(99))),
+  Widget build(BuildContext context) {
+    final Widget detail = FutureBuilder<SourceContentDetailSeed>(
+      future: seed,
+      builder: (context, snapshot) {
+        if (snapshot.hasData) {
+          final data = snapshot.requireData;
+          // The persisted/Runtime seed may not contain host-local bytes. Keep the
+          // cover already visible on the shelf as the detail screen's handoff
+          // fallback so the later refresh cannot discard it.
+          final coveredInitialDetail = preserveSourceContentCover(detail: data.initialDetail, fallbackSummary: previewDetail.summary);
+          return _SourceDetailScreen(
+            gateway: gateway,
+            pluginId: data.pluginId,
+            pluginVersion: data.pluginVersion,
+            id: data.id,
+            initialContent: coveredInitialDetail.summary,
+            initialDetail: coveredInitialDetail,
+            initialCatalog: data.initialCatalog,
+            initialSourceName: data.initialDetail.sourceName,
+            sourceVariants: const <SourceSearchHit>[],
+            onSourceVariantRequested: null,
+            relatedContents: const <PluginContentSummary>[],
+            onTextChapterRequested: onTextChapterRequested,
+            onComicChapterRequested: onComicChapterRequested,
+            onAudioChapterRequested: onAudioChapterRequested,
+            onVideoEpisodeRequested: onVideoEpisodeRequested,
+            onAddToShelf: null,
+            onRemoveFromShelf: null,
+            shelfState: shelfState,
+            onExternalUrlRequested: onExternalUrlRequested,
+            onShelfAction: onShelfAction,
+            onStartReading: onStartReading,
+            isCoverBlurred: isCoverBlurred,
+            isModalSheet: true,
+          );
+        }
+        return BookCoverSourceScope(
+          pluginId: previewDetail.pluginId,
+          pluginVersion: previewPluginVersion,
+          child: Scaffold(
+            body: SafeArea(
+              child: Column(
+                children: <Widget>[
+                  const Padding(
+                    padding: EdgeInsets.only(top: 10, bottom: 2),
+                    child: SizedBox(
+                      width: 42,
+                      height: 5,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.all(Radius.circular(99))),
+                      ),
                     ),
                   ),
-                ),
-                Padding(
-                  padding: EdgeInsets.fromLTRB(
-                    AppSpacing.discoveryPagePadding,
-                    AppSpacing.pageHeaderTopPaddingFor(context),
-                    AppSpacing.discoveryPagePadding,
-                    AppSpacing.pageHeaderTopPadding,
+                  Padding(
+                    padding: EdgeInsets.fromLTRB(
+                      AppSpacing.discoveryPagePadding,
+                      AppSpacing.pageHeaderTopPaddingFor(context),
+                      AppSpacing.discoveryPagePadding,
+                      AppSpacing.pageHeaderTopPadding,
+                    ),
+                    child: _DetailHeader(isModalSheet: true, readerOwnedTheme: _usesReaderOwnedTheme(previewDetail.summary.contentKind)),
                   ),
-                  child: _DetailHeader(isModalSheet: true),
-                ),
-                Expanded(
-                  child: _SourceDetailView(
-                    key: const ValueKey<String>('source-detail-deferred-preview'),
-                    bundle: _previewBundle,
-                    gateway: gateway,
-                    relatedContents: const <PluginContentSummary>[],
-                    isRefreshing: !snapshot.hasError,
-                    onTextChapterRequested: onTextChapterRequested,
-                    onComicChapterRequested: onComicChapterRequested,
-                    onAudioChapterRequested: onAudioChapterRequested,
-                    onVideoEpisodeRequested: onVideoEpisodeRequested,
-                    onAddToShelf: null,
-                    onRemoveFromShelf: null,
-                    shelfState: shelfState,
-                    onShelfAction: onShelfAction,
-                    onStartReading: onStartReading,
-                    isCoverBlurred: isCoverBlurred,
-                    onRecommendationRequested: null,
-                    onExternalUrlRequested: onExternalUrlRequested,
+                  Expanded(
+                    child: _SourceDetailView(
+                      key: const ValueKey<String>('source-detail-deferred-preview'),
+                      bundle: _previewBundle,
+                      gateway: gateway,
+                      relatedContents: const <PluginContentSummary>[],
+                      sourceVariants: const <SourceSearchHit>[],
+                      onSourceVariantRequested: null,
+                      isRefreshing: !snapshot.hasError,
+                      onTextChapterRequested: onTextChapterRequested,
+                      onComicChapterRequested: onComicChapterRequested,
+                      onAudioChapterRequested: onAudioChapterRequested,
+                      onVideoEpisodeRequested: onVideoEpisodeRequested,
+                      onAddToShelf: null,
+                      onRemoveFromShelf: null,
+                      shelfState: shelfState,
+                      onShelfAction: onShelfAction,
+                      onStartReading: onStartReading,
+                      isCoverBlurred: isCoverBlurred,
+                      onRecommendationRequested: null,
+                      onExternalUrlRequested: onExternalUrlRequested,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
-        ),
-      );
-    },
-  );
+        );
+      },
+    );
+    return _usesReaderOwnedTheme(previewDetail.summary.contentKind) ? Theme(data: AppTheme.novelReader(), child: detail) : detail;
+  }
 }

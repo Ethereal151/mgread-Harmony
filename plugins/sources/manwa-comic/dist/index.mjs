@@ -7,7 +7,7 @@
  * 稳定标识：漫画使用站点数字 ID，章节使用图片接口 cid 与分页号。
  */
 import { load } from 'cheerio';
-const base = 'https://manwamu.cc', headers = Object.freeze({ 'User-Agent': 'Mozilla/5.0 MgRead', Accept: 'text/html,application/json,*/*' }), categories = Object.freeze([['latest', '最新', 'comic'], ['ancient', '古风', 'gufeng'], ['fantasy', '玄幻', 'xuanhuan'], ['campus', '校园', 'xiaoyuan'], ['vip', 'VIP', 'vip']]);
+const base = 'https://manwamu.cc', imageTransformKey = '0B6666A0-BB59-1381-B746-a0E4C9AC', headers = Object.freeze({ 'User-Agent': 'Mozilla/5.0 MgRead', Accept: 'text/html,application/json,*/*' }), categories = Object.freeze([['latest', '最新', 'comic'], ['ancient', '古风', 'gufeng'], ['fantasy', '玄幻', 'xuanhuan'], ['campus', '校园', 'xiaoyuan'], ['vip', 'VIP', 'vip']]);
 let context;
 export async function activate(next) { context = next; next.log.info('source_activated'); }
 export async function search(request) { const query = request.query.trim(); if (query === '')
@@ -35,7 +35,7 @@ export async function getContent(request) { const book = contentId(request.id), 
     if (!safeUrl(upstream))
         continue;
     const index = pages.length;
-    pages.push(frozen({ id: `page:${cid}:${page}:${index + 1}`, index, url: requireContext().resource.proxy({ kind: 'image', url: upstream, headers: { Referer: bookUrl(book) } }), mimeType: imageMime(upstream), width: null, height: null }));
+    pages.push(frozen({ id: `page:${cid}:${page}:${index + 1}`, index, url: proxyEncryptedImage(upstream, bookUrl(book)), mimeType: imageMime(upstream), width: null, height: null }));
 } if (pages.length === 0)
     throw new Error('Chapter images are unavailable.'); return frozen({ chapterId: request.chapterId, contentKind: 'manga', title: null, updatedAt: null, text: null, pages: Object.freeze(pages) }); }
 async function fetchJson(url) { const response = await requireContext().http.fetch(url, { headers }); if (!response.ok)
@@ -59,7 +59,8 @@ function proxyImage(value) { let url; try {
 }
 catch {
     return null;
-} return requireContext().resource.proxy({ kind: 'image', url, headers: { Referer: `${base}/` } }); }
+} return proxyEncryptedImage(url, `${base}/`); }
+function proxyEncryptedImage(url, referer) { return requireContext().resource.proxy({ kind: 'image', url, resourceTransform: 'aes-cbc-prefixed-iv-image-v1', resourceTransformKey: imageTransformKey, headers: { Accept: 'image/*', Referer: referer, 'User-Agent': headers['User-Agent'] } }); }
 function imageMime(url) { const path = new URL(url).pathname.toLowerCase(); return path.endsWith('.png') ? 'image/png' : path.endsWith('.webp') ? 'image/webp' : 'image/jpeg'; }
 function safeUrl(value) { try {
     const url = new URL(value);

@@ -14,6 +14,7 @@
 library;
 
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
@@ -22,6 +23,7 @@ import 'package:media_kit_video/media_kit_video.dart';
 
 import '../api/contracts.dart';
 import '../api/models.dart';
+import 'anime4k_shader_store.dart';
 
 /// Creates the package default backend without exposing MediaKit publicly.
 VideoPlaybackBackend createMediaKitVideoPlaybackBackend({Uri? proxyUri}) =>
@@ -50,6 +52,7 @@ final class MediaKitVideoPlaybackBackend implements VideoPlaybackBackend {
   int _surfaceGeneration = 0;
   double _rate = 1;
   double _volume = 100;
+  VideoEnhancementMode _enhancementMode = VideoEnhancementMode.off;
   bool _disposed = false;
 
   VideoPlaybackBackendState get _value => _state.value;
@@ -92,6 +95,7 @@ final class MediaKitVideoPlaybackBackend implements VideoPlaybackBackend {
         duration: episode.durationHint ?? Duration.zero,
         rate: _rate,
         volume: _volume,
+        enhancementMode: _enhancementMode,
         buffering: true,
       ),
     );
@@ -146,6 +150,7 @@ final class MediaKitVideoPlaybackBackend implements VideoPlaybackBackend {
 
     try {
       await session.applyProxy();
+      await session.setEnhancementMode(_enhancementMode);
       _debugPlaybackRequest('open', episode);
       await session.player.open(
         Media(
@@ -404,6 +409,23 @@ final class MediaKitVideoPlaybackBackend implements VideoPlaybackBackend {
     _emit(_value.copyWith(volume: volume));
   }
 
+  /// Applies the Android/Windows Anime4K real-time shader profile.
+  Future<void> setEnhancementMode(VideoEnhancementMode mode) async {
+    _ensureActive();
+    if (mode != VideoEnhancementMode.off &&
+        !Platform.isAndroid &&
+        !Platform.isWindows) {
+      return;
+    }
+    final session = _session;
+    if (session != null) {
+      await session.setEnhancementMode(mode);
+      if (_disposed || !identical(_session, session)) return;
+    }
+    _enhancementMode = mode;
+    _emit(_value.copyWith(enhancementMode: mode));
+  }
+
   @override
   Future<void> dispose() {
     final pending = _disposeFuture;
@@ -468,6 +490,7 @@ final class _MediaKitEpisodeSession {
   late final Future<void> controllerReady;
   final List<StreamSubscription<Object?>> subscriptions =
       <StreamSubscription<Object?>>[];
+  Future<void> _enhancementQueue = Future<void>.value();
   final Completer<void> _closed = Completer<void>();
   Future<void>? _disposeFuture;
 
@@ -482,6 +505,26 @@ final class _MediaKitEpisodeSession {
     if (proxy == null || platform is! NativePlayer) return;
     await platform.setProperty('http-proxy', proxy.toString());
     await platform.setProperty('demuxer-lavf-o', 'http_proxy=$proxy');
+  }
+
+  Future<void> setEnhancementMode(VideoEnhancementMode mode) {
+    final operation = _enhancementQueue.then<void>(
+      (_) => _setEnhancementMode(mode),
+    );
+    _enhancementQueue = operation.then<void>(
+      (_) {},
+      onError: (Object _, StackTrace _) {},
+    );
+    return operation;
+  }
+
+  Future<void> _setEnhancementMode(VideoEnhancementMode mode) async {
+    final platform = player.platform;
+    if (platform is! NativePlayer) return;
+    final shaders = mode == VideoEnhancementMode.anime4kFast
+        ? await Anime4KShaderStore.paths()
+        : const <String>[];
+    await platform.setProperty('glsl-shaders', shaders.join(';'));
   }
 
   Future<void> dispose() {
@@ -502,6 +545,11 @@ final class _MediaKitEpisodeSession {
       );
     } finally {
       subscriptions.clear();
+      try {
+        await _enhancementQueue;
+      } on Object {
+        // Shader cleanup must not prevent native player disposal.
+      }
       await player.dispose();
     }
   }

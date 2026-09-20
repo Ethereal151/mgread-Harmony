@@ -65,7 +65,7 @@ class PairedDevicesSection extends StatelessWidget {
                   width: 5,
                   height: 32,
                   margin: const EdgeInsets.only(top: 2, right: AppSpacing.regular),
-                  decoration: BoxDecoration(color: tokens.dataSourceAccent, borderRadius: AppRadii.pill),
+                  decoration: BoxDecoration(color: tokens.accent, borderRadius: AppRadii.pill),
                 ),
                 Expanded(
                   child: Column(
@@ -110,12 +110,12 @@ class PairedDevicesSection extends StatelessWidget {
               const SizedBox(height: AppSpacing.regular),
               DecoratedBox(
                 decoration: BoxDecoration(
-                  color: state.onlineDeviceIds.contains(device.deviceId) ? const Color(0xFFFFFAF5) : tokens.mutedSurface,
+                  color: state.onlineDeviceIds.contains(device.deviceId)
+                      ? Color.alphaBlend(tokens.success.withValues(alpha: 0.08), tokens.surface)
+                      : tokens.mutedSurface,
                   borderRadius: const BorderRadius.all(Radius.circular(16)),
                   border: Border.all(
-                    color: state.onlineDeviceIds.contains(device.deviceId)
-                        ? tokens.dataSourceAccent.withValues(alpha: 0.38)
-                        : tokens.divider,
+                    color: state.onlineDeviceIds.contains(device.deviceId) ? tokens.success.withValues(alpha: 0.38) : tokens.divider,
                   ),
                 ),
                 child: Padding(
@@ -282,7 +282,7 @@ class _PairedDeviceTile extends StatelessWidget {
               PairedDevicePlatform.android || PairedDevicePlatform.ohos => Icons.phone_android_rounded,
               PairedDevicePlatform.windows || PairedDevicePlatform.macos => Icons.computer_rounded,
               PairedDevicePlatform.unknown => Icons.devices_other_rounded,
-            }, color: online ? tokens.dataSourceAccent : tokens.mutedText),
+            }, color: online ? tokens.success : tokens.mutedText),
           ),
         ),
         const SizedBox(width: AppSpacing.regular),
@@ -313,7 +313,7 @@ class _PairedDeviceTile extends StatelessWidget {
                       '对方 App ${appOffer!.version.displayVersion}${_appUpgradeAvailable ? ' · 有新版本' : ''}',
                       key: Key('device-sync-app-version-${device.deviceId}'),
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: _appUpgradeAvailable ? tokens.dataSourceAccent : tokens.mutedText,
+                        color: _appUpgradeAvailable ? tokens.accent : tokens.mutedText,
                         fontWeight: _appUpgradeAvailable ? FontWeight.w700 : null,
                       ),
                     ),
@@ -399,6 +399,7 @@ class _PairingPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final offer = state.pairingOffer;
     final colorScheme = Theme.of(context).colorScheme;
+    final AppThemeTokens tokens = AppThemeTokens.of(context);
     return DecoratedBox(
       decoration: BoxDecoration(color: Theme.of(context).colorScheme.surfaceContainerLow, borderRadius: AppRadii.detailControl),
       child: Padding(
@@ -460,7 +461,7 @@ class _PairingPanel extends StatelessWidget {
               ),
               const Text('请确认另一台设备显示相同数字，并在那边允许配对。'),
             ] else if (state.pairingPhase == DevicePairingPhase.completed) ...<Widget>[
-              const Icon(Icons.verified_rounded, color: Colors.green, size: 32),
+              Icon(Icons.verified_rounded, color: tokens.success, size: 32),
               const SizedBox(height: AppSpacing.compact),
               const Text('配对完成。以后两端打开即可自动同步。'),
             ] else if (state.pairingPhase == DevicePairingPhase.failed) ...<Widget>[

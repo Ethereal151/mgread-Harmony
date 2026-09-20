@@ -1,25 +1,47 @@
+// ignore_for_file: prefer_initializing_formals
+
 import 'dart:async';
 
 import 'package:mgread_plugin_runtime/mgread_plugin_runtime.dart';
 
 import 'package:mg_read/core/content_library/content_library.dart';
 import 'package:mg_read/core/diagnostics/diagnostics.dart';
+import 'package:mg_read/core/settings/settings.dart';
 import 'package:mg_read/features/discovery/application/persisted_source_detail.dart';
 import 'package:mg_read/features/discovery/application/source_content_gateway.dart';
 import 'package:mg_read/features/discovery/application/source_manga_projection.dart';
 
+typedef MangaShelfWarmOperation =
+    Future<int> Function({
+      required LibraryItem item,
+      required List<PluginChapterSummary> chapters,
+      required int followingChapterCount,
+      required void Function() onFirstImagePersisted,
+    });
+
 /// Warms the app-owned source data immediately after a book is added.
 ///
-/// Novel and manga share catalog, first-chapter and detail work. A validated
-/// first body or manga manifest is committed before a waiting reader continues.
+/// Novel and manga share catalog, configured chapter-body and detail work. A
+/// validated first novel body or first manga image is committed before a
+/// waiting reader continues; the remainder keeps warming in the background.
 /// Detail-page seeds bypass duplicate detail/catalog Runtime calls while
 /// preserving the same persistence path. Audio and video are intentionally
 /// outside this reader-owned pipeline.
 final class ContentLibrarySourcePrefetcher {
-  ContentLibrarySourcePrefetcher(this._library, this._gateway, {this._diagnostics});
+  ContentLibrarySourcePrefetcher(
+    this._library,
+    this._gateway, {
+    AppSettingsManager? settings,
+    MangaShelfWarmOperation? mangaWarm,
+    DiagnosticsManager? diagnostics,
+  }) : _settings = settings,
+       _mangaWarm = mangaWarm,
+       _diagnostics = diagnostics;
 
   final ContentLibrary _library;
   final SourceContentGateway _gateway;
+  final AppSettingsManager? _settings;
+  final MangaShelfWarmOperation? _mangaWarm;
   final DiagnosticsManager? _diagnostics;
   final Map<String, Future<void>> _active = <String, Future<void>>{};
   final Map<String, Completer<void>> _readable = <String, Completer<void>>{};
@@ -117,24 +139,42 @@ final class ContentLibrarySourcePrefetcher {
           if (content.contentKind != PluginContentKind.novel || content.text == null || content.text!.isEmpty) {
             throw StateError('Source first chapter is not readable novel content.');
           }
-          final persistence = _library
-              .cacheNovelChapter(itemId: item.id, remoteChapterId: chapterId, text: content.text!)
-              .then<void>((_) {}, onError: (Object _, StackTrace stack) {});
+          final persistence = _library.cacheNovelChapter(itemId: item.id, remoteChapterId: chapterId, text: content.text!);
           final prepared = ContentLibraryPrefetchedNovelChapter(chapterId: chapterId, text: content.text!, persistence: persistence);
           _prepared[item.id.value] = prepared;
           unawaited(
-            persistence.whenComplete(() {
-              if (identical(_prepared[item.id.value], prepared)) _prepared.remove(item.id.value);
-            }),
+            persistence.then<void>(
+              (_) {
+                if (identical(_prepared[item.id.value], prepared)) _prepared.remove(item.id.value);
+              },
+              onError: (Object error, StackTrace stack) {
+                if (identical(_prepared[item.id.value], prepared)) _prepared.remove(item.id.value);
+              },
+            ),
           );
+          await persistence;
           cachedChapterCount = 1;
+          if (!readable.isCompleted) readable.complete();
+          cachedChapterCount += await _warmFollowingNovelChapters(item, source, catalogResult.items);
         case ContentKind.manga:
           final projection = projectSourceMangaChapter(content, chapterId);
           final session = await _library.openMangaReaderSession(item.id);
           final entry = await session?.itemByRemoteIdentity(chapterId);
           if (entry == null) throw StateError('Synchronized manga chapter is unavailable.');
           await _library.cacheMangaChapter(entryId: entry.id, pages: projection.descriptors);
-          cachedChapterCount = 1;
+          final mangaWarm = _mangaWarm;
+          if (mangaWarm == null) {
+            cachedChapterCount = 1;
+          } else {
+            cachedChapterCount = await mangaWarm(
+              item: item,
+              chapters: catalogResult.items,
+              followingChapterCount: _followingChapterCount,
+              onFirstImagePersisted: () {
+                if (!readable.isCompleted) readable.complete();
+              },
+            );
+          }
         case ContentKind.audio || ContentKind.video:
           throw StateError('Media does not use reader prefetch.');
       }
@@ -215,6 +255,34 @@ final class ContentLibrarySourcePrefetcher {
     } finally {
       _readable.remove(item.id.value);
     }
+  }
+
+  int get _followingChapterCount {
+    final settings = _settings;
+    if (settings == null || !settings.supports(AppSettingKeys.novelPreloadChapterCount)) {
+      return 0;
+    }
+    return settings.get(AppSettingKeys.novelPreloadChapterCount);
+  }
+
+  Future<int> _warmFollowingNovelChapters(LibraryItem item, LibraryItemSource source, List<PluginChapterSummary> chapters) async {
+    var cached = 0;
+    final int end = (1 + _followingChapterCount).clamp(1, chapters.length);
+    for (var index = 1; index < end; index++) {
+      final chapter = chapters[index];
+      try {
+        final content = await _gateway.getContent(pluginId: source.pluginId, id: source.remoteContentId, chapterId: chapter.id);
+        if (content.contentKind != PluginContentKind.novel || content.text == null || content.text!.isEmpty) {
+          continue;
+        }
+        await _library.cacheNovelChapter(itemId: item.id, remoteChapterId: chapter.id, text: content.text!);
+        cached++;
+      } on Object {
+        // Shelf warming is best effort per chapter. A later reader preload can
+        // retry one failed chapter without discarding the chapters already saved.
+      }
+    }
+    return cached;
   }
 
   Future<PluginContentDetail?> _loadDetail(LibraryItemSource source) async {

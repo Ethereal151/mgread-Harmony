@@ -168,6 +168,7 @@ class DiscoveryCarouselHeroCard extends StatelessWidget {
                     children: <Widget>[
                       DiscoveryBookCover(
                         title: data.title,
+                        contentKind: data.contentKind,
                         coverBytes: data.coverBytes,
                         remoteContentId: data.remoteContentId,
                         coverUrl: data.coverUrl,
@@ -306,6 +307,7 @@ class DiscoveryPopularBook extends StatelessWidget {
             children: <Widget>[
               DiscoveryBookCover(
                 title: data.title,
+                contentKind: data.contentKind,
                 variant: data.coverVariant,
                 width: AppSpacing.discoveryPopularCoverWidth,
                 height: AppSpacing.discoveryPopularCoverHeight,
@@ -400,6 +402,7 @@ class DiscoveryRankingRow extends StatelessWidget {
           children: <Widget>[
             DiscoveryBookCover(
               title: data.title,
+              contentKind: data.contentKind,
               variant: data.coverVariant,
               width: AppSpacing.discoveryRankCoverWidth,
               height: AppSpacing.discoveryRankCoverHeight,
@@ -735,6 +738,7 @@ class DiscoveryEditorsChoiceCard extends StatelessWidget {
                 children: <Widget>[
                   DiscoveryBookCover(
                     title: data.title,
+                    contentKind: data.contentKind,
                     variant: data.coverVariant,
                     width: AppSpacing.discoveryEditorCoverWidth,
                     height: AppSpacing.discoveryEditorCoverHeight,
@@ -765,15 +769,17 @@ class DiscoveryEditorsChoiceCard extends StatelessWidget {
                           ),
                           if (data.description != null) ...<Widget>[
                             const SizedBox(height: 4),
-                            Text(
-                              data.description!,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: theme.colorScheme.onSurface.withValues(alpha: 0.76),
-                                fontWeight: FontWeight.w400,
-                                height: 1.28,
-                                letterSpacing: 0,
+                            Flexible(
+                              child: Text(
+                                data.description!,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: theme.colorScheme.onSurface.withValues(alpha: 0.76),
+                                  fontWeight: FontWeight.w400,
+                                  height: 1.28,
+                                  letterSpacing: 0,
+                                ),
                               ),
                             ),
                           ],

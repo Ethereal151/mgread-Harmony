@@ -15,14 +15,18 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../api/controller.dart';
 import '../api/models.dart';
+import 'video_player_details_sheet.dart';
 import 'video_player_settings_sheet.dart';
 import 'video_player_visuals.dart';
 
 /// Package-private overlay for one video session.
 final class VideoPlayerChrome extends StatefulWidget {
   const VideoPlayerChrome({
+    required this.controller,
     required this.snapshot,
+    required this.activeEpisode,
     required this.reduceMotion,
     required this.seekPreviewPosition,
     required this.onExit,
@@ -30,6 +34,7 @@ final class VideoPlayerChrome extends StatefulWidget {
     required this.onSeekPreviewEnded,
     required this.onSeekPreviewCanceled,
     required this.onRate,
+    required this.onEnhancementMode,
     required this.onFit,
     required this.onEpisodes,
     required this.onFullscreen,
@@ -41,7 +46,9 @@ final class VideoPlayerChrome extends StatefulWidget {
     super.key,
   });
 
+  final VideoPlayerController controller;
   final VideoPlayerSnapshot snapshot;
+  final VideoEpisode? activeEpisode;
   final bool reduceMotion;
   final Duration? seekPreviewPosition;
   final VoidCallback onExit;
@@ -49,6 +56,7 @@ final class VideoPlayerChrome extends StatefulWidget {
   final ValueChanged<Duration> onSeekPreviewEnded;
   final VoidCallback onSeekPreviewCanceled;
   final Future<void> Function(double) onRate;
+  final Future<void> Function(VideoEnhancementMode) onEnhancementMode;
   final Future<void> Function() onFit;
   final VoidCallback onEpisodes;
   final ValueChanged<bool> onFullscreen;
@@ -101,6 +109,7 @@ final class _VideoPlayerChromeState extends State<VideoPlayerChrome> {
                       title: snapshot.title,
                       subtitle: _episodeLabel(snapshot),
                       fullscreen: snapshot.fullscreenRequested,
+                      onDetails: () => _showDetails(context),
                       onExit: widget.onExit,
                       onEpisodes: widget.onEpisodes,
                       onSettings: () => _showSettings(context),
@@ -118,12 +127,22 @@ final class _VideoPlayerChromeState extends State<VideoPlayerChrome> {
     );
   }
 
+  void _showDetails(BuildContext context) {
+    widget.onInteractionStart();
+    showVideoDetailsSheet(
+      context,
+      controller: widget.controller,
+      activeEpisode: widget.activeEpisode,
+    ).whenComplete(widget.onInteractionEnd);
+  }
+
   void _showSettings(BuildContext context) {
     widget.onInteractionStart();
     showVideoPlayerSettingsSheet(
       context: context,
       snapshot: widget.snapshot,
       onRate: widget.onRate,
+      onEnhancementMode: widget.onEnhancementMode,
       onFit: widget.onFit,
       onPreviousEpisode: widget.onPreviousEpisode,
       onNextEpisode: widget.onNextEpisode,
@@ -246,6 +265,7 @@ final class _TopBar extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.fullscreen,
+    required this.onDetails,
     required this.onExit,
     required this.onEpisodes,
     required this.onSettings,
@@ -255,6 +275,7 @@ final class _TopBar extends StatelessWidget {
   final String title;
   final String subtitle;
   final bool fullscreen;
+  final VoidCallback onDetails;
   final VoidCallback onExit;
   final VoidCallback onEpisodes;
   final VoidCallback onSettings;
@@ -301,6 +322,16 @@ final class _TopBar extends StatelessWidget {
               ),
           ],
         ),
+      ),
+      IconButton(
+        key: const Key('video-player-details'),
+        tooltip: '视频详情',
+        onPressed: onDetails,
+        style: IconButton.styleFrom(
+          foregroundColor: videoPlayerForeground,
+          visualDensity: VisualDensity.compact,
+        ),
+        icon: const Icon(Icons.info_outline_rounded, size: 21),
       ),
       IconButton(
         key: const Key('video-player-episodes'),

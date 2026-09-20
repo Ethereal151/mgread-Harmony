@@ -229,9 +229,14 @@ function collectionResponse(id, title, request, values, page) {
     return frozen({ kind: 'document', document: { components: [{ type: 'section', id: `${id}:section`, title, subtitle: null, icon: 'video', children: [{ type: 'contentCollection', id, layout: 'coverGrid', items, continuation }] }] } });
 }
 function parseListings(html, mode) {
-    const blocks = mode === 'search' ? html.match(/<[^>]*class=["'][^"']*module-search-item[^"']*["'][^>]*>[\s\S]*?<\/[^>]+>/giu) ?? [] : html.match(/<[^>]*class=["'][^"']*module-item[^"']*["'][^>]*>[\s\S]*?<\/[^>]+>/giu) ?? [];
+    const blocks = blocksByClass(html, mode === 'search' ? 'module-search-item' : 'module-item');
     const values = blocks.flatMap((block) => listingFromHtml(block));
     return [...new Map(values.map((value) => [value.id, value])).values()];
+}
+function blocksByClass(html, className) {
+    const starts = [...html.matchAll(/<div\b[^>]*class=["']([^"']+)["'][^>]*>/giu)]
+        .filter((match) => match[1]?.split(/\s+/u).includes(className));
+    return starts.map((match, index) => html.slice(match.index, starts[index + 1]?.index ?? html.length));
 }
 function listingFromHtml(html) {
     const href = attribute(html, /<a\b[^>]*href=["']([^"']*voddetail[^"']*)["'][^>]*>/iu) || attribute(html, /<a\b[^>]*href=["']([^"']+)["'][^>]*>/iu);

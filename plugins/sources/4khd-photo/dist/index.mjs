@@ -1,22 +1,25 @@
-const base = 'https://feza.uuss.uk', headers = Object.freeze({ Accept: 'text/html,application/xhtml+xml,application/json,*/*', 'Accept-Language': 'zh-CN,zh;q=0.9', 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36', Referer: `${base}/` }), categories = Object.freeze([['recent', 'Recently Updated', '/'], ['popular', 'Popular', '/popular/'], ['cosplay', 'Cosplay', '/cosplay/'], ['ai', 'AI Enhanced', '/tag/ai-enhanced/'], ['aigirl', 'AIGirl', '/tag/aigirl/'], ['coser', 'Coser', '/tag/coser/'], ['rosi', 'Rosi', '/tag/rosi/'], ['youxi', 'Youxi', '/tag/youxi/']]);
-let context;
-export async function activate(next) { context = next; next.log.info('source_activated'); }
+const bootstrapBase = 'https://feza.uuss.uk', categories = Object.freeze([['recent', 'Recently Updated', '/'], ['popular', 'Popular', '/popular/'], ['cosplay', 'Cosplay', '/cosplay/'], ['ai', 'AI Enhanced', '/tag/ai-enhanced/'], ['aigirl', 'AIGirl', '/tag/aigirl/'], ['coser', 'Coser', '/tag/coser/'], ['rosi', 'Rosi', '/tag/rosi/'], ['youxi', 'Youxi', '/tag/youxi/']]);
+let context, base = bootstrapBase, originPromise;
+export async function activate(next) { context = next; base = bootstrapBase; originPromise = undefined; next.log.info('source_activated'); }
 export async function search(request) { const query = request.query.trim(); if (query === '')
-    return frozen({ items: [], nextCursor: null, totalCount: 0 }); const page = cursorPage(request.cursor, 'search'), size = clamp(request.pageSize), url = `${base}/search/${encodeURIComponent(query)}/${page > 1 ? `page/${page}/` : ''}`, html = await fetchText(url), parsed = parseList(html); const values = parsed.length > 0 ? parsed.slice(0, size) : (await fetchPosts(page, size, query)).slice(0, size); return frozen({ items: values, nextCursor: values.length >= size ? `search:${page + 1}` : null, totalCount: null }); }
+    return frozen({ items: [], nextCursor: null, totalCount: 0 }); await ensureBase(); const page = cursorPage(request.cursor, 'search'), size = clamp(request.pageSize), url = `${base}/search/${encodeURIComponent(query)}/${page > 1 ? `page/${page}/` : ''}`; let parsed = []; try {
+    parsed = parseList(await fetchText(url));
+}
+catch { } const values = parsed.length > 0 ? parsed.slice(0, size) : (await fetchPosts(page, size, query)).slice(0, size); return frozen({ items: values, nextCursor: values.length >= size ? `search:${page + 1}` : null, totalCount: null }); }
 export async function searchSuggestions(_request) { return frozen({ items: [], nextCursor: null }); }
 export async function discover(request) { if (request.target === null) {
     if (request.cursor !== null || request.collectionId !== null)
         throw new Error('Initial discovery request is invalid.');
     return frozen({ kind: 'document', document: { components: [{ type: 'section', id: 'photo-categories', title: '4KHD', subtitle: '写真与图集分类', icon: 'manga', children: [{ type: 'categoryCollection', id: 'photo-category-list', layout: 'chips', categories: categories.map(([id, title]) => ({ id, title, target: `category:${id}`, count: null, url: null, icon: 'manga' })) }] }] } });
-} const category = categories.find(([id]) => request.target === `category:${id}`); if (category === undefined)
+} await ensureBase(); const category = categories.find(([id]) => request.target === `category:${id}`); if (category === undefined)
     throw new Error('Discovery target is invalid.'); const page = cursorPage(request.cursor, request.target), size = clamp(request.pageSize), pagePath = page === 1 ? category[2] : category[2] === '/' ? `/page/${page}/` : `${category[2]}page/${page}/`, html = await fetchText(`${base}${pagePath}`), parsed = parseList(html), values = parsed.length > 0 ? parsed.slice(0, size) : (await fetchPosts(page, size, '')).slice(0, size), collectionId = `manga:${category[0]}`, items = values.map(content => frozen({ content, rank: null, metric: null, recommendation: null })), continuation = values.length >= size ? frozen({ target: request.target, cursor: `${request.target}:${page + 1}` }) : null; if (request.collectionId !== null) {
     if (request.collectionId !== collectionId)
         throw new Error('Discovery collection is invalid.');
     return frozen({ kind: 'append', collectionId, items, continuation });
 } return frozen({ kind: 'document', document: { components: [{ type: 'section', id: `${collectionId}:section`, title: category[1], subtitle: null, icon: 'manga', children: [{ type: 'contentCollection', id: collectionId, layout: 'coverGrid', items, continuation }] }] } }); }
-export async function getDetail(request) { const path = contentPath(request.id), url = `${base}${path}`, html = await fetchText(url), title = decode(strip(firstCapture(html, /<title[^>]*>([^<]+)<\/title>/iu)).replace(/\s*-\s*4KHD\s*$/iu, '').trim()) || 'Photo', cover = firstCapture(html, /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/iu) || firstCapture(html, /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/iu), description = decode(firstCapture(html, /<meta[^>]+(?:property=["']og:description["']|name=["']description["'])[^>]+content=["']([^"']+)["']/iu)), item = summary(path, title, cover); return frozen({ ...item, description: description || null, aliases: [], catalogUrl: url }); }
+export async function getDetail(request) { await ensureBase(); const path = contentPath(request.id), url = `${base}${path}`, html = await fetchText(url), title = decode(strip(firstCapture(html, /<title[^>]*>([^<]+)<\/title>/iu)).replace(/\s*-\s*4KHD\s*$/iu, '').trim()) || 'Photo', cover = firstCapture(html, /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/iu) || firstCapture(html, /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/iu) || firstCapture(html, /<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/iu), description = decode(firstCapture(html, /<meta[^>]+(?:property=["']og:description["']|name=["']description["'])[^>]+content=["']([^"']+)["']/iu)), item = summary(path, title, cover); return frozen({ ...item, description: description || null, aliases: [], catalogUrl: url }); }
 export async function getChapters(request) { const path = contentPath(request.id), chapter = frozen({ id: `manga:${encodeKey(path)}:main`, title: 'Full Album', order: 0, url: null, volumeTitle: 'Album', wordCount: null, updatedAt: null, isLocked: null, attributes: [] }); return frozen({ items: [chapter], groups: [frozen({ id: `group:manga:${encodeKey(path)}`, title: 'Album', order: 0, episodes: [chapter] })] }); }
-export async function getContent(request) { const path = contentPath(request.id); if (request.chapterId !== `manga:${encodeKey(path)}:main`)
+export async function getContent(request) { await ensureBase(); const path = contentPath(request.id); if (request.chapterId !== `manga:${encodeKey(path)}:main`)
     throw new Error('Chapter ID is invalid.'); const seenPages = new Set(), seenImages = new Set(), images = []; let current = `${base}${path}`; for (let page = 0; page < 40 && current !== '' && !seenPages.has(current); page += 1) {
     seenPages.add(current);
     const html = await fetchText(current);
@@ -30,7 +33,7 @@ export async function getContent(request) { const path = contentPath(request.id)
 } if (images.length === 0)
     throw new Error('Album images are unavailable.'); const pages = images.map((upstream, index) => frozen({ id: `page:${index + 1}`, index, url: requireContext().resource.proxy({ kind: 'image', url: upstream, headers: { Referer: `${base}${path}` } }), mimeType: imageMime(upstream), width: null, height: null })); return frozen({ chapterId: request.chapterId, contentKind: 'manga', title: null, updatedAt: null, text: null, pages: Object.freeze(pages) }); }
 async function fetchPosts(page, size, query) { const url = new URL(`${base}/wp-json/wp/v2/posts`); url.searchParams.set('per_page', String(size)); url.searchParams.set('page', String(page)); if (query !== '')
-    url.searchParams.set('search', query); const response = await requireContext().http.fetch(url, { headers }); if (!response.ok)
+    url.searchParams.set('search', query); const response = await requireContext().http.fetch(url, { headers: requestHeaders(base) }); if (!response.ok)
     return []; let value; try {
     value = await response.json();
 }
@@ -39,16 +42,52 @@ catch {
 } if (!Array.isArray(value))
     return []; return value.filter(isObject).map(post => { const path = normalizePath(text(post.link)); if (path === null)
     return null; const title = decode(strip(text(object(post.title).rendered))) || `Photo ${text(post.id)}`, cover = text(post.jetpack_featured_media_url); return summary(path, title, cover); }).filter(notNull); }
-async function fetchText(url) { const response = await requireContext().http.fetch(url, { headers }); if (!response.ok)
+async function ensureBase() { originPromise ??= resolveBase(); base = await originPromise; }
+async function resolveBase() { const probePath = '/wp-json/wp/v2/posts?per_page=1&page=1', bootstrap = await requireContext().http.fetch(`${bootstrapBase}${probePath}`, { headers: requestHeaders(bootstrapBase) }); if (!bootstrap.ok)
+    throw new Error('Source origin request failed.'); const body = await bootstrap.text(); if (isPosts(body))
+    return bootstrapBase; const sites = firstCapture(body, /\bconst\s+sites\s*=\s*\[([\s\S]*?)\]/u), candidates = [...sites.matchAll(/["'](https:\/\/[a-z0-9.-]+)["']/giu)].map(match => match[1] ?? '').slice(0, 8), seen = new Set(); for (const candidate of candidates) {
+    let origin;
+    try {
+        origin = new URL(candidate).origin;
+    }
+    catch {
+        continue;
+    }
+    if (seen.has(origin))
+        continue;
+    seen.add(origin);
+    try {
+        const response = await requireContext().http.fetch(`${origin}${probePath}`, { headers: requestHeaders(origin) });
+        if (response.ok && isPosts(await response.text()))
+            return origin;
+    }
+    catch { }
+} throw new Error('Source origin is unavailable.'); }
+function isPosts(value) { try {
+    return Array.isArray(JSON.parse(value));
+}
+catch {
+    return false;
+} }
+function requestHeaders(origin) { return { Accept: 'text/html,application/xhtml+xml,application/json,*/*', 'Accept-Language': 'zh-CN,zh;q=0.9', 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36', Referer: `${origin}/` }; }
+async function fetchText(url) { const response = await requireContext().http.fetch(url, { headers: requestHeaders(base) }); if (!response.ok)
     throw new Error('Source request failed.'); return response.text(); }
-function parseList(html) { const values = new Map(); for (const match of html.matchAll(/<a\b([^>]*)href=["']([^"']*\/(?:content|album|pic)\/[^"']+)["']([^>]*)>([\s\S]*?)<\/a>/giu)) {
+function parseList(html) { const values = new Map(); for (const row of html.matchAll(/<li\b[^>]*class=["'][^"']*\bpost-\d+\b[^"']*["'][^>]*>([\s\S]*?)<\/li>/giu)) {
+    const body = row[1] ?? '', path = normalizePath(firstCapture(body, /<a\b[^>]*href=["']([^"']*\/(?:content|album|pic)\/[^"']+)["']/iu));
+    if (path === null || values.has(path))
+        continue;
+    const image = /<img\b[^>]*>/iu.exec(body)?.[0] ?? '', title = strip(firstCapture(body, /<h2[^>]*>([\s\S]*?)<\/h2>/iu));
+    if (title === '')
+        continue;
+    values.set(path, summary(path, decode(title), attribute(image, 'src') || attribute(image, 'data-src') || attribute(image, 'data-lazy-src')));
+} for (const match of html.matchAll(/<a\b([^>]*)href=["']([^"']*\/(?:content|album|pic)\/[^"']+)["']([^>]*)>([\s\S]*?)<\/a>/giu)) {
     const path = normalizePath(match[2] ?? '');
     if (path === null || values.has(path))
         continue;
     const body = match[4] ?? '', image = /<img\b[^>]*>/iu.exec(body)?.[0] ?? '', title = strip(firstCapture(body, /<h2[^>]*>([\s\S]*?)<\/h2>/iu)) || attribute(`${match[1] ?? ''} ${match[3] ?? ''}`, 'title') || strip(body);
     if (title === '')
         continue;
-    values.set(path, summary(path, decode(title), attribute(image, 'src')));
+    values.set(path, summary(path, decode(title), attribute(image, 'src') || attribute(image, 'data-src') || attribute(image, 'data-lazy-src')));
 } return [...values.values()]; }
 function extractImages(html) { const end = html.indexOf('id="basicE"'), start = html.indexOf('<p><a href="https://i'), gallery = start >= 0 ? html.slice(start, end >= 0 ? end : undefined) : html, values = []; for (const match of gallery.matchAll(/<a[^>]+href=["'](https:\/\/i\d+\.wp\.com\/pic\.4khd\.com\/[^?"'\s]+)["'][^>]*>\s*<img/giu))
     if (match[1])

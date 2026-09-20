@@ -9,10 +9,17 @@
 library;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:novel_reader_ui/novel_reader_ui.dart';
 
 /// Refreshes one persisted source-bound bookshelf item.
-abstract interface class LibraryBookRefresher {
+abstract interface class LibraryBookRefresher implements ReaderBookRefreshCapability {
+  @override
   Future<void> refresh(String bookId);
+}
+
+/// Reports whether a refresh appended one or more catalog entries.
+abstract interface class LibraryBookRefreshReporter {
+  Future<bool> refreshAndReport(String bookId);
 }
 
 /// Provides the refresh capability only in an app composition with persistence.

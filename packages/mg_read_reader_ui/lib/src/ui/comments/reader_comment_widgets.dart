@@ -122,6 +122,7 @@ Future<void> showReaderCommentsSheet({
   required ReaderCommentFeed feed,
   required ReaderCommentTarget target,
   required ReaderPalette palette,
+  ReaderFontPreset font = ReaderFontPreset.system,
   String title = ReaderCommentStrings.title,
   ValueChanged<Object>? onLoadError,
   ValueChanged<BuildContext>? onSheetBuilt,
@@ -132,12 +133,15 @@ Future<void> showReaderCommentsSheet({
     backgroundColor: Colors.transparent,
     builder: (BuildContext context) {
       onSheetBuilt?.call(context);
-      return ReaderCommentsSheet(
-        feed: feed,
-        target: target,
-        palette: palette,
-        title: title,
-        onLoadError: onLoadError,
+      return Theme(
+        data: readerThemeData(palette, font: font),
+        child: ReaderCommentsSheet(
+          feed: feed,
+          target: target,
+          palette: palette,
+          title: title,
+          onLoadError: onLoadError,
+        ),
       );
     },
   );

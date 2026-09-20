@@ -25,6 +25,24 @@ enum ReaderThemePreset {
 
   /// A neutral charcoal palette with subdued contrast.
   charcoal,
+
+  /// Pure black and white for OLED displays and maximum dark-room contrast.
+  oled,
+
+  /// A deep indigo palette with a soft violet accent.
+  midnight,
+
+  /// A deep green palette with a low-glare natural tone.
+  forestNight,
+
+  /// A cool, pale lavender reading palette.
+  lavenderMist,
+
+  /// A warm blush palette with rose accents.
+  roseTea,
+
+  /// A pale teal palette with a fresh, low-saturation surface.
+  seaGlass,
 }
 
 /// Built-in, reader-owned background treatments.
@@ -65,6 +83,15 @@ enum ReaderFontPreset {
 
   /// The platform serif family and its Chinese fallback chain.
   serif,
+}
+
+/// Selects whether the host system or the reader controls display brightness.
+enum ReaderBrightnessMode {
+  /// Leave the display brightness under the operating system's control.
+  system,
+
+  /// Apply [TextReaderPreferences.brightness] while reading.
+  manual,
 }
 
 @immutable
@@ -258,6 +285,7 @@ class TextReaderPreferences {
   const TextReaderPreferences({
     this.theme = ReaderThemePreset.day,
     this.lastNonNightTheme = ReaderThemePreset.day,
+    this.lastNightTheme = ReaderThemePreset.night,
     this.background = ReaderBackgroundPreset.plain,
     this.font = ReaderFontPreset.system,
     this.customFontId,
@@ -271,8 +299,10 @@ class TextReaderPreferences {
     this.topPadding = 8,
     this.bottomPadding = 32,
     this.brightness = 1,
+    this.brightnessMode = ReaderBrightnessMode.system,
     this.navigationMode = ReaderNavigationMode.horizontalPages,
     this.singleHandMode = false,
+    this.pageTurnShortcuts = true,
     this.keepScreenOn = true,
     this.pageAnimation = ReaderPageAnimation.slide,
     this.immersiveMode = false,
@@ -287,11 +317,19 @@ class TextReaderPreferences {
   /// Built-in reading color scheme.
   final ReaderThemePreset theme;
 
-  /// The last non-night color scheme, restored when night mode is closed.
+  /// The last day color scheme, restored when night mode is closed.
+  ///
+  /// The name is retained for persisted/API compatibility. This is a global
+  /// reader preference rather than a book-scoped value. Night presets are
+  /// invalid here and normalize to [ReaderThemePreset.day].
+  final ReaderThemePreset lastNonNightTheme;
+
+  /// The last night color scheme, restored when day mode is closed.
   ///
   /// This is a global reader preference rather than a book-scoped value.
-  /// Night presets are invalid here and normalize to [ReaderThemePreset.day].
-  final ReaderThemePreset lastNonNightTheme;
+  /// Day presets are invalid here and normalize to
+  /// [ReaderThemePreset.night].
+  final ReaderThemePreset lastNightTheme;
 
   /// Built-in background treatment applied behind the reading surface.
   final ReaderBackgroundPreset background;
@@ -340,8 +378,11 @@ class TextReaderPreferences {
   /// beneath the footer.
   final double bottomPadding;
 
-  /// Reader overlay brightness from 0.25 to 1.0.
+  /// Application screen brightness used by manual mode, from 0.05 to 1.0.
   final double brightness;
+
+  /// Whether application screen brightness follows the system or this reader.
+  final ReaderBrightnessMode brightnessMode;
 
   /// Horizontal pagination or vertical scrolling.
   final ReaderNavigationMode navigationMode;
@@ -351,6 +392,12 @@ class TextReaderPreferences {
   /// This affects horizontal reading tap zones only. Swipe direction and
   /// vertical scrolling retain their normal behavior.
   final bool singleHandMode;
+
+  /// Whether volume keys and common hardware keyboard shortcuts turn pages.
+  ///
+  /// The default preserves the reader's existing keyboard behavior while
+  /// adding volume-key support on hosts that expose it.
+  final bool pageTurnShortcuts;
 
   /// Requests display-awake while an active reader is in the foreground.
   final bool keepScreenOn;
@@ -390,6 +437,11 @@ class TextReaderPreferences {
                 ? fallback.lastNonNightTheme
                 : lastNonNightTheme)
           : theme,
+      lastNightTheme: _isNightThemePreset(theme)
+          ? theme
+          : (_isNightThemePreset(lastNightTheme)
+                ? lastNightTheme
+                : fallback.lastNightTheme),
       customFontId: customFontId?.trim(),
       clearCustomFontId: customFontId?.trim().isEmpty ?? false,
       fontSize: fontSize.isFinite
@@ -411,6 +463,7 @@ class TextReaderPreferences {
         2.1,
       ], fallback: fallback.lineHeight),
       paragraphSpacing: _nearest(paragraphSpacing, const <double>[
+        0,
         8,
         14,
         22,
@@ -421,24 +474,28 @@ class TextReaderPreferences {
         2,
       ], fallback: fallback.firstLineIndent.toDouble()).round(),
       horizontalPadding: _nearest(horizontalPadding, const <double>[
+        0,
         16,
         24,
         40,
       ], fallback: fallback.horizontalPadding),
       topPadding: _nearest(topPadding, const <double>[
+        0,
         8,
         24,
         40,
         64,
       ], fallback: fallback.topPadding),
       bottomPadding: _nearest(bottomPadding, const <double>[
+        0,
         8,
         24,
+        32,
         40,
         64,
       ], fallback: fallback.bottomPadding),
       brightness: brightness.isFinite
-          ? brightness.clamp(0.25, 1).toDouble()
+          ? brightness.clamp(0.05, 1).toDouble()
           : fallback.brightness,
     );
   }
@@ -461,6 +518,7 @@ class TextReaderPreferences {
   TextReaderPreferences copyWith({
     ReaderThemePreset? theme,
     ReaderThemePreset? lastNonNightTheme,
+    ReaderThemePreset? lastNightTheme,
     ReaderBackgroundPreset? background,
     ReaderFontPreset? font,
     String? customFontId,
@@ -475,8 +533,10 @@ class TextReaderPreferences {
     double? topPadding,
     double? bottomPadding,
     double? brightness,
+    ReaderBrightnessMode? brightnessMode,
     ReaderNavigationMode? navigationMode,
     bool? singleHandMode,
+    bool? pageTurnShortcuts,
     bool? keepScreenOn,
     ReaderPageAnimation? pageAnimation,
     bool? immersiveMode,
@@ -487,6 +547,7 @@ class TextReaderPreferences {
     return TextReaderPreferences(
       theme: theme ?? this.theme,
       lastNonNightTheme: lastNonNightTheme ?? this.lastNonNightTheme,
+      lastNightTheme: lastNightTheme ?? this.lastNightTheme,
       background: background ?? this.background,
       font: font ?? this.font,
       customFontId: clearCustomFontId
@@ -502,8 +563,10 @@ class TextReaderPreferences {
       topPadding: topPadding ?? this.topPadding,
       bottomPadding: bottomPadding ?? this.bottomPadding,
       brightness: brightness ?? this.brightness,
+      brightnessMode: brightnessMode ?? this.brightnessMode,
       navigationMode: navigationMode ?? this.navigationMode,
       singleHandMode: singleHandMode ?? this.singleHandMode,
+      pageTurnShortcuts: pageTurnShortcuts ?? this.pageTurnShortcuts,
       keepScreenOn: keepScreenOn ?? this.keepScreenOn,
       pageAnimation: pageAnimation ?? this.pageAnimation,
       immersiveMode: immersiveMode ?? this.immersiveMode,
@@ -519,6 +582,7 @@ class TextReaderPreferences {
       other is TextReaderPreferences &&
       theme == other.theme &&
       lastNonNightTheme == other.lastNonNightTheme &&
+      lastNightTheme == other.lastNightTheme &&
       background == other.background &&
       font == other.font &&
       customFontId == other.customFontId &&
@@ -532,8 +596,10 @@ class TextReaderPreferences {
       topPadding == other.topPadding &&
       bottomPadding == other.bottomPadding &&
       brightness == other.brightness &&
+      brightnessMode == other.brightnessMode &&
       navigationMode == other.navigationMode &&
       singleHandMode == other.singleHandMode &&
+      pageTurnShortcuts == other.pageTurnShortcuts &&
       keepScreenOn == other.keepScreenOn &&
       pageAnimation == other.pageAnimation &&
       immersiveMode == other.immersiveMode &&
@@ -545,6 +611,7 @@ class TextReaderPreferences {
   int get hashCode => Object.hashAll(<Object?>[
     theme,
     lastNonNightTheme,
+    lastNightTheme,
     background,
     font,
     customFontId,
@@ -558,8 +625,10 @@ class TextReaderPreferences {
     topPadding,
     bottomPadding,
     brightness,
+    brightnessMode,
     navigationMode,
     singleHandMode,
+    pageTurnShortcuts,
     keepScreenOn,
     pageAnimation,
     immersiveMode,
@@ -572,7 +641,10 @@ class TextReaderPreferences {
 bool _isNightThemePreset(ReaderThemePreset theme) =>
     theme == ReaderThemePreset.night ||
     theme == ReaderThemePreset.deepNight ||
-    theme == ReaderThemePreset.charcoal;
+    theme == ReaderThemePreset.charcoal ||
+    theme == ReaderThemePreset.oled ||
+    theme == ReaderThemePreset.midnight ||
+    theme == ReaderThemePreset.forestNight;
 
 @immutable
 /// A recoverable reader error suitable for host diagnostics.

@@ -1,5 +1,11 @@
 ## Unreleased
 
+* Text reader book details now accept host-resolved cover bytes, render them
+  from memory without re-requesting expiring source URLs, and use a responsive
+  card layout with clearer metadata, statistics, source, and fallback states.
+* Expanded text-reader color presets with OLED pure black-and-white, indigo,
+  forest, lavender, rose, and sea-glass themes; new dark presets participate
+  in night-mode restoration and existing enum values remain unchanged.
 * Comic readers now show the shared source subtitle strip below their dark top bar; text and comic readers reuse one structure while retaining distinct palette styles. `ComicBookInfo` also accepts an optional source URL for the explicit external-link action.
 * Text readers now extend the configured fast chapter preload window with a foreground-only slow preload window capped at ten times the setting. It loads at most one distant chapter every random 10-30 seconds, yields to active/fast requests, shares in-flight deduplication, and does not retain distant bodies in reader memory.
 * Added a host-configurable 0-5 chapter text preload window. Following chapter bodies load sequentially with generation checks and bounded memory retention, while only the immediately adjacent chapter is pre-paginated.

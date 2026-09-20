@@ -53,6 +53,30 @@ final class VideoPlayerHostBridge {
     }
   }
 
+  Future<double?> readSystemVolume() async {
+    final observer = _observer;
+    if (observer == null) return null;
+    try {
+      return (await Future<double?>.sync(
+        observer.onSystemVolumeReadRequested,
+      ))?.clamp(0, 100).toDouble();
+    } on Object {
+      return null;
+    }
+  }
+
+  Future<void> setSystemVolume(double volume) async {
+    final observer = _observer;
+    if (observer == null) return;
+    try {
+      await Future<void>.sync(
+        () => observer.onSystemVolumeRequested(volume.clamp(0, 100).toDouble()),
+      );
+    } on Object {
+      // Optional platform feedback must not replace valid playback state.
+    }
+  }
+
   void dispose() => reportPlaybackActive(false);
 
   void _notifyPlaybackActive(VideoPlayerObserver? observer, bool active) {

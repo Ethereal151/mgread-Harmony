@@ -3,8 +3,8 @@
  *
  * Owns the public site routes, stable video/line/episode identities, source-priority
  * line ordering, HTML parsing and MCUE player decryption. This upstream rejects
- * proxies, so both source requests and Runtime-proxied media explicitly use direct
- * Runtime routing; media bytes still remain in Runtime's resource proxy.
+ * proxies, so source requests and Runtime-proxied covers/media explicitly use
+ * direct Runtime routing; resource bytes still remain in Runtime's resource proxy.
  */
 import { createDecipheriv, createHash } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -232,7 +232,7 @@ function summary(id, title, cover, latestChapterTitle, description = null, tags 
         coverOrientation: 'portrait',
         author: null,
         url: detailUrl(id),
-        coverUrl: absolute(cover),
+        coverUrl: proxyCover(cover),
         description,
         language: 'zh-CN',
         status: 'unknown',
@@ -289,10 +289,16 @@ function parseGroups(html, id) {
 }
 function parseGroupTitles(html) {
     const titles = [];
-    for (const match of html.matchAll(/<div\b([^>]*class=["'][^"']*module-tab-item[^"']*["'][^>]*)>([\s\S]*?)<\/div>/giu)) {
-        const value = attribute(match[1] ?? '', 'data-dropdown-value') ||
-            firstText(match[2] ?? '', /<span\b[^>]*>([\s\S]*?)<\/span>/iu) ||
-            strip(match[2] ?? '').replace(/\d+$/u, '').trim();
+    for (const match of html.matchAll(/<div\b([^>]*)>/giu)) {
+        const attributes = match[1] ?? '';
+        if (!attribute(attributes, 'class').split(/\s+/u).includes('module-tab-item'))
+            continue;
+        const bodyStart = (match.index ?? 0) + match[0].length;
+        const bodyEnd = html.indexOf('</div>', bodyStart);
+        const body = bodyEnd < 0 ? '' : html.slice(bodyStart, bodyEnd);
+        const value = attribute(attributes, 'data-dropdown-value') ||
+            firstText(body, /<span\b[^>]*>([\s\S]*?)<\/span>/iu) ||
+            strip(body).replace(/\d+$/u, '').trim();
         if (value !== '' && value.length <= 80)
             titles.push(value);
     }
@@ -470,6 +476,17 @@ function absolute(value) {
     catch {
         return null;
     }
+}
+function proxyCover(value) {
+    const url = absolute(value);
+    if (url === null || !safeMediaUrl(url))
+        return null;
+    return requireContext().resource.proxy({
+        kind: 'image',
+        url,
+        headers: { Accept: 'image/*', Referer: `${base}/`, 'User-Agent': pageHeaders['User-Agent'] },
+        proxyMode: directProxyMode,
+    });
 }
 function cleanTitle(value) {
     const title = strip(value);

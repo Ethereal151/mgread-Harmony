@@ -43,6 +43,31 @@ void main() {
     expect(manager.status.documents[AppSettingKeys.appearanceDocument.kind]?.lastErrorCode, 'invalid_setting_value');
   });
 
+  test('cover metadata mode defaults below the cover and accepts inside-cover mode', () async {
+    final store = FakeSettingsStore();
+    final manager = AppSettingsManager(
+      store: store,
+      registry: AppSettingKeys.registry,
+      policy: const SettingsPersistencePolicy(debounce: Duration.zero),
+    );
+    await manager.initialize();
+    addTearDown(manager.close);
+
+    expect(manager.get(AppSettingKeys.homeCoverMetadataMode), 'belowCover');
+    expect(
+      LibraryHomeCoverMetadataMode.fromSetting(manager.get(AppSettingKeys.homeCoverMetadataMode)),
+      LibraryHomeCoverMetadataMode.belowCover,
+    );
+
+    await manager.set(AppSettingKeys.homeCoverMetadataMode, LibraryHomeCoverMetadataMode.insideCover.settingValue);
+    await manager.flush();
+
+    expect(
+      LibraryHomeCoverMetadataMode.fromSetting(manager.get(AppSettingKeys.homeCoverMetadataMode)),
+      LibraryHomeCoverMetadataMode.insideCover,
+    );
+  });
+
   test('blurred cover book IDs survive manager reopen', () async {
     final store = FakeSettingsStore();
     final firstManager = AppSettingsManager(

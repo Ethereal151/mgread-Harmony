@@ -2,7 +2,112 @@ part of 'comic_reader_view.dart';
 
 // ignore_for_file: invalid_use_of_protected_member
 
+enum _ComicOverflowAction { refreshBook }
+
+extension _ComicReaderPageTurning on _ComicReaderViewState {
+  static const double _tapTurnZoneFraction = .25;
+  static const double _singleHandTurnZoneFraction = .3;
+
+  void _handleReadingSurfaceTap(TapUpDetails details) {
+    if (_preferences.pageTurnShortcuts) {
+      final int? direction = _tapPageTurnDirection(details);
+      if (direction != null) {
+        _scheduleScrollByViewport(direction);
+        return;
+      }
+    }
+    _setControlsVisible(!_controlsVisible);
+  }
+
+  int? _tapPageTurnDirection(TapUpDetails details) {
+    if (_preferences.singleHandMode) {
+      final double width = MediaQuery.sizeOf(context).width;
+      final double edgeZone = width * _singleHandTurnZoneFraction;
+      final double x = details.localPosition.dx;
+      if (x <= edgeZone || x >= width - edgeZone) return 1;
+      return null;
+    }
+    if (_preferences.pageTurnLayout == ComicPageTurnLayout.horizontal) {
+      final double width = MediaQuery.sizeOf(context).width;
+      final double edgeZone = width * _tapTurnZoneFraction;
+      final double x = details.localPosition.dx;
+      if (x <= edgeZone) return -1;
+      if (x >= width - edgeZone) return 1;
+      return null;
+    }
+    final double edgeZone = _viewportHeight * _tapTurnZoneFraction;
+    final double y = details.localPosition.dy;
+    if (y <= edgeZone) return -1;
+    if (y >= _viewportHeight - edgeZone) return 1;
+    return null;
+  }
+
+  void _scheduleScrollByViewport(int direction) {
+    // Let the ListView finish resolving the pointer-up gesture first. Without
+    // this deferral its zero-velocity ballistic activity can cancel the tap's
+    // programmatic scroll before it moves.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_disposed) return;
+      // Use one more frame so the Scrollable has fully left its pointer-up
+      // activity before animateTo takes ownership of the position.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!_disposed) _scrollByViewport(direction);
+      });
+      WidgetsBinding.instance.scheduleFrame();
+    });
+    WidgetsBinding.instance.scheduleFrame();
+  }
+
+  void _scrollByViewport(int direction, {bool animate = true}) {
+    _scrollBy(
+      direction * _viewportHeight * _preferences.pageTurnFraction,
+      animate: animate,
+    );
+  }
+
+  double get _pageTurnDistance =>
+      _viewportHeight * _preferences.pageTurnFraction;
+
+  void _scrollBy(double delta, {bool animate = true}) {
+    if (!_preferences.pageTurnShortcuts ||
+        !_foreground ||
+        _settingsVisible ||
+        _controlsVisible ||
+        _currentChapter == null ||
+        !_scrollController.hasClients) {
+      return;
+    }
+    final double target = (_scrollController.offset + delta).clamp(
+      0,
+      _scrollController.position.maxScrollExtent,
+    );
+    if (!animate || MediaQuery.disableAnimationsOf(context)) {
+      _scrollController.jumpTo(target);
+    } else {
+      unawaited(
+        _scrollController.animateTo(
+          target,
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOutCubic,
+        ),
+      );
+    }
+  }
+}
+
 extension _ComicReaderChrome on _ComicReaderViewState {
+  void _handleVolumeKey(ReaderVolumeKey key) {
+    if (!_preferences.pageTurnShortcuts ||
+        !_foreground ||
+        _settingsVisible ||
+        _controlsVisible ||
+        _currentChapter == null ||
+        !_scrollController.hasClients) {
+      return;
+    }
+    _scrollByViewport(key == ReaderVolumeKey.down ? 1 : -1);
+  }
+
   Widget _buildReadingSurface(ReaderPalette palette) {
     if (!_loading && _failure == null && _window.isEmpty) {
       return Center(
@@ -20,7 +125,7 @@ extension _ComicReaderChrome on _ComicReaderViewState {
       },
       child: GestureDetector(
         behavior: HitTestBehavior.translucent,
-        onTapUp: (_) => _setControlsVisible(!_controlsVisible),
+        onTapUp: _handleReadingSurfaceTap,
         child: ScrollConfiguration(
           behavior: ScrollConfiguration.of(context).copyWith(
             dragDevices: <PointerDeviceKind>{
@@ -44,24 +149,8 @@ extension _ComicReaderChrome on _ComicReaderViewState {
             itemBuilder: (BuildContext context, int index) {
               final _ComicListEntry entry = entries[index];
               return switch (entry) {
-                _ComicHeaderEntry() => _buildChapterHeader(entry, palette),
-                _ComicImageEntry() => ComicProgressiveImageTile(
-                  key: _imageKeyFor(entry),
-                  cache: _imageCache,
-                  chapterId: entry.chapter.info.id,
-                  image: entry.image,
-                  width: _viewportWidth,
-                  placeholderHeight: entry.placeholderExtent,
-                  palette: palette,
-                  decodeBudget: _decodeBudget,
-                  onPresented: _notifyFirstContentPresented,
-                  bookId: widget.bookId,
-                  commentFeed: widget.commentFeed,
-                  onOpenComments: (ReaderCommentTarget target) =>
-                      _showImageComments(target, palette),
-                  onFailure: (Object error) =>
-                      unawaited(_reportFailure(_asImageFailure(error))),
-                ),
+                _ComicHeaderEntry() => _buildChapterHeader(entry),
+                _ComicImageEntry() => _buildImageTile(entry, palette),
                 _ComicBoundaryEntry() => _buildBoundary(entry, palette),
               };
             },
@@ -71,18 +160,50 @@ extension _ComicReaderChrome on _ComicReaderViewState {
     );
   }
 
-  Widget _buildChapterHeader(_ComicHeaderEntry entry, ReaderPalette palette) {
+  Widget _buildImageTile(_ComicImageEntry entry, ReaderPalette palette) {
+    final String retryKey = '${entry.chapter.info.id}\u0000${entry.image.id}';
+    return ComicProgressiveImageTile(
+      key: _imageKeyFor(entry),
+      cache: _imageCache,
+      chapterId: entry.chapter.info.id,
+      image: entry.image,
+      width: _viewportWidth,
+      placeholderHeight: entry.placeholderExtent,
+      palette: palette,
+      decodeBudget: _decodeBudget,
+      onPresented: (bool cacheHit) {
+        _imageRetryCoordinator.markResolved(retryKey);
+        _notifyFirstContentPresented(cacheHit);
+      },
+      onAutomaticRetryAvailable: (Future<void> Function() retry) {
+        _imageRetryCoordinator.register(
+          key: retryKey,
+          isNearViewport: () => _isImageNearViewport(retryKey),
+          retry: retry,
+        );
+      },
+      bookId: widget.bookId,
+      commentFeed: widget.commentFeed,
+      onOpenComments: (ReaderCommentTarget target) =>
+          _showImageComments(target, palette),
+      onFailure: (Object error) =>
+          unawaited(_reportFailure(_asImageFailure(error))),
+    );
+  }
+
+  Widget _buildChapterHeader(_ComicHeaderEntry entry) {
     return SizedBox(
       height: _ComicReaderViewState._chapterHeaderExtent,
       child: ColoredBox(
-        color: const Color(0xFF151719),
+        key: const ValueKey<String>('comic-reader-chapter-header'),
+        color: Colors.white,
         child: Center(
           child: Text(
             entry.chapter.info.title,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              color: palette.text,
+              color: const Color(0xFF242424),
               fontSize: 15,
               fontWeight: FontWeight.w600,
             ),
@@ -150,114 +271,187 @@ extension _ComicReaderChrome on _ComicReaderViewState {
           children: <Widget>[
             Align(
               alignment: Alignment.topCenter,
-              child: SafeArea(
-                bottom: false,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: <Widget>[
-                    Container(
-                      key: const ValueKey<String>(
-                        'comic-reader-primary-top-bar',
-                      ),
-                      height: 54,
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      decoration: const BoxDecoration(
-                        color: Color(0xE617191B),
-                        border: Border(
-                          bottom: BorderSide(color: Color(0x243A3D40)),
-                        ),
-                      ),
-                      child: Row(
-                        children: <Widget>[
-                          _chromeButton(
-                            key: const ValueKey<String>(
-                              'comic-reader-back-action',
-                            ),
-                            icon: Icons.arrow_back_rounded,
-                            label: ComicReaderStrings.back,
-                            onPressed: () => unawaited(_requestExit()),
+              child: SizedBox(
+                width: double.infinity,
+                child: ColoredBox(
+                  color: _comicReaderChromeColor,
+                  child: SafeArea(
+                    bottom: false,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        Container(
+                          key: const ValueKey<String>(
+                            'comic-reader-primary-top-bar',
                           ),
-                          const SizedBox(width: 4),
-                          Expanded(
-                            child: Text(
-                              _currentChapter?.title ?? _book?.title ?? '',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: palette.text,
-                                fontWeight: FontWeight.w600,
+                          height: 54,
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          decoration: const BoxDecoration(
+                            color: _comicReaderChromeColor,
+                            border: Border(
+                              bottom: BorderSide(color: Color(0x243A3D40)),
+                            ),
+                          ),
+                          child: Row(
+                            children: <Widget>[
+                              _chromeButton(
+                                key: const ValueKey<String>(
+                                  'comic-reader-back-action',
+                                ),
+                                icon: Icons.arrow_back_rounded,
+                                label: ComicReaderStrings.back,
+                                onPressed: () => unawaited(_requestExit()),
                               ),
-                            ),
+                              const SizedBox(width: 4),
+                              Expanded(
+                                child: Text(
+                                  _currentChapter?.title ?? _book?.title ?? '',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: palette.text,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                              _chromeButton(
+                                key: const ValueKey<String>(
+                                  'comic-reader-add-bookmark',
+                                ),
+                                icon: Icons.bookmark_add_outlined,
+                                label: ComicReaderStrings.addBookmark,
+                                onPressed: () => unawaited(_addBookmark()),
+                              ),
+                              if (widget.bookRefreshCapability != null)
+                                PopupMenuButton<_ComicOverflowAction>(
+                                  key: _comicOverflowMenuKey,
+                                  tooltip: ComicReaderStrings.more,
+                                  icon: const Icon(Icons.more_vert_rounded),
+                                  onSelected: (_ComicOverflowAction action) {
+                                    switch (action) {
+                                      case _ComicOverflowAction.refreshBook:
+                                        unawaited(_refreshBookFromHost());
+                                    }
+                                  },
+                                  itemBuilder: (BuildContext context) =>
+                                      <PopupMenuEntry<_ComicOverflowAction>>[
+                                        PopupMenuItem<_ComicOverflowAction>(
+                                          value:
+                                              _ComicOverflowAction.refreshBook,
+                                          enabled: !_bookRefreshLoading,
+                                          child: Row(
+                                            children: <Widget>[
+                                              _bookRefreshLoading
+                                                  ? const SizedBox.square(
+                                                      dimension: 20,
+                                                      child:
+                                                          CircularProgressIndicator(
+                                                            strokeWidth: 2,
+                                                          ),
+                                                    )
+                                                  : const Icon(
+                                                      Icons.sync_rounded,
+                                                      size: 20,
+                                                    ),
+                                              const SizedBox(width: 12),
+                                              const Text(
+                                                ComicReaderStrings.refreshBook,
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                ),
+                            ],
                           ),
-                          _chromeButton(
-                            key: const ValueKey<String>(
-                              'comic-reader-add-bookmark',
-                            ),
-                            icon: Icons.bookmark_add_outlined,
-                            label: ComicReaderStrings.addBookmark,
-                            onPressed: () => unawaited(_addBookmark()),
+                        ),
+                        ReaderSourceStrip(
+                          key: const ValueKey<String>(
+                            'comic-reader-source-strip',
                           ),
-                        ],
-                      ),
+                          sourceName: _book?.sourceName,
+                          sourceUrl: _book?.sourceUrl?.toString(),
+                          sourceUri: _book?.sourceUrl,
+                          style: ReaderSourceStripStyle.comic(palette),
+                          onOpenSource: _book?.sourceUrl == null
+                              ? null
+                              : () => unawaited(
+                                  _openSourceUrl(_book!.sourceUrl!),
+                                ),
+                          sourceNameKey: const ValueKey<String>(
+                            'comic-reader-source-name',
+                          ),
+                          sourceUrlRegionKey: const ValueKey<String>(
+                            'comic-reader-source-url-region',
+                          ),
+                        ),
+                      ],
                     ),
-                    ReaderSourceStrip(
-                      key: const ValueKey<String>('comic-reader-source-strip'),
-                      sourceName: _book?.sourceName,
-                      sourceUrl: _book?.sourceUrl?.toString(),
-                      sourceUri: _book?.sourceUrl,
-                      style: ReaderSourceStripStyle.comic(palette),
-                      onOpenSource: _book?.sourceUrl == null
-                          ? null
-                          : () => unawaited(_openSourceUrl(_book!.sourceUrl!)),
-                      sourceNameKey: const ValueKey<String>(
-                        'comic-reader-source-name',
-                      ),
-                      sourceUrlRegionKey: const ValueKey<String>(
-                        'comic-reader-source-url-region',
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ),
             ),
             Align(
               alignment: Alignment.bottomCenter,
-              child: SafeArea(
-                top: false,
-                child: Container(
-                  height: 70,
-                  decoration: const BoxDecoration(
-                    color: Color(0xF2181A1C),
-                    border: Border(top: BorderSide(color: Color(0x243A3D40))),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: <Widget>[
-                      _bottomButton(
-                        const ValueKey<String>('comic-reader-catalog'),
-                        Icons.list_alt_rounded,
-                        ComicReaderStrings.catalog,
-                        _showCatalog,
+              child: SizedBox(
+                width: double.infinity,
+                child: ColoredBox(
+                  color: _comicReaderChromeColor,
+                  child: SafeArea(
+                    top: false,
+                    child: Container(
+                      height: 70,
+                      decoration: const BoxDecoration(
+                        color: _comicReaderChromeColor,
+                        border: Border(
+                          top: BorderSide(color: Color(0x243A3D40)),
+                        ),
                       ),
-                      _bottomButton(
-                        const ValueKey<String>('comic-reader-bookmarks'),
-                        Icons.bookmarks_outlined,
-                        ComicReaderStrings.bookmarks,
-                        _showBookmarks,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: <Widget>[
+                          _bottomButton(
+                            const ValueKey<String>('comic-reader-catalog'),
+                            Icons.list_alt_rounded,
+                            ComicReaderStrings.catalog,
+                            _showCatalog,
+                          ),
+                          _bottomButton(
+                            const ValueKey<String>('comic-reader-bookmarks'),
+                            Icons.bookmarks_outlined,
+                            ComicReaderStrings.bookmarks,
+                            _showBookmarks,
+                          ),
+                          _bottomButton(
+                            const ValueKey<String>('comic-reader-settings'),
+                            Icons.tune_rounded,
+                            ComicReaderStrings.settings,
+                            _showSettings,
+                          ),
+                        ],
                       ),
-                      _bottomButton(
-                        const ValueKey<String>('comic-reader-settings'),
-                        Icons.tune_rounded,
-                        ComicReaderStrings.settings,
-                        _showSettings,
-                      ),
-                    ],
+                    ),
                   ),
                 ),
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  /// 工具栏显示时覆盖正文，点击中间空白区域只关闭工具栏。
+  ///
+  /// 该层位于 chrome 之下，因此顶部和底部按钮仍可操作；同时避免
+  /// 点击或拖动透明区域继续命中漫画列表。
+  Widget _buildControlsInteractionLock() {
+    return Positioned.fill(
+      child: GestureDetector(
+        key: const ValueKey<String>('comic-reader-controls-interaction-lock'),
+        behavior: HitTestBehavior.opaque,
+        excludeFromSemantics: true,
+        onTap: () => _setControlsVisible(false),
       ),
     );
   }
@@ -440,28 +634,29 @@ extension _ComicReaderChrome on _ComicReaderViewState {
       unawaited(_requestExit());
       return;
     }
-    if (!_scrollController.hasClients) return;
+    if (!_preferences.pageTurnShortcuts ||
+        _settingsVisible ||
+        _controlsVisible ||
+        !_scrollController.hasClients) {
+      return;
+    }
     final double delta = switch (event.logicalKey) {
       LogicalKeyboardKey.arrowDown => 72,
       LogicalKeyboardKey.arrowUp => -72,
-      LogicalKeyboardKey.pageDown => _viewportHeight * .82,
-      LogicalKeyboardKey.pageUp => -_viewportHeight * .82,
+      LogicalKeyboardKey.arrowRight => _pageTurnDistance,
+      LogicalKeyboardKey.space when !HardwareKeyboard.instance.isShiftPressed =>
+        _pageTurnDistance,
+      LogicalKeyboardKey.enter => _pageTurnDistance,
+      LogicalKeyboardKey.pageDown => _pageTurnDistance,
+      LogicalKeyboardKey.arrowLeft => -_pageTurnDistance,
+      LogicalKeyboardKey.space => -_pageTurnDistance,
+      LogicalKeyboardKey.pageUp => -_pageTurnDistance,
+      LogicalKeyboardKey.audioVolumeDown => _pageTurnDistance,
+      LogicalKeyboardKey.audioVolumeUp => -_pageTurnDistance,
       _ => 0,
     };
     if (delta == 0) return;
-    final double target = (_scrollController.offset + delta).clamp(
-      0,
-      _scrollController.position.maxScrollExtent,
-    );
-    if (MediaQuery.disableAnimationsOf(context)) {
-      _scrollController.jumpTo(target);
-    } else {
-      _scrollController.animateTo(
-        target,
-        duration: const Duration(milliseconds: 180),
-        curve: Curves.easeOutCubic,
-      );
-    }
+    _scrollBy(delta);
   }
 
   Future<void> _addBookmark() async {
@@ -605,131 +800,6 @@ extension _ComicReaderChrome on _ComicReaderViewState {
       final ModalRoute<Object?>? route = ModalRoute.of(sheetContext);
       if (route?.isCurrent ?? false) Navigator.of(sheetContext).pop();
     });
-  }
-
-  void _showCatalog() {
-    final int session = _sessionGeneration;
-    final String bookId = widget.bookId;
-    final ComicReaderDataSource source = widget.dataSource;
-    final ComicReaderStateStore store = widget.stateStore;
-    bool isCurrent() => _isSession(session, bookId, source, store);
-    final int sheetGeneration = _beginSheet();
-    _setControlsVisible(false);
-    final Future<void> sheet = showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: const Color(0xFF202326),
-      builder: (BuildContext sheetContext) {
-        _captureSheetContext(sheetContext, sheetGeneration);
-        return StatefulBuilder(
-          builder:
-              (
-                BuildContext context,
-                void Function(VoidCallback) sheetSetState,
-              ) {
-                return _darkSheet(
-                  SafeArea(
-                    child: SizedBox(
-                      height: MediaQuery.sizeOf(context).height * .76,
-                      child: Column(
-                        children: <Widget>[
-                          _sheetHeader(ComicReaderStrings.catalog),
-                          Expanded(
-                            child: ListView.builder(
-                              itemCount:
-                                  _catalog.length +
-                                  (_catalogHasMore || _catalogLoading ? 1 : 0),
-                              itemBuilder: (BuildContext context, int index) {
-                                if (index == _catalog.length) {
-                                  return SizedBox(
-                                    height: 64,
-                                    child: Center(
-                                      child: _catalogLoading
-                                          ? const CircularProgressIndicator(
-                                              strokeWidth: 2,
-                                            )
-                                          : TextButton(
-                                              onPressed: () async {
-                                                if (!isCurrent()) {
-                                                  if (sheetContext.mounted) {
-                                                    Navigator.of(
-                                                      sheetContext,
-                                                    ).pop();
-                                                  }
-                                                  return;
-                                                }
-                                                await _loadNextCatalogPage();
-                                                if (sheetContext.mounted &&
-                                                    isCurrent()) {
-                                                  sheetSetState(() {});
-                                                }
-                                              },
-                                              child: const Text(
-                                                ComicReaderStrings.loadMore,
-                                              ),
-                                            ),
-                                    ),
-                                  );
-                                }
-                                final ComicChapterInfo chapter =
-                                    _catalog[index];
-                                return ListTile(
-                                  minTileHeight: 52,
-                                  selected: chapter.id == _currentChapter?.id,
-                                  title: Text(
-                                    chapter.title,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                  subtitle: Text(_chapterStatus(chapter)),
-                                  onTap: () {
-                                    if (!isCurrent()) {
-                                      Navigator.of(context).pop();
-                                      return;
-                                    }
-                                    Navigator.of(context).pop();
-                                    unawaited(
-                                      _openChapterInfo(
-                                        chapter,
-                                        replaceWindow: true,
-                                      ),
-                                    );
-                                  },
-                                );
-                              },
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                );
-              },
-        );
-      },
-    );
-    unawaited(sheet.whenComplete(() => _finishSheet(sheetGeneration)));
-  }
-
-  String _chapterStatus(ComicChapterInfo chapter) {
-    final String count = chapter.imageCount == null
-        ? ''
-        : ComicReaderStrings.imageCount(chapter.imageCount!);
-    final String read = chapter.hasBeenRead
-        ? ComicReaderStrings.read
-        : ComicReaderStrings.unread;
-    final String availability = switch (chapter.availability) {
-      ReaderChapterAvailability.downloaded => ComicReaderStrings.cached,
-      ReaderChapterAvailability.downloading => ComicReaderStrings.loadingStatus,
-      ReaderChapterAvailability.notDownloaded => ComicReaderStrings.notCached,
-      ReaderChapterAvailability.failed => ComicReaderStrings.failedStatus,
-      ReaderChapterAvailability.unknown => '',
-    };
-    return <String>[
-      count,
-      read,
-      availability,
-    ].where((value) => value.isNotEmpty).join(' · ');
   }
 
   void _showBookmarks() {
@@ -910,12 +980,7 @@ extension _ComicReaderChrome on _ComicReaderViewState {
                                   min: .25,
                                   max: 1,
                                   onChanged: (double value) => update(
-                                    ComicReaderPreferences(
-                                      brightness: value,
-                                      keepScreenOn: _preferences.keepScreenOn,
-                                      immersiveMode: _preferences.immersiveMode,
-                                      imageSpacing: _preferences.imageSpacing,
-                                    ),
+                                    _preferences.copyWith(brightness: value),
                                     persist: false,
                                   ),
                                   onChangeEnd: (double value) => commit(),
@@ -928,15 +993,103 @@ extension _ComicReaderChrome on _ComicReaderViewState {
                                     ),
                                     value: _preferences.keepScreenOn,
                                     onChanged: (bool value) => update(
-                                      ComicReaderPreferences(
-                                        brightness: _preferences.brightness,
+                                      _preferences.copyWith(
                                         keepScreenOn: value,
-                                        immersiveMode:
-                                            _preferences.immersiveMode,
-                                        imageSpacing: _preferences.imageSpacing,
                                       ),
                                     ),
                                   ),
+                                SwitchListTile.adaptive(
+                                  contentPadding: EdgeInsets.zero,
+                                  title: const Text(
+                                    ComicReaderStrings.pageTurnShortcuts,
+                                  ),
+                                  value: _preferences.pageTurnShortcuts,
+                                  onChanged: (bool value) => update(
+                                    _preferences.copyWith(
+                                      pageTurnShortcuts: value,
+                                    ),
+                                  ),
+                                ),
+                                DropdownButtonFormField<double>(
+                                  key: const ValueKey<String>(
+                                    'comic-reader-page-turn-fraction',
+                                  ),
+                                  initialValue: _preferences.pageTurnFraction,
+                                  decoration: const InputDecoration(
+                                    labelText:
+                                        ComicReaderStrings.pageTurnFraction,
+                                  ),
+                                  items: ComicReaderPreferences
+                                      .pageTurnFractions
+                                      .map(
+                                        (double fraction) =>
+                                            DropdownMenuItem<double>(
+                                              value: fraction,
+                                              child: Text(
+                                                '${(fraction * 100).round()}%',
+                                              ),
+                                            ),
+                                      )
+                                      .toList(),
+                                  onChanged: (double? value) {
+                                    if (value != null) {
+                                      update(
+                                        _preferences.copyWith(
+                                          pageTurnFraction: value,
+                                        ),
+                                      );
+                                    }
+                                  },
+                                ),
+                                DropdownButtonFormField<ComicPageTurnLayout>(
+                                  key: const ValueKey<String>(
+                                    'comic-reader-page-turn-layout',
+                                  ),
+                                  initialValue: _preferences.pageTurnLayout,
+                                  decoration: const InputDecoration(
+                                    labelText:
+                                        ComicReaderStrings.pageTurnLayout,
+                                  ),
+                                  items:
+                                      const <
+                                        DropdownMenuItem<ComicPageTurnLayout>
+                                      >[
+                                        DropdownMenuItem<ComicPageTurnLayout>(
+                                          value: ComicPageTurnLayout.vertical,
+                                          child: Text(
+                                            ComicReaderStrings.pageTurnVertical,
+                                          ),
+                                        ),
+                                        DropdownMenuItem<ComicPageTurnLayout>(
+                                          value: ComicPageTurnLayout.horizontal,
+                                          child: Text(
+                                            ComicReaderStrings
+                                                .pageTurnHorizontal,
+                                          ),
+                                        ),
+                                      ],
+                                  onChanged: (ComicPageTurnLayout? value) {
+                                    if (value != null) {
+                                      update(
+                                        _preferences.copyWith(
+                                          pageTurnLayout: value,
+                                        ),
+                                      );
+                                    }
+                                  },
+                                ),
+                                SwitchListTile.adaptive(
+                                  contentPadding: EdgeInsets.zero,
+                                  title: const Text(
+                                    ComicReaderStrings.singleHandMode,
+                                  ),
+                                  value: _preferences.singleHandMode,
+                                  onChanged: (bool value) => update(
+                                    _preferences.copyWith(
+                                      singleHandMode: value,
+                                    ),
+                                  ),
+                                ),
                                 if (_platformCapabilities.immersiveMode)
                                   SwitchListTile.adaptive(
                                     contentPadding: EdgeInsets.zero,
@@ -945,11 +1098,8 @@ extension _ComicReaderChrome on _ComicReaderViewState {
                                     ),
                                     value: _preferences.immersiveMode,
                                     onChanged: (bool value) => update(
-                                      ComicReaderPreferences(
-                                        brightness: _preferences.brightness,
-                                        keepScreenOn: _preferences.keepScreenOn,
+                                      _preferences.copyWith(
                                         immersiveMode: value,
-                                        imageSpacing: _preferences.imageSpacing,
                                       ),
                                     ),
                                   ),

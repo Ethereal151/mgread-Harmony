@@ -43,7 +43,7 @@ catch {
     throw new Error('Source response is invalid.'); return value; }
 async function authorizedHeaders() { return { ...baseHeaders, Authorization: await getToken() }; }
 async function getToken() { if (!tokenPromise)
-    tokenPromise = (async () => { const now = Date.now(), device = createHash('md5').update(String(now)).digest('hex'), plain = JSON.stringify({ first_install_time: now, last_update_time: now, install_first_open: true, package_name: 'com.jz.xydj', device, timestamp: now }), cipher = createCipheriv('aes-128-ecb', Buffer.from('B@ecf920Od8A4df7'), null), body = Buffer.concat([cipher.update(plain, 'utf8'), cipher.final()]).toString('base64'), response = await requireContext().http.fetch(loginUrl, { method: 'POST', headers: { ...baseHeaders, 'Content-Type': 'application/json; charset=utf-8' }, body }); if (!response.ok)
+    tokenPromise = (async () => { const now = Date.now(), device = createHash('md5').update(String(now)).digest('hex'), plain = JSON.stringify({ first_install_time: now, last_update_time: now, install_first_open: true, package_name: 'com.jz.xydj', device, timestamp: now }), cipher = createCipheriv('aes-128-ecb', Buffer.from('B@ecf920Od8A4df7'), null), body = Buffer.concat([cipher.update(plain, 'utf8'), cipher.final()]).toString('base64'), response = await requireContext().http.fetch(loginUrl, { method: 'POST', proxyMode: 'direct', headers: { ...baseHeaders, 'Content-Type': 'application/json; charset=utf-8' }, body }); if (!response.ok)
         throw new Error('Source login failed.'); const value = object(JSON.parse(await response.text())), token = text(object(value.data).token); if (!token)
         throw new Error('Source login did not return a token.'); return token; })(); try {
     return await tokenPromise;

@@ -8,6 +8,7 @@ import {
   SourceTestFailure,
   assertInlineJsonSize,
   assertStandardSourceContract,
+  collectDiscoveryContinuations,
   collectDiscoveryTargets,
   createSourceTestHarness,
   parseSourceTestArguments,
@@ -15,6 +16,7 @@ import {
   probeResourceGroups,
   runReadingSourceFlow,
 } from '../index.js';
+import { createRuntimeLikeFetch } from '../src/http.js';
 
 function fakePlugin(overrides = {}) {
   return {
@@ -107,6 +109,19 @@ test('creates an isolated host and records bounded resource metadata', async (t)
   );
   await harness.cleanup();
   await assert.rejects(access(harness.root));
+});
+
+test('runtime-like fetch routes direct requests outside the configured fetch', async () => {
+  const calls = [];
+  const runtimeFetch = createRuntimeLikeFetch(
+    async (_input, init) => { calls.push({ route: 'configured', init }); return new Response('configured'); },
+    { directFetch: async (_input, init) => { calls.push({ route: 'direct', init }); return new Response('direct'); } },
+  );
+  assert.equal(await (await runtimeFetch('https://fixture.invalid/configured')).text(), 'configured');
+  assert.equal(await (await runtimeFetch('https://fixture.invalid/direct', { proxyMode: 'direct' })).text(), 'direct');
+  assert.deepEqual(calls.map(({ route }) => route), ['configured', 'direct']);
+  assert.ok(calls.every(({ init }) => init.proxyMode === undefined));
+  assert.ok(calls.every(({ init }) => new Headers(init.headers).get('user-agent')?.startsWith('Mozilla/5.0')));
 });
 
 test('browser session retains host cookies between source requests', async (t) => {
@@ -207,6 +222,45 @@ test('resource probe verifies Node-side transformed image descriptors', async ()
   assert.ok(result.bytesRead > 0);
 });
 
+test('resource probe decodes AES-256-CBC images with a prefixed IV', async () => {
+  const key = Buffer.from('0123456789abcdef0123456789abcdef');
+  const iv = Buffer.from('abcdefghijklmnop');
+  const plain = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]);
+  const cipher = createCipheriv('aes-256-cbc', key, iv);
+  const encrypted = Buffer.concat([iv, cipher.update(plain), cipher.final()]);
+  const result = await probeReachableResource({
+    requests: [{
+      kind: 'image',
+      url: 'https://fixture.invalid/encrypted.jpg',
+      resourceTransform: 'aes-cbc-prefixed-iv-image-v1',
+      resourceTransformKey: key.toString('ascii'),
+      headers: {},
+    }],
+    fetch: async () => new Response(encrypted, { headers: { 'content-type': 'image/jpeg' } }),
+  });
+  assert.equal(result.contentType, 'image/jpeg');
+  assert.ok(result.bytesRead > 0);
+});
+
+test('resource probe joins encrypt-then-split AES-CBC images before decrypting', async () => {
+  const key = Buffer.from('aaaaaaaaaaaaaaaa');
+  const iv = Buffer.from('0123456789aaaaaa');
+  const plain = Buffer.from([0, 0, 0, 1, 0, 0, 0, 1, 74, 70, 73, 70, 1, 2, 3]);
+  const cipher = createCipheriv('aes-128-cbc', key, iv);
+  const encrypted = Buffer.concat([cipher.update(plain), cipher.final()]);
+  const urls = ['https://fixture.invalid/manifest-0', 'https://fixture.invalid/manifest-1'];
+  const parts = new Map([[urls[0], encrypted.subarray(0, 13)], [urls[1], encrypted.subarray(13)]]);
+  const result = await probeReachableResource({
+    requests: [{
+      kind: 'image', url: urls[0], urls,
+      resourceTransform: 'aes-cbc-encrypt-then-split-image-v1', headers: {},
+    }],
+    fetch: async (url) => new Response(parts.get(String(url))),
+  });
+  assert.equal(result.contentType, 'image/jpeg');
+  assert.ok(result.bytesRead > 0);
+});
+
 test('probes cover and comic image groups independently', async () => {
   const groups = await probeResourceGroups({
     requests: [
@@ -219,7 +273,9 @@ test('probes cover and comic image groups independently', async () => {
       pages: [{ url: 'proxy:page-1' }],
     }],
     contentKind: 'manga',
-    fetch: async (url) => new Response(new Uint8Array([1, 2, 3]), {
+    fetch: async (url) => new Response(new Uint8Array(url.endsWith('cover.jpg')
+      ? [0xff, 0xd8, 0xff]
+      : [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), {
       status: 200,
       headers: { 'content-type': url.endsWith('cover.jpg') ? 'image/jpeg' : 'image/png' },
     }),
@@ -232,6 +288,29 @@ test('probes cover and comic image groups independently', async () => {
   assert.equal(groups.comicImages.candidates, 1);
 });
 
+test('requires every sampled manga chapter and page position to pass', async () => {
+  const groups = await probeResourceGroups({
+    requests: [
+      { kind: 'image', url: 'https://fixture.invalid/chapter-1-page-1.jpg', projectedUrl: 'proxy:c1p1' },
+      { kind: 'image', url: 'https://fixture.invalid/chapter-2-page-1.jpg', projectedUrl: 'proxy:c2p1' },
+    ],
+    detail: { contentKind: 'manga' },
+    contents: [
+      { contentKind: 'manga', pages: [{ url: 'proxy:c1p1' }] },
+      { contentKind: 'manga', pages: [{ url: 'proxy:c2p1' }] },
+    ],
+    contentKind: 'manga',
+    fetch: async (url) => url.includes('chapter-1')
+      ? new Response(new Uint8Array([0xff, 0xd8, 0xff]), { headers: { 'content-type': 'image/jpeg' } })
+      : new Response('missing', { status: 404, headers: { 'content-type': 'text/plain' } }),
+  });
+  assert.equal(groups.comicImages.status, 'failed');
+  assert.deepEqual(
+    groups.comicImages.surfaces.map((surface) => surface.status),
+    ['passed', 'failed'],
+  );
+});
+
 test('marks an applicable media group failed without masking the cover result', async () => {
   const groups = await probeResourceGroups({
     requests: [
@@ -242,12 +321,74 @@ test('marks an applicable media group failed without masking the cover result', 
     contents: [{ contentKind: 'audio', media: { url: 'proxy:audio' } }],
     contentKind: 'audio',
     fetch: async (url) => url.endsWith('cover.jpg')
-      ? new Response(new Uint8Array([1]), { headers: { 'content-type': 'image/jpeg' } })
+      ? new Response(new Uint8Array([0xff, 0xd8, 0xff]), { headers: { 'content-type': 'image/jpeg' } })
       : new Response('denied', { status: 403, headers: { 'content-type': 'text/plain' } }),
   });
   assert.equal(groups.cover.status, 'passed');
   assert.equal(groups.audio.status, 'failed');
   assert.equal(groups.video.status, 'notTested');
+});
+
+test('keeps discovery cover surfaces independent from a healthy detail cover', async () => {
+  const groups = await probeResourceGroups({
+    requests: [
+      { kind: 'image', url: 'https://fixture.invalid/broken.jpg', projectedUrl: 'proxy:broken' },
+      { kind: 'image', url: 'https://fixture.invalid/detail.jpg', projectedUrl: 'proxy:detail' },
+    ],
+    detail: { contentKind: 'novel', coverUrl: 'proxy:detail' },
+    discoverySurfaces: [
+      { name: 'discover.root', items: [{ id: 'novel:1', coverUrl: 'proxy:broken' }] },
+      { name: 'discover.target.1', items: [{ id: 'novel:2', coverUrl: null }] },
+    ],
+    fetch: async (url) => url.endsWith('detail.jpg')
+      ? new Response(new Uint8Array([0xff, 0xd8, 0xff]), { headers: { 'content-type': 'image/jpeg' } })
+      : new Response('missing', { status: 404, headers: { 'content-type': 'text/plain' } }),
+  });
+  assert.equal(groups.cover.status, 'failed');
+  assert.deepEqual(
+    groups.cover.surfaces.map((surface) => [surface.name, surface.status]),
+    [
+      ['discover.root', 'failed'],
+      ['discover.target.1', 'notRegistered'],
+      ['detail', 'passed'],
+    ],
+  );
+});
+
+test('rejects mismatched image signatures and accepts an HLS playlist prefix', async () => {
+  const imageGroups = await probeResourceGroups({
+    requests: [{ kind: 'image', url: 'https://fixture.invalid/cover.png', projectedUrl: 'proxy:cover' }],
+    detail: { contentKind: 'novel', coverUrl: 'proxy:cover' },
+    fetch: async () => new Response(new Uint8Array([0xff, 0xd8, 0xff]), {
+      headers: { 'content-type': 'image/png' },
+    }),
+  });
+  assert.equal(imageGroups.cover.status, 'failed');
+
+  const videoGroups = await probeResourceGroups({
+    requests: [{ kind: 'hls', url: 'https://fixture.invalid/master.m3u8', projectedUrl: 'proxy:hls' }],
+    detail: { contentKind: 'video' },
+    contents: [{ contentKind: 'video', media: { url: 'proxy:hls' } }],
+    contentKind: 'video',
+    fetch: async () => new Response('#EXTM3U\n#EXT-X-VERSION:3\n', {
+      headers: { 'content-type': 'application/vnd.apple.mpegurl' },
+    }),
+  });
+  assert.equal(videoGroups.video.status, 'passed');
+});
+
+test('accepts a live MP3 chunk that starts inside a frame', async () => {
+  const body = new Uint8Array(7 + 192 * 2);
+  body.set([0xff, 0xfb, 0x54, 0x00], 7);
+  body.set([0xff, 0xfb, 0x54, 0x00], 7 + 192);
+  const groups = await probeResourceGroups({
+    requests: [{ kind: 'audio', url: 'https://fixture.invalid/live.mp3', projectedUrl: 'proxy:audio' }],
+    detail: { contentKind: 'audio' },
+    contents: [{ contentKind: 'audio', media: { url: 'proxy:audio' } }],
+    contentKind: 'audio',
+    fetch: async () => new Response(body, { headers: { 'content-type': 'audio/mpeg' } }),
+  });
+  assert.equal(groups.audio.status, 'passed');
 });
 
 test('runs the standard reading chain and reports complete results', async () => {
@@ -291,13 +432,17 @@ test('counts a Runtime-style media body even when its pages collection is empty'
       async getDetail({ id }) {
         return { id, title: 'fixture', contentKind: 'video' };
       },
+      async getChapters() {
+        const chapter = { id: 'chapter:1', order: 0, isLocked: false };
+        return { items: [chapter], groups: [{ id: 'group:1', order: 0, episodes: [chapter] }] };
+      },
       async getContent({ chapterId }) {
         return {
           chapterId,
           contentKind: 'video',
           text: null,
           pages: [],
-          media: { type: 'video', url: 'http://127.0.0.1:1234/v1/source-resource/fixture' },
+          media: { resourceType: 'video', url: 'http://127.0.0.1:1234/v1/source-resource/fixture' },
         };
       },
     }),
@@ -306,6 +451,81 @@ test('counts a Runtime-style media body even when its pages collection is empty'
 
   assert.equal(result.summary.contentKind, 'video');
   assert.equal(result.summary.contentUnits, 1);
+});
+
+test('requires audio and video groups to match the flat catalog', async () => {
+  await assert.rejects(
+    runReadingSourceFlow({
+      plugin: fakePlugin({
+        async getDetail({ id }) { return { id, title: 'fixture', contentKind: 'audio' }; },
+        async getChapters() {
+          return {
+            items: [{ id: 'track:1', order: 0, isLocked: false }],
+            groups: [{ id: 'group:1', order: 0, episodes: [] }],
+          };
+        },
+      }),
+      contentId: 'audio:1',
+    }),
+    (error) => error instanceof SourceTestFailure
+      && error.code === 'source_media_groups_invalid'
+      && error.stage === 'chapters',
+  );
+});
+
+test('requires search to recover the discovered stable ID', async () => {
+  await assert.rejects(
+    runReadingSourceFlow({
+      plugin: fakePlugin({ async search() { return { items: [{ id: 'novel:other' }] }; } }),
+      contentId: 'novel:1',
+      searchRequest: { query: 'fixture', cursor: null, pageSize: 5 },
+    }),
+    (error) => error instanceof SourceTestFailure
+      && error.code === 'source_search_identity_missing'
+      && error.stage === 'search',
+  );
+});
+
+test('tries bounded search query candidates until the stable ID is recovered', async () => {
+  const queries = [];
+  const result = await runReadingSourceFlow({
+    plugin: fakePlugin({
+      async search({ query }) {
+        queries.push(query);
+        return { items: [{ id: query === 'fixture' ? 'novel:1' : 'novel:other' }] };
+      },
+    }),
+    contentId: 'novel:1',
+    searchRequest: [
+      { query: '《Fixture：副标题》', cursor: null, pageSize: 5 },
+      { query: 'fixture', cursor: null, pageSize: 5 },
+    ],
+  });
+  assert.equal(result.selectedId, 'novel:1');
+  assert.deepEqual(queries, ['《Fixture：副标题》', 'fixture']);
+});
+
+test('samples only unlocked chapters', async () => {
+  const requested = [];
+  const result = await runReadingSourceFlow({
+    plugin: fakePlugin({
+      async getChapters() {
+        return {
+          items: [
+            { id: 'chapter:locked', order: 0, isLocked: true },
+            { id: 'chapter:open', order: 1, isLocked: false },
+          ],
+        };
+      },
+      async getContent({ chapterId }) {
+        requested.push(chapterId);
+        return { chapterId, contentKind: 'novel', text: 'fixture', pages: [] };
+      },
+    }),
+    contentId: 'novel:1',
+  });
+  assert.equal(result.summary.contentSamples, 1);
+  assert.deepEqual(requested, ['chapter:open']);
 });
 
 test('collects bounded discovery targets and parses one pure Node selection', () => {
@@ -322,6 +542,18 @@ test('collects bounded discovery targets and parses one pure Node selection', ()
     },
   });
   assert.deepEqual(targets, ['tab:one', 'category:one']);
+  const continuations = collectDiscoveryContinuations({
+    kind: 'document',
+    document: {
+      components: [{
+        type: 'contentCollection',
+        id: 'collection:one',
+        items: [],
+        continuation: { target: 'category:one', cursor: 'page:2' },
+      }],
+    },
+  });
+  assert.deepEqual(continuations, [{ collectionId: 'collection:one', target: 'category:one', cursor: 'page:2' }]);
   const options = parseSourceTestArguments(['--source', 'aisishuwu', '--skip-build'], {
     cwd: 'C:\\workspace',
   });

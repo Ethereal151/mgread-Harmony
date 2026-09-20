@@ -85,7 +85,7 @@ class ProfileSettingsRow extends StatelessWidget {
                     width: AppSpacing.profileSettingsIconSlot,
                     child: Align(
                       alignment: Alignment.centerLeft,
-                      child: Icon(_iconFor(item.icon), color: tokens.warning, size: AppSpacing.profileSettingsIconSize),
+                      child: Icon(_iconFor(item.icon), color: tokens.accent, size: AppSpacing.profileSettingsIconSize),
                     ),
                   ),
                   const SizedBox(width: AppSpacing.profileSettingsIconTextGap),
@@ -115,7 +115,7 @@ class ProfileSettingsRow extends StatelessWidget {
                     Text(
                       item.trailingLabel!,
                       style: theme.textTheme.bodyMedium?.copyWith(
-                        color: item.isAccentTrailingLabel ? tokens.warning : tokens.mutedText,
+                        color: item.isAccentTrailingLabel ? tokens.accent : tokens.mutedText,
                         fontWeight: FontWeight.w400,
                         height: 1.1,
                       ),

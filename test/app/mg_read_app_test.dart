@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mg_read/app/app_theme.dart';
 import 'package:mg_read/app/app_router.dart';
 import 'package:mg_read/app/mg_read_app.dart';
 import 'package:mg_read/core/diagnostics/diagnostics.dart';
@@ -170,7 +171,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('temporarily keeps the app in light-only mode', (WidgetTester tester) async {
+  testWidgets('keeps an explicitly persisted light mode', (WidgetTester tester) async {
     final settings = await createTestAppSettings(themeMode: 'light');
     addTearDown(settings.close);
     final _ControlledLibraryOverviewLoader loader = _ControlledLibraryOverviewLoader();
@@ -193,6 +194,31 @@ void main() {
     expect(settings.get(AppSettingKeys.themeMode), 'light');
   });
 
+  testWidgets('applies the host theme color without changing reader themes', (WidgetTester tester) async {
+    final settings = await createTestAppSettings(themeMode: 'light');
+    addTearDown(settings.close);
+    final _ControlledLibraryOverviewLoader loader = _ControlledLibraryOverviewLoader();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          appSettingsProvider.overrideWithValue(settings),
+          libraryOverviewLoaderProvider.overrideWithValue(loader),
+          pluginRuntimeGatewayProvider.overrideWithValue(const TestReadyPluginRuntimeGateway()),
+        ],
+        child: const MgReadApp(),
+      ),
+    );
+    await tester.pump();
+    loader.completeNext(_overview('主题色测试书籍'));
+    await tester.pumpAndSettle();
+
+    await settings.set(AppSettingKeys.themeColor, 'blue');
+    await tester.pumpAndSettle();
+
+    final ThemeData theme = Theme.of(tester.element(find.byType(LibraryPage)));
+    expect(theme.colorScheme.primary, AppThemeColor.blue.accent);
+  });
+
   testWidgets('opens the profile route from the shared mobile navigation', (WidgetTester tester) async {
     final settings = await createTestAppSettings(themeMode: 'light');
     addTearDown(settings.close);
@@ -205,14 +231,22 @@ void main() {
     expect(find.text('设置与管理'), findsOneWidget);
 
     _expectBrightnessForCurrentPage(tester, Brightness.light);
-    expect(find.byKey(const Key('theme-mode-toggle')), findsNothing);
+    await tester.tap(find.byKey(const Key('theme-mode-toggle')));
+    await tester.pumpAndSettle();
+    _expectBrightnessForCurrentPage(tester, Brightness.dark);
+    expect(settings.get(AppSettingKeys.themeMode), 'dark');
+
+    await tester.tap(find.byKey(const Key('theme-mode-toggle')));
+    await tester.pumpAndSettle();
+    _expectBrightnessForCurrentPage(tester, Brightness.light);
+    expect(settings.get(AppSettingKeys.themeMode), 'light');
 
     await tester.tap(find.byKey(const Key('app-nav-home')));
     await tester.pumpAndSettle();
     expect(find.byType(LibraryPage), findsOneWidget);
   });
 
-  testWidgets('keeps light mode when the operating system prefers dark mode', (WidgetTester tester) async {
+  testWidgets('follows the operating system in system theme mode', (WidgetTester tester) async {
     tester.platformDispatcher.platformBrightnessTestValue = Brightness.dark;
     addTearDown(tester.platformDispatcher.clearPlatformBrightnessTestValue);
     final settings = await createTestAppSettings();
@@ -221,23 +255,23 @@ void main() {
     await tester.pumpWidget(testMgReadApp(settings));
     await tester.pumpAndSettle();
 
-    _expectBrightnessForCurrentPage(tester, Brightness.light);
-    expect(find.byKey(const Key('theme-mode-toggle')), findsNothing);
+    _expectBrightnessForCurrentPage(tester, Brightness.dark);
 
     await tester.tap(find.byKey(const Key('app-nav-search')));
     await tester.pumpAndSettle();
     expect(find.byType(SearchPage), findsOneWidget);
-    _expectBrightnessForCurrentPage(tester, Brightness.light);
+    _expectBrightnessForCurrentPage(tester, Brightness.dark);
 
     await tester.tap(find.byKey(const Key('app-nav-discover')));
     await tester.pumpAndSettle();
     expect(find.byType(DiscoveryDestinationPage), findsOneWidget);
-    _expectBrightnessForCurrentPage(tester, Brightness.light);
+    _expectBrightnessForCurrentPage(tester, Brightness.dark);
 
     await tester.tap(find.byKey(const Key('app-nav-profile')));
     await tester.pumpAndSettle();
     expect(find.byType(ProfilePage), findsOneWidget);
-    _expectBrightnessForCurrentPage(tester, Brightness.light);
+    _expectBrightnessForCurrentPage(tester, Brightness.dark);
+    expect(find.byKey(const Key('theme-mode-toggle')), findsOneWidget);
   });
 }
 

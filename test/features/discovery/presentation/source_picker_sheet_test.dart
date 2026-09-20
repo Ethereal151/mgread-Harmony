@@ -50,7 +50,16 @@ void main() {
     expect(find.text('全部'), findsNothing);
     expect(find.text('已启用'), findsNothing);
     expect(find.text('成人向原创网络小说数据源。'), findsOneWidget);
+    expect(find.text('2 个可用 · 当前：爱丽丝书屋'), findsOneWidget);
     expect(find.byIcon(Icons.check_rounded), findsOneWidget);
+    expect(tester.getSize(find.byKey(const Key('discovery-source-picker-search'))).height, 46);
+    expect(tester.getSize(find.byKey(const Key('discovery-source-picker-filters'))).height, 44);
+    expect(find.byKey(const ValueKey<String>('discovery-source-picker-filter-count-可用')), findsOneWidget);
+    expect(find.byKey(const ValueKey<String>('discovery-source-picker-actions-org.mgread.aisishuwu')), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.byKey(const Key('discovery-source-picker-filters'))).dy,
+      lessThan(tester.getTopLeft(find.byKey(const Key('discovery-source-picker-search'))).dy),
+    );
     final Image image = tester.widget<Image>(find.byKey(const Key('source-icon-network-org.example.manga')));
     expect(
       image.image,
@@ -60,11 +69,46 @@ void main() {
     await tester.pump();
 
     expect(find.text('爱丽丝书屋'), findsNothing);
+    expect(find.byKey(const Key('discovery-source-picker-search-clear')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('discovery-source-picker-search-clear')));
+    await tester.pump();
+    expect(find.text('爱丽丝书屋'), findsOneWidget);
+    expect(find.byKey(const Key('discovery-source-picker-search-clear')), findsNothing);
+    await tester.enterText(find.byKey(const Key('discovery-source-picker-search')), '漫画');
+    await tester.pump();
     await tester.tap(find.byKey(const ValueKey<String>('discovery-source-picker-org.example.manga')));
     await tester.pumpAndSettle();
 
     expect(result, isA<DiscoverySourceSelected>());
     expect((result! as DiscoverySourceSelected).sourceId, 'org.example.manga');
+  });
+
+  testWidgets('picker exposes the all-source search scope', (tester) async {
+    DiscoverySourcePickerResult? result;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: TextButton(
+              onPressed: () async {
+                result = await showDiscoverySourcePicker(context, sources: sources, selectedSourceId: null, allowAllSources: true);
+              },
+              child: const Text('打开'),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('打开'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('discovery-source-picker-all')), findsOneWidget);
+    expect(find.text('并行搜索并合并重复结果'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('discovery-source-picker-all')));
+    await tester.pumpAndSettle();
+    expect(result, isA<DiscoveryAllSourcesSelected>());
   });
 
   testWidgets('picker exposes the Runtime-owned management entry point', (tester) async {
@@ -91,6 +135,51 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(result, isA<DiscoverySourceManagementRequested>());
+  });
+
+  testWidgets('picker presents management as secondary and add as primary', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: Builder(
+          builder: (context) => TextButton(
+            onPressed: () => showDiscoverySourcePicker(context, sources: sources, selectedSourceId: sources.first.id),
+            child: const Text('打开'),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('打开'));
+    await tester.pumpAndSettle();
+
+    expect(find.widgetWithText(OutlinedButton, '管理数据源'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, '添加数据源'), findsOneWidget);
+  });
+
+  testWidgets('picker constrains its width on wide layouts', (tester) async {
+    tester.view.physicalSize = const Size(900, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: Builder(
+          builder: (context) => TextButton(
+            onPressed: () => showDiscoverySourcePicker(context, sources: sources, selectedSourceId: sources.first.id),
+            child: const Text('打开'),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('打开'));
+    await tester.pumpAndSettle();
+
+    expect(tester.getSize(find.byKey(const Key('discovery-source-picker-panel'))).width, 520);
   });
 
   testWidgets('long press exposes source WebView debug actions', (tester) async {
@@ -212,6 +301,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(pinnedSourceIds, <String>['org.example.manga']);
+    expect(find.text('已置顶'), findsOneWidget);
+    expect(find.text('其他数据源'), findsOneWidget);
     expect(
       tester.getTopLeft(find.byKey(const ValueKey<String>('discovery-source-picker-org.example.manga'))).dy,
       lessThan(tester.getTopLeft(find.byKey(const ValueKey<String>('discovery-source-picker-org.mgread.aisishuwu'))).dy),

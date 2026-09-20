@@ -149,7 +149,8 @@ class _LocalProfileHeader extends StatelessWidget {
                 fit: BoxFit.cover,
                 cacheWidth: 128,
                 cacheHeight: 128,
-                errorBuilder: (_, _, _) => const ColoredBox(color: Color(0xFFEDE7DE), child: SizedBox(width: 64, height: 64)),
+                errorBuilder: (context, _, _) =>
+                    ColoredBox(color: AppThemeTokens.of(context).mutedSurface, child: const SizedBox(width: 64, height: 64)),
               ),
             ),
             const SizedBox(width: AppSpacing.regular),

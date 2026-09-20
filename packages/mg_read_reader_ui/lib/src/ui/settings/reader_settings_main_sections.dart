@@ -69,38 +69,47 @@ extension _ReaderSettingsMainSections on _ReaderSettingsSheetState {
         children: <Widget>[
           Expanded(
             child: Slider(
+              key: const ValueKey<String>('reader-settings-brightness-slider'),
               value: _preferences.brightness,
-              min: .25,
+              min: .05,
               max: 1,
-              divisions: 30,
-              label: '${(_preferences.brightness * 100).round()}%',
+              divisions: 38,
+              label: _preferences.brightnessMode == ReaderBrightnessMode.system
+                  ? ReaderStrings.systemBrightness
+                  : '${(_preferences.brightness * 100).round()}%',
               semanticFormatterCallback: (double value) =>
-                  '${ReaderStrings.brightness} ${(value * 100).round()}%',
-              onChanged: (double value) =>
-                  _preview(_preferences.copyWith(brightness: value)),
-              onChangeEnd: (double value) =>
-                  _commit(_preferences.copyWith(brightness: value)),
+                  _preferences.brightnessMode == ReaderBrightnessMode.system
+                  ? ReaderStrings.systemBrightness
+                  : '${ReaderStrings.brightness} ${(value * 100).round()}%',
+              onChanged:
+                  _preferences.brightnessMode == ReaderBrightnessMode.manual
+                  ? (double value) =>
+                        _preview(_preferences.copyWith(brightness: value))
+                  : null,
+              onChangeEnd:
+                  _preferences.brightnessMode == ReaderBrightnessMode.manual
+                  ? (double value) =>
+                        _commit(_preferences.copyWith(brightness: value))
+                  : null,
             ),
           ),
           const SizedBox(width: 8),
           SizedBox(
-            width: ReaderSettingsTokens.eyeCareControlWidth,
-            child: ReaderSettingsCapsule(
+            width: ReaderSettingsTokens.brightnessModeControlWidth,
+            child: ReaderSettingsSegmentedControl<ReaderBrightnessMode>(
+              key: const ValueKey<String>('reader-settings-brightness-mode'),
+              values: const <ReaderBrightnessMode>[
+                ReaderBrightnessMode.manual,
+                ReaderBrightnessMode.system,
+              ],
+              selected: _preferences.brightnessMode,
+              labelFor: (ReaderBrightnessMode mode) => switch (mode) {
+                ReaderBrightnessMode.manual => ReaderStrings.manualBrightness,
+                ReaderBrightnessMode.system => ReaderStrings.systemBrightness,
+              },
+              onSelected: (ReaderBrightnessMode mode) =>
+                  _commit(_preferences.copyWith(brightnessMode: mode)),
               palette: palette,
-              padding: const EdgeInsets.symmetric(horizontal: 6),
-              selected: _preferences.theme == ReaderThemePreset.eyeCare,
-              semanticLabel: ReaderStrings.eyeCareMode,
-              onTap: () => _commit(
-                _preferences.copyWith(theme: ReaderThemePreset.eyeCare),
-              ),
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
-                children: <Widget>[
-                  Text(ReaderStrings.eyeCareMode),
-                  SizedBox(width: 4),
-                  Icon(Icons.visibility_outlined, size: 17),
-                ],
-              ),
             ),
           ),
         ],
@@ -114,64 +123,39 @@ extension _ReaderSettingsMainSections on _ReaderSettingsSheetState {
       ReaderFontPreset.sansSerif => ReaderStrings.sansSerif,
       ReaderFontPreset.serif => ReaderStrings.serif,
     };
-    return LayoutBuilder(
-      builder: (BuildContext context, BoxConstraints constraints) {
-        final Widget sizeControl = _buildFontSizeSlider(palette);
-        final Widget fontControl = ReaderSettingsCapsule(
-          palette: palette,
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          onTap: () => _openPage(_SettingsPage.font),
-          semanticLabel: ReaderStrings.selectFont,
-          child: Row(
-            children: <Widget>[
-              Expanded(
-                child: Text(
-                  fontLabel,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
-                ),
-              ),
-              const Icon(Icons.chevron_right_rounded, size: 18),
-            ],
-          ),
-        );
-        if (constraints.maxWidth < 300) {
-          return ReaderSettingsSectionRow(
-            label: ReaderStrings.fontSize,
-            alignTop: true,
-            child: Column(
-              children: <Widget>[
-                sizeControl,
-                const SizedBox(height: 6),
-                fontControl,
-              ],
+    final Widget sizeControl = _buildFontSizeControl(
+      palette,
+      showProgress: false,
+      showLabel: false,
+    );
+    final Widget fontControl = ReaderSettingsCapsule(
+      palette: palette,
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      onTap: () => _openPage(_SettingsPage.font),
+      semanticLabel: ReaderStrings.selectFont,
+      child: Row(
+        children: <Widget>[
+          Expanded(
+            child: Text(
+              fontLabel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
             ),
-          );
-        }
-        return ReaderSettingsSectionRow(
-          label: ReaderStrings.fontSize,
-          child: Row(
-            children: <Widget>[
-              SizedBox(
-                width: ReaderSettingsTokens.fontSizeControlWidth,
-                child: sizeControl,
-              ),
-              const SizedBox(width: 6),
-              SizedBox(
-                width:
-                    (constraints.maxWidth -
-                            ReaderSettingsTokens.labelWidth -
-                            ReaderSettingsTokens.fontSizeControlWidth -
-                            6)
-                        .clamp(96, 220)
-                        .toDouble(),
-                child: fontControl,
-              ),
-            ],
           ),
-        );
-      },
+          const Icon(Icons.chevron_right_rounded, size: 18),
+        ],
+      ),
+    );
+    return ReaderSettingsSectionRow(
+      label: ReaderStrings.fontSize,
+      child: Row(
+        children: <Widget>[
+          Expanded(child: sizeControl),
+          const SizedBox(width: 6),
+          Expanded(child: fontControl),
+        ],
+      ),
     );
   }
 

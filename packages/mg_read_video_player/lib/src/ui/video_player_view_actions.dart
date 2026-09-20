@@ -2,6 +2,24 @@
 part of 'video_player_view.dart';
 
 extension _VideoPlayerViewActions on _VideoPlayerViewState {
+  int? _actionBeginEpisodeOpening(int? loadGeneration) {
+    if (_disposed ||
+        (loadGeneration != null && !_isCurrentLoad(loadGeneration))) {
+      return null;
+    }
+    final int generation = ++_episodeGeneration;
+    _cancelFirstFrameTimeout();
+    _completionGeneration = 0;
+    _reportedFirstFrameSelection = null;
+    _reportedBackendError = null;
+    _update(() {
+      _status = VideoPlayerStatus.loading;
+      _failure = null;
+      _controlsVisible = true;
+    });
+    return generation;
+  }
+
   void _actionNotifyStartup(
     VideoStartupPhase phase, {
     required VideoStartupState state,
@@ -338,7 +356,8 @@ extension _VideoPlayerViewActions on _VideoPlayerViewState {
   }
 
   bool get _lifecycleAllowsPlayback =>
-      _lifecycleState == null || _lifecycleState == AppLifecycleState.resumed;
+      _lifecycleState == null ||
+      allowsVideoPlaybackForLifecycle(_lifecycleState!);
 
   Future<void> _actionResumeForForeground() async {
     if (!_playbackDesired || !_lifecycleAllowsPlayback) return;

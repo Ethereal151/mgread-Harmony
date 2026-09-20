@@ -23,7 +23,7 @@ abstract final class ReaderSettingsTokens {
   static const double backgroundPreviewHeight = 34;
   static const double navHeight = 58;
   static const double eyeCareControlWidth = 100;
-  static const double fontSizeControlWidth = 128;
+  static const double brightnessModeControlWidth = 112;
   static const double autoReadingSpeedControlWidth = 176;
   static const double fontCatalogPreviewSize = 52;
   static const double fontCatalogCardRadius = 11;

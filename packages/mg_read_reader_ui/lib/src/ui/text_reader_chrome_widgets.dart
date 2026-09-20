@@ -46,7 +46,8 @@ extension _TextReaderChromeWidgets on _TextReaderViewState {
                         (widget.extensions.chapterRefreshCapability == null
                             ? 0
                             : 48) +
-                        (widget.extensions.chapterCacheCapability == null
+                        (widget.extensions.chapterCacheCapability == null &&
+                                widget.extensions.bookRefreshCapability == null
                             ? 0
                             : 48),
                     top: 0,
@@ -109,7 +110,8 @@ extension _TextReaderChromeWidgets on _TextReaderViewState {
                               icon: const Icon(Icons.refresh_rounded, size: 21),
                             ),
                           ),
-                        if (widget.extensions.chapterCacheCapability != null)
+                        if (widget.extensions.chapterCacheCapability != null ||
+                            widget.extensions.bookRefreshCapability != null)
                           _buildReaderOverflowMenu(),
                       ],
                     ),
@@ -263,9 +265,11 @@ extension _TextReaderChromeWidgets on _TextReaderViewState {
                   ),
                   _barAction(
                     _isNightTheme(_preferences.theme)
-                        ? Icons.nightlight_rounded
+                        ? Icons.light_mode_rounded
                         : Icons.nightlight_outlined,
-                    ReaderStrings.night,
+                    _isNightTheme(_preferences.theme)
+                        ? ReaderStrings.day
+                        : ReaderStrings.night,
                     _toggleNightTheme,
                     key: const Key('reader-toolbar-night-theme'),
                   ),

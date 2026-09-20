@@ -23,6 +23,21 @@ void main() {
     },
   );
 
+  test('preserves zero spacing and margins as the no-distance option', () {
+    const TextReaderPreferences preferences = TextReaderPreferences(
+      paragraphSpacing: 0,
+      horizontalPadding: 0,
+      topPadding: 0,
+      bottomPadding: 0,
+    );
+    final TextReaderPreferences normalized = preferences.normalized();
+
+    expect(normalized.paragraphSpacing, 0);
+    expect(normalized.horizontalPadding, 0);
+    expect(normalized.topPadding, 0);
+    expect(normalized.bottomPadding, 0);
+  });
+
   test('keeps arbitrary font sizes within the supported continuous range', () {
     expect(
       const TextReaderPreferences(fontSize: 23.5).normalized().fontSize,
@@ -30,6 +45,72 @@ void main() {
     );
     expect(const TextReaderPreferences(fontSize: 12).normalized().fontSize, 16);
     expect(const TextReaderPreferences(fontSize: 40).normalized().fontSize, 32);
+  });
+
+  test(
+    'enables common page-turn shortcuts by default and can disable them',
+    () {
+      expect(TextReaderPreferences.defaults.pageTurnShortcuts, isTrue);
+      expect(
+        TextReaderPreferences.defaults
+            .copyWith(pageTurnShortcuts: false)
+            .pageTurnShortcuts,
+        isFalse,
+      );
+    },
+  );
+
+  test('defaults display brightness to the system and keeps manual values', () {
+    expect(
+      TextReaderPreferences.defaults.brightnessMode,
+      ReaderBrightnessMode.system,
+    );
+    expect(
+      const TextReaderPreferences(
+        brightness: .01,
+        brightnessMode: ReaderBrightnessMode.manual,
+      ).normalized(),
+      const TextReaderPreferences(
+        brightness: .05,
+        brightnessMode: ReaderBrightnessMode.manual,
+      ),
+    );
+  });
+
+  testWidgets('labels the bottom margin and page footer debug regions', (
+    WidgetTester tester,
+  ) async {
+    final TextReaderController controller = TextReaderController();
+    await tester.pumpWidget(
+      _reader(
+        _MemoryStore(const TextReaderPreferences(bottomPadding: 40)),
+        controller,
+      ),
+    );
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 500)),
+    );
+    await tester.pumpAndSettle();
+    await controller.showControls();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('reader-toolbar-settings')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('更多'));
+    await tester.pumpAndSettle();
+
+    final Finder debugMode = find.ancestor(
+      of: find.text('排版调试模式'),
+      matching: find.byType(SwitchListTile),
+    );
+    await tester.tap(
+      find.descendant(of: debugMode, matching: find.byType(Switch)),
+    );
+    await tester.pumpAndSettle();
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+
+    expect(find.text('底部边距 40 px'), findsOneWidget);
+    expect(find.text('页脚叠加层 bottom 10 px'), findsOneWidget);
   });
 
   testWidgets(
@@ -80,11 +161,41 @@ void main() {
     );
     expect(
       const TextReaderPreferences(
+        theme: ReaderThemePreset.eyeCare,
+        lastNightTheme: ReaderThemePreset.deepNight,
+      ).normalized().lastNightTheme,
+      ReaderThemePreset.deepNight,
+    );
+    expect(
+      const TextReaderPreferences(
+        theme: ReaderThemePreset.deepNight,
+      ).normalized().lastNightTheme,
+      ReaderThemePreset.deepNight,
+    );
+    expect(
+      const TextReaderPreferences(
+        theme: ReaderThemePreset.eyeCare,
+        lastNightTheme: ReaderThemePreset.eyeCare,
+      ).normalized().lastNightTheme,
+      ReaderThemePreset.night,
+    );
+    expect(
+      const TextReaderPreferences(
         theme: ReaderThemePreset.night,
         lastNonNightTheme: ReaderThemePreset.deepNight,
       ).normalized().lastNonNightTheme,
       ReaderThemePreset.day,
     );
+    for (final ReaderThemePreset theme in <ReaderThemePreset>[
+      ReaderThemePreset.oled,
+      ReaderThemePreset.midnight,
+      ReaderThemePreset.forestNight,
+    ]) {
+      expect(
+        TextReaderPreferences(theme: theme).normalized().lastNonNightTheme,
+        ReaderThemePreset.day,
+      );
+    }
   });
 
   testWidgets('restores the last non-night theme after a reader re-entry', (
@@ -122,6 +233,34 @@ void main() {
     await tester.runAsync(() => Future<void>.delayed(Duration.zero));
     expect(store.preferences.theme, ReaderThemePreset.eyeCare);
     expect(store.preferences.lastNonNightTheme, ReaderThemePreset.eyeCare);
+  });
+
+  testWidgets('toggles to the last selected night theme from the reader bar', (
+    WidgetTester tester,
+  ) async {
+    final _MemoryStore store = _MemoryStore(
+      const TextReaderPreferences(lastNightTheme: ReaderThemePreset.deepNight),
+    );
+    final TextReaderController controller = TextReaderController();
+    await tester.pumpWidget(_reader(store, controller));
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 500)),
+    );
+    await tester.pumpAndSettle();
+    await controller.showControls();
+    await tester.pump();
+
+    await tester.tap(find.byKey(const Key('reader-toolbar-night-theme')));
+    await tester.pump();
+    await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+    expect(store.preferences.theme, ReaderThemePreset.deepNight);
+    expect(find.text('日间'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('reader-toolbar-night-theme')));
+    await tester.pump();
+    await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+    expect(store.preferences.theme, ReaderThemePreset.day);
+    expect(find.text('夜间'), findsOneWidget);
   });
 
   testWidgets(

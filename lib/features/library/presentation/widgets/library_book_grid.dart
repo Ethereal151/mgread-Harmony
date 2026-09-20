@@ -17,6 +17,7 @@ import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 import 'package:mg_read/app/app_theme.dart';
 import 'package:mg_read/core/content_library/content_library.dart';
 import 'package:mg_read/features/library/presentation/library_book_list_view_data.dart';
+import 'package:mg_read/features/library/presentation/library_home_view_data.dart';
 import 'package:mg_read/features/library/presentation/widgets/library_book_cover.dart';
 import 'package:mg_read/features/library/presentation/widgets/library_book_list_action.dart';
 import 'package:mg_read/features/library/presentation/widgets/library_book_removal_transition.dart';
@@ -35,6 +36,7 @@ class LibraryBookSliverGrid extends StatelessWidget {
     this.preparingBookId,
     this.removingBookIds = const <String>{},
     this.refreshingBookIds = const <String>{},
+    this.metadataMode = LibraryHomeCoverMetadataMode.belowCover,
     super.key,
   }) : books = List<LibraryBookListItemViewData>.unmodifiable(books);
 
@@ -47,6 +49,7 @@ class LibraryBookSliverGrid extends StatelessWidget {
   final String? preparingBookId;
   final Set<String> removingBookIds;
   final Set<String> refreshingBookIds;
+  final LibraryHomeCoverMetadataMode metadataMode;
 
   @override
   Widget build(BuildContext context) {
@@ -78,6 +81,7 @@ class LibraryBookSliverGrid extends StatelessWidget {
                 isRefreshing: refreshingBookIds.contains(book.id),
                 coverWidth: tileWidth,
                 coverHeight: coverHeight,
+                metadataMode: metadataMode,
               ),
             );
           },
@@ -100,6 +104,7 @@ class LibraryBookGridItem extends StatelessWidget {
     this.isRefreshing = false,
     required this.coverWidth,
     required this.coverHeight,
+    this.metadataMode = LibraryHomeCoverMetadataMode.belowCover,
     super.key,
   });
 
@@ -113,6 +118,7 @@ class LibraryBookGridItem extends StatelessWidget {
   final bool isRefreshing;
   final double coverWidth;
   final double coverHeight;
+  final LibraryHomeCoverMetadataMode metadataMode;
 
   @override
   Widget build(BuildContext context) {
@@ -147,6 +153,7 @@ class LibraryBookGridItem extends StatelessWidget {
                       ),
                       child: LibraryBookCover(
                         title: data.title,
+                        contentKind: data.contentKind,
                         variant: data.coverVariant,
                         coverBytes: data.coverBytes,
                         coverRequest: data.coverRequest,
@@ -159,6 +166,7 @@ class LibraryBookGridItem extends StatelessWidget {
                         isRefreshing: isRefreshing,
                       ),
                     ),
+                    if (metadataMode == LibraryHomeCoverMetadataMode.insideCover) Positioned.fill(child: _CoverMetadataOverlay(data: data)),
                     if (data.hasAttentionIndicator)
                       Positioned(
                         left: AppSpacing.compact,
@@ -189,21 +197,23 @@ class LibraryBookGridItem extends StatelessWidget {
                       ),
                   ],
                 ),
-                const SizedBox(height: AppSpacing.compact),
-                Text(
-                  data.title,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.titleMedium?.copyWith(fontSize: AppTypography.body, fontWeight: FontWeight.w600, height: 1.22),
-                ),
-                if (data.subtitle case final subtitle?) ...<Widget>[
-                  const SizedBox(height: AppSpacing.unit),
+                if (metadataMode == LibraryHomeCoverMetadataMode.belowCover) ...<Widget>[
+                  const SizedBox(height: AppSpacing.compact),
                   Text(
-                    subtitle,
-                    maxLines: 1,
+                    data.title,
+                    maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodySmall?.copyWith(color: tokens.mutedText, fontSize: AppTypography.caption, height: 1.2),
+                    style: theme.textTheme.titleMedium?.copyWith(fontSize: AppTypography.body, fontWeight: FontWeight.w600, height: 1.22),
                   ),
+                  if (data.subtitle case final subtitle?) ...<Widget>[
+                    const SizedBox(height: AppSpacing.unit),
+                    Text(
+                      subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall?.copyWith(color: tokens.mutedText, fontSize: AppTypography.caption, height: 1.2),
+                    ),
+                  ],
                 ],
               ],
             ),
@@ -216,6 +226,72 @@ class LibraryBookGridItem extends StatelessWidget {
   String get _semanticLabel {
     final String? subtitle = data.subtitle;
     return subtitle == null || subtitle.isEmpty ? data.title : '${data.title}，$subtitle';
+  }
+}
+
+class _CoverMetadataOverlay extends StatelessWidget {
+  const _CoverMetadataOverlay({required this.data});
+
+  final LibraryBookListItemViewData data;
+
+  @override
+  Widget build(BuildContext context) {
+    final ThemeData theme = Theme.of(context);
+    final TextStyle titleStyle = (theme.textTheme.titleMedium ?? const TextStyle()).copyWith(
+      color: Colors.white,
+      fontSize: AppTypography.body,
+      fontWeight: FontWeight.w700,
+      height: 1.15,
+      shadows: const <Shadow>[Shadow(color: Colors.black54, blurRadius: 4)],
+    );
+    final TextStyle subtitleStyle = (theme.textTheme.bodySmall ?? const TextStyle()).copyWith(
+      color: Colors.white.withValues(alpha: 0.88),
+      fontSize: AppTypography.caption,
+      height: 1.2,
+      shadows: const <Shadow>[Shadow(color: Colors.black54, blurRadius: 3)],
+    );
+    return IgnorePointer(
+      child: ClipRRect(
+        borderRadius: AppRadii.bookCover,
+        child: DecoratedBox(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: <Color>[Colors.transparent, Color(0xC9000000)],
+              stops: <double>[0.52, 1],
+            ),
+          ),
+          child: Align(
+            alignment: Alignment.bottomLeft,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(AppSpacing.compact, AppSpacing.page, AppSpacing.compact, AppSpacing.compact),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(
+                    data.title,
+                    key: Key('library-grid-book-overlay-title-${data.id}'),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: titleStyle,
+                  ),
+                  if (data.subtitle case final subtitle?)
+                    Text(
+                      subtitle,
+                      key: Key('library-grid-book-overlay-subtitle-${data.id}'),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: subtitleStyle,
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 

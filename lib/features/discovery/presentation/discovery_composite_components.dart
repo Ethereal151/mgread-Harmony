@@ -8,7 +8,7 @@
 /// - 组件只消费 Runtime 已校验的数据，不执行 IO，也不接受数据源颜色、尺寸或任意 UI 代码。
 /// - 布局名称表达内容语义；列数、间距和主题始终由 MgRead 根据可用宽度决定。
 /// - 本文件负责竖向与方形封面；横向封面由独立通用组件负责。
-/// - 分类 chips 按可用宽度等分列宽，最后一行保持同一列宽而不按内容收缩。
+/// - 分类 chips 按可用宽度等分可见按钮，最后一行保持同一列宽而不按内容收缩。
 /// - 横向书架在组件内允许触摸、手写笔、触控板和鼠标直接拖动。
 library;
 
@@ -247,12 +247,12 @@ class _CategoryChips extends StatelessWidget {
         < 1080 => 5,
         _ => 6,
       };
-      const gap = AppSpacing.discoveryComponentGap;
+      const gap = AppSpacing.compact;
       final itemWidth = (constraints.maxWidth - gap * (columns - 1)) / columns;
       return Wrap(
         key: const Key('runtime-discovery-category-chips'),
         spacing: gap,
-        runSpacing: AppSpacing.compact,
+        runSpacing: 0,
         children: categories
             .map(
               (category) => SizedBox(
@@ -315,35 +315,81 @@ class DiscoveryComponentChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final tokens = AppThemeTokens.of(context);
+    final labelStyle = theme.textTheme.bodyMedium?.copyWith(
+      color: selected ? theme.colorScheme.onPrimaryContainer : theme.colorScheme.onSurface,
+      fontWeight: FontWeight.w600,
+    );
     return SizedBox(
       height: AppSpacing.minimumTouchTarget,
-      child: Align(
-        widthFactor: expanded ? null : 1,
-        alignment: Alignment.center,
-        child: SizedBox(
-          height: AppSpacing.discoveryChipVisualHeight,
-          width: expanded ? double.infinity : null,
-          child: ChoiceChip(
-            showCheckmark: false,
-            selected: selected,
-            onSelected: (_) => onPressed(),
-            avatar: icon == null ? null : Icon(icon, size: 17, color: tokens.accent),
-            label: Text(label),
-            labelStyle: theme.textTheme.bodyMedium?.copyWith(
-              color: selected ? theme.colorScheme.onPrimaryContainer : theme.colorScheme.onSurface,
-              fontWeight: FontWeight.w600,
+      child: expanded
+          ? Material(
+              type: MaterialType.transparency,
+              child: InkWell(
+                onTap: onPressed,
+                borderRadius: AppRadii.discoveryTile,
+                child: Align(
+                  alignment: Alignment.center,
+                  child: SizedBox(
+                    key: const Key('runtime-discovery-expanded-chip-surface'),
+                    height: AppSpacing.discoveryChipVisualHeight,
+                    width: double.infinity,
+                    child: Ink(
+                      decoration: ShapeDecoration(
+                        color: selected ? tokens.accentSoft : tokens.surface,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: AppRadii.discoveryTile,
+                          side: BorderSide(color: selected ? tokens.accent : tokens.divider),
+                        ),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.compact),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: <Widget>[
+                            if (icon != null) ...<Widget>[
+                              Icon(icon, size: 17, color: tokens.accent),
+                              const SizedBox(width: AppSpacing.unit),
+                            ],
+                            Flexible(
+                              child: Text(
+                                label,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                textAlign: TextAlign.center,
+                                style: labelStyle,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            )
+          : Align(
+              widthFactor: 1,
+              alignment: Alignment.center,
+              child: SizedBox(
+                height: AppSpacing.discoveryChipVisualHeight,
+                child: ChoiceChip(
+                  showCheckmark: false,
+                  selected: selected,
+                  onSelected: (_) => onPressed(),
+                  avatar: icon == null ? null : Icon(icon, size: 17, color: tokens.accent),
+                  label: Text(label),
+                  labelStyle: labelStyle,
+                  labelPadding: const EdgeInsets.symmetric(horizontal: AppSpacing.unit),
+                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.compact),
+                  visualDensity: VisualDensity.compact,
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  backgroundColor: tokens.surface,
+                  selectedColor: tokens.accentSoft,
+                  side: BorderSide(color: selected ? tokens.accent : tokens.divider),
+                  shape: RoundedRectangleBorder(borderRadius: AppRadii.discoveryTile),
+                ),
+              ),
             ),
-            labelPadding: const EdgeInsets.symmetric(horizontal: AppSpacing.unit),
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.compact),
-            visualDensity: VisualDensity.compact,
-            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            backgroundColor: tokens.surface,
-            selectedColor: tokens.accentSoft,
-            side: BorderSide(color: selected ? tokens.accent : tokens.divider),
-            shape: RoundedRectangleBorder(borderRadius: AppRadii.discoveryTile),
-          ),
-        ),
-      ),
     );
   }
 }
@@ -382,6 +428,7 @@ class _CoverTile extends StatelessWidget {
               children: <Widget>[
                 DiscoveryBookCover(
                   title: content.title,
+                  contentKind: content.contentKind,
                   coverBytes: content.coverBytes,
                   remoteContentId: content.id,
                   coverUrl: content.coverUrl,

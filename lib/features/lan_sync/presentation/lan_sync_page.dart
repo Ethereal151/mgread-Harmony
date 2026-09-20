@@ -85,7 +85,7 @@ class _LanSyncPageState extends ConsumerState<LanSyncPage> {
             gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
-              colors: <Color>[tokens.pageBackground, const Color(0xFFFFFCF9), tokens.pageBackground],
+              colors: <Color>[tokens.pageBackground, tokens.surface, tokens.pageBackground],
             ),
           ),
           child: SafeArea(

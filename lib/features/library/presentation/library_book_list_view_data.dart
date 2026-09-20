@@ -24,6 +24,7 @@ final class LibraryBookListItemViewData {
     required this.title,
     required this.coverVariant,
     required this.status,
+    this.contentKind = ContentKind.novel,
     this.coverUrl,
     this.coverOrientation = CoverOrientation.portrait,
     this.coverBytes,
@@ -43,6 +44,9 @@ final class LibraryBookListItemViewData {
 
   /// Primary title shown at the top of the row.
   final String title;
+
+  /// Content family used by type-aware local cover artwork and destinations.
+  final ContentKind contentKind;
 
   /// Optional source cover retained by the app-owned shelf projection.
   final Uri? coverUrl;

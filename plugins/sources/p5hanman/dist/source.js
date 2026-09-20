@@ -36,7 +36,7 @@ export class P5HanmanSource {
         if (normalized === null)
             return Object.freeze([]);
         const url = new URL('/search', siteOrigin);
-        url.searchParams.set('q', normalized);
+        url.searchParams.set('keyword', normalized);
         const html = await this.#cache.getOrFetchText(url, listingPolicy, async () => (await this.#fetchHtml(url)).body);
         return this.#parseCards(html, url, 'unknown', '漫画', 1).items;
     }

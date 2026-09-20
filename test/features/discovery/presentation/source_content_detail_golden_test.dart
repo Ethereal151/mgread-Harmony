@@ -52,6 +52,16 @@ void main() {
     expect(find.text('字数：1859600'), findsNothing);
   });
 
+  testWidgets('novel detail keeps its reader theme outside the application theme', (WidgetTester tester) async {
+    await _setViewport(tester, const Size(390, 900));
+    await tester.pumpWidget(_DetailGoldenHost(appTheme: AppTheme.dark(), useReference: true));
+    await tester.pumpAndSettle();
+
+    final BuildContext detailContext = tester.element(find.byKey(const Key('source-content-detail-sheet')));
+    expect(Theme.of(detailContext).brightness, Brightness.light);
+    expect(Theme.of(detailContext).colorScheme.primary, AppThemeColor.warm.accent);
+  });
+
   testWidgets('uses the complete catalog length as the chapter count', (WidgetTester tester) async {
     await _setViewport(tester, const Size(390, 900));
     await tester.pumpWidget(_DetailGoldenHost(gateway: _GoldenDetailGateway()));
@@ -195,6 +205,7 @@ class _DetailGoldenHost extends StatelessWidget {
     this.gateway,
     this.useReference = false,
     this.includeInitialContent = true,
+    this.appTheme,
     this.onRecommendationRequested,
     this.onCopyFailure,
   });
@@ -202,13 +213,14 @@ class _DetailGoldenHost extends StatelessWidget {
   final _GoldenDetailGateway? gateway;
   final bool useReference;
   final bool includeInitialContent;
+  final ThemeData? appTheme;
   final SourceRecommendationRequested? onRecommendationRequested;
   final SourceDetailFailureCopy? onCopyFailure;
 
   @override
   Widget build(BuildContext context) => MaterialApp(
     debugShowCheckedModeBanner: false,
-    theme: AppTheme.light(),
+    theme: appTheme ?? AppTheme.light(),
     themeMode: ThemeMode.light,
     builder: (BuildContext context, Widget? child) {
       final MediaQueryData mediaQuery = MediaQuery.of(context);

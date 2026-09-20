@@ -4,6 +4,10 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+val isReleaseBuild = gradle.startParameter.taskNames.any {
+    it.contains("Release", ignoreCase = true)
+}
+
 android {
     namespace = "com.mgread.mg_read"
     compileSdk = flutter.compileSdkVersion
@@ -38,16 +42,23 @@ android {
             // Compress native libraries to reduce direct APK download size.
             // Android extracts them during installation.
             useLegacyPackaging = true
-            excludes += setOf(
-                "**/armeabi-v7a/**",
-                "**/x86/**",
-                "**/x86_64/**",
-                "**/libVkLayer_khronos_validation.so",
-            )
+            excludes += buildSet {
+                add("**/armeabi-v7a/**")
+                add("**/x86/**")
+                if (isReleaseBuild) add("**/x86_64/**")
+                add("**/libVkLayer_khronos_validation.so")
+            }
         }
     }
 
     buildTypes {
+        debug {
+            // Keep the production APK arm64-only while allowing the x86_64
+            // Android emulator to exercise Flutter and MediaKit playback.
+            ndk {
+                abiFilters.add("x86_64")
+            }
+        }
         release {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.

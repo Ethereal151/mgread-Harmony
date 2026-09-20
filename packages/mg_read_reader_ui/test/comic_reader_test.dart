@@ -8,6 +8,8 @@ import 'package:novel_reader_ui/novel_reader_ui.dart';
 import 'package:novel_reader_ui/src/ui/comic/comic_image_cache.dart';
 import 'package:novel_reader_ui/src/ui/comic/comic_image_tile.dart';
 import 'package:novel_reader_ui/src/ui/comic/comic_chapter_preloader.dart';
+import 'package:novel_reader_ui/src/ui/comic/comic_image_retry_coordinator.dart';
+import 'package:novel_reader_ui/src/ui/reader_theme.dart';
 
 void main() {
   testWidgets('owns transparent system bars while the comic chapter loads', (
@@ -30,6 +32,55 @@ void main() {
     expect(region.value.statusBarIconBrightness, Brightness.light);
     expect(region.value.systemNavigationBarColor, Colors.transparent);
     expect(region.value.systemStatusBarContrastEnforced, isFalse);
+  });
+
+  testWidgets('uses a light chapter header for comic chapter transitions', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ComicReaderView(
+          bookId: 'book',
+          dataSource: _FakeComicSource(),
+          stateStore: _MemoryComicStateStore(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final ScrollPosition position = tester
+        .state<ScrollableState>(find.byType(Scrollable).first)
+        .position;
+    position.jumpTo(0);
+    await tester.pump();
+
+    final List<ColoredBox> headers = tester
+        .widgetList<ColoredBox>(
+          find.byKey(const ValueKey<String>('comic-reader-chapter-header')),
+        )
+        .toList();
+    final List<Text> titles = tester
+        .widgetList<Text>(
+          find.descendant(
+            of: find.byKey(
+              const ValueKey<String>('comic-reader-chapter-header'),
+            ),
+            matching: find.byType(Text),
+          ),
+        )
+        .toList();
+
+    expect(headers, isNotEmpty);
+    expect(
+      headers.every((ColoredBox header) => header.color == Colors.white),
+      isTrue,
+    );
+    expect(titles, isNotEmpty);
+    expect(
+      titles.every(
+        (Text title) => title.style?.color == const Color(0xFF242424),
+      ),
+      isTrue,
+    );
   });
 
   test('comic progress is anchored by chapter, image and fraction', () {
@@ -71,6 +122,38 @@ void main() {
         sourceUrl: sourceUrl,
       ),
     );
+  });
+
+  testWidgets('failed comic images expose a background retry callback', (
+    WidgetTester tester,
+  ) async {
+    final source = _RetryingComicSource(failures: 1);
+    final cache = ComicImageByteCache(bookId: 'book', dataSource: source);
+    Future<void> Function()? retry;
+    addTearDown(cache.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ComicProgressiveImageTile(
+          cache: cache,
+          chapterId: 'chapter-1',
+          image: _image('image-1', null),
+          width: 320,
+          placeholderHeight: 240,
+          palette: ReaderPalette.fromPreset(ReaderThemePreset.day),
+          onFailure: (_) {},
+          decodeBudget: ComicDecodedImageBudget(),
+          onAutomaticRetryAvailable: (callback) => retry = callback,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(retry, isNotNull);
+    await retry!();
+    await tester.pump();
+    expect(source.imageCalls, 2);
   });
 
   test(
@@ -160,6 +243,43 @@ void main() {
     },
   );
 
+  testWidgets(
+    'comic reader caches configured following chapter manifests and images',
+    (WidgetTester tester) async {
+      final source = _MultiChapterPreloadComicSource();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ComicReaderView(
+            bookId: 'book',
+            dataSource: source,
+            stateStore: _MemoryComicStateStore(),
+            chapterPreloadCount: 2,
+          ),
+        ),
+      );
+      for (
+        var frame = 0;
+        frame < 30 && !source.requestedImages.contains('chapter-3/image-3');
+        frame++
+      ) {
+        await tester.pump(const Duration(milliseconds: 10));
+      }
+
+      expect(source.requestedContent, <String>[
+        'chapter-1',
+        'chapter-2',
+        'chapter-3',
+      ]);
+      expect(source.requestedImages, <String>[
+        'chapter-1/image-1',
+        'chapter-2/image-2',
+        'chapter-3/image-3',
+      ]);
+      expect(source.requestedContent, isNot(contains('chapter-4')));
+    },
+  );
+
   test(
     'memory pressure cancels prefetch and rejects late cache insertion',
     () async {
@@ -218,13 +338,13 @@ void main() {
   );
 
   test(
-    'chapter preload is ordered, bounded and waits before the next chapter',
+    'chapter preload is ordered, bounded and obeys the following chapter count',
     () async {
       final source = _BlockingComicSource();
       final cache = ComicImageByteCache(bookId: 'book', dataSource: source);
       final preloader = ComicChapterPreloader(cache);
       addTearDown(cache.dispose);
-      var nextCalls = 0;
+      final nextCalls = <int>[];
       final chapter = ComicChapterContent(
         chapterId: 'chapter-1',
         title: '第一章',
@@ -234,12 +354,13 @@ void main() {
       );
       preloader.start(
         chapter,
-        nextChapter: () async {
-          nextCalls++;
+        followingChapterCount: 2,
+        followingChapter: (int offset) async {
+          nextCalls.add(offset);
           return ComicChapterContent(
-            chapterId: 'chapter-2',
-            title: '第二章',
-            images: [_image('next', null)],
+            chapterId: 'chapter-${offset + 1}',
+            title: '后续第 $offset 章',
+            images: [_image('next-$offset', null)],
           );
         },
       );
@@ -252,18 +373,58 @@ void main() {
         source.complete('page-$i');
         await Future<void>.delayed(Duration.zero);
       }
-      expect(nextCalls, 0);
+      expect(nextCalls, isEmpty);
       expect(source.started, List.generate(10, (i) => 'page-$i'));
       source.complete('page-9');
       await Future<void>.delayed(Duration.zero);
-      expect(nextCalls, 1);
-      expect(source.started.last, 'next');
+      expect(nextCalls, <int>[1]);
+      expect(source.started.last, 'next-1');
       expect(source.peakActive, 4);
-      source.complete('next');
+      source.complete('next-1');
+      await Future<void>.delayed(Duration.zero);
+      expect(nextCalls, <int>[1, 2]);
+      expect(source.started.last, 'next-2');
+      source.complete('next-2');
       await Future<void>.delayed(Duration.zero);
       preloader.cancel();
     },
   );
+
+  test('chapter preload reports image-level cache progress', () async {
+    final source = _FakeComicSource();
+    final cache = ComicImageByteCache(bookId: 'book', dataSource: source);
+    final progress = <(int, int)>[];
+    final preloader = ComicChapterPreloader(
+      cache,
+      onProgress: (chapter, cached, failed) {
+        progress.add((cached, failed));
+      },
+    );
+    addTearDown(cache.dispose);
+
+    preloader.start(
+      ComicChapterContent(
+        chapterId: 'chapter-1',
+        title: '第一章',
+        images: <ComicImageInfo>[
+          _image('one', null),
+          ComicImageInfo(id: 'two', index: 1),
+        ],
+      ),
+      followingChapterCount: 0,
+      followingChapter: (_) async => null,
+    );
+    for (
+      var attempt = 0;
+      attempt < 20 && (progress.isEmpty || progress.last != (2, 0));
+      attempt++
+    ) {
+      await Future<void>.delayed(Duration.zero);
+    }
+
+    expect(progress.first, (0, 0));
+    expect(progress.last, (2, 0));
+  });
 
   test(
     'cancelling chapter preload stops replenishment and preserves visible work',
@@ -282,7 +443,8 @@ void main() {
       var nextCalls = 0;
       preloader.start(
         chapter,
-        nextChapter: () async {
+        followingChapterCount: 1,
+        followingChapter: (int offset) async {
           nextCalls++;
           return null;
         },
@@ -401,6 +563,129 @@ void main() {
     );
   });
 
+  test('comic reader keeps page-turn shortcut preference in copies', () {
+    expect(ComicReaderPreferences.defaults.pageTurnShortcuts, isTrue);
+    expect(ComicReaderPreferences.defaults.pageTurnFraction, .9);
+    expect(ComicReaderPreferences.pageTurnFractions, <double>[
+      .3,
+      .5,
+      .8,
+      .9,
+      1,
+    ]);
+    expect(
+      ComicReaderPreferences.defaults
+          .copyWith(
+            pageTurnShortcuts: false,
+            pageTurnFraction: .5,
+            pageTurnLayout: ComicPageTurnLayout.horizontal,
+            singleHandMode: true,
+          )
+          .pageTurnShortcuts,
+      isFalse,
+    );
+    final ComicReaderPreferences configured = ComicReaderPreferences.defaults
+        .copyWith(
+          pageTurnFraction: .5,
+          pageTurnLayout: ComicPageTurnLayout.horizontal,
+          singleHandMode: true,
+        )
+        .normalized();
+    expect(configured.pageTurnFraction, .5);
+    expect(configured.pageTurnLayout, ComicPageTurnLayout.horizontal);
+    expect(configured.singleHandMode, isTrue);
+    expect(
+      const ComicReaderPreferences(
+        pageTurnFraction: .82,
+      ).normalized().pageTurnFraction,
+      .8,
+    );
+  });
+
+  test(
+    'comic image retries use jittered and near-viewport scheduling',
+    () async {
+      var nearViewport = false;
+      var retryCalls = 0;
+      final coordinator = ComicImageRetryCoordinator(
+        retryDelay: () => const Duration(milliseconds: 20),
+        scanDebounce: const Duration(milliseconds: 2),
+      );
+      addTearDown(coordinator.dispose);
+
+      coordinator.register(
+        key: 'far',
+        isNearViewport: () => nearViewport,
+        retry: () async {
+          retryCalls++;
+          coordinator.markResolved('far');
+        },
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 8));
+      expect(retryCalls, 0);
+
+      nearViewport = true;
+      coordinator.onViewportChanged();
+      await Future<void>.delayed(const Duration(milliseconds: 8));
+      expect(retryCalls, 1);
+
+      coordinator.register(
+        key: 'near',
+        isNearViewport: () => true,
+        retry: () async {
+          retryCalls++;
+          coordinator.markResolved('near');
+        },
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 8));
+      expect(retryCalls, 2);
+    },
+  );
+
+  test('comic image retry coordinator keeps one request in flight', () async {
+    final coordinator = ComicImageRetryCoordinator(
+      retryDelay: () => Duration.zero,
+      scanDebounce: const Duration(milliseconds: 2),
+    );
+    addTearDown(coordinator.dispose);
+    final Completer<void> firstRetry = Completer<void>();
+    var active = 0;
+    var peakActive = 0;
+    var retryCalls = 0;
+
+    coordinator.register(
+      key: 'first',
+      isNearViewport: () => true,
+      retry: () async {
+        active++;
+        peakActive = active > peakActive ? active : peakActive;
+        retryCalls++;
+        await firstRetry.future;
+        active--;
+        coordinator.markResolved('first');
+      },
+    );
+    coordinator.register(
+      key: 'second',
+      isNearViewport: () => true,
+      retry: () async {
+        active++;
+        peakActive = active > peakActive ? active : peakActive;
+        retryCalls++;
+        active--;
+        coordinator.markResolved('second');
+      },
+    );
+
+    await Future<void>.delayed(const Duration(milliseconds: 8));
+    expect(retryCalls, 1);
+    expect(peakActive, 1);
+    firstRetry.complete();
+    await Future<void>.delayed(const Duration(milliseconds: 8));
+    expect(retryCalls, 2);
+    expect(peakActive, 1);
+  });
+
   testWidgets(
     'comic images use decoded dimensions and meet without fixed-extent gaps',
     (WidgetTester tester) async {
@@ -487,11 +772,19 @@ void main() {
     );
     expect(find.text('测试漫画源'), findsOneWidget);
     expect(find.text('https://source.example/comics/book'), findsOneWidget);
+    expect(
+      tester
+          .getRect(
+            find.byKey(const ValueKey<String>('comic-reader-source-name')),
+          )
+          .width,
+      lessThan(104),
+    );
     expect(tester.getRect(sourceStrip).top, tester.getRect(primaryBar).bottom);
     final Material stripMaterial = tester.widget<Material>(
       find.descendant(of: sourceStrip, matching: find.byType(Material)).first,
     );
-    expect(stripMaterial.color, const Color(0xD917191B));
+    expect(stripMaterial.color, const Color(0xFF17191B));
     expect(
       find.byKey(const ValueKey<String>('comic-reader-catalog')),
       findsOneWidget,
@@ -510,6 +803,351 @@ void main() {
     await tester.pump();
     expect(observer.exitCount, 1);
     expect(observer.firstContentCount, 1);
+  });
+
+  testWidgets(
+    'comic settings expose shared page-turn layout and ratio controls',
+    (WidgetTester tester) async {
+      final store = _MemoryComicStateStore();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ComicReaderView(
+            bookId: 'book',
+            dataSource: _FakeComicSource(),
+            stateStore: store,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey<String>('comic-reader-content-surface')),
+      );
+      await tester.pump();
+      await tester.tap(
+        find.byKey(const ValueKey<String>('comic-reader-settings')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('跳转比例'), findsOneWidget);
+      expect(find.text('90%'), findsOneWidget);
+      expect(find.text('点击翻页方向'), findsOneWidget);
+      expect(find.text('上下区域'), findsOneWidget);
+      expect(find.text('单手模式'), findsOneWidget);
+
+      await tester.tap(
+        find.byKey(const ValueKey<String>('comic-reader-page-turn-fraction')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('50%').last);
+      await tester.pumpAndSettle();
+      expect(store.preferences?.pageTurnFraction, .5);
+
+      await tester.tap(
+        find.byKey(const ValueKey<String>('comic-reader-page-turn-layout')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('左右区域').last);
+      await tester.pumpAndSettle();
+      expect(store.preferences?.pageTurnLayout, ComicPageTurnLayout.horizontal);
+
+      await tester.tap(find.text('单手模式'));
+      await tester.pump();
+      expect(store.preferences?.singleHandMode, isTrue);
+    },
+  );
+
+  testWidgets('comic catalog completes pages and centers the current chapter', (
+    WidgetTester tester,
+  ) async {
+    tester.view
+      ..physicalSize = const Size(400, 700)
+      ..devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final source = _PagedComicCatalogSource();
+    final controller = ComicReaderController();
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ComicReaderView(
+          bookId: 'book',
+          dataSource: source,
+          controller: controller,
+          stateStore: _MemoryComicStateStore(
+            progress: const ComicReaderProgress(
+              chapterId: 'chapter-76',
+              imageId: 'image-1',
+              chapterIndex: 75,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(controller.snapshot.chapter?.id, 'chapter-76');
+
+    await tester.tap(
+      find.byKey(const ValueKey<String>('comic-reader-content-surface')),
+    );
+    await tester.pump();
+    await tester.tap(
+      find.byKey(const ValueKey<String>('comic-reader-catalog')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(source.catalogCursors, <String?>[null, '50', '100']);
+    expect(find.text('共 120 话'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey<String>('comic-reader-catalog-scrollbar')),
+      findsOneWidget,
+    );
+    final ScrollableState catalogScrollable = tester.state<ScrollableState>(
+      find
+          .descendant(
+            of: find.byKey(
+              const ValueKey<String>('comic-reader-catalog-scrollbar'),
+            ),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+    expect(catalogScrollable.position.pixels, greaterThan(0));
+    final Finder currentChapter = find.byKey(
+      const ValueKey<String>('comic-reader-catalog-chapter-chapter-76'),
+    );
+    expect(currentChapter, findsOneWidget);
+    expect(tester.widget<ListTile>(currentChapter).selected, isTrue);
+    expect(
+      find.descendant(
+        of: currentChapter,
+        matching: find.text('1 张 · 未读 · 已缓存 1/1'),
+      ),
+      findsOneWidget,
+    );
+    final Rect chapterRect = tester.getRect(currentChapter);
+    expect(chapterRect.top, greaterThan(100));
+    expect(chapterRect.bottom, lessThan(700));
+  });
+
+  testWidgets('tapping the comic reader middle area closes visible controls', (
+    WidgetTester tester,
+  ) async {
+    final controller = ComicReaderController();
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ComicReaderView(
+          bookId: 'book',
+          dataSource: _FakeComicSource(),
+          stateStore: _MemoryComicStateStore(),
+          controller: controller,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(const ValueKey<String>('comic-reader-content-surface')),
+    );
+    await tester.pump();
+    expect(controller.snapshot.controlsVisible, isTrue);
+    final regionWithControls = tester
+        .widget<AnnotatedRegion<SystemUiOverlayStyle>>(
+          find.byType(AnnotatedRegion<SystemUiOverlayStyle>),
+        );
+    expect(regionWithControls.value.statusBarColor, const Color(0xFF17191B));
+    expect(
+      regionWithControls.value.systemNavigationBarColor,
+      const Color(0xFF17191B),
+    );
+    expect(
+      find.byKey(
+        const ValueKey<String>('comic-reader-controls-interaction-lock'),
+      ),
+      findsOneWidget,
+    );
+
+    await tester.tap(
+      find.byKey(
+        const ValueKey<String>('comic-reader-controls-interaction-lock'),
+      ),
+    );
+    await tester.pump();
+    expect(controller.snapshot.controlsVisible, isFalse);
+    final regionWithoutControls = tester
+        .widget<AnnotatedRegion<SystemUiOverlayStyle>>(
+          find.byType(AnnotatedRegion<SystemUiOverlayStyle>),
+        );
+    expect(regionWithoutControls.value.statusBarColor, Colors.transparent);
+    expect(
+      regionWithoutControls.value.systemNavigationBarColor,
+      Colors.transparent,
+    );
+    expect(
+      find.byKey(
+        const ValueKey<String>('comic-reader-controls-interaction-lock'),
+      ),
+      findsNothing,
+    );
+  });
+
+  testWidgets(
+    'comic edge taps turn pages, center opens controls, and drag still scrolls',
+    (WidgetTester tester) async {
+      tester.view
+        ..physicalSize = const Size(400, 600)
+        ..devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final controller = ComicReaderController();
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ComicReaderView(
+            bookId: 'book',
+            dataSource: _LongComicSource(),
+            stateStore: _MemoryComicStateStore(),
+            controller: controller,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final Finder surface = find.byKey(
+        const ValueKey<String>('comic-reader-content-surface'),
+      );
+      final Rect surfaceRect = tester.getRect(surface);
+      final ScrollPosition position = tester
+          .state<ScrollableState>(find.byType(Scrollable).first)
+          .position;
+
+      await tester.tapAt(
+        Offset(surfaceRect.center.dx, surfaceRect.bottom - 24),
+      );
+      for (var frame = 0; frame < 20; frame++) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      final double afterDownTap = position.pixels;
+      expect(afterDownTap, greaterThan(0));
+      expect(controller.snapshot.controlsVisible, isFalse);
+
+      await tester.tapAt(Offset(surfaceRect.center.dx, surfaceRect.top + 24));
+      for (var frame = 0; frame < 20; frame++) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      expect(position.pixels, lessThan(afterDownTap));
+      expect(controller.snapshot.controlsVisible, isFalse);
+
+      await tester.tapAt(surfaceRect.center);
+      await tester.pump();
+      expect(controller.snapshot.controlsVisible, isTrue);
+      await tester.tap(
+        find.byKey(
+          const ValueKey<String>('comic-reader-controls-interaction-lock'),
+        ),
+      );
+      await tester.pump();
+
+      final double beforeDrag = position.pixels;
+      await tester.drag(surface, const Offset(0, -180));
+      await tester.pumpAndSettle();
+      expect(position.pixels, greaterThan(beforeDrag));
+      expect(controller.snapshot.controlsVisible, isFalse);
+    },
+  );
+
+  testWidgets('next comic chapter responds while chapter metadata resolves', (
+    WidgetTester tester,
+  ) async {
+    final source = _DelayedChapterInfoComicSource();
+    final controller = ComicReaderController();
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ComicReaderView(
+          bookId: 'book',
+          dataSource: source,
+          stateStore: _MemoryComicStateStore(),
+          controller: controller,
+        ),
+      ),
+    );
+    for (
+      var frame = 0;
+      frame < 30 && controller.snapshot.chapter?.id != 'chapter-1';
+      frame++
+    ) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    expect(controller.snapshot.chapter?.id, 'chapter-1');
+
+    unawaited(controller.nextChapter());
+    await tester.pump();
+
+    expect(
+      find.byKey(const ValueKey<String>('comic-reader-chapter-loading')),
+      findsOneWidget,
+    );
+    expect(controller.snapshot.isLoading, isTrue);
+
+    source.completeNextChapter();
+    for (
+      var frame = 0;
+      frame < 30 && controller.snapshot.chapter?.id != 'chapter-2';
+      frame++
+    ) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    expect(controller.snapshot.chapter?.id, 'chapter-2');
+    expect(controller.snapshot.isLoading, isFalse);
+  });
+
+  testWidgets('retrying a failed next chapter retries that chapter', (
+    WidgetTester tester,
+  ) async {
+    final source = _FailingNextChapterComicSource();
+    final controller = ComicReaderController();
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ComicReaderView(
+          bookId: 'book',
+          dataSource: source,
+          stateStore: _MemoryComicStateStore(),
+          controller: controller,
+        ),
+      ),
+    );
+
+    for (var frame = 0; frame < 60 && source.chapter2Calls < 1; frame++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    expect(source.chapter2Calls, greaterThanOrEqualTo(1));
+    expect(controller.snapshot.chapter?.id, 'chapter-1');
+
+    unawaited(controller.nextChapter());
+    for (
+      var frame = 0;
+      frame < 60 && (source.chapter2Calls < 2 || controller.snapshot.isLoading);
+      frame++
+    ) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    expect(source.chapter2Calls, greaterThanOrEqualTo(2));
+    expect(controller.snapshot.chapter?.id, 'chapter-1');
+    expect(controller.snapshot.failure, isNotNull);
+    expect(controller.snapshot.isLoading, isFalse);
+
+    await controller.refreshCurrentChapter();
+    for (
+      var frame = 0;
+      frame < 60 && controller.snapshot.chapter?.id != 'chapter-2';
+      frame++
+    ) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    expect(source.chapter2Calls, 3);
+    expect(controller.snapshot.chapter?.id, 'chapter-2');
+    expect(controller.snapshot.failure, isNull);
   });
 
   testWidgets(
@@ -649,6 +1287,29 @@ class _FakeComicSource implements ComicReaderDataSource {
   }
 }
 
+class _RetryingComicSource extends _FakeComicSource {
+  _RetryingComicSource({required this.failures});
+
+  final int failures;
+
+  @override
+  Future<Uint8List> loadImageBytes(
+    String bookId,
+    String chapterId,
+    String imageId,
+  ) async {
+    imageCalls++;
+    if (imageCalls <= failures) {
+      throw StateError('temporary comic image failure');
+    }
+    return Uint8List.fromList(
+      base64Decode(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+      ),
+    );
+  }
+}
+
 class _BlockingComicSource extends _FakeComicSource {
   final List<String> started = <String>[];
   final Map<String, Completer<Uint8List>> _pending =
@@ -677,6 +1338,88 @@ class _BlockingComicSource extends _FakeComicSource {
     if (pending != null && !pending.isCompleted) {
       pending.complete(Uint8List.fromList(<int>[1]));
     }
+  }
+}
+
+class _DelayedChapterInfoComicSource extends _FakeComicSource {
+  final Completer<ComicChapterInfo> _nextChapter =
+      Completer<ComicChapterInfo>();
+
+  void completeNextChapter() {
+    if (_nextChapter.isCompleted) return;
+    _nextChapter.complete(
+      const ComicChapterInfo(
+        id: 'chapter-2',
+        title: '第二章',
+        index: 1,
+        imageCount: 1,
+      ),
+    );
+  }
+
+  @override
+  Future<ComicChapterCatalogPage> loadChapterCatalog(
+    String bookId, {
+    String? cursor,
+    int pageSize = 50,
+  }) async => ComicChapterCatalogPage(
+    items: const <ComicChapterInfo>[
+      ComicChapterInfo(id: 'chapter-1', title: '第一章', index: 0, imageCount: 1),
+    ],
+    total: 2,
+    nextCursor: 'remaining',
+    hasMore: true,
+  );
+
+  @override
+  Future<ComicChapterInfo> loadChapterAtIndex(String bookId, int index) =>
+      index == 1
+      ? _nextChapter.future
+      : super.loadChapterAtIndex(bookId, index);
+}
+
+class _FailingNextChapterComicSource extends _FakeComicSource {
+  int chapter2Calls = 0;
+
+  @override
+  Future<ComicChapterCatalogPage> loadChapterCatalog(
+    String bookId, {
+    String? cursor,
+    int pageSize = 50,
+  }) async => ComicChapterCatalogPage(
+    items: const <ComicChapterInfo>[
+      ComicChapterInfo(id: 'chapter-1', title: '第一章', index: 0, imageCount: 1),
+      ComicChapterInfo(id: 'chapter-2', title: '第二章', index: 1, imageCount: 1),
+    ],
+    total: 2,
+    hasMore: false,
+  );
+
+  @override
+  Future<ComicChapterInfo> loadChapterAtIndex(String bookId, int index) async =>
+      ComicChapterInfo(
+        id: 'chapter-${index + 1}',
+        title: '第${index + 1}章',
+        index: index,
+        imageCount: 1,
+      );
+
+  @override
+  Future<ComicChapterContent> loadChapterContent(
+    String bookId,
+    String chapterId,
+  ) async {
+    if (chapterId == 'chapter-2') {
+      chapter2Calls++;
+      if (chapter2Calls < 3) throw StateError('temporary next chapter failure');
+    }
+    return ComicChapterContent(
+      chapterId: chapterId,
+      title: chapterId,
+      images: <ComicImageInfo>[
+        ComicImageInfo(id: '$chapterId-image-1', index: 0, width: 1, height: 1),
+      ],
+    );
   }
 }
 
@@ -725,6 +1468,74 @@ class _GatedFirstImageComicSource extends _FakeComicSource {
   ) async {
     requestedImages.add(imageId);
     if (imageId == 'image-1') await _firstImageRelease.future;
+    return Uint8List.fromList(
+      base64Decode(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+      ),
+    );
+  }
+}
+
+class _MultiChapterPreloadComicSource extends _FakeComicSource {
+  final List<String> requestedContent = <String>[];
+  final List<String> requestedImages = <String>[];
+
+  @override
+  Future<ComicChapterCatalogPage> loadChapterCatalog(
+    String bookId, {
+    String? cursor,
+    int pageSize = 50,
+  }) async => ComicChapterCatalogPage(
+    items: <ComicChapterInfo>[
+      for (var index = 0; index < 4; index++)
+        ComicChapterInfo(
+          id: 'chapter-${index + 1}',
+          title: '第 ${index + 1} 章',
+          index: index,
+          imageCount: 1,
+        ),
+    ],
+    total: 4,
+    hasMore: false,
+  );
+
+  @override
+  Future<ComicChapterInfo> loadChapterAtIndex(String bookId, int index) async =>
+      ComicChapterInfo(
+        id: 'chapter-${index + 1}',
+        title: '第 ${index + 1} 章',
+        index: index,
+        imageCount: 1,
+      );
+
+  @override
+  Future<ComicChapterContent> loadChapterContent(
+    String bookId,
+    String chapterId,
+  ) async {
+    requestedContent.add(chapterId);
+    final int chapterNumber = int.parse(chapterId.split('-').last);
+    return ComicChapterContent(
+      chapterId: chapterId,
+      title: chapterId,
+      images: <ComicImageInfo>[
+        ComicImageInfo(
+          id: 'image-$chapterNumber',
+          index: 0,
+          width: 1,
+          height: 1,
+        ),
+      ],
+    );
+  }
+
+  @override
+  Future<Uint8List> loadImageBytes(
+    String bookId,
+    String chapterId,
+    String imageId,
+  ) async {
+    requestedImages.add('$chapterId/$imageId');
     return Uint8List.fromList(
       base64Decode(
         'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
@@ -831,6 +1642,7 @@ class _MemoryComicStateStore implements ComicReaderStateStore {
   _MemoryComicStateStore({this.progress});
 
   final ComicReaderProgress? progress;
+  ComicReaderPreferences? preferences;
 
   @override
   Future<ComicReaderProgress?> loadProgress(String bookId) async => progress;
@@ -840,9 +1652,10 @@ class _MemoryComicStateStore implements ComicReaderStateStore {
     ComicReaderProgress progress,
   ) async {}
   @override
-  Future<ComicReaderPreferences?> loadPreferences() async => null;
+  Future<ComicReaderPreferences?> loadPreferences() async => preferences;
   @override
-  Future<void> savePreferences(ComicReaderPreferences preferences) async {}
+  Future<void> savePreferences(ComicReaderPreferences value) async =>
+      preferences = value;
   @override
   Future<List<ComicReaderBookmark>> loadBookmarks(String bookId) async =>
       const <ComicReaderBookmark>[];
@@ -850,6 +1663,60 @@ class _MemoryComicStateStore implements ComicReaderStateStore {
   Future<void> addBookmark(ComicReaderBookmark bookmark) async {}
   @override
   Future<void> removeBookmark(String bookId, String bookmarkId) async {}
+}
+
+class _PagedComicCatalogSource extends _FakeComicSource {
+  static const int chapterTotal = 120;
+
+  final List<String?> catalogCursors = <String?>[];
+
+  ComicChapterInfo _chapter(int index) => ComicChapterInfo(
+    id: 'chapter-${index + 1}',
+    title: '第 ${index + 1} 话',
+    index: index,
+    availability: ReaderChapterAvailability.downloaded,
+    imageCount: 1,
+    hasBeenRead: index < 75,
+  );
+
+  @override
+  Future<ComicChapterCatalogPage> loadChapterCatalog(
+    String bookId, {
+    String? cursor,
+    int pageSize = 50,
+  }) async {
+    catalogCursors.add(cursor);
+    final int start = cursor == null ? 0 : int.parse(cursor);
+    final int requestedEnd = start + pageSize;
+    final int end = requestedEnd < chapterTotal ? requestedEnd : chapterTotal;
+    return ComicChapterCatalogPage(
+      items: <ComicChapterInfo>[
+        for (int index = start; index < end; index++) _chapter(index),
+      ],
+      total: chapterTotal,
+      hasMore: end < chapterTotal,
+      nextCursor: end < chapterTotal ? '$end' : null,
+    );
+  }
+
+  @override
+  Future<ComicChapterInfo> loadChapterAtIndex(String bookId, int index) async =>
+      _chapter(index);
+
+  @override
+  Future<ComicChapterContent> loadChapterContent(
+    String bookId,
+    String chapterId,
+  ) async {
+    final int index = int.parse(chapterId.substring('chapter-'.length)) - 1;
+    return ComicChapterContent(
+      chapterId: chapterId,
+      title: _chapter(index).title,
+      images: const <ComicImageInfo>[
+        ComicImageInfo(id: 'image-1', index: 0, width: 1, height: 1),
+      ],
+    );
+  }
 }
 
 class _RecordingComicObserver extends ComicReaderObserver {

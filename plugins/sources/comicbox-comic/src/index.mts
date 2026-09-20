@@ -11,12 +11,15 @@ import type { MgReadPluginContext } from '@mgread/source-api';
 
 type Context = MgReadPluginContext;
 type Item = { path: string; title: string; cover: string; description: string };
+type PageImage = { url: string; urls: readonly string[] | null; transform: 'aes-cbc-encrypt-then-split-image-v1' | null;
+  mimeType: string; width: number | null; height: number | null };
 
 const base = 'https://www.comicbox.xyz';
 const sourceUserAgent = 'Mozilla/5.0 MgRead';
 const headers = { 'User-Agent': sourceUserAgent };
 const channels = ['热门', '全部', 'Fate', '东方', '原神', '汉化', '日漫', '韩漫', '单行本', '长篇', '短篇'];
 const bmiHosts = new Set(['bmigmi-global-wuwu.ccavbox.com']);
+const bmiManifestHosts = new Set(['storage.googleapis.com']);
 let context: Context | undefined;
 
 export async function activate(next: Context) { context = next; next.log.info('source_activated'); }
@@ -99,20 +102,23 @@ export async function getContent(request: { id: string; chapterId: string }) {
   const pageUrl = new URL(path, base).toString();
   const $ = load(await text(pageUrl));
   const seen = new Set<string>();
-  const values: string[] = [];
+  const values: PageImage[] = [];
   $('.comiclist .comicpage div[data-bmi-manifest][data-src], .comiclist .comicpage img, .comicpage div[data-bmi-manifest][data-src], .comicpage img').toArray().forEach((node) => {
     const image = $(node);
+    const manifest = bmiManifestImage(image.attr('data-bmi-manifest') ?? '');
     const raw = image.attr('data-src') ?? image.attr('data-original') ?? image.attr('src') ?? '';
-    if (!safeUrl(raw, pageUrl)) return;
-    const url = new URL(raw, pageUrl).toString();
-    if (seen.has(url)) return;
-    seen.add(url);
-    values.push(url);
+    const legacyUrl = safeUrl(raw, pageUrl) ? new URL(raw, pageUrl).toString() : null;
+    const value = manifest ?? (legacyUrl === null ? null : { url: legacyUrl, urls: null, transform: null,
+      mimeType: imageMime(legacyUrl), width: null, height: null });
+    if (value === null || seen.has(value.url)) return;
+    seen.add(value.url);
+    values.push(value);
   });
   if (!values.length) throw new Error('Chapter images are unavailable.');
   const title = clean($('.sp-reader-title').first().text()) || null;
-  const pages = values.map((url, index) => frozen({ id: `page:${encode(path)}:${index + 1}`, index, url: imageProxy(url, pageUrl),
-    resourcePolicy: 'sessionOnly' as const, expiresAt: null, mimeType: imageMime(url), width: null, height: null }));
+  const pages = values.map((value, index) => frozen({ id: `page:${encode(path)}:${index + 1}`, index,
+    url: value.urls === null ? imageProxy(value.url, pageUrl) : splitImageProxy(value.urls, pageUrl, value.transform ?? 'aes-cbc-split-image-v1'),
+    resourcePolicy: 'sessionOnly' as const, expiresAt: null, mimeType: value.mimeType, width: value.width, height: value.height }));
   return frozen({ chapterId: request.chapterId, contentKind: 'manga' as const, title, updatedAt: null, text: null, pages: Object.freeze(pages) });
 }
 
@@ -169,13 +175,47 @@ function imageProxy(value: string, referer: string) {
   if (!value) return null;
   let url: URL;
   try { url = new URL(value, base); } catch { return null; }
-  const request = requireContext().resource.proxy;
   const common = { kind: 'image', headers: { Accept: 'image/*', Referer: referer, 'User-Agent': sourceUserAgent } };
-  if (!bmiHosts.has(url.hostname)) return request({ ...common, url: url.toString() });
+  if (!bmiHosts.has(url.hostname)) return requireContext().resource.proxy({ ...common, url: url.toString() });
   const urls = splitImageUrls(url);
+  return splitImageProxy(urls, referer);
+}
+
+function splitImageProxy(urls: readonly string[], referer: string,
+  resourceTransform: 'aes-cbc-split-image-v1' | 'aes-cbc-encrypt-then-split-image-v1' = 'aes-cbc-split-image-v1') {
   const first = urls[0];
   if (first === undefined) return null;
-  return request({ ...common, url: first, urls, resourceTransform: 'aes-cbc-split-image-v1' });
+  return requireContext().resource.proxy({ kind: 'image', url: first, urls, resourceTransform,
+    headers: { Accept: 'image/*', Referer: referer, 'User-Agent': sourceUserAgent } });
+}
+
+function bmiManifestImage(encoded: string): PageImage | null {
+  if (encoded.length === 0 || encoded.length > 131072) return null;
+  try {
+    const root: unknown = JSON.parse(Buffer.from(encoded, 'base64').toString('utf8'));
+    if (!isRecord(root) || !isRecord(root.variants)) return null;
+    for (const format of ['jpeg', 'avif', 'webp', 'png']) {
+      const variant = root.variants[format];
+      if (!isRecord(variant) || !Array.isArray(variant.renditions)) continue;
+      const rendition = variant.renditions.find((value) => isRecord(value) && value.role === 'page' && value.format === format &&
+        value.decoder === 'monga-v2-encrypt-then-split');
+      if (!isRecord(rendition) || !Array.isArray(rendition.chunks) || rendition.chunks.length < 2 || rendition.chunks.length > 8) continue;
+      const chunks = rendition.chunks.filter(isRecord).toSorted((left, right) => Number(left.index) - Number(right.index));
+      if (chunks.length !== rendition.chunks.length) continue;
+      const urls: string[] = [];
+      for (let index = 0; index < chunks.length; index += 1) {
+        const chunk = chunks[index];
+        if (chunk === undefined || chunk.index !== index || chunk.count !== chunks.length || typeof chunk.url !== 'string') break;
+        const url = new URL(chunk.url);
+        if (url.protocol !== 'https:' || !bmiManifestHosts.has(url.hostname) || url.username !== '' || url.password !== '') break;
+        urls.push(url.toString());
+      }
+      if (urls.length !== chunks.length) continue;
+      return { url: urls[0] ?? '', urls: Object.freeze(urls), transform: 'aes-cbc-encrypt-then-split-image-v1', mimeType: `image/${format}`,
+        width: positiveInteger(rendition.width), height: positiveInteger(rendition.height) };
+    }
+  } catch { return null; }
+  return null;
 }
 
 function splitImageUrls(source: URL) {
@@ -211,6 +251,8 @@ function imageMime(value: string) {
 function safeUrl(value: string, relativeTo: string) {
   try { return ['http:', 'https:'].includes(new URL(value, relativeTo).protocol); } catch { return false; }
 }
+function isRecord(value: unknown): value is Record<string, unknown> { return value !== null && typeof value === 'object' && !Array.isArray(value); }
+function positiveInteger(value: unknown) { return Number.isSafeInteger(value) && Number(value) > 0 ? Number(value) : null; }
 function stripSiteSuffix(value: string) { return value.replace(/\s+-\s+污污漫畫$/u, '').trim(); }
 function encode(value: string) { return Buffer.from(value).toString('base64url'); }
 function decode(value: string) { return Buffer.from(value, 'base64url').toString('utf8'); }

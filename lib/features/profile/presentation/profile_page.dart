@@ -13,7 +13,6 @@ library;
 import 'package:flutter/material.dart';
 
 import 'package:mg_read/app/app_theme.dart';
-import 'package:mg_read/app/app_theme_mode_scope.dart';
 import 'package:mg_read/features/profile/presentation/profile_view_data.dart';
 import 'package:mg_read/features/profile/domain/profile_identity.dart';
 import 'package:mg_read/features/profile/domain/profile_reading_stats.dart';
@@ -23,10 +22,6 @@ import 'package:mg_read/shared/presentation/app_navigation_destination.dart';
 import 'package:mg_read/shared/presentation/widgets/app_bottom_navigation.dart';
 import 'package:mg_read/shared/presentation/widgets/app_page_backdrop.dart';
 import 'package:mg_read/shared/presentation/widgets/app_page_title.dart';
-
-// Dark-mode plumbing remains available, but the current UI milestone exposes
-// only the light theme and therefore does not render a theme action.
-const bool _themeModeActionEnabled = false;
 
 class ProfilePage extends StatefulWidget {
   /// Creates the profile page and delegates root navigation to the app layer.
@@ -91,6 +86,7 @@ class _ProfilePageState extends State<ProfilePage> {
       data = data.withReadingStats(stats);
     }
     return Scaffold(
+      extendBody: true,
       body: AppPageBackdrop(
         style: AppPageBackdropStyle.profile,
         child: SafeArea(
@@ -117,11 +113,11 @@ class _ProfilePageState extends State<ProfilePage> {
                           pagePadding,
                           AppSpacing.pageHeaderTopPaddingFor(context),
                           pagePadding,
-                          AppSpacing.profileContentBottomSafeDistance,
+                          AppSpacing.profileContentBottomSafeDistance + MediaQuery.viewPaddingOf(context).bottom,
                         ),
                         children: <Widget>[
                           ProfileTopBar(
-                            onToggleTheme: _themeModeActionEnabled ? () => _handleToggleTheme(context) : null,
+                            onToggleTheme: widget.onToggleTheme,
                             onNotifications: widget.onNotificationsRequested ?? _showUnavailableMessage,
                           ),
                           const SizedBox(height: AppSpacing.compact + 2),
@@ -164,15 +160,6 @@ class _ProfilePageState extends State<ProfilePage> {
         child: AppBottomNavigation(selected: AppNavigationDestination.profile, onSelected: _handleDestinationSelected),
       ),
     );
-  }
-
-  void _handleToggleTheme(BuildContext context) {
-    final VoidCallback? callback = widget.onToggleTheme;
-    if (callback != null) {
-      callback();
-      return;
-    }
-    AppThemeModeScope.of(context).onToggleTheme(Theme.of(context).brightness);
   }
 
   void _handleDestinationSelected(AppNavigationDestination destination) {
@@ -233,7 +220,7 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 }
 
-/// The profile page header with the temporary theme and notification actions.
+/// The profile page header with theme and notification actions.
 class ProfileTopBar extends StatelessWidget {
   /// Creates the title and fixed-size top actions.
   const ProfileTopBar({required this.onToggleTheme, required this.onNotifications, super.key});
@@ -266,7 +253,7 @@ class ProfileTopBar extends StatelessWidget {
   }
 }
 
-/// Keeps the reference header silhouette while theme switching is light-only.
+/// Keeps the reference header silhouette when no app theme callback is given.
 class _ProfileTopBarDecoration extends StatelessWidget {
   const _ProfileTopBarDecoration();
 

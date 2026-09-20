@@ -8,10 +8,8 @@
 ///
 library;
 
-import 'dart:ui' show Tristate;
-
 import 'package:flutter/material.dart';
-import 'package:flutter/semantics.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mg_read/app/app_theme.dart';
 import 'package:mg_read/features/profile/presentation/about_page.dart';
@@ -105,7 +103,7 @@ void main() {
 
     expect(find.byType(LanSyncPage), findsOneWidget);
     expect(find.text('发送数据'), findsOneWidget);
-    expect(find.text('接收数据'), findsOneWidget);
+    expect(find.byKey(const Key('lan-sync-scan')), findsOneWidget);
     expect(find.textContaining('首版传输不加密'), findsOneWidget);
     expect(find.byKey(const Key('app-bottom-navigation')), findsNothing);
 
@@ -133,16 +131,19 @@ void main() {
     expect(find.byKey(const Key('app-bottom-navigation')), findsNothing);
   });
 
-  testWidgets('feedback page preserves measured banner and form proportions', (WidgetTester tester) async {
+  testWidgets('feedback page preserves measured banner and shows the GitHub card', (WidgetTester tester) async {
     await _setViewport(tester, const Size(390, 900));
     await tester.pumpWidget(_feedbackHost());
     await tester.pumpAndSettle();
 
     final Rect banner = tester.getRect(find.byKey(const Key('feedback-thanks-banner')));
-    final Rect form = tester.getRect(find.byKey(const Key('feedback-form-card')));
+    final Rect card = tester.getRect(find.byKey(const Key('feedback-github-card')));
 
     expect(banner, const Rect.fromLTWH(20, 72, 350, 108));
-    expect(form, const Rect.fromLTWH(20, 195, 350, 602));
+    expect(card.left, 20);
+    expect(card.top, 195);
+    expect(card.width, 350);
+    expect(card.height, greaterThan(0));
     expect(tester.takeException(), isNull);
   });
 
@@ -162,46 +163,38 @@ void main() {
     expect(tester.getRect(find.byKey(const Key('profile-detail-top-bar'))).top, 24);
   });
 
-  testWidgets('feedback types switch and content is limited to 500 characters', (WidgetTester tester) async {
-    final SemanticsHandle semantics = tester.ensureSemantics();
+  testWidgets('feedback page exposes the GitHub Issues address and external-browser action', (WidgetTester tester) async {
     await _setViewport(tester, const Size(390, 900));
     await tester.pumpWidget(_feedbackHost());
     await tester.pumpAndSettle();
 
-    final Finder suggestion = find.byKey(const Key('feedback-type-suggestion'));
-    final Finder problem = find.byKey(const Key('feedback-type-problem'));
-    expect(tester.getSemantics(suggestion).flagsCollection.isSelected, Tristate.isTrue);
-
-    await tester.tap(problem);
-    await tester.pump();
-    expect(tester.getSemantics(problem).flagsCollection.isSelected, Tristate.isTrue);
-    expect(tester.getSemantics(suggestion).flagsCollection.isSelected, Tristate.isFalse);
-
-    await tester.enterText(find.byKey(const Key('feedback-content-field')), List<String>.filled(510, '阅').join());
-    await tester.pump();
-    final EditableText editor = tester.widget<EditableText>(find.byType(EditableText).first);
-    expect(editor.controller.text.characters.length, 500);
-    expect(find.text('500/500'), findsOneWidget);
-    semantics.dispose();
+    expect(find.text('当前不提供应用内提交'), findsOneWidget);
+    expect(find.text(githubFeedbackUrl), findsOneWidget);
+    expect(find.byKey(const Key('feedback-open-github')), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
-  testWidgets('feedback actions remain local and never pretend to submit', (WidgetTester tester) async {
+  testWidgets('feedback GitHub action opens the issue page externally', (WidgetTester tester) async {
+    final calls = <MethodCall>[];
+    const launcherChannel = MethodChannel('plugins.flutter.io/url_launcher');
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(launcherChannel, (call) async {
+      calls.add(call);
+      return true;
+    });
+    addTearDown(() => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(launcherChannel, null));
+
     await _setViewport(tester, const Size(390, 900));
     await tester.pumpWidget(_feedbackHost());
     await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('feedback-open-github')));
+    await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('feedback-add-image')));
-    await tester.pump();
-    expect(find.text('截图选择尚未接入，当前不会访问本地文件。'), findsOneWidget);
-
-    await tester.tap(find.byKey(const Key('feedback-submit')));
-    await tester.pump();
-    expect(find.text('请先填写反馈内容。'), findsOneWidget);
-
-    await tester.enterText(find.byKey(const Key('feedback-content-field')), '希望增加更清晰的目录筛选。');
-    await tester.tap(find.byKey(const Key('feedback-submit')));
-    await tester.pump();
-    expect(find.text('反馈已保留在当前页面，提交服务尚未接入。'), findsOneWidget);
+    expect(calls, hasLength(1));
+    expect(calls.single.method, 'launch');
+    final arguments = calls.single.arguments as Map<Object?, Object?>;
+    expect(arguments['url'], githubFeedbackUrl);
+    expect(arguments['useWebView'], isFalse);
+    expect(arguments['useSafariVC'], isFalse);
     expect(tester.takeException(), isNull);
   });
 
@@ -216,7 +209,7 @@ void main() {
     expect(find.byKey(const Key('app-bottom-navigation')), findsNothing);
   });
 
-  testWidgets('profile details stay light-only without header theme actions', (WidgetTester tester) async {
+  testWidgets('profile exposes theme action while detail pages keep their own chrome', (WidgetTester tester) async {
     await _setViewport(tester, const Size(390, 900));
     final settings = await createTestAppSettings(themeMode: 'light');
     addTearDown(settings.close);
@@ -225,7 +218,7 @@ void main() {
 
     await tester.tap(find.byKey(const Key('app-nav-profile')));
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('theme-mode-toggle')), findsNothing);
+    expect(find.byKey(const Key('theme-mode-toggle')), findsOneWidget);
 
     final Finder profileScroll = find.byKey(const Key('profile-page-content'));
     await tester.scrollUntilVisible(

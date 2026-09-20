@@ -622,6 +622,7 @@ extension _TextReaderComments on _TextReaderViewState {
         feed: feed,
         target: target,
         palette: _palette,
+        font: _preferences.font,
         title: title ?? ReaderCommentStrings.title,
         onLoadError: (Object error) => unawaited(
           _notify(

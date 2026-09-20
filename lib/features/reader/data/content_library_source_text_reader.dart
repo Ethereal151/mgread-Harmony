@@ -5,6 +5,7 @@
 /// budget, without scanning or encoding text on the first-content path.
 library;
 
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:mgread_plugin_runtime/mgread_plugin_runtime.dart';
@@ -33,13 +34,21 @@ import 'package:mg_read/features/reader/data/content_library_text_reader_state_s
 /// Both normal and prewarmed requests must retain the app-owned cached cover;
 /// [ReaderEntryTransition] deliberately performs no network cover request.
 final class ContentLibrarySourceTextReader implements LibraryReaderLauncher, LocalShelfReaderPrewarmer {
-  const ContentLibrarySourceTextReader(this._library, this._gateway, [this._prefetcher, this._settings, this._chapterCacheTasks]);
+  const ContentLibrarySourceTextReader(
+    this._library,
+    this._gateway, [
+    this._prefetcher,
+    this._settings,
+    this._chapterCacheTasks,
+    this._bookRefreshCapability,
+  ]);
 
   final ContentLibrary _library;
   final SourceContentGateway _gateway;
   final ContentLibrarySourcePrefetcher? _prefetcher;
   final AppSettingsManager? _settings;
   final ChapterCacheTaskController? _chapterCacheTasks;
+  final ReaderBookRefreshCapability? _bookRefreshCapability;
 
   @override
   Future<NovelReaderLaunchRequest> launch(String libraryItemId) async {
@@ -160,7 +169,7 @@ final class ContentLibrarySourceTextReader implements LibraryReaderLauncher, Loc
         if (remote.contentKind != PluginContentKind.novel || remote.text == null) {
           throw _failure(ReaderLaunchFailureReason.sourceContentKind, AppErrorCode.unsupported);
         }
-        initialWrite = session.cacheChapter(entry: target, text: remote.text!).then<void>((_) {}, onError: (Object _, StackTrace stack) {});
+        initialWrite = session.cacheChapter(entry: target, text: remote.text!);
         content = NovelChapterContent(text: remote.text!);
       }
       preparationKind = ReaderLaunchPreparationKind.network;
@@ -228,9 +237,7 @@ final class ContentLibrarySourceTextReader implements LibraryReaderLauncher, Loc
       throw _failure(ReaderLaunchFailureReason.sourceContentKind, AppErrorCode.unsupported);
     }
     networkStopwatch.stop();
-    final initialWrite = localSession
-        .cacheChapter(entry: initialEntry, text: initialContent.text!)
-        .then<void>((_) {}, onError: (Object _, StackTrace stack) {});
+    final initialWrite = localSession.cacheChapter(entry: initialEntry, text: initialContent.text!);
     return _buildSessionRequest(
       item: item,
       source: source,
@@ -254,6 +261,7 @@ final class ContentLibrarySourceTextReader implements LibraryReaderLauncher, Loc
     Future<void>? initialWrite,
   }) {
     final chapterAccess = _SessionNovelChapterAccess(
+      library: _library,
       session: session,
       item: item,
       source: source,
@@ -264,6 +272,7 @@ final class ContentLibrarySourceTextReader implements LibraryReaderLauncher, Loc
       initialWrite: initialWrite,
     );
     final dataSource = _SessionTextReaderDataSource(
+      library: _library,
       item: item,
       session: session,
       chapterAccess: chapterAccess,
@@ -292,6 +301,7 @@ final class ContentLibrarySourceTextReader implements LibraryReaderLauncher, Loc
         chapterStateCapability: chapterAccess,
         chapterCacheCapability: _chapterCacheTasks == null ? null : chapterAccess,
         chapterRefreshCapability: chapterAccess,
+        bookRefreshCapability: _bookRefreshCapability,
       ),
       estimatedWarmBytes: utf8.encode(initialContent.text).length,
       preparationKind: preparationKind,
@@ -365,6 +375,7 @@ final class _SessionNovelChapterAccess
   static const int _maximumMemoryWeight = 128 * 1024;
 
   _SessionNovelChapterAccess({
+    required this.library,
     required this.session,
     required this.item,
     required this.source,
@@ -374,16 +385,19 @@ final class _SessionNovelChapterAccess
     required NovelChapterContent initialContent,
     Future<void>? initialWrite,
   }) {
-    // The launch path has already obtained usable content, either from the
-    // durable object store or a remote response being persisted in the background.
-    // Keep this dynamic state correct even when the immutable catalog entry
-    // was cached before that content write completed.
-    _cachedChapterIds.add(initialEntry.remoteIdentity);
+    // Remote content remains immediately readable from session memory, but it
+    // is only reported as cached after the background object-store write has
+    // actually succeeded.
+    if (initialWrite == null) {
+      _cachedChapterIds.add(initialEntry.remoteIdentity);
+    } else {
+      _trackInitialWrite(initialEntry.remoteIdentity, initialWrite);
+    }
     _memoryByRemoteId[initialEntry.remoteIdentity] = initialContent.text;
-    if (initialWrite != null) _trackWrite(initialEntry.remoteIdentity, initialWrite);
   }
 
-  final NovelReaderSession session;
+  final ContentLibrary library;
+  NovelReaderSession session;
   final LibraryItem item;
   final LibraryItemSource source;
   final SourceContentGateway gateway;
@@ -401,6 +415,13 @@ final class _SessionNovelChapterAccess
   final Map<String, Future<PluginChapterContent>> _loading = <String, Future<PluginChapterContent>>{};
   final Map<String, Future<ChapterCacheItemResult>> _cacheLoading = <String, Future<ChapterCacheItemResult>>{};
   final Map<String, Future<void>> _writing = <String, Future<void>>{};
+
+  Future<NovelReaderSession?> refreshSession() async {
+    final refreshed = await library.openNovelReaderSession(item.id);
+    if (refreshed == null) return null;
+    session = refreshed;
+    return refreshed;
+  }
 
   Future<PluginChapterContent> load(String chapterId) async {
     final content = await _load(chapterId);
@@ -494,6 +515,22 @@ final class _SessionNovelChapterAccess
     return write.whenComplete(() {
       if (identical(_writing[chapterId], write)) _writing.remove(chapterId);
     });
+  }
+
+  void _trackInitialWrite(String chapterId, Future<void> write) {
+    final tracked = _trackWrite(chapterId, write);
+    unawaited(
+      tracked.then<void>(
+        (_) {
+          _cachedChapterIds.add(chapterId);
+          _failedChapterIds.remove(chapterId);
+        },
+        onError: (Object error, StackTrace stack) {
+          _cachedChapterIds.remove(chapterId);
+          _failedChapterIds.add(chapterId);
+        },
+      ),
+    );
   }
 
   PluginChapterContent _pluginContent(CatalogEntry entry, String text) => PluginChapterContent(
@@ -606,6 +643,9 @@ final class _SessionNovelChapterAccess
     if (_loading.containsKey(entry.remoteIdentity)) {
       return ReaderChapterAvailability.downloading;
     }
+    if (_writing.containsKey(entry.remoteIdentity)) {
+      return ReaderChapterAvailability.downloading;
+    }
     if (_failedChapterIds.contains(entry.remoteIdentity)) {
       return ReaderChapterAvailability.failed;
     }
@@ -621,11 +661,18 @@ final class _SessionNovelChapterAccess
   }
 }
 
-final class _SessionTextReaderDataSource implements TextReaderDataSource {
-  const _SessionTextReaderDataSource({required this.item, required this.session, required this.chapterAccess, required this.sourceKind});
+final class _SessionTextReaderDataSource implements TextReaderDataSource, ReaderCatalogRefreshDataSource {
+  _SessionTextReaderDataSource({
+    required this.library,
+    required this.item,
+    required this.session,
+    required this.chapterAccess,
+    required this.sourceKind,
+  });
 
-  final LibraryItem item;
-  final NovelReaderSession session;
+  final ContentLibrary library;
+  LibraryItem item;
+  NovelReaderSession session;
   final _SessionNovelChapterAccess chapterAccess;
   final ReaderBookSourceKind sourceKind;
 
@@ -650,6 +697,14 @@ final class _SessionTextReaderDataSource implements TextReaderDataSource {
   Future<ReaderBookInfo> loadBookInfo(String bookId) async {
     _requireBook(bookId);
     return bookInfo;
+  }
+
+  @override
+  Future<void> refreshCatalog(String bookId) async {
+    _requireBook(bookId);
+    final refreshed = await chapterAccess.refreshSession();
+    if (refreshed != null) session = refreshed;
+    item = await library.getLibraryItem(item.id) ?? item;
   }
 
   @override

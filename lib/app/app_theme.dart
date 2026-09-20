@@ -13,29 +13,171 @@ library;
 
 import 'package:flutter/material.dart';
 
+/// Preset accent palettes for host application surfaces.
+///
+/// These values intentionally do not flow into the novel, comic, audio, or
+/// video readers. Those packages own their own appearance and reading
+/// controls.
+enum AppThemeColor {
+  warm('warm', '暖光橙', Color(0xFFCC8836)),
+  blue('blue', '海盐蓝', Color(0xFF4F7CAC)),
+  green('green', '竹青绿', Color(0xFF4F8A65)),
+  purple('purple', '雾紫', Color(0xFF7C6DB0)),
+  rose('rose', '樱桃红', Color(0xFFB85C78));
+
+  const AppThemeColor(this.id, this.label, this.accent);
+
+  final String id;
+  final String label;
+  final Color accent;
+
+  static AppThemeColor fromId(String id) {
+    return values.firstWhere((color) => color.id == id, orElse: () => AppThemeColor.warm);
+  }
+}
+
+/// Preset dark palettes for host application surfaces.
+///
+/// Every palette keeps its large surfaces near black so the setting remains
+/// comfortable for night use while still offering different accent moods.
+enum AppDarkThemeColor {
+  seaSaltBlue(
+    'blue',
+    '海盐蓝',
+    Color(0xFF8AB4F8),
+    Color(0xFF000000),
+    Color(0xFF0B0E12),
+    Color(0xFF131820),
+    Color(0xFF11151A),
+    Color(0xFF252B33),
+    Color(0xFFA6AFBB),
+    Color(0xFF17263A),
+    Color(0xFFB5D1FF),
+  ),
+  coolBlack(
+    'coolBlack',
+    '酷黑',
+    Color(0xFFD7DCE5),
+    Color(0xFF000000),
+    Color(0xFF08090B),
+    Color(0xFF101216),
+    Color(0xFF0D0E11),
+    Color(0xFF25272C),
+    Color(0xFFA9AFB9),
+    Color(0xFF1B1D22),
+    Color(0xFFF0F2F5),
+  ),
+  forestBlack(
+    'forestBlack',
+    '墨绿黑',
+    Color(0xFF8FD3A6),
+    Color(0xFF020806),
+    Color(0xFF08130D),
+    Color(0xFF0F1D14),
+    Color(0xFF0C1911),
+    Color(0xFF203128),
+    Color(0xFFA1B9AA),
+    Color(0xFF14291D),
+    Color(0xFFB6E8C5),
+  ),
+  purpleBlack(
+    'purpleBlack',
+    '黛紫黑',
+    Color(0xFFD0A6FF),
+    Color(0xFF08050C),
+    Color(0xFF140A1B),
+    Color(0xFF21102A),
+    Color(0xFF1A0D22),
+    Color(0xFF382342),
+    Color(0xFFB9A9C8),
+    Color(0xFF29163A),
+    Color(0xFFE4CFFF),
+  ),
+  amberBlack(
+    'amberBlack',
+    '暖炭黑',
+    Color(0xFFFFC18A),
+    Color(0xFF0A0806),
+    Color(0xFF15100C),
+    Color(0xFF211811),
+    Color(0xFF1A120C),
+    Color(0xFF3A2A1D),
+    Color(0xFFC0AA96),
+    Color(0xFF332015),
+    Color(0xFFFFD4AF),
+  );
+
+  const AppDarkThemeColor(
+    this.id,
+    this.label,
+    this.accent,
+    this.pageBackground,
+    this.surface,
+    this.featureSurface,
+    this.mutedSurface,
+    this.divider,
+    this.mutedText,
+    this.accentSoft,
+    this.focusRing,
+  );
+
+  final String id;
+  final String label;
+  final Color accent;
+  final Color pageBackground;
+  final Color surface;
+  final Color featureSurface;
+  final Color mutedSurface;
+  final Color divider;
+  final Color mutedText;
+  final Color accentSoft;
+  final Color focusRing;
+
+  static AppDarkThemeColor fromId(String id) {
+    return values.firstWhere((color) => color.id == id, orElse: () => AppDarkThemeColor.seaSaltBlue);
+  }
+}
+
 /// Defines the application-wide visual defaults and semantic UI tokens.
 abstract final class AppTheme {
   /// Temporary product switch while the source-picker visual baseline is light-only.
   static const bool darkModeEnabled = false;
+  static final ThemeData _novelReaderTheme = light(color: AppThemeColor.warm);
 
-  static ThemeData light() {
-    const AppThemeTokens tokens = AppThemeTokens(
-      pageBackground: Color(0xFFFDFBFA),
-      surface: Color(0xFFFEFDFB),
-      featureSurface: Color(0xFFF9EBDC),
-      mutedSurface: Color(0xFFF7F4EF),
-      divider: Color(0xFFF1ECE5),
-      mutedText: Color(0xFF827D77),
-      accent: Color(0xFFCC8836),
-      dataSourceAccent: Color(0xFFE96A0A),
-      dataSourceCat: Color(0xFFFFC300),
-      dataSourceCommunity: Color(0xFF509B30),
-      accentSoft: Color(0xFFF9EFE2),
-      notification: Color(0xFFE34835),
-      success: Color(0xFF3D8A63),
-      warning: Color(0xFFB56D24),
-      focusRing: Color(0xFF9C5B16),
-      shadow: Color(0x33261C12),
+  /// Stable host baseline for novel and comic reading surfaces.
+  ///
+  /// Reading surfaces have their own visual language and preferences, so the
+  /// selected application accent and dark-mode setting must not flow into
+  /// their entry, detail, or catalog UI.
+  static ThemeData novelReader() => _novelReaderTheme;
+
+  static ThemeData light({AppThemeColor color = AppThemeColor.warm}) {
+    const pageBackground = Color(0xFFFDFBFA);
+    const surface = Color(0xFFFEFDFB);
+    final Color featureSurface = color == AppThemeColor.warm
+        ? const Color(0xFFF9EBDC)
+        : Color.alphaBlend(color.accent.withValues(alpha: 0.08), surface);
+    final Color accentSoft = color == AppThemeColor.warm
+        ? const Color(0xFFF9EFE2)
+        : Color.alphaBlend(color.accent.withValues(alpha: 0.11), pageBackground);
+    final Color focusRing = color == AppThemeColor.warm ? const Color(0xFF9C5B16) : color.accent;
+    final AppThemeTokens tokens = AppThemeTokens(
+      pageBackground: pageBackground,
+      surface: surface,
+      featureSurface: featureSurface,
+      mutedSurface: const Color(0xFFF7F4EF),
+      divider: const Color(0xFFF1ECE5),
+      mutedText: const Color(0xFF827D77),
+      accent: color.accent,
+      dataSourceAccent: const Color(0xFFE96A0A),
+      dataSourceCat: const Color(0xFFFFC300),
+      dataSourceCommunity: const Color(0xFF509B30),
+      accentSoft: accentSoft,
+      notification: const Color(0xFFE34835),
+      success: const Color(0xFF3D8A63),
+      warning: const Color(0xFFB56D24),
+      focusRing: focusRing,
+      shadow: const Color(0x33261C12),
       coverDuskStart: Color(0xFF293746),
       coverDuskEnd: Color(0xFF725536),
       coverDawnStart: Color(0xFFE1A15B),
@@ -47,11 +189,12 @@ abstract final class AppTheme {
       coverEmberStart: Color(0xFF5E3527),
       coverEmberEnd: Color(0xFFCA8B40),
     );
-    final ColorScheme colorScheme = ColorScheme.fromSeed(seedColor: tokens.accent, brightness: Brightness.light).copyWith(
+    final ColorScheme seededScheme = ColorScheme.fromSeed(seedColor: tokens.accent, brightness: Brightness.light);
+    final ColorScheme colorScheme = seededScheme.copyWith(
       primary: tokens.accent,
       onPrimary: Colors.white,
       primaryContainer: tokens.accentSoft,
-      onPrimaryContainer: const Color(0xFF472706),
+      onPrimaryContainer: color == AppThemeColor.warm ? const Color(0xFF472706) : seededScheme.onPrimaryContainer,
       surface: tokens.surface,
       onSurface: const Color(0xFF201C18),
       outlineVariant: tokens.divider,
@@ -59,42 +202,42 @@ abstract final class AppTheme {
     return _theme(colorScheme, tokens);
   }
 
-  static ThemeData dark() {
-    const AppThemeTokens tokens = AppThemeTokens(
-      pageBackground: Color(0xFF17130F),
-      surface: Color(0xFF211B16),
-      featureSurface: Color(0xFF30251C),
-      mutedSurface: Color(0xFF2A231D),
-      divider: Color(0xFF4A4037),
-      mutedText: Color(0xFFC8BEB2),
-      accent: Color(0xFFE1A657),
-      dataSourceAccent: Color(0xFFE1A657),
-      dataSourceCat: Color(0xFFE1A657),
-      dataSourceCommunity: Color(0xFF81C99E),
-      accentSoft: Color(0xFF5D421C),
-      notification: Color(0xFFFF7666),
-      success: Color(0xFF81C99E),
-      warning: Color(0xFFE3A45B),
-      focusRing: Color(0xFFFFC878),
-      shadow: Color(0x66000000),
-      coverDuskStart: Color(0xFF485B68),
-      coverDuskEnd: Color(0xFF9D7445),
-      coverDawnStart: Color(0xFFB66C35),
-      coverDawnEnd: Color(0xFF5E879C),
-      coverOceanStart: Color(0xFF315D91),
-      coverOceanEnd: Color(0xFF789FC8),
-      coverIndigoStart: Color(0xFF45415F),
-      coverIndigoEnd: Color(0xFFAF8FBC),
-      coverEmberStart: Color(0xFF8A4B36),
-      coverEmberEnd: Color(0xFFEBAD56),
+  static ThemeData dark({AppDarkThemeColor color = AppDarkThemeColor.seaSaltBlue}) {
+    final AppThemeTokens tokens = AppThemeTokens(
+      pageBackground: color.pageBackground,
+      surface: color.surface,
+      featureSurface: color.featureSurface,
+      mutedSurface: color.mutedSurface,
+      divider: color.divider,
+      mutedText: color.mutedText,
+      accent: color.accent,
+      dataSourceAccent: Color(0xFFFF9A62),
+      dataSourceCat: Color(0xFFFFC857),
+      dataSourceCommunity: Color(0xFF81C995),
+      accentSoft: color.accentSoft,
+      notification: Color(0xFFFF8B8B),
+      success: Color(0xFF7DDBA5),
+      warning: Color(0xFFFFC266),
+      focusRing: color.focusRing,
+      shadow: Color(0x99000000),
+      coverDuskStart: Color(0xFF182433),
+      coverDuskEnd: Color(0xFF455B73),
+      coverDawnStart: Color(0xFF304B68),
+      coverDawnEnd: Color(0xFF657F9B),
+      coverOceanStart: Color(0xFF163252),
+      coverOceanEnd: Color(0xFF4E7BA8),
+      coverIndigoStart: Color(0xFF22243A),
+      coverIndigoEnd: Color(0xFF5C6197),
+      coverEmberStart: Color(0xFF3C2735),
+      coverEmberEnd: Color(0xFF8A5167),
     );
     final ColorScheme colorScheme = ColorScheme.fromSeed(seedColor: tokens.accent, brightness: Brightness.dark).copyWith(
       primary: tokens.accent,
-      onPrimary: const Color(0xFF352108),
+      onPrimary: color == AppDarkThemeColor.seaSaltBlue ? const Color(0xFF07111F) : const Color(0xFF111111),
       primaryContainer: tokens.accentSoft,
-      onPrimaryContainer: const Color(0xFFFFDCB0),
+      onPrimaryContainer: color == AppDarkThemeColor.seaSaltBlue ? const Color(0xFFD7E7FF) : const Color(0xFFE8EDF3),
       surface: tokens.surface,
-      onSurface: const Color(0xFFF5EDE4),
+      onSurface: const Color(0xFFE8EDF3),
       outlineVariant: tokens.divider,
     );
     return _theme(colorScheme, tokens);
@@ -373,6 +516,8 @@ abstract final class AppSpacing {
   static const double sourceManagerHeight = unit * 10;
   static const double sourceManagerGap = unit + unit / 2;
   static const double bottomNavigationHeight = unit * 18;
+  static const double bottomNavigationMaxWidth = 560;
+  static const double bottomNavigationContentBottomPadding = bottomNavigationHeight + page;
   static const double bottomNavigationItemHeight = unit * 13;
   static const double topBarActionSize = unit * 10;
   static const double topBarActionIconSize = unit * 5 + 2;
@@ -478,6 +623,7 @@ abstract final class AppDetailMetrics {
   static const double backButtonExtent = 48;
   static const double backButtonLeft = 8;
   static const double bottomNavigationHeight = 76;
+  static const double bottomNavigationContentBottomPadding = bottomNavigationHeight + AppSpacing.page;
 
   static const double aboutIconTopGap = 29;
   static const double aboutIconExtent = 106;
@@ -488,13 +634,6 @@ abstract final class AppDetailMetrics {
 
   static const double feedbackBannerHeight = 108;
   static const double feedbackCardTopGap = 15;
-  static const double feedbackCardHeight = 602;
-  static const double feedbackCardPadding = 14;
-  static const double feedbackTypeHeight = 31;
-  static const double feedbackEditorHeight = 141;
-  static const double feedbackUploadTileExtent = 96;
-  static const double feedbackContactHeight = 34;
-  static const double feedbackSubmitHeight = 39;
 }
 
 /// Shared semantic corner radii for MgRead surfaces.
@@ -530,7 +669,6 @@ abstract final class AppMotion {
   static const Duration bottomNavigationLabelResponse = Duration(milliseconds: 190);
   static const Duration bottomNavigationPillMinimumTravel = Duration(milliseconds: 180);
   static const Duration bottomNavigationPillTravel = Duration(milliseconds: 300);
-  static const Duration bottomNavigationTextureDrift = Duration(seconds: 8);
   static const Duration privacyModeReveal = Duration(milliseconds: 520);
   static const Duration destinationTransition = short;
   static const Duration destinationReverseTransition = shortReverse;
@@ -546,7 +684,6 @@ abstract final class AppMotion {
   static const Curve navigationCurve = Curves.easeOutCubic;
   static const Curve navigationReverseCurve = Curves.easeInCubic;
   static const Curve standardCurve = Curves.easeInOutCubic;
-  static const Curve bottomNavigationTextureCurve = Curves.easeInOutSine;
 
   /// Returns whether the platform asks the app to avoid non-essential motion.
   static bool disablesAnimations(BuildContext context) {

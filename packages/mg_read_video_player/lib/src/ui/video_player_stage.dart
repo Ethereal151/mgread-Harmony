@@ -19,6 +19,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../api/contracts.dart';
+import '../api/controller.dart';
 import '../api/models.dart';
 import 'video_player_chrome.dart';
 import 'video_player_buffering_indicator.dart';
@@ -40,8 +41,10 @@ const _videoPlayerSystemUiStyle = SystemUiOverlayStyle(
 
 final class VideoPlayerStage extends StatelessWidget {
   const VideoPlayerStage({
+    required this.controller,
     required this.backend,
     required this.snapshot,
+    required this.activeEpisode,
     required this.focusNode,
     required this.exitAuthorized,
     required this.onPopAttempt,
@@ -52,7 +55,9 @@ final class VideoPlayerStage extends StatelessWidget {
     required this.onPlayOrPause,
     required this.onSeek,
     required this.onRate,
-    required this.onVolume,
+    required this.onEnhancementMode,
+    required this.onReadSystemVolume,
+    required this.onSystemVolume,
     required this.onReplay,
     required this.onPreviousEpisode,
     required this.onNextEpisode,
@@ -68,8 +73,10 @@ final class VideoPlayerStage extends StatelessWidget {
     super.key,
   });
 
+  final VideoPlayerController controller;
   final VideoPlaybackBackend backend;
   final VideoPlayerSnapshot snapshot;
+  final VideoEpisode? activeEpisode;
   final FocusNode focusNode;
   final bool exitAuthorized;
   final VoidCallback onPopAttempt;
@@ -80,7 +87,9 @@ final class VideoPlayerStage extends StatelessWidget {
   final Future<void> Function() onPlayOrPause;
   final Future<void> Function(Duration) onSeek;
   final Future<void> Function(double) onRate;
-  final Future<void> Function(double) onVolume;
+  final Future<void> Function(VideoEnhancementMode) onEnhancementMode;
+  final Future<double?> Function() onReadSystemVolume;
+  final Future<void> Function(double) onSystemVolume;
   final Future<void> Function() onReplay;
   final Future<void> Function() onPreviousEpisode;
   final Future<void> Function() onNextEpisode;
@@ -140,14 +149,18 @@ final class VideoPlayerStage extends StatelessWidget {
                       ),
                     if (snapshot.status == VideoPlayerStatus.ready)
                       _VideoPlayerInteractionLayer(
+                        controller: controller,
                         snapshot: snapshot,
+                        activeEpisode: activeEpisode,
                         reduceMotion: reduceMotion,
                         onToggleControls: onToggleControls,
                         onExit: onExit,
                         onPlayOrPause: onPlayOrPause,
                         onSeek: onSeek,
                         onRate: onRate,
-                        onVolume: onVolume,
+                        onEnhancementMode: onEnhancementMode,
+                        onReadSystemVolume: onReadSystemVolume,
+                        onSystemVolume: onSystemVolume,
                         onPreviousEpisode: onPreviousEpisode,
                         onNextEpisode: onNextEpisode,
                         onAutoAdvance: onAutoAdvance,
@@ -209,14 +222,18 @@ final class VideoPlayerStage extends StatelessWidget {
 
 final class _VideoPlayerInteractionLayer extends StatefulWidget {
   const _VideoPlayerInteractionLayer({
+    required this.controller,
     required this.snapshot,
+    required this.activeEpisode,
     required this.reduceMotion,
     required this.onToggleControls,
     required this.onExit,
     required this.onPlayOrPause,
     required this.onSeek,
     required this.onRate,
-    required this.onVolume,
+    required this.onEnhancementMode,
+    required this.onReadSystemVolume,
+    required this.onSystemVolume,
     required this.onPreviousEpisode,
     required this.onNextEpisode,
     required this.onAutoAdvance,
@@ -229,14 +246,18 @@ final class _VideoPlayerInteractionLayer extends StatefulWidget {
     required this.onBrightness,
   });
 
+  final VideoPlayerController controller;
   final VideoPlayerSnapshot snapshot;
+  final VideoEpisode? activeEpisode;
   final bool reduceMotion;
   final Future<void> Function() onToggleControls;
   final Future<void> Function() onExit;
   final Future<void> Function() onPlayOrPause;
   final Future<void> Function(Duration) onSeek;
   final Future<void> Function(double) onRate;
-  final Future<void> Function(double) onVolume;
+  final Future<void> Function(VideoEnhancementMode) onEnhancementMode;
+  final Future<double?> Function() onReadSystemVolume;
+  final Future<void> Function(double) onSystemVolume;
   final Future<void> Function() onPreviousEpisode;
   final Future<void> Function() onNextEpisode;
   final Future<void> Function(bool) onAutoAdvance;
@@ -305,7 +326,8 @@ final class _VideoPlayerInteractionLayerState
               unawaited(_commitSeekPreview(position)),
           onSeekPreviewCanceled: _cancelSeekPreview,
           onRate: (value) => unawaited(widget.onRate(value)),
-          onVolume: (value) => unawaited(widget.onVolume(value)),
+          onReadSystemVolume: widget.onReadSystemVolume,
+          onSystemVolume: widget.onSystemVolume,
           onReadBrightness: widget.onReadBrightness,
           onBrightness: (value) => unawaited(widget.onBrightness(value)),
           locked: snapshot.controlsLocked,
@@ -314,7 +336,9 @@ final class _VideoPlayerInteractionLayerState
         ),
         if (!snapshot.controlsLocked)
           VideoPlayerChrome(
+            controller: widget.controller,
             snapshot: snapshot,
+            activeEpisode: widget.activeEpisode,
             reduceMotion: widget.reduceMotion,
             seekPreviewPosition: _seekPreviewPosition,
             onExit: () => unawaited(widget.onExit()),
@@ -323,6 +347,7 @@ final class _VideoPlayerInteractionLayerState
                 unawaited(_commitSeekPreview(position)),
             onSeekPreviewCanceled: _cancelSeekPreview,
             onRate: widget.onRate,
+            onEnhancementMode: widget.onEnhancementMode,
             onFit: widget.onFit,
             onEpisodes: () => unawaited(widget.onEpisodes()),
             onFullscreen: (value) => unawaited(widget.onFullscreen(value)),

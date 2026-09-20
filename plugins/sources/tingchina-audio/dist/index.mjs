@@ -1,14 +1,40 @@
-/** Ting China audio source: JSON API projection and Runtime-owned media proxy. */
+/**
+ * 听中国听书原生数据源。
+ *
+ * 职责：调用听中国 JSON API，解析专辑、目录和播放地址，并把音频交给 Runtime 代理。
+ * 生命周期：activate 保存当前 Runtime 上下文；播放地址只在当前插件进程内按书籍/章节缓存。
+ * IO：来源请求和快速音频探测都走 ctx.http；媒体地址只经 ctx.resource.proxy 输出，不缓存媒体主体。
+ * 缓存：章节投影进入 Runtime 注入的持久化插件缓存，一天内直接命中；过期章节先返回旧目录并后台刷新。
+ * 缓存：签名地址按上游失效时间（无法解析时使用短 TTL）管理；未过期的地址每次播放前用 HEAD 快速探测。
+ */
 import { createHash } from 'node:crypto';
+import { PluginCache } from '@mgread/plugin-cache';
 const base = 'https://app.365ting.com';
 const api = `${base}/listen/Apitzg2025/`;
 const appHeaders = { Accept: 'application/json,text/html,*/*', 'User-Agent': 'TingShiJie/1.8.8 (m.i275.com)' };
 const audioHeaders = { Accept: '*/*', 'User-Agent': 'okhttp/4.9.3' };
 const playKey = 'J9gSpfUlzYxE8Hn5IXiGaD2jVMrwAm0K';
 const categories = Object.freeze([['popular', '热门', null], ['6', '玄幻', '6'], ['7', '奇幻', '7'], ['8', '武侠', '8'], ['13', '历史', '13'], ['14', '恐怖', '14'], ['31', '评书', '31'], ['50', '儿童', '50']]);
+const playbackCacheTtlMs = 10 * 60 * 1000;
+const playbackExpirySafetyMs = 5 * 1000;
+const playbackProbeTimeoutMs = 1500;
+const playbackCacheMaxEntries = 256;
+const chapterPageConcurrency = 6;
+const chapterCacheTtlMs = 24 * 60 * 60 * 1000;
+const chapterCachePolicy = Object.freeze({ namespace: 'audio-chapters-v1', staleAfterMs: chapterCacheTtlMs, serveStaleWhileRevalidate: true, allowStaleOnError: true });
 let context;
 const chapterLocks = new Map();
-export async function activate(next) { context = next; next.log.info('source_activated'); }
+const playbackCache = new Map();
+const playbackLocks = new Map();
+let chapterCache;
+export async function activate(next) {
+    context = next;
+    chapterCache = new PluginCache(next.cacheDir, { logger: next.log });
+    chapterLocks.clear();
+    playbackCache.clear();
+    playbackLocks.clear();
+    next.log.info('source_activated');
+}
 export async function search(request) {
     if (request.cursor !== null)
         throw new Error('Search cursor is unsupported.');
@@ -52,18 +78,42 @@ export async function getDetail(request) {
 }
 export async function getChapters(request) {
     const id = contentId(request.id);
+    const result = await requireChapterCache().getOrFetchJson(id, chapterCachePolicy, async () => ({ value: await loadChapters(id), storedAtMs: Date.now() }), decodeChapters);
+    rememberChapterLocks(result.items);
+    return result;
+}
+async function loadChapters(id) {
     const first = await chapterPage(id, 1);
     const total = positive(first.count, first.list.length);
-    const pages = [first];
     const pageCount = Math.min(25, Math.ceil(total / 200));
-    for (let page = 2; page <= pageCount; page += 1)
-        pages.push(await chapterPage(id, page));
+    const pages = [first, ...(await chapterPages(id, pageCount))];
     const items = pages.flatMap((value) => value.list).slice(0, 5000).map((value, order) => chapter(id, value, order));
+    rememberChapterLocks(items);
+    const groups = items.length === 0
+        ? []
+        : [frozen({ id: `group:${id}:default`, title: '节目', order: 0, episodes: items })];
+    return frozen({ items, groups });
+}
+function rememberChapterLocks(items) {
     if (chapterLocks.size + items.length > 10_000)
         chapterLocks.clear();
     for (const item of items)
         chapterLocks.set(item.id, item.isLocked === true);
-    return frozen({ items, groups: [] });
+}
+function decodeChapters(value) {
+    if (!isObject(value) || !Array.isArray(value.items) || !Array.isArray(value.groups))
+        return undefined;
+    if (!value.items.every(isObject) || !value.groups.every(isObject))
+        return undefined;
+    return value;
+}
+async function chapterPages(id, pageCount) {
+    const pages = [];
+    for (let start = 2; start <= pageCount; start += chapterPageConcurrency) {
+        const batch = await Promise.all(Array.from({ length: Math.min(chapterPageConcurrency, pageCount - start + 1) }, (_, offset) => chapterPage(id, start + offset)));
+        pages.push(...batch);
+    }
+    return pages;
 }
 export async function getContent(request) {
     const ctx = requireContext();
@@ -73,17 +123,9 @@ export async function getContent(request) {
         const chapterId = chapterIdFrom(request.chapterId, bookId);
         if (chapterLocks.get(request.chapterId) === true)
             throw new Error('unsupported: paid audio chapter requires an account.');
-        const timestamp = Date.now().toString();
-        const signature = md5(`${md5(`${timestamp}${playKey}`)}${playKey}`);
-        const endpoint = `${api}AppGetChapterUrl2023?timeStamp=${encodeURIComponent(timestamp)}&uid=&chapterId=${encodeURIComponent(chapterId)}&addItParapet=${encodeURIComponent(signature)}&bookId=${encodeURIComponent(bookId)}`;
-        const payload = await fetchJson(endpoint);
-        const upstream = text(payload.src);
-        if (!trustedAudio(upstream))
-            throw new Error('Playback address is unavailable.');
-        const referer = base + '/';
-        const headers = { ...audioHeaders, Origin: base, Referer: referer };
+        const playback = await getPlayback(bookId, chapterId);
         const result = frozen({ chapterId: request.chapterId, contentKind: 'audio', title: null, updatedAt: null, text: null, pages: [], media: {
-                url: ctx.resource.proxy({ kind: 'audio', url: upstream, headers }), resourceType: 'audio', resourcePolicy: 'sessionOnly', expiresAt: null, mimeType: mime(upstream), headers,
+                url: ctx.resource.proxy({ kind: 'audio', url: playback.url, headers: playback.headers }), resourceType: 'audio', resourcePolicy: playback.mediaExpiresAt === null ? 'sessionOnly' : 'refreshable', expiresAt: playback.mediaExpiresAt === null ? null : new Date(playback.mediaExpiresAt).toISOString(), mimeType: mime(playback.url), headers: playback.headers,
             } });
         ctx.log.info('audio_playback_resource_resolved');
         return result;
@@ -92,6 +134,98 @@ export async function getContent(request) {
         ctx.log.warn('audio_playback_resource_failed');
         throw error;
     }
+}
+async function getPlayback(bookId, chapterId) {
+    const key = `${bookId}:${chapterId}`;
+    const pending = playbackLocks.get(key);
+    if (pending !== undefined)
+        return pending;
+    const task = resolvePlayback(key, bookId, chapterId);
+    playbackLocks.set(key, task);
+    try {
+        return await task;
+    }
+    finally {
+        if (playbackLocks.get(key) === task)
+            playbackLocks.delete(key);
+    }
+}
+async function resolvePlayback(key, bookId, chapterId) {
+    const ctx = requireContext();
+    const cached = playbackCache.get(key);
+    if (cached !== undefined) {
+        if (cached.expiresAt <= Date.now() + playbackExpirySafetyMs) {
+            playbackCache.delete(key);
+            ctx.log.info('audio_playback_cache_expired');
+        }
+        else if (await probePlayback(cached)) {
+            ctx.log.info('audio_playback_cache_hit');
+            return cached;
+        }
+        else {
+            playbackCache.delete(key);
+            ctx.log.info('audio_playback_cache_probe_failed');
+        }
+    }
+    const timestamp = Date.now().toString();
+    const signature = md5(`${md5(`${timestamp}${playKey}`)}${playKey}`);
+    const endpoint = `${api}AppGetChapterUrl2023?timeStamp=${encodeURIComponent(timestamp)}&uid=&chapterId=${encodeURIComponent(chapterId)}&addItParapet=${encodeURIComponent(signature)}&bookId=${encodeURIComponent(bookId)}`;
+    const payload = await fetchJson(endpoint);
+    const upstream = text(payload.src);
+    if (!trustedAudio(upstream))
+        throw new Error('Playback address is unavailable.');
+    const headers = { ...audioHeaders, Origin: base, Referer: `${base}/` };
+    const expiry = playbackExpiry(payload, upstream);
+    const resolved = { url: upstream, expiresAt: expiry.cacheExpiresAt, mediaExpiresAt: expiry.mediaExpiresAt, headers };
+    if (!playbackCache.has(key) && playbackCache.size >= playbackCacheMaxEntries) {
+        const oldest = playbackCache.keys().next().value;
+        if (typeof oldest === 'string')
+            playbackCache.delete(oldest);
+    }
+    playbackCache.set(key, resolved);
+    return resolved;
+}
+async function probePlayback(playback) {
+    try {
+        const response = await requireContext().http.fetch(playback.url, { method: 'HEAD', headers: playback.headers, signal: AbortSignal.timeout(playbackProbeTimeoutMs) });
+        return response.ok;
+    }
+    catch {
+        return false;
+    }
+}
+function playbackExpiry(payload, url) {
+    const now = Date.now();
+    const explicit = ['expiresAt', 'expireAt', 'expires', 'expireTime', 'expiration'].map((key) => timestamp(payload[key])).find((value) => value !== null);
+    const mediaExpiresAt = explicit ?? urlExpiresAt(url);
+    return { cacheExpiresAt: mediaExpiresAt ?? now + playbackCacheTtlMs, mediaExpiresAt };
+}
+function urlExpiresAt(value) {
+    try {
+        const parsed = new URL(value);
+        for (const key of ['expiresAt', 'expireAt', 'expires', 'expireTime', 'expiration', 'e']) {
+            const result = timestamp(parsed.searchParams.get(key));
+            if (result !== null)
+                return result;
+        }
+        const authKey = parsed.searchParams.get('auth_key');
+        const embedded = authKey?.split('-')[1];
+        return timestamp(embedded);
+    }
+    catch {
+        return null;
+    }
+}
+function timestamp(value) {
+    if (value === null || value === undefined || value === '')
+        return null;
+    const numeric = typeof value === 'number' ? value : Number(value);
+    if (Number.isFinite(numeric) && numeric > 0) {
+        const milliseconds = numeric < 100_000_000_000 ? numeric * 1000 : numeric;
+        return milliseconds;
+    }
+    const parsed = Date.parse(String(value));
+    return Number.isFinite(parsed) ? parsed : null;
 }
 async function fetchJson(url) {
     const response = await requireContext().http.fetch(url, { headers: appHeaders });
@@ -126,7 +260,7 @@ function summary(value, idOverride) {
 }
 function detail(item) { return frozen({ ...item, aliases: [], catalogUrl: item.url }); }
 function chapter(bookId, value, order) { const id = text(value.chapterId) || text(value.id) || text(value.url); if (id === '')
-    throw new Error('Source chapter has no ID.'); const price = number(value.price) || number(value.chapterPrice); return frozen({ id: `audio:${bookId}:${id}`, title: text(value.title) || `第${order + 1}集`, order, url: null, volumeTitle: null, wordCount: null, updatedAt: null, isLocked: price > 0, attributes: price > 0 ? [{ key: 'price', label: '听币', value: String(price) }] : [] }); }
+    throw new Error('Source chapter has no ID.'); const price = number(value.price) || number(value.chapterPrice); return frozen({ id: `audio:${bookId}:${id}`, title: text(value.title) || `第${order + 1}集`, order, url: `${base}/book/${encodeURIComponent(bookId)}/${encodeURIComponent(id)}`, volumeTitle: null, wordCount: null, updatedAt: null, isLocked: price > 0, attributes: price > 0 ? [{ key: 'price', label: '听币', value: String(price) }] : [] }); }
 function popular(data) { const root = object(data.data); return records(object(root.best).list).length > 0 ? records(object(root.best).list) : records(root.list); }
 function contentId(id) { const match = /^audio:([^:]+)$/u.exec(id); if (match?.[1] === undefined)
     throw new Error('Content ID is invalid.'); return match[1]; }
@@ -157,3 +291,5 @@ function frozen(value) { return Object.freeze(value); }
 function escape(value) { return value.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&'); }
 function requireContext() { if (context === undefined)
     throw new Error('Source is not activated.'); return context; }
+function requireChapterCache() { if (chapterCache === undefined)
+    throw new Error('Source is not activated.'); return chapterCache; }

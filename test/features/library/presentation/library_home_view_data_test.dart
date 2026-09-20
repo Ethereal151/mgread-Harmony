@@ -92,6 +92,7 @@ void main() {
     );
 
     expect(data.continueReading?.coverOrientation, CoverOrientation.square);
+    expect(data.books.single.contentKind, ContentKind.audio);
     expect(data.books.single.coverOrientation, CoverOrientation.square);
   });
 }

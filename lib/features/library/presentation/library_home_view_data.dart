@@ -70,6 +70,7 @@ final class LibraryHomeViewData {
         (entry) => LibraryBookListItemViewData(
           id: entry.value.id,
           title: entry.value.title,
+          contentKind: entry.value.contentKind,
           subtitle: _librarySubtitle(entry.value),
           coverUrl: entry.value.coverUrl,
           coverBytes: entry.value.coverBytes,
@@ -95,6 +96,7 @@ final class LibraryHomeViewData {
         return LibraryBookListItemViewData(
           id: item.id,
           title: item.title,
+          contentKind: item.contentKind,
           subtitle: _librarySubtitle(item),
           activityLabel: _readingHistoryLabel(item.lastReadAtUtc!),
           coverUrl: item.coverUrl,
@@ -239,6 +241,18 @@ enum LibraryHomeLayoutMode {
   static LibraryHomeLayoutMode fromSetting(String value) => value == card.name ? card : list;
 }
 
+/// Where card metadata is rendered when the bookshelf uses card mode.
+enum LibraryHomeCoverMetadataMode {
+  belowCover,
+  insideCover;
+
+  /// Stable value persisted by the app-owned settings manager.
+  String get settingValue => name;
+
+  /// Resolves an app setting while retaining the unobtrusive default.
+  static LibraryHomeCoverMetadataMode fromSetting(String value) => value == insideCover.name ? insideCover : belowCover;
+}
+
 /// The two content sections available at the library landing page.
 enum LibraryHomeSection { recentUpdates, shelf }
 
@@ -251,6 +265,7 @@ final class LibraryHomeCallbacks {
     this.onReadingHistory,
     this.onContinueReading,
     this.onOpenBook,
+    this.onBookDetail,
     this.onBookLongPress,
     this.onBookMore,
     this.onRefreshBook,
@@ -269,6 +284,7 @@ final class LibraryHomeCallbacks {
   final VoidCallback? onReadingHistory;
   final VoidCallback? onContinueReading;
   final ValueChanged<LibraryBookListItemViewData>? onOpenBook;
+  final ValueChanged<LibraryBookListItemViewData>? onBookDetail;
   final ValueChanged<LibraryBookListItemViewData>? onBookLongPress;
   final ValueChanged<LibraryBookListItemViewData>? onBookMore;
   final Future<void> Function(LibraryBookListItemViewData)? onRefreshBook;
@@ -290,6 +306,7 @@ final class LibraryHomeCallbacks {
     VoidCallback? onReadingHistory,
     VoidCallback? onContinueReading,
     ValueChanged<LibraryBookListItemViewData>? onOpenBook,
+    ValueChanged<LibraryBookListItemViewData>? onBookDetail,
     ValueChanged<LibraryBookListItemViewData>? onBookLongPress,
     ValueChanged<LibraryBookListItemViewData>? onBookMore,
     Future<void> Function(LibraryBookListItemViewData)? onRefreshBook,
@@ -308,6 +325,7 @@ final class LibraryHomeCallbacks {
       onReadingHistory: onReadingHistory ?? this.onReadingHistory,
       onContinueReading: onContinueReading ?? this.onContinueReading,
       onOpenBook: onOpenBook ?? this.onOpenBook,
+      onBookDetail: onBookDetail ?? this.onBookDetail,
       onBookLongPress: onBookLongPress ?? this.onBookLongPress,
       onBookMore: onBookMore ?? this.onBookMore,
       onRefreshBook: onRefreshBook ?? this.onRefreshBook,

@@ -6,7 +6,7 @@
 ///
 /// 注意：
 /// - 不在 build() 中加载字体、访问宿主数据或写持久化。
-/// - Slider 预览在关闭时只提交最新值，不能破坏设置面板的滚动锁定语义。
+/// - 进度条预览在关闭时只提交最新值，不能破坏设置面板的滚动锁定语义。
 ///
 library;
 
@@ -22,6 +22,7 @@ import '../reader_strings.dart';
 import '../reader_theme.dart';
 import '../fonts/reader_font_catalog.dart';
 import 'reader_settings_controls.dart';
+import 'reader_settings_font_size_control.dart';
 import 'reader_settings_tokens.dart';
 
 part 'reader_settings_coordinator.dart';
@@ -36,7 +37,13 @@ const List<ReaderThemePreset> _themeOrder = <ReaderThemePreset>[
   ReaderThemePreset.parchment,
   ReaderThemePreset.eyeCare,
   ReaderThemePreset.mistBlue,
+  ReaderThemePreset.lavenderMist,
+  ReaderThemePreset.roseTea,
+  ReaderThemePreset.seaGlass,
   ReaderThemePreset.night,
   ReaderThemePreset.deepNight,
   ReaderThemePreset.charcoal,
+  ReaderThemePreset.midnight,
+  ReaderThemePreset.forestNight,
+  ReaderThemePreset.oled,
 ];

@@ -55,7 +55,7 @@ export async function getContent(request) {
     return frozen({ chapterId: request.chapterId, contentKind: 'video', title: selected.title, updatedAt: null, text: null, pages: [], media: { url: requireContext().resource.proxy({ kind: resourceType, url: upstream, headers: mediaHeaders }), resourceType, resourcePolicy: 'sessionOnly', expiresAt: null, mimeType: resourceType === 'hls' ? 'application/vnd.apple.mpegurl' : 'video/mp4', headers: mediaHeaders } });
 }
 async function fetchText(url) { const response = await requireContext().http.fetch(url, { headers }); if (!response.ok)
-    throw new Error('Source request failed.'); return response.text(); }
+    throw new Error(`Source request failed (HTTP ${response.status}).`); return response.text(); }
 async function rootDocument(pageSize) {
     const limit = Math.min(clamp(pageSize), 10);
     const values = parseList(await fetchText(categoryUrl('1', 1))).slice(0, limit);
@@ -87,24 +87,31 @@ function listEntries(html) {
 }
 function parseDetail(html, id) { const title = firstText(html, /<h1[^>]*>([\s\S]*?)<\/h1>/iu) || firstText(html, /<title[^>]*>([\s\S]*?)<\/title>/iu); const cover = firstAttribute(html, /<meta[^>]+property=["']og:image["'][^>]*>/iu, 'content') || firstAttribute(html, /<img\b[^>]*>/iu, 'data-original') || firstAttribute(html, /<img\b[^>]*>/iu, 'src'); return summary(id, title || `视频 ${id}`, cover, null); }
 function summary(id, title, cover, updatedAt) { if (!/^\d+$/u.test(id))
-    throw new Error('Source item has no ID.'); return frozen({ id: `video:${id}`, title: decode(title) || `视频 ${id}`, contentKind: 'video', author: null, url: detailUrl(id), coverUrl: absolute(cover), description: null, language: 'zh-CN', status: 'unknown', access: 'unknown', wordCount: null, chapterCount: null, publishedAt: null, updatedAt, latestChapter: null, categories: [], tags: [], attributes: [] }); }
+    throw new Error('Source item has no ID.'); return frozen({ id: `video:${id}`, title: decode(title) || `视频 ${id}`, contentKind: 'video', author: null, url: detailUrl(id), coverUrl: proxyImage(cover), description: null, language: 'zh-CN', status: 'unknown', access: 'unknown', wordCount: null, chapterCount: null, publishedAt: null, updatedAt, latestChapter: null, categories: [], tags: [], attributes: [] }); }
 function detail(item) { return frozen({ ...item, aliases: [], catalogUrl: item.url }); }
 function parseGroups(html, id) {
-    const blocks = playlistBlocks(html);
-    const groups = blocks.map((block, index) => groupFromLinks(block.html, id, block.title || `分组 ${index + 1}`, index)).filter((value) => value.episodes.length > 0);
-    if (groups.length > 0)
-        return groups;
-    const fallback = groupFromLinks(html, id, '默认分组', 0);
-    if (fallback.episodes.length === 0)
+    const entries = links(html).filter((entry) => entry.id === id);
+    if (entries.length === 0)
         throw new Error('No playable episodes found.');
-    return [fallback];
+    const blocks = playlistBlocks(html);
+    return [...new Set(entries.map((entry) => entry.sid))].map((sid, order) => {
+        const title = playlistTitle(html, blocks, sid) || `线路 ${order + 1}`;
+        const episodes = entries.filter((entry) => entry.sid === sid).map((entry, index) => frozen({ id: `video:${id}:${entry.sid}:${entry.nid}`, title: entry.title || `第${index + 1}集`, order: index, url: playUrl(id, entry.sid, entry.nid), volumeTitle: decode(title), wordCount: null, updatedAt: null, isLocked: null, attributes: [] }));
+        return frozen({ id: `group:${id}:${sid}`, title: decode(title), order, episodes });
+    });
 }
 function playlistBlocks(html) {
     const titles = [...html.matchAll(/<(?:div|li|span)[^>]*class=["'][^"']*(?:tab-item|playlist-title)[^"']*["'][^>]*>([\s\S]*?)<\/(?:div|li|span)>/giu)].map((match) => strip(match[1] ?? ''));
     const blocks = [...html.matchAll(/<(?:div|ul|section)[^>]*(?:class=["'][^"']*(?:play-list|playlist)[^"']*["']|data-group=)[^>]*>([\s\S]*?)<\/(?:div|ul|section)>/giu)];
     return blocks.map((match, index) => ({ html: match[1] ?? '', title: attribute(match[0] ?? '', 'data-group') || titles[index] || '' }));
 }
-function groupFromLinks(html, id, title, order) { const episodes = links(html).filter((entry) => entry.id === id).map((entry, index) => frozen({ id: `video:${id}:${entry.sid}:${entry.nid}`, title: entry.title || `第${index + 1}集`, order: index, url: playUrl(id, entry.sid, entry.nid), volumeTitle: decode(title), wordCount: null, updatedAt: null, isLocked: null, attributes: [] })); const sid = episodes[0]?.id.split(':')[2] ?? String(order + 1); return frozen({ id: `group:${id}:${sid}`, title: decode(title), order, episodes }); }
+function playlistTitle(html, blocks, sid) {
+    const block = blocks.find((value) => links(value.html).some((entry) => entry.sid === sid));
+    if (block?.title)
+        return block.title;
+    const match = new RegExp(`<(?:div|section)[^>]*id=["']playlist_${escape(sid)}["'][^>]*>[\\s\\S]*?<h[1-6][^>]*>([\\s\\S]*?)<\\/h[1-6]>`, 'iu').exec(html);
+    return strip(match?.[1] ?? '');
+}
 function links(html) { const result = []; for (const match of html.matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/giu)) {
     const href = attribute(match[1] ?? '', 'href');
     const parsed = /\/vod\/play\/id\/(\d+)\/sid\/(\d+)\/nid\/(\d+)\.html/iu.exec(href);
@@ -175,6 +182,7 @@ function absolute(value) { if (value === null || value === '')
 catch {
     return null;
 } }
+function proxyImage(value) { const url = absolute(value); return url === null ? null : requireContext().resource.proxy({ kind: 'image', url, headers: { Referer: `${base}/`, 'User-Agent': headers['User-Agent'] } }); }
 function attribute(text, name) { return new RegExp(`${escape(name)}=["']([^"']+)["']`, 'iu').exec(text)?.[1] ?? ''; }
 function firstAttribute(html, pattern, name) { const match = pattern.exec(html); return match === null ? '' : attribute(match[0], name); }
 function firstText(html, pattern) { return strip(pattern.exec(html)?.[1] ?? ''); }

@@ -16,7 +16,8 @@ export async function discover(request) { if (request.target === null) {
 } return frozen({ kind: 'document', document: { components: [{ type: 'section', id: `${collectionId}:section`, title: channel.title, subtitle: null, icon: 'manga', children: [{ type: 'contentCollection', id: collectionId, layout: 'coverGrid', items, continuation }] }] } }); }
 export async function getDetail(request) { const id = contentId(request.id), model = object((await fetchJson('intro', { id, force: 'false', viewId: viewId() })).model), item = summary(model, id); return frozen({ ...item, aliases: [], catalogUrl: `${root}catalog/${encodeURIComponent(id)}` }); }
 export async function getChapters(request) { const id = contentId(request.id), model = object((await fetchJson(`catalog/${encodeURIComponent(id)}`, {})).model), items = records(model.menus).filter(item => item.hide !== true && number(item.hide) !== 1).map((item, index) => chapter(id, item, index)).filter(notNull); return frozen({ items, groups: items.length === 0 ? [] : [frozen({ id: `group:${id}:main`, title: '章节', order: 0, episodes: items })] }); }
-export async function getContent(request) { const comicId = contentId(request.id), chapter = chapterNative(request.chapterId, comicId), model = object((await fetchJson('chapter', { id: chapter, viewId: viewId(), comicId })).model), images = Array.isArray(model.images) ? model.images : [], pages = []; for (const value of images) {
+export async function getContent(request) { const comicId = contentId(request.id), chapter = chapterNative(request.chapterId, comicId), model = object((await fetchJson('chapter', { id: chapter, viewId: viewId(), comicId })).model); if (isLocked(model) || text(model.msg) !== '')
+    return raiseAccessBlocked(text(model.msg) || '该章节需要登录或会员权限。'); const images = Array.isArray(model.images) ? model.images : [], pages = []; for (const value of images) {
     const upstream = typeof value === 'string' ? value : isObject(value) ? text(first(value.url, value.src, value.image)) : '';
     if (!safeUrl(upstream))
         continue;
@@ -55,9 +56,9 @@ function summaries(values) { const result = new Map(); for (const value of value
     result.set(id, item);
 } return [...result.values()]; }
 function summary(value, id) { const native = sourceId(id); if (native === null)
-    throw new Error('Comic ID is invalid.'); const title = text(value.title) || id, author = nullable(first(value.authors, value.author, value.uploader)), finished = number(value.finished) === 1, latestId = sourceId(value.latestReadChapterId); return frozen({ id: `manga:${native}`, title, contentKind: 'manga', coverOrientation: 'portrait', author, url: `${root}intro?id=${encodeURIComponent(id)}`, coverUrl: proxyImage(text(value.coverUrl)), description: nullable(first(value.brief, value.description)), language: 'zh-CN', status: finished ? 'completed' : 'ongoing', access: number(value.vip) === 1 ? 'paid' : 'unknown', wordCount: null, chapterCount: nonNegative(value.chapterCount), publishedAt: timestamp(value.onlineTime), updatedAt: timestamp(first(value.updateTime, value.updateTimeFormat)), latestChapter: latestId === null ? null : { id: `manga:${id}:${latestId}`, title: text(first(value.latestUpdate, value.latestReadChapter)) || '最新章节', url: null, updatedAt: null }, categories: stringList(first(value.categories, value.category)), tags: stringList(value.tags), attributes: [] }); }
+    throw new Error('Comic ID is invalid.'); const title = text(value.title) || id, author = nullable(first(value.authors, value.author, value.uploader)), finished = number(value.finished) === 1, latestId = sourceId(value.latestReadChapterId); return frozen({ id: `manga:${native}`, title, contentKind: 'manga', coverOrientation: 'portrait', author, url: `${root}intro?id=${encodeURIComponent(id)}`, coverUrl: proxyImage(text(value.coverUrl)), description: nullable(first(value.brief, value.description)), language: 'zh-CN', status: finished ? 'completed' : 'ongoing', access: isLocked(value) ? 'paid' : 'unknown', wordCount: null, chapterCount: nonNegative(value.chapterCount), publishedAt: timestamp(value.onlineTime), updatedAt: timestamp(first(value.updateTime, value.updateTimeFormat)), latestChapter: latestId === null ? null : { id: `manga:${id}:${latestId}`, title: text(first(value.latestUpdate, value.latestReadChapter)) || '最新章节', url: null, updatedAt: null }, categories: stringList(first(value.categories, value.category)), tags: stringList(value.tags), attributes: [] }); }
 function chapter(comicId, value, index) { const id = sourceId(value.id); if (id === null || text(value.title) === '')
-    return null; return frozen({ id: `manga:${comicId}:${id}`, title: text(value.title), order: index, url: null, volumeTitle: '章节', wordCount: null, updatedAt: timestamp(value.onlineTime), isLocked: number(value.vip) === 1, attributes: [] }); }
+    return null; return frozen({ id: `manga:${comicId}:${id}`, title: text(value.title), order: index, url: null, volumeTitle: '章节', wordCount: null, updatedAt: timestamp(value.onlineTime), isLocked: isLocked(value), attributes: [] }); }
 function sourceId(value) { const id = text(value); return /^\d{6,}$/u.test(id) ? id : null; }
 function contentId(id) { const value = /^manga:(\d+)$/u.exec(id)?.[1]; if (value === undefined)
     throw new Error('Content ID is invalid.'); return value; }
@@ -92,6 +93,8 @@ function text(value) { return typeof value === 'string' ? value.trim() : typeof 
 function number(value) { const result = Number(value); return Number.isFinite(result) ? result : 0; }
 function nullable(value) { const result = text(value); return result === '' ? null : result; }
 function notNull(value) { return value !== null; }
+function isLocked(value) { return number(value.member) === 1 || number(value.vip) === 1; }
+function raiseAccessBlocked(message) { requireContext().errors.raise({ code: 'source_access_blocked', message, annotation: '该章节需要登录或会员权限。' }); throw new Error('Access blocked.'); }
 function clamp(value) { return Math.max(1, Math.min(50, Math.floor(value))); }
 function frozen(value) { return Object.freeze(value); }
 function requireContext() { if (context === undefined)

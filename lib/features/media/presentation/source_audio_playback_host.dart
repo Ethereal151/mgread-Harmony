@@ -12,6 +12,8 @@
 library;
 
 import 'dart:async';
+import 'dart:convert';
+import 'dart:math' as math;
 import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/gestures.dart' show DragStartBehavior, PointerDeviceKind, PointerDownEvent, kBackMouseButton;
@@ -21,9 +23,14 @@ import 'package:flutter/services.dart';
 import 'package:mg_read_audio_player/mg_read_audio_player.dart';
 
 import 'package:mg_read/app/app_theme.dart';
+import 'package:mg_read/core/settings/settings.dart';
 import 'package:mg_read/features/media/application/source_audio_playback_service.dart';
+import 'package:mg_read/features/plugins/application/plugin_runtime_connection.dart';
 import 'package:mg_read/features/media/presentation/media_entry_cover.dart';
+import 'package:mgread_plugin_runtime/mgread_plugin_runtime.dart';
 import 'package:mg_read/shared/presentation/widgets/async_book_cover_loader.dart';
+
+part 'source_audio_mini_player.dart';
 
 /// Owns a transparent local Navigator for playback above the app router.
 ///
@@ -49,36 +56,48 @@ final class _SourceAudioPlaybackNavigatorState extends ConsumerState<SourceAudio
     final playback = ref.watch(sourceAudioPlaybackServiceProvider);
     if (!playback.isActive) return const SizedBox.shrink();
     final service = ref.read(sourceAudioPlaybackServiceProvider.notifier);
-    final minimized = playback.presentation == SourceAudioPresentation.minimized;
-    final controller = playback.controller;
-    return Stack(
-      fit: StackFit.expand,
-      children: <Widget>[
-        IgnorePointer(
-          ignoring: minimized,
-          child: HeroControllerScope.none(
-            child: Navigator(
-              key: _navigatorKey,
-              onGenerateRoute: (settings) => PageRouteBuilder<void>(
-                settings: settings,
-                opaque: false,
-                transitionDuration: Duration.zero,
-                reverseTransitionDuration: Duration.zero,
-                pageBuilder: (context, animation, secondaryAnimation) =>
-                    SourceAudioPlaybackHost(backButtonDispatcher: widget.backButtonDispatcher, playbackNavigatorKey: _navigatorKey),
+    final settings = ref.read(appSettingsProvider);
+    return StreamBuilder<SettingsSnapshot>(
+      stream: settings.changes,
+      initialData: settings.snapshot,
+      builder: (context, settingsSnapshot) {
+        final String style = settings.supports(AppSettingKeys.audioMiniPlayerStyle)
+            ? settingsSnapshot.data?.get(AppSettingKeys.audioMiniPlayerStyle) ?? settings.get(AppSettingKeys.audioMiniPlayerStyle)
+            : 'bar';
+        final minimized = playback.presentation == SourceAudioPresentation.minimized;
+        final controller = playback.controller;
+        return Stack(
+          fit: StackFit.expand,
+          children: <Widget>[
+            IgnorePointer(
+              ignoring: minimized,
+              child: HeroControllerScope.none(
+                child: Navigator(
+                  key: _navigatorKey,
+                  onGenerateRoute: (settings) => PageRouteBuilder<void>(
+                    settings: settings,
+                    opaque: false,
+                    transitionDuration: Duration.zero,
+                    reverseTransitionDuration: Duration.zero,
+                    pageBuilder: (context, animation, secondaryAnimation) =>
+                        SourceAudioPlaybackHost(backButtonDispatcher: widget.backButtonDispatcher, playbackNavigatorKey: _navigatorKey),
+                  ),
+                ),
               ),
             ),
-          ),
-        ),
-        if (minimized && controller != null)
-          _SourceAudioMiniOverlay(
-            controller: controller,
-            initialPosition: _miniPlayerPosition,
-            onPositionChanged: (position) => _miniPlayerPosition = position,
-            onExpand: service.expand,
-            onStop: () => unawaited(service.stop(sessionId: playback.sessionId)),
-          ),
-      ],
+            if (minimized && controller != null)
+              _SourceAudioMiniOverlay(
+                style: style,
+                request: playback.request!,
+                controller: controller,
+                initialPosition: _miniPlayerPosition,
+                onPositionChanged: (position) => _miniPlayerPosition = position,
+                onExpand: service.expand,
+                onStop: () => unawaited(service.stop(sessionId: playback.sessionId)),
+              ),
+          ],
+        );
+      },
     );
   }
 }
@@ -236,10 +255,26 @@ final class _ActiveSourceAudioPlaybackHostState extends ConsumerState<_ActiveSou
         key: const Key('source-audio-player'),
         controller: controller,
         artworkBuilder: (context, track) => _sourceAudioArtwork(context, track, request),
+        queueArtworkBuilder: (context, entry) => _sourceAudioQueueArtwork(context, entry, request),
+        resourceUrlDecoder: _decodeSourceResourceUrl,
         keepScreenOn: playback.keepScreenOn,
         onKeepScreenOnChanged: _service.setKeepScreenOn,
       ),
     );
+  }
+
+  Future<AudioResourceDecodeResult?> _decodeSourceResourceUrl(Uri resource) async {
+    try {
+      final decoded = await ref.read(pluginRuntimeFacadeProvider).invoke(SourceResourceDecodeInvocation(url: resource.toString()));
+      return AudioResourceDecodeResult(
+        pluginId: decoded.pluginId,
+        requestJson: const JsonEncoder.withIndent(
+          '  ',
+        ).convert(<String, Object?>{'pluginId': decoded.pluginId, 'request': decoded.request}),
+      );
+    } on Object {
+      return null;
+    }
   }
 
   Widget _buildExitPrompt(BuildContext context) {
@@ -305,6 +340,8 @@ final class _ActiveSourceAudioPlaybackHostState extends ConsumerState<_ActiveSou
 
 final class _SourceAudioMiniOverlay extends StatefulWidget {
   const _SourceAudioMiniOverlay({
+    required this.style,
+    required this.request,
     required this.controller,
     required this.initialPosition,
     required this.onPositionChanged,
@@ -312,6 +349,8 @@ final class _SourceAudioMiniOverlay extends StatefulWidget {
     required this.onStop,
   });
 
+  final String style;
+  final SourceAudioPlaybackRequest request;
   final AudioPlayerController controller;
   final Offset? initialPosition;
   final ValueChanged<Offset> onPositionChanged;
@@ -325,6 +364,8 @@ final class _SourceAudioMiniOverlay extends StatefulWidget {
 final class _SourceAudioMiniOverlayState extends State<_SourceAudioMiniOverlay> {
   late final OverlayEntry _entry = OverlayEntry(
     builder: (context) => _DraggableSourceAudioMiniPlayer(
+      style: widget.style,
+      request: widget.request,
       controller: widget.controller,
       initialPosition: widget.initialPosition,
       onPositionChanged: widget.onPositionChanged,
@@ -352,6 +393,8 @@ final class _SourceAudioMiniOverlayState extends State<_SourceAudioMiniOverlay> 
 
 final class _DraggableSourceAudioMiniPlayer extends StatefulWidget {
   const _DraggableSourceAudioMiniPlayer({
+    required this.style,
+    required this.request,
     required this.controller,
     required this.initialPosition,
     required this.onPositionChanged,
@@ -359,6 +402,8 @@ final class _DraggableSourceAudioMiniPlayer extends StatefulWidget {
     required this.onStop,
   });
 
+  final String style;
+  final SourceAudioPlaybackRequest request;
   final AudioPlayerController controller;
   final Offset? initialPosition;
   final ValueChanged<Offset> onPositionChanged;
@@ -371,7 +416,8 @@ final class _DraggableSourceAudioMiniPlayer extends StatefulWidget {
 
 final class _DraggableSourceAudioMiniPlayerState extends State<_DraggableSourceAudioMiniPlayer> {
   static const double _maxWidth = 520;
-  static const double _height = 44 + AppSpacing.compact * 2;
+  static const double _barHeight = 44 + AppSpacing.compact * 2;
+  static const double _squareSize = 100;
 
   Offset? _position;
   Offset _resolvedPosition = Offset.zero;
@@ -414,14 +460,18 @@ final class _DraggableSourceAudioMiniPlayerState extends State<_DraggableSourceA
     final padding = MediaQuery.paddingOf(context);
     return LayoutBuilder(
       builder: (context, constraints) {
-        final availableWidth = (constraints.maxWidth - AppSpacing.regular * 2).clamp(0.0, _maxWidth).toDouble();
+        final square = widget.style == 'square';
+        final availableWidth = square ? _squareSize : (constraints.maxWidth - AppSpacing.regular * 2).clamp(0.0, _maxWidth).toDouble();
+        final availableHeight = square ? _squareSize : _barHeight;
         final minX = AppSpacing.regular;
         final maxX = (constraints.maxWidth - padding.right - AppSpacing.regular - availableWidth).clamp(minX, double.infinity).toDouble();
         final minY = padding.top + AppSpacing.regular;
-        final maxY = (constraints.maxHeight - padding.bottom - AppSpacing.regular - _height).clamp(minY, double.infinity).toDouble();
+        final maxY = (constraints.maxHeight - padding.bottom - AppSpacing.regular - availableHeight)
+            .clamp(minY, double.infinity)
+            .toDouble();
         final defaultPosition = Offset(
           ((constraints.maxWidth - availableWidth) / 2).clamp(minX, maxX).toDouble(),
-          (constraints.maxHeight - padding.bottom - AppSpacing.bottomNavigationHeight - AppSpacing.compact - _height)
+          (constraints.maxHeight - padding.bottom - AppSpacing.bottomNavigationHeight - AppSpacing.compact - availableHeight)
               .clamp(minY, maxY)
               .toDouble(),
         );
@@ -436,16 +486,23 @@ final class _DraggableSourceAudioMiniPlayerState extends State<_DraggableSourceA
               left: _resolvedPosition.dx,
               top: _resolvedPosition.dy,
               width: availableWidth,
+              height: availableHeight,
               child: Semantics(
                 container: true,
-                label: '可拖动后台播放条',
+                label: square ? '可拖动方块迷你播放器' : '可拖动后台播放条',
                 child: GestureDetector(
                   key: const Key('source-audio-mini-drag-region'),
                   behavior: HitTestBehavior.opaque,
                   dragStartBehavior: DragStartBehavior.down,
+                  onTap: widget.onExpand,
                   onPanStart: _startDrag,
                   onPanUpdate: _drag,
-                  child: _SourceAudioMiniPlayer(controller: widget.controller, onExpand: widget.onExpand, onStop: widget.onStop),
+                  child: _SourceAudioMiniPlayer(
+                    style: widget.style,
+                    request: widget.request,
+                    controller: widget.controller,
+                    onStop: widget.onStop,
+                  ),
                 ),
               ),
             ),
@@ -457,10 +514,11 @@ final class _DraggableSourceAudioMiniPlayerState extends State<_DraggableSourceA
 }
 
 final class _SourceAudioMiniPlayer extends StatefulWidget {
-  const _SourceAudioMiniPlayer({required this.controller, required this.onExpand, required this.onStop});
+  const _SourceAudioMiniPlayer({required this.style, required this.request, required this.controller, required this.onStop});
 
+  final String style;
+  final SourceAudioPlaybackRequest request;
   final AudioPlayerController controller;
-  final VoidCallback onExpand;
   final VoidCallback onStop;
 
   @override
@@ -495,6 +553,8 @@ final class _SourceAudioMiniPlayerState extends State<_SourceAudioMiniPlayer> {
     final theme = Theme.of(context);
     final tokens = AppThemeTokens.of(context);
     final foreground = theme.colorScheme.onSurface;
+    final square = widget.style == 'square';
+    final artwork = track == null ? null : _buildSourceAudioMiniArtwork(context, track, widget.request);
     return DecoratedBox(
       decoration: BoxDecoration(
         borderRadius: AppRadii.detailControl,
@@ -504,90 +564,52 @@ final class _SourceAudioMiniPlayerState extends State<_SourceAudioMiniPlayer> {
         borderRadius: AppRadii.detailControl,
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
-          child: DecoratedBox(
-            key: const Key('source-audio-mini-glass'),
-            decoration: BoxDecoration(
-              borderRadius: AppRadii.detailControl,
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: <Color>[tokens.surface.withValues(alpha: 0.58), tokens.mutedSurface.withValues(alpha: 0.38)],
-              ),
-              border: Border.all(color: foreground.withValues(alpha: 0.12)),
-            ),
-            child: Material(
-              key: const Key('source-audio-mini-player'),
-              color: Colors.transparent,
-              borderRadius: AppRadii.detailControl,
-              clipBehavior: Clip.antiAlias,
-              child: InkWell(
-                onTap: widget.onExpand,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(AppSpacing.regular, AppSpacing.compact, AppSpacing.unit, AppSpacing.compact),
-                  child: Row(
-                    children: <Widget>[
-                      DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: tokens.accentSoft.withValues(alpha: 0.60),
-                          borderRadius: AppRadii.discoveryTile,
-                          border: Border.all(color: tokens.accent.withValues(alpha: 0.18)),
-                        ),
-                        child: SizedBox.square(
-                          dimension: 44,
-                          child: Tooltip(
-                            message: failure == null
-                                ? '音频正在后台播放'
-                                : '${failure.message}\n发生位置：${failure.location}\n诊断编号：${failure.code}'
-                                      '${failure.debugDetail == null ? '' : '\n技术原因：${failure.debugDetail}'}',
-                            child: Icon(
-                              failure == null ? Icons.graphic_eq_rounded : Icons.error_outline_rounded,
-                              color: failure == null ? tokens.accent : tokens.warning,
-                            ),
+          child: Stack(
+            fit: StackFit.expand,
+            children: <Widget>[
+              if (artwork != null) Positioned.fill(child: artwork),
+              DecoratedBox(
+                key: const Key('source-audio-mini-glass'),
+                decoration: BoxDecoration(
+                  borderRadius: AppRadii.detailControl,
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: <Color>[tokens.surface.withValues(alpha: 0.58), tokens.mutedSurface.withValues(alpha: 0.38)],
+                  ),
+                  border: Border.all(color: foreground.withValues(alpha: 0.12)),
+                ),
+                child: Material(
+                  key: const Key('source-audio-mini-player'),
+                  color: Colors.transparent,
+                  borderRadius: AppRadii.detailControl,
+                  clipBehavior: Clip.antiAlias,
+                  child: InkWell(
+                    child: square
+                        ? _buildSourceAudioMiniSquare(
+                            context,
+                            snapshot,
+                            failure,
+                            tokens,
+                            foreground,
+                            controller: widget.controller,
+                            onStop: widget.onStop,
+                          )
+                        : _buildSourceAudioMiniBar(
+                            context,
+                            snapshot,
+                            track,
+                            failure,
+                            tokens,
+                            foreground,
+                            theme,
+                            controller: widget.controller,
+                            onStop: widget.onStop,
                           ),
-                        ),
-                      ),
-                      const SizedBox(width: AppSpacing.regular),
-                      Expanded(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: <Widget>[
-                            Text(
-                              track?.title ?? '正在准备音频',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: theme.textTheme.bodyLarge?.copyWith(color: foreground, fontWeight: FontWeight.w600),
-                            ),
-                            Text(
-                              failure == null
-                                  ? track?.collectionTitle ?? '点按返回播放器'
-                                  : '${failure.message} · ${failure.location} · ${failure.code}',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: theme.textTheme.bodySmall?.copyWith(color: failure == null ? tokens.mutedText : tokens.warning),
-                            ),
-                          ],
-                        ),
-                      ),
-                      IconButton(
-                        key: const Key('source-audio-mini-toggle'),
-                        tooltip: snapshot.playing ? '暂停' : '播放',
-                        onPressed: () => unawaited(widget.controller.toggle()),
-                        color: foreground,
-                        icon: Icon(snapshot.playing ? Icons.pause_rounded : Icons.play_arrow_rounded),
-                      ),
-                      IconButton(
-                        key: const Key('source-audio-mini-stop'),
-                        tooltip: '停止并关闭',
-                        onPressed: widget.onStop,
-                        color: tokens.mutedText,
-                        icon: const Icon(Icons.close_rounded),
-                      ),
-                    ],
                   ),
                 ),
               ),
-            ),
+            ],
           ),
         ),
       ),
@@ -602,13 +624,41 @@ final class _SourceAudioMiniPlayerState extends State<_SourceAudioMiniPlayer> {
 }
 
 Widget _sourceAudioArtwork(BuildContext context, AudioTrack track, SourceAudioPlaybackRequest request) {
-  final artwork = track.artwork;
+  return _sourceAudioArtworkFor(
+    context,
+    localBytes: track.artworkBytes ?? request.detail.summary.coverBytes,
+    artwork: track.artwork,
+    request: request,
+    imageKey: const Key('source-audio-artwork'),
+  );
+}
+
+Widget _sourceAudioQueueArtwork(BuildContext context, AudioQueueEntry entry, SourceAudioPlaybackRequest request) {
+  return _sourceAudioArtworkFor(
+    context,
+    localBytes: request.detail.summary.coverBytes,
+    artwork: entry.artwork,
+    request: request,
+    imageKey: Key('source-audio-queue-cover-${entry.id}'),
+  );
+}
+
+Widget _sourceAudioArtworkFor(
+  BuildContext context, {
+  required List<int>? localBytes,
+  required Uri? artwork,
+  required SourceAudioPlaybackRequest request,
+  required Key imageKey,
+}) {
+  if (localBytes != null && localBytes.isNotEmpty) {
+    return Image.memory(Uint8List.fromList(localBytes), key: imageKey, fit: BoxFit.cover, gaplessPlayback: true);
+  }
   if (artwork == null || (artwork.scheme != 'http' && artwork.scheme != 'https')) {
     return const _SourceAudioArtworkFallback();
   }
   final coverRequest = BookCoverRequest(
     pluginId: request.detail.pluginId,
-    pluginVersion: 'unknown',
+    pluginVersion: request.pluginVersion,
     remoteContentId: request.detail.summary.id,
     coverUrl: artwork,
   );
@@ -618,7 +668,7 @@ Widget _sourceAudioArtwork(BuildContext context, AudioTrack track, SourceAudioPl
         .when(
           data: (bytes) => bytes == null || bytes.isEmpty
               ? const _SourceAudioArtworkFallback()
-              : Image.memory(Uint8List.fromList(bytes), fit: BoxFit.cover, gaplessPlayback: true),
+              : Image.memory(Uint8List.fromList(bytes), key: imageKey, fit: BoxFit.cover, gaplessPlayback: true),
           error: (_, _) => const _SourceAudioArtworkFallback(),
           loading: () => const _SourceAudioArtworkFallback(),
         ),

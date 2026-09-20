@@ -14,6 +14,7 @@ abstract final class ReaderStrings {
   static const addBookmark = '添加书签';
   static const removeBookmark = '删除书签';
   static const refreshChapter = '刷新本章';
+  static const refreshBook = '更新书籍';
   static const more = '更多';
   static const cacheChapters = '缓存章节';
   static const cacheChapterCount = '缓存章节数';
@@ -46,6 +47,8 @@ abstract final class ReaderStrings {
   static const topMargin = '顶部边距';
   static const bottomMargin = '底部边距';
   static const brightness = '亮度';
+  static const manualBrightness = '手动';
+  static const systemBrightness = '系统';
   static const eyeCareMode = '护眼模式';
   static const themeTitle = '主题';
   static const keepScreenOn = '阅读时屏幕常亮';
@@ -61,6 +64,12 @@ abstract final class ReaderStrings {
   static const mistBlue = '雾蓝';
   static const deepNight = '深夜';
   static const charcoal = '炭灰';
+  static const oled = 'OLED 黑白';
+  static const midnight = '午夜蓝紫';
+  static const forestNight = '森林夜';
+  static const lavenderMist = '薰衣草雾';
+  static const roseTea = '玫瑰茶';
+  static const seaGlass = '海玻璃';
   static const color = '颜色';
   static const background = '背景';
   static const plainBackground = '纯净';
@@ -119,11 +128,13 @@ abstract final class ReaderStrings {
   static const spacingSettings = '间距设置';
   static const commentSettings = '评论设置';
   static const moreSettings = '更多';
+  static const layoutDebugMode = '排版调试模式';
   static const autoReading = '自动阅读';
   static const startAutoReading = '开启自动阅读';
   static const stopAutoReading = '停止自动阅读';
   static const autoReadingSpeed = '自动阅读速度';
   static const singleHandMode = '单手模式';
+  static const pageTurnShortcuts = '音量键与快捷键翻页';
   static const slow = '慢';
   static const fast = '快';
   static const bookComments = '书籍评论';

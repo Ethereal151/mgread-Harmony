@@ -119,6 +119,7 @@ class DiscoveryDestinationPage extends ConsumerWidget {
     };
 
     return Scaffold(
+      extendBody: true,
       appBar: AppBar(
         toolbarHeight: AppSpacing.pageHeaderHeight,
         title: const AppPageTitle(title: '发现'),
@@ -344,6 +345,8 @@ Future<void> _selectDiscoverySource(
   switch (selected) {
     case DiscoverySourceSelected(:final sourceId):
       await controller.selectSource(sourceId);
+    case DiscoveryAllSourcesSelected():
+      return;
     case DiscoverySourceManagementRequested():
       onSourceManagementRequested?.call();
     case DiscoverySourceWebViewActionRequested(:final sourceId, :final action):

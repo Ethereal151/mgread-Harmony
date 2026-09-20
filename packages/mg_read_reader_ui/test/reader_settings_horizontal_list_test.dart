@@ -96,4 +96,79 @@ void main() {
       ReaderSettingsTokens.controlHeight,
     );
   });
+
+  testWidgets('settings hover feedback is clipped to each control boundary', (
+    WidgetTester tester,
+  ) async {
+    final ReaderPalette palette = ReaderPalette.fromPreset(
+      ReaderThemePreset.day,
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Column(
+            children: <Widget>[
+              SizedBox(
+                width: 180,
+                child: ReaderSettingsCapsule(
+                  palette: palette,
+                  onTap: () {},
+                  child: const Text('护眼模式'),
+                ),
+              ),
+              SizedBox(
+                width: 180,
+                child: ReaderSettingsSegmentedControl<int>(
+                  values: const <int>[0, 1],
+                  selected: 0,
+                  labelFor: (int value) => '$value',
+                  onSelected: (_) {},
+                  palette: palette,
+                ),
+              ),
+              ReaderThemeSwatch(
+                preset: ReaderThemePreset.day,
+                selected: true,
+                label: '日间',
+                onTap: () {},
+              ),
+              ReaderBackgroundChoice(
+                preset: ReaderBackgroundPreset.plain,
+                palette: palette,
+                selected: true,
+                label: '纯色',
+                onTap: () {},
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    for (final Finder owner in <Finder>[
+      find.byType(ReaderSettingsCapsule),
+      find.byType(ReaderThemeSwatch),
+      find.byType(ReaderBackgroundChoice),
+    ]) {
+      final Material material = tester.widget<Material>(
+        find.descendant(of: owner, matching: find.byType(Material)).first,
+      );
+      expect(material.clipBehavior, Clip.antiAlias);
+    }
+
+    final Iterable<Material> segmentedMaterials = tester.widgetList<Material>(
+      find.descendant(
+        of: find.byType(ReaderSettingsSegmentedControl<int>),
+        matching: find.byType(Material),
+      ),
+    );
+    expect(segmentedMaterials, isNotEmpty);
+    expect(
+      segmentedMaterials.every(
+        (Material material) => material.clipBehavior == Clip.antiAlias,
+      ),
+      isTrue,
+    );
+  });
 }

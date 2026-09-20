@@ -19,6 +19,7 @@ import 'package:mgread_plugin_runtime/mgread_plugin_runtime.dart';
 import 'package:novel_reader_ui/novel_reader_ui.dart';
 
 import 'package:mg_read/app/app_theme.dart';
+import 'package:mg_read/app/app_theme_mode_scope.dart';
 import 'package:mg_read/core/diagnostics/diagnostics.dart';
 import 'package:mg_read/core/settings/settings.dart';
 import 'package:mg_read/features/cache/presentation/cache_management_page.dart';
@@ -189,18 +190,20 @@ class LibraryRoute extends GoRouteData with $LibraryRoute {
         onReaderRequested: (String bookId) {
           ReaderRoute(bookId: bookId).push(context);
         },
-        onAudioChapterRequested: ({required detail, required firstCatalogPage, required chapter, String? libraryItemId}) {
-          final navigator = appRootNavigatorKey.currentState;
-          if (navigator == null) return Future<void>.error(StateError('The application navigator is not ready.'));
-          return openTransientSourceAudioPlayer(
-            context,
-            navigator: navigator,
-            detail: detail,
-            firstCatalogPage: firstCatalogPage,
-            chapter: chapter,
-            libraryItemId: libraryItemId,
-          );
-        },
+        onAudioChapterRequested:
+            ({required detail, required firstCatalogPage, required chapter, required pluginVersion, String? libraryItemId}) {
+              final navigator = appRootNavigatorKey.currentState;
+              if (navigator == null) return Future<void>.error(StateError('The application navigator is not ready.'));
+              return openTransientSourceAudioPlayer(
+                context,
+                navigator: navigator,
+                detail: detail,
+                firstCatalogPage: firstCatalogPage,
+                chapter: chapter,
+                pluginVersion: pluginVersion,
+                libraryItemId: libraryItemId,
+              );
+            },
         onVideoEpisodeRequested: ({required detail, required firstCatalogPage, required chapter, String? libraryItemId}) {
           final navigator = appRootNavigatorKey.currentState;
           if (navigator == null) return Future<void>.error(StateError('The application navigator is not ready.'));
@@ -293,17 +296,19 @@ class SearchRoute extends GoRouteData with $SearchRoute {
             entryCoverBytes: entryCoverBytes,
           );
         },
-        onAudioChapterRequested: ({required detail, required firstCatalogPage, required chapter, String? libraryItemId}) {
-          final navigator = appRootNavigatorKey.currentState;
-          if (navigator == null) return Future<void>.error(StateError('The application navigator is not ready.'));
-          return openTransientSourceAudioPlayer(
-            context,
-            navigator: navigator,
-            detail: detail,
-            firstCatalogPage: firstCatalogPage,
-            chapter: chapter,
-          );
-        },
+        onAudioChapterRequested:
+            ({required detail, required firstCatalogPage, required chapter, required pluginVersion, String? libraryItemId}) {
+              final navigator = appRootNavigatorKey.currentState;
+              if (navigator == null) return Future<void>.error(StateError('The application navigator is not ready.'));
+              return openTransientSourceAudioPlayer(
+                context,
+                navigator: navigator,
+                detail: detail,
+                firstCatalogPage: firstCatalogPage,
+                chapter: chapter,
+                pluginVersion: pluginVersion,
+              );
+            },
         onVideoEpisodeRequested: ({required detail, required firstCatalogPage, required chapter}) {
           final navigator = appRootNavigatorKey.currentState;
           if (navigator == null) return Future<void>.error(StateError('The application navigator is not ready.'));
@@ -359,17 +364,19 @@ class DiscoveryRoute extends GoRouteData with $DiscoveryRoute {
             entryCoverBytes: entryCoverBytes,
           );
         },
-        onAudioChapterRequested: ({required detail, required firstCatalogPage, required chapter, String? libraryItemId}) {
-          final navigator = appRootNavigatorKey.currentState;
-          if (navigator == null) return Future<void>.error(StateError('The application navigator is not ready.'));
-          return openTransientSourceAudioPlayer(
-            context,
-            navigator: navigator,
-            detail: detail,
-            firstCatalogPage: firstCatalogPage,
-            chapter: chapter,
-          );
-        },
+        onAudioChapterRequested:
+            ({required detail, required firstCatalogPage, required chapter, required pluginVersion, String? libraryItemId}) {
+              final navigator = appRootNavigatorKey.currentState;
+              if (navigator == null) return Future<void>.error(StateError('The application navigator is not ready.'));
+              return openTransientSourceAudioPlayer(
+                context,
+                navigator: navigator,
+                detail: detail,
+                firstCatalogPage: firstCatalogPage,
+                chapter: chapter,
+                pluginVersion: pluginVersion,
+              );
+            },
         onVideoEpisodeRequested: ({required detail, required firstCatalogPage, required chapter}) {
           final navigator = appRootNavigatorKey.currentState;
           if (navigator == null) return Future<void>.error(StateError('The application navigator is not ready.'));
@@ -433,6 +440,7 @@ Future<void> _openTransientSourceComicReader(
   final request = ComicReaderLaunchRequest(
     bookId: detail.summary.id,
     entryCoverBytes: entryCoverBytes,
+    chapterPreloadCount: container.read(appSettingsProvider).get(AppSettingKeys.novelPreloadChapterCount),
     dataSource: TransientSourceComicReaderDataSource(
       detail: detail,
       catalog: firstCatalogPage,
@@ -509,6 +517,9 @@ class ProfileRoute extends GoRouteData with $ProfileRoute {
             readingStats: stats,
             profileIdentity: identity,
             appVersion: appVersion,
+            onToggleTheme: () {
+              AppThemeModeScope.of(context).onToggleTheme(Theme.of(context).brightness);
+            },
             onEditRequested: () {
               const EditProfileRoute().push(context);
             },

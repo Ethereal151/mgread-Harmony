@@ -149,8 +149,8 @@ extension _TextReaderSession on _TextReaderViewState {
           ? _defaultChapterProgress()
           : loadedProgress;
       _preferences = results[3] as TextReaderPreferences;
+      unawaited(_syncApplicationBrightness());
       unawaited(_loadPersistedCustomFont());
-      _lastNonNightTheme = _preferences.lastNonNightTheme;
       // Bookmark/state/comment work is deliberately deferred until after the
       // first real text frame so it cannot compete with first-page layout.
       _bookmarks = const <ReaderBookmark>[];
@@ -501,6 +501,76 @@ extension _TextReaderSession on _TextReaderViewState {
     });
     _catalogCompletion = request;
     return request;
+  }
+
+  Future<void> _refreshCatalogFromHost() async {
+    final active = _catalogCompletion;
+    if (active != null) {
+      try {
+        await active;
+      } on Object {
+        // The background refresh remains best effort for the reader surface.
+      }
+    }
+    final int generation = _sessionGeneration;
+    final TextReaderDataSource dataSource = widget.dataSource;
+    final String bookId = widget.bookId;
+    try {
+      if (dataSource case final ReaderCatalogRefreshDataSource refreshable) {
+        await refreshable.refreshCatalog(bookId);
+      }
+      if (!_isCatalogSessionCurrent(generation, dataSource, bookId)) return;
+      final current = _currentChapterInfo;
+      _catalog.clear();
+      _catalogById.clear();
+      _catalogByIndex.clear();
+      _catalogPageIds.clear();
+      _catalogCursor = null;
+      _catalogTotal = 0;
+      _catalogHasMore = false;
+      _catalogLoading = false;
+      _seededSparseCatalog = false;
+      final page = await dataSource.loadChapterCatalog(
+        bookId,
+        pageSize: _TextReaderViewState._catalogCompletionPageSize,
+      );
+      if (!_isCatalogSessionCurrent(generation, dataSource, bookId)) return;
+      _mergeCatalog(page, refreshChapterStates: false);
+      if (current != null && !_catalogById.containsKey(current.id)) {
+        _catalogById[current.id] = current;
+        _catalogByIndex[current.index] = current;
+      }
+      if (current != null) {
+        _currentChapterInfo = _catalogById[current.id] ?? current;
+      }
+      _catalogRevision.value++;
+      if (mounted) setState(() {});
+    } on Object {
+      // A silent background signal must never interrupt an active chapter.
+    }
+  }
+
+  Future<void> _refreshBookFromHost() async {
+    final ReaderBookRefreshCapability? capability =
+        widget.extensions.bookRefreshCapability;
+    if (capability == null || _bookRefreshLoading) return;
+    if (mounted) setState(() => _bookRefreshLoading = true);
+    _catalogRevision.value++;
+    try {
+      await capability.refresh(widget.bookId);
+      await _refreshCatalogFromHost();
+      final int generation = _sessionGeneration;
+      final ReaderBookInfo book = await widget.dataSource.loadBookInfo(
+        widget.bookId,
+      );
+      if (!_isSessionCurrent(generation) || !mounted) return;
+      setState(() => _book = book);
+    } catch (error) {
+      await _reportFailure(_asFailure(error, ReaderFailureKind.data));
+    } finally {
+      if (mounted) setState(() => _bookRefreshLoading = false);
+      _catalogRevision.value++;
+    }
   }
 
   Future<void> _loadCompleteCatalogPages({required bool notify}) async {

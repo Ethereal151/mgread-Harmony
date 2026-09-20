@@ -247,6 +247,25 @@ void main() {
     expect(find.byKey(const Key('source-chapter-content-sheet')), findsNothing);
   });
 
+  testWidgets('detail greys out a source row when the source has no external URL', (tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          theme: AppTheme.light(),
+          home: _MangaDetailHost(
+            onComicChapterRequested: ({required detail, required firstCatalogPage, required chapter, required entryCoverBytes}) async {},
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final sourceRow = find.byKey(const Key('source-detail-catalog-url'), skipOffstage: false);
+    final sourceInkWell = find.descendant(of: sourceRow, matching: find.byType(InkWell));
+    expect(tester.widget<InkWell>(sourceInkWell).onTap, isNull);
+    expect(tester.getSemantics(sourceRow), matchesSemantics(isEnabled: false, hasEnabledState: true));
+  });
+
   testWidgets('detail selects independent portrait and landscape header compositions', (tester) async {
     await tester.binding.setSurfaceSize(const Size(390, 900));
     addTearDown(() => tester.binding.setSurfaceSize(null));

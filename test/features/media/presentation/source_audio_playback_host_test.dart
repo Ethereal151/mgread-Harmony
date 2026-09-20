@@ -95,11 +95,14 @@ void main() {
             'setupFailure=${state.setupFailure} presented=${state.playerPresented}';
       },
     );
+    expect(find.byKey(const Key('source-audio-artwork')), findsNWidgets(2));
     expect(systemUiModes.last, 'SystemUiMode.immersiveSticky');
 
     await tester.tap(find.byKey(const Key('audio-queue')));
     await _pumpUntil(tester, () => find.byKey(const Key('audio-queue-list')).evaluate().isNotEmpty);
     expect(find.byKey(const Key('audio-queue-list')), findsOneWidget);
+    expect(find.byKey(const Key('audio-queue-artwork-chapter-1')), findsOneWidget);
+    expect(find.byKey(const Key('source-audio-queue-cover-chapter-1')), findsOneWidget);
     final Future<bool> queueBackHandled = backButtonDispatcher.invokeCallback(Future<bool>.value(false));
     await tester.pump();
     expect(await queueBackHandled, isTrue);
@@ -145,7 +148,14 @@ void main() {
 
     expect(settings.get(AppSettingKeys.audioExitBehavior), 'continue');
     expect(find.text('详情页'), findsOneWidget);
-    expect(tester.getSize(find.byKey(const Key('source-audio-mini-player'))).width, lessThanOrEqualTo(520));
+    await settings.set(AppSettingKeys.audioMiniPlayerStyle, 'square');
+    await tester.pump();
+    expect(tester.getSize(find.byKey(const Key('source-audio-mini-player'))), const Size(100, 100));
+    expect(find.byKey(const Key('source-audio-mini-playing-indicator')), findsOneWidget);
+    expect(find.byKey(const Key('source-audio-mini-cover')), findsOneWidget);
+    final miniCover = find.descendant(of: find.byKey(const Key('source-audio-mini-cover')), matching: find.byType(Image));
+    expect(miniCover, findsOneWidget);
+    expect(tester.widget<Image>(miniCover).image, isA<MemoryImage>());
 
     final Rect miniBeforeDrag = tester.getRect(find.byKey(const Key('source-audio-mini-player')));
     final TestGesture dragGesture = await tester.startGesture(miniBeforeDrag.center);
@@ -164,9 +174,8 @@ void main() {
 
     backend.emitError('lock-screen next decoder failed');
     await tester.pump();
-    expect(find.text('播放遇到错误，请稍后重试。 · 播放器读取音频资源 · audio_backend_error'), findsOneWidget);
-
-    await tester.tap(find.byKey(const Key('source-audio-mini-player')));
+    expect(find.byTooltip('播放遇到错误，请稍后重试。\n发生位置：播放器读取音频资源\n诊断编号：audio_backend_error\n技术原因：lock-screen next decoder failed'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('source-audio-mini-drag-region')));
     await _pumpUntil(tester, () => find.byKey(const Key('audio-back')).evaluate().isNotEmpty);
     expect(backend.openCalls, 1);
     expect(systemUiModes.last, 'SystemUiMode.immersiveSticky');
@@ -334,7 +343,8 @@ SourceAudioPlaybackRequest _request() {
     contentKind: PluginContentKind.audio,
     author: '播讲者',
     url: null,
-    coverUrl: null,
+    coverUrl: Uri.parse('https://covers.example/test-audio.png'),
+    coverBytes: _onePixelPng,
     description: null,
     language: 'zh-CN',
     status: PluginContentStatus.unknown,
@@ -355,3 +365,76 @@ SourceAudioPlaybackRequest _request() {
     libraryItemId: null,
   );
 }
+
+const List<int> _onePixelPng = <int>[
+  137,
+  80,
+  78,
+  71,
+  13,
+  10,
+  26,
+  10,
+  0,
+  0,
+  0,
+  13,
+  73,
+  72,
+  68,
+  82,
+  0,
+  0,
+  0,
+  1,
+  0,
+  0,
+  0,
+  1,
+  8,
+  6,
+  0,
+  0,
+  0,
+  31,
+  21,
+  196,
+  137,
+  0,
+  0,
+  0,
+  13,
+  73,
+  68,
+  65,
+  84,
+  120,
+  156,
+  99,
+  248,
+  207,
+  192,
+  240,
+  31,
+  0,
+  5,
+  0,
+  1,
+  255,
+  137,
+  153,
+  61,
+  29,
+  0,
+  0,
+  0,
+  0,
+  73,
+  69,
+  78,
+  68,
+  174,
+  66,
+  96,
+  130,
+];

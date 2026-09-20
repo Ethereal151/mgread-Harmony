@@ -1,5 +1,5 @@
 /**
- * Tianyue parser using public PC HTTP only; no browser, Cookie, or user-agent fallback.
+ * Tianyue parser using public PC HTTP only; origin HTML bypasses the configured proxy because the site closes proxied requests.
  * If direct search is empty, the new-book list and first three catalog categories are inspected, with two requests at most in flight and early cancellation at 20 matches.
  * GET display projections are cached according to the source policy; POST search and page parsing remain source-owned.
  */
@@ -27,10 +27,15 @@ export class TianyueSource {
             return Object.freeze([]);
         const url = new URL('/search.html', origin);
         const body = new URLSearchParams({ searchkey: query }).toString();
-        const response = await this.#fetch(url, { method: 'POST', headers: { accept: 'text/html,application/xhtml+xml', 'accept-language': 'zh-CN,zh;q=0.9', 'content-type': 'application/x-www-form-urlencoded; charset=UTF-8', origin, referer: `${origin}/` }, body });
-        const direct = this.parseList(response, url, null);
-        if (direct.length > 0)
-            return direct;
+        try {
+            const response = await this.#fetch(url, { method: 'POST', headers: { accept: 'text/html,application/xhtml+xml', 'accept-language': 'zh-CN,zh;q=0.9', 'content-type': 'application/x-www-form-urlencoded; charset=UTF-8', origin, referer: `${origin}/` }, body });
+            const direct = this.parseList(response, url, null);
+            if (direct.length > 0)
+                return direct;
+        }
+        catch {
+            this.context.log.warn('source_direct_search_unavailable');
+        }
         return this.#fallbackSearch(query);
     }
     async discover(categoryId, page) {
@@ -183,7 +188,7 @@ export class TianyueSource {
         }
         return Object.freeze(matches);
     }
-    async #fetch(url, init) { const response = await this.context.http.fetch(url, init ?? { headers: { accept: 'text/html,application/xhtml+xml', 'accept-language': 'zh-CN,zh;q=0.9', referer: `${origin}/` } }); const body = await response.text(); if (!response.ok || /(?:cf-challenge|cf-turnstile|Just a moment|Checking your browser|challenge-platform)/iu.test(body))
+    async #fetch(url, init) { const request = { ...(init ?? { headers: { accept: 'text/html,application/xhtml+xml', 'accept-language': 'zh-CN,zh;q=0.9', referer: `${origin}/` } }), proxyMode: 'direct' }; const response = await this.context.http.fetch(url, request); const body = await response.text(); if (!response.ok || /(?:cf-challenge|cf-turnstile|Just a moment|Checking your browser|challenge-platform)/iu.test(body))
         throw new Error('Source page is unavailable.'); return body; }
     #proxyImage(url, referer) { return url.protocol === 'https:' && url.hostname === 'img.xtyxsw.org' && referer.origin === origin ? this.context.resource.proxy({ kind: 'image', url: url.toString(), headers: { Accept: 'image/*', Referer: referer.toString() } }) : null; }
 }

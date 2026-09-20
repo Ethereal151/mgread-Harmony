@@ -4,7 +4,9 @@ import * as plugin from '../dist/index.mjs';
 
 const listing = `<a class="sp-bcarousel-item" href="/book/test" title="测试漫画"><div class="cropped" data-src="https://bmigmi-global-wuwu.ccavbox.com/break_2/static/upload/book/test/cover_pc.jpg"></div></a>`;
 const detail = `<meta property="og:title" content="测试漫画 - 污污漫畫"><meta property="og:image" content="https://bmigmi-global-wuwu.ccavbox.com/break_2/static/upload/book/test/cover.jpg"><h1 class="sp-book-title">测试漫画</h1><p class="sp-book-summary">简介</p><div class="sp-chapter-grid"><a class="sp-chapter-item" href="/free-chapter/test-1" title="第一话">第一话</a></div>`;
-const chapter = `<div class="sp-reader-title">第一话</div><div class="comiclist"><div class="comicpage"><div><div id="page1" data-bmi-manifest="" class="cropped" data-src="https://bmigmi-global-wuwu.ccavbox.com/break_2/static/upload/book/test/test-1/page1.jpg"></div></div></div></div>`;
+const manifestUrls = ['https://storage.googleapis.com/bmi-2025-prod-v2/page/0?generation=1', 'https://storage.googleapis.com/bmi-2025-prod-v2/page/1?generation=2'];
+const manifest = Buffer.from(JSON.stringify({ variants: { jpeg: { renditions: [{ role: 'page', format: 'jpeg', decoder: 'monga-v2-encrypt-then-split', width: 720, height: 800, chunks: manifestUrls.map((url, index) => ({ index, count: 2, url })) }] } } })).toString('base64');
+const chapter = `<div class="sp-reader-title">第一话</div><div class="comiclist"><div class="comicpage"><div><div id="page1" data-bmi-manifest="${manifest}" class="cropped" data-src="https://bmigmi-global-wuwu.ccavbox.com/break_2/static/upload/book/test/test-1/page1.jpg"></div></div></div></div>`;
 
 test('ComicBox source reads catalog and chapter pages through Node HTTP', async () => {
   const resources = [];
@@ -29,6 +31,8 @@ test('ComicBox source reads catalog and chapter pages through Node HTTP', async 
   assert.equal(content.title, '第一话');
   assert.equal(content.pages.length, 1);
   assert.equal(content.pages[0].resourcePolicy, 'sessionOnly');
-  assert.equal(resources.at(-1).resourceTransform, 'aes-cbc-split-image-v1');
-  assert.match(resources.at(-1).urls[0], /page1\.b_0$/u);
+  assert.equal(content.pages[0].width, 720);
+  assert.equal(content.pages[0].height, 800);
+  assert.equal(resources.at(-1).resourceTransform, 'aes-cbc-encrypt-then-split-image-v1');
+  assert.deepEqual(resources.at(-1).urls, manifestUrls);
 });

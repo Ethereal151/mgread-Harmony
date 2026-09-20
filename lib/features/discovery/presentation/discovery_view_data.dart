@@ -61,6 +61,7 @@ final class DiscoveryHeroViewData {
     required this.description,
     required this.metadata,
     required this.coverVariant,
+    this.contentKind = PluginContentKind.novel,
     this.coverOrientation = PluginCoverOrientation.portrait,
     this.coverBytes,
     this.remoteContentId,
@@ -73,6 +74,7 @@ final class DiscoveryHeroViewData {
   final String? description;
   final String? metadata;
   final DiscoveryCoverVariant coverVariant;
+  final PluginContentKind contentKind;
   final PluginCoverOrientation coverOrientation;
   final List<int>? coverBytes;
   final String? remoteContentId;
@@ -86,11 +88,13 @@ final class DiscoveryBookViewData {
     required this.title,
     required this.author,
     required this.coverVariant,
+    this.contentKind = PluginContentKind.novel,
   });
 
   final String title;
   final String? author;
   final DiscoveryCoverVariant coverVariant;
+  final PluginContentKind contentKind;
 }
 
 @immutable
@@ -101,6 +105,7 @@ final class DiscoveryRankedBookViewData {
     required this.author,
     required this.heat,
     required this.coverVariant,
+    this.contentKind = PluginContentKind.novel,
   });
 
   final int? rank;
@@ -108,6 +113,7 @@ final class DiscoveryRankedBookViewData {
   final String? author;
   final String? heat;
   final DiscoveryCoverVariant coverVariant;
+  final PluginContentKind contentKind;
 }
 
 @immutable
@@ -133,6 +139,7 @@ final class DiscoveryEditorsChoiceViewData {
     required this.description,
     required this.metadata,
     required this.coverVariant,
+    this.contentKind = PluginContentKind.novel,
   });
 
   final String title;
@@ -140,6 +147,7 @@ final class DiscoveryEditorsChoiceViewData {
   final String? description;
   final String? metadata;
   final DiscoveryCoverVariant coverVariant;
+  final PluginContentKind contentKind;
 }
 
 enum DiscoveryCoverVariant { gothic, dawn, indigo, ember, snow, abyss }

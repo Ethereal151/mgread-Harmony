@@ -13,7 +13,13 @@ let context;
 const cache = new Map();
 export async function activate(next) { context = next; cache.clear(); next.log.info('source_activated'); }
 export async function search(request) { const query = clean(request.query); if (!query)
-    return frozen({ items: [], nextCursor: null, totalCount: 0 }); const page = cursorPage(request.cursor, 'search'), path = `/search/${encodeURIComponent(query)}/${page > 1 ? `${page}/` : ''}`, values = parseCards(await get(path)).slice(0, clamp(request.pageSize)), items = await Promise.all(values.map(summary)); return frozen({ items, nextCursor: values.length >= clamp(request.pageSize) ? `search:${page + 1}` : null, totalCount: null }); }
+    return frozen({ items: [], nextCursor: null, totalCount: 0 }); const page = cursorPage(request.cursor, 'search'), limit = clamp(request.pageSize), found = new Map(); for (const candidate of searchCandidates(query)) {
+    const path = `/search/${encodeURIComponent(candidate)}/${page > 1 ? `${page}/` : ''}`;
+    for (const value of parseCards(await get(path)))
+        found.set(value.id, value);
+    if ([...found.values()].some(value => normalizeSearchText(value.title) === normalizeSearchText(query)))
+        break;
+} const values = prioritizeSearchResults([...found.values()], query).slice(0, limit), items = await Promise.all(values.map(summary)); return frozen({ items, nextCursor: values.length >= limit ? `search:${page + 1}` : null, totalCount: null }); }
 export async function searchSuggestions(_request) { return frozen({ items: [], nextCursor: null }); }
 export async function discover(request) { if (request.target === null)
     return frozen({ kind: 'document', document: { components: [{ type: 'section', id: 'ai-drama-channels', title: 'AI短剧', subtitle: '每日大赛 AI 剧场', icon: 'video', children: [{ type: 'categoryCollection', id: 'ai-drama-channel-list', layout: 'chips', categories: [{ id: 'theater', title: 'AI剧场', target: 'channel:theater', count: null, url: null, icon: 'video' }] }] }] } }); if (request.target !== 'channel:theater')
@@ -65,6 +71,16 @@ async function decryptedCover(url) { if (!safeUrl(url))
 catch {
     return null;
 } }
+function searchCandidates(query) { const values = new Set([query]), words = query.split(/\s+/gu).filter(Boolean), characters = Array.from(query); if (words.length > 1) {
+    values.add(words.slice(0, 2).join(' '));
+    values.add(words[0] ?? '');
+}
+else if (characters.length > 24) {
+    values.add(characters.slice(0, 24).join(''));
+    values.add(characters.slice(0, 12).join(''));
+} return [...values].filter(value => value.length >= 2).slice(0, 3); }
+function prioritizeSearchResults(values, query) { const expected = normalizeSearchText(query); return [...values].sort((left, right) => Number(normalizeSearchText(right.title) === expected) - Number(normalizeSearchText(left.title) === expected)); }
+function normalizeSearchText(value) { return value.normalize('NFKC').replaceAll(/\s+/gu, '').toLocaleLowerCase('zh-CN'); }
 function contentId(id) { const value = /^video:(\d+)$/u.exec(id)?.[1]; if (!value)
     throw new Error('Content ID is invalid.'); return value; }
 function chapterIndex(id, content) { const value = Number(new RegExp(`^video:${content}:(\\d+)$`, 'u').exec(id)?.[1]); if (!Number.isSafeInteger(value) || value < 0)

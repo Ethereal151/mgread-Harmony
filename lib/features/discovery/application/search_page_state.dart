@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:mgread_plugin_runtime/mgread_plugin_runtime.dart';
 
 import 'package:mg_read/core/errors/app_error.dart';
+import 'package:mg_read/features/discovery/application/batch_search.dart';
 import 'package:mg_read/features/discovery/application/source_content_gateway.dart';
 
 enum SearchPageStatus { loadingSources, ready, searching, loaded, failure }
@@ -16,6 +17,7 @@ final class SearchPageState {
     required this.result,
     required this.error,
     required Iterable<PluginSearchSuggestion> hotSearches,
+    required this.sortOrder,
   }) : sources = List<PluginSourceDescriptor>.unmodifiable(sources),
        hotSearches = List<PluginSearchSuggestion>.unmodifiable(hotSearches);
 
@@ -27,6 +29,7 @@ final class SearchPageState {
     result: null,
     error: null,
     hotSearches: const <PluginSearchSuggestion>[],
+    sortOrder: SearchResultSortOrder.defaultForSourceScope(null),
   );
 
   factory SearchPageState.ready({
@@ -34,6 +37,7 @@ final class SearchPageState {
     required String? selectedSourceId,
     String query = '',
     Iterable<PluginSearchSuggestion> hotSearches = const <PluginSearchSuggestion>[],
+    SearchResultSortOrder? sortOrder,
   }) => SearchPageState._(
     status: SearchPageStatus.ready,
     sources: sources,
@@ -42,14 +46,16 @@ final class SearchPageState {
     result: null,
     error: null,
     hotSearches: hotSearches,
+    sortOrder: sortOrder ?? SearchResultSortOrder.defaultForSourceScope(selectedSourceId),
   );
 
   factory SearchPageState.searching({
     required Iterable<PluginSourceDescriptor> sources,
-    required String selectedSourceId,
+    required String? selectedSourceId,
     required String query,
-    PluginSearchResult? retainedResult,
+    AggregatedSearchResult? retainedResult,
     Iterable<PluginSearchSuggestion> hotSearches = const <PluginSearchSuggestion>[],
+    SearchResultSortOrder? sortOrder,
   }) => SearchPageState._(
     status: SearchPageStatus.searching,
     sources: sources,
@@ -58,14 +64,16 @@ final class SearchPageState {
     result: retainedResult,
     error: null,
     hotSearches: hotSearches,
+    sortOrder: sortOrder ?? SearchResultSortOrder.defaultForSourceScope(selectedSourceId),
   );
 
   factory SearchPageState.loaded({
     required Iterable<PluginSourceDescriptor> sources,
-    required String selectedSourceId,
+    required String? selectedSourceId,
     required String query,
-    required PluginSearchResult result,
+    required AggregatedSearchResult result,
     Iterable<PluginSearchSuggestion> hotSearches = const <PluginSearchSuggestion>[],
+    SearchResultSortOrder? sortOrder,
   }) => SearchPageState._(
     status: SearchPageStatus.loaded,
     sources: sources,
@@ -74,6 +82,7 @@ final class SearchPageState {
     result: result,
     error: null,
     hotSearches: hotSearches,
+    sortOrder: sortOrder ?? SearchResultSortOrder.defaultForSourceScope(selectedSourceId),
   );
 
   factory SearchPageState.failure({
@@ -81,8 +90,9 @@ final class SearchPageState {
     required String? selectedSourceId,
     required String query,
     required AppError error,
-    PluginSearchResult? retainedResult,
+    AggregatedSearchResult? retainedResult,
     Iterable<PluginSearchSuggestion> hotSearches = const <PluginSearchSuggestion>[],
+    SearchResultSortOrder? sortOrder,
   }) => SearchPageState._(
     status: SearchPageStatus.failure,
     sources: sources,
@@ -91,15 +101,17 @@ final class SearchPageState {
     result: retainedResult,
     error: error,
     hotSearches: hotSearches,
+    sortOrder: sortOrder ?? SearchResultSortOrder.defaultForSourceScope(selectedSourceId),
   );
 
   final SearchPageStatus status;
   final List<PluginSourceDescriptor> sources;
   final String? selectedSourceId;
   final String query;
-  final PluginSearchResult? result;
+  final AggregatedSearchResult? result;
   final AppError? error;
   final List<PluginSearchSuggestion> hotSearches;
+  final SearchResultSortOrder sortOrder;
 
   bool get hasSources => sources.isNotEmpty;
 
@@ -111,6 +123,7 @@ final class SearchPageState {
     result: result,
     error: error,
     hotSearches: hotSearches,
+    sortOrder: sortOrder,
   );
 
   SearchPageState withHotSearches(Iterable<PluginSearchSuggestion> value) => SearchPageState._(
@@ -121,5 +134,29 @@ final class SearchPageState {
     result: result,
     error: error,
     hotSearches: value,
+    sortOrder: sortOrder,
+  );
+
+  SearchPageState withResult({required SearchPageStatus nextStatus, required AggregatedSearchResult? nextResult, AppError? nextError}) =>
+      SearchPageState._(
+        status: nextStatus,
+        sources: sources,
+        selectedSourceId: selectedSourceId,
+        query: query,
+        result: nextResult,
+        error: nextError,
+        hotSearches: hotSearches,
+        sortOrder: sortOrder,
+      );
+
+  SearchPageState withSortOrder(SearchResultSortOrder value) => SearchPageState._(
+    status: status,
+    sources: sources,
+    selectedSourceId: selectedSourceId,
+    query: query,
+    result: result,
+    error: error,
+    hotSearches: hotSearches,
+    sortOrder: value,
   );
 }

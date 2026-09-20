@@ -49,7 +49,10 @@ void main() {
       const Key('audio-seek-forward'),
       const Key('audio-next'),
     ]) {
-      expect(tester.getBottomLeft(find.byKey(key)).dy, transportBottom);
+      expect(
+        tester.getBottomLeft(find.byKey(key)).dy,
+        closeTo(transportBottom - 6, 0.01),
+      );
     }
 
     await tester.tap(find.byKey(const Key('audio-play-pause')));

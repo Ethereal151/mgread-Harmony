@@ -15,6 +15,8 @@ import 'reader_accessible_tooltip.dart';
 import 'reader_strings.dart';
 import 'reader_theme.dart';
 
+const double _maxReaderSourceNameWidth = 104;
+
 @immutable
 class ReaderSourceStripStyle {
   const ReaderSourceStripStyle({
@@ -28,7 +30,7 @@ class ReaderSourceStripStyle {
 
   factory ReaderSourceStripStyle.text(ReaderPalette palette) =>
       ReaderSourceStripStyle(
-        surface: palette.panel.withValues(alpha: .76),
+        surface: palette.panel,
         divider: palette.divider,
         sourceText: palette.secondaryText.withValues(alpha: .78),
         inactiveText: palette.secondaryText.withValues(alpha: .78),
@@ -38,7 +40,7 @@ class ReaderSourceStripStyle {
 
   factory ReaderSourceStripStyle.comic(ReaderPalette palette) =>
       ReaderSourceStripStyle(
-        surface: const Color(0xD917191B),
+        surface: const Color(0xFF17191B),
         divider: const Color(0x243A3D40),
         sourceText: palette.secondaryText.withValues(alpha: .92),
         inactiveText: palette.secondaryText.withValues(alpha: .82),
@@ -128,16 +130,20 @@ class ReaderSourceStrip extends StatelessWidget {
           height: 22,
           child: Row(
             children: <Widget>[
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 104),
-                child: Text(
-                  normalizedName.isEmpty
-                      ? ReaderStrings.sourceUnavailable
-                      : normalizedName,
-                  key: sourceNameKey,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(color: style.sourceText, fontSize: 11),
+              IntrinsicWidth(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(
+                    maxWidth: _maxReaderSourceNameWidth,
+                  ),
+                  child: Text(
+                    normalizedName.isEmpty
+                        ? ReaderStrings.sourceUnavailable
+                        : normalizedName,
+                    key: sourceNameKey,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: style.sourceText, fontSize: 11),
+                  ),
                 ),
               ),
               const SizedBox(width: 8),
