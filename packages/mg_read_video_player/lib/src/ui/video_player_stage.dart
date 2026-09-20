@@ -19,6 +19,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../api/contracts.dart';
+import '../api/controller.dart';
 import '../api/models.dart';
 import 'video_player_chrome.dart';
 import 'video_player_buffering_indicator.dart';
@@ -40,8 +41,10 @@ const _videoPlayerSystemUiStyle = SystemUiOverlayStyle(
 
 final class VideoPlayerStage extends StatelessWidget {
   const VideoPlayerStage({
+    required this.controller,
     required this.backend,
     required this.snapshot,
+    required this.activeEpisode,
     required this.focusNode,
     required this.exitAuthorized,
     required this.onPopAttempt,
@@ -70,8 +73,10 @@ final class VideoPlayerStage extends StatelessWidget {
     super.key,
   });
 
+  final VideoPlayerController controller;
   final VideoPlaybackBackend backend;
   final VideoPlayerSnapshot snapshot;
+  final VideoEpisode? activeEpisode;
   final FocusNode focusNode;
   final bool exitAuthorized;
   final VoidCallback onPopAttempt;
@@ -144,7 +149,9 @@ final class VideoPlayerStage extends StatelessWidget {
                       ),
                     if (snapshot.status == VideoPlayerStatus.ready)
                       _VideoPlayerInteractionLayer(
+                        controller: controller,
                         snapshot: snapshot,
+                        activeEpisode: activeEpisode,
                         reduceMotion: reduceMotion,
                         onToggleControls: onToggleControls,
                         onExit: onExit,
@@ -215,7 +222,9 @@ final class VideoPlayerStage extends StatelessWidget {
 
 final class _VideoPlayerInteractionLayer extends StatefulWidget {
   const _VideoPlayerInteractionLayer({
+    required this.controller,
     required this.snapshot,
+    required this.activeEpisode,
     required this.reduceMotion,
     required this.onToggleControls,
     required this.onExit,
@@ -237,7 +246,9 @@ final class _VideoPlayerInteractionLayer extends StatefulWidget {
     required this.onBrightness,
   });
 
+  final VideoPlayerController controller;
   final VideoPlayerSnapshot snapshot;
+  final VideoEpisode? activeEpisode;
   final bool reduceMotion;
   final Future<void> Function() onToggleControls;
   final Future<void> Function() onExit;
@@ -325,7 +336,9 @@ final class _VideoPlayerInteractionLayerState
         ),
         if (!snapshot.controlsLocked)
           VideoPlayerChrome(
+            controller: widget.controller,
             snapshot: snapshot,
+            activeEpisode: widget.activeEpisode,
             reduceMotion: widget.reduceMotion,
             seekPreviewPosition: _seekPreviewPosition,
             onExit: () => unawaited(widget.onExit()),

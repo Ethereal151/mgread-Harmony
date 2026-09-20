@@ -718,8 +718,10 @@ final class _VideoPlayerViewState extends State<VideoPlayerView>
 
   @override
   Widget build(BuildContext context) => VideoPlayerStage(
+    controller: _controller,
     backend: _backend,
     snapshot: _snapshot,
+    activeEpisode: _episode,
     focusNode: _focusNode,
     exitAuthorized: _exitAuthorized,
     onPopAttempt: () => unawaited(requestExit()),

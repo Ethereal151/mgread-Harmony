@@ -134,6 +134,28 @@ void main() {
     },
   );
 
+  testWidgets('opens current playback details from the top bar', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_playerApp(backend: _Backend()));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('video-player-details')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('video-details-sheet')), findsOneWidget);
+    expect(find.text('视频详情'), findsOneWidget);
+    expect(
+      tester.widget<Text>(find.byKey(const Key('video-details-url'))).data,
+      'https://example.test/1.mp4',
+    );
+    expect(find.byKey(const Key('video-details-url-copy')), findsOneWidget);
+    expect(find.byKey(const Key('video-details-headers-copy')), findsOneWidget);
+    expect(find.text('show'), findsOneWidget);
+    expect(find.text('group-a'), findsOneWidget);
+    expect(find.text('episode-1'), findsOneWidget);
+  });
+
   testWidgets(
     'fullscreen keeps the same single progress control and top actions',
     (tester) async {
