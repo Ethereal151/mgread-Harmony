@@ -313,7 +313,7 @@ void main() {
     );
     expect(
       tester.widget<Text>(find.byKey(const Key('audio-details-resource'))).data,
-      'https://example.test/books/book-1/chapters/chapter-1',
+      'https://example.test/audio/1.mp3',
     );
     expect(
       tester
@@ -325,13 +325,25 @@ void main() {
       find.byKey(const Key('audio-details-resource-copy')),
       findsOneWidget,
     );
+    expect(
+      tester.widget<Text>(find.byKey(const Key('audio-details-source'))).data,
+      'https://example.test/books/book-1/chapters/chapter-1',
+    );
+    expect(
+      tester
+          .widget<Text>(find.byKey(const Key('audio-details-source')))
+          .maxLines,
+      1,
+    );
+    expect(find.byKey(const Key('audio-details-source-copy')), findsOneWidget);
     expect(find.text('来源地址'), findsOneWidget);
+    expect(find.text('播放地址'), findsOneWidget);
     expect(find.byKey(const Key('audio-details-progress')), findsNothing);
     expect(find.text('播放信息'), findsNothing);
     expect(find.text('播放速度'), findsNothing);
     expect(find.text('音量'), findsNothing);
 
-    await tester.drag(details, const Offset(0, -260));
+    await tester.drag(details, const Offset(0, -420));
     await tester.pumpAndSettle();
     expect(
       find.byKey(const Key('audio-details-comment-composer')),
@@ -365,6 +377,10 @@ void main() {
 
       expect(
         find.byKey(const Key('audio-details-resource-copy')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('audio-details-source-copy')),
         findsOneWidget,
       );
       expect(

@@ -266,9 +266,31 @@ class _AudioDetailsSheet extends StatelessWidget {
                                 color: AudioPlayerColors.divider,
                               ),
                               const SizedBox(height: 13),
+                              if (track.sourceUrl != null) ...<Widget>[
+                                _ResourceUrlRow(
+                                  resource: track.sourceUrl!,
+                                  title: '来源地址',
+                                  valueKey: const Key('audio-details-source'),
+                                  copyKey: const Key(
+                                    'audio-details-source-copy',
+                                  ),
+                                  copyMessage: '来源地址已复制',
+                                ),
+                                const SizedBox(height: 13),
+                                const Divider(
+                                  height: 1,
+                                  color: AudioPlayerColors.divider,
+                                ),
+                                const SizedBox(height: 13),
+                              ],
                               _ResourceUrlRow(
-                                resource: track.sourceUrl ?? track.resource,
-                                isSourceUrl: track.sourceUrl != null,
+                                resource: track.resource,
+                                title: '播放地址',
+                                valueKey: const Key('audio-details-resource'),
+                                copyKey: const Key(
+                                  'audio-details-resource-copy',
+                                ),
+                                copyMessage: '播放地址已复制',
                               ),
                               if (resourceUrlDecoder != null) ...<Widget>[
                                 const SizedBox(height: 13),
@@ -454,10 +476,19 @@ class _DetailStat extends StatelessWidget {
 }
 
 class _ResourceUrlRow extends StatelessWidget {
-  const _ResourceUrlRow({required this.resource, required this.isSourceUrl});
+  const _ResourceUrlRow({
+    required this.resource,
+    required this.title,
+    required this.valueKey,
+    required this.copyKey,
+    required this.copyMessage,
+  });
 
   final Uri resource;
-  final bool isSourceUrl;
+  final String title;
+  final Key valueKey;
+  final Key copyKey;
+  final String copyMessage;
 
   @override
   Widget build(BuildContext context) {
@@ -480,7 +511,7 @@ class _ResourceUrlRow extends StatelessWidget {
                 children: <Widget>[
                   Expanded(
                     child: Text(
-                      isSourceUrl ? '来源地址' : '章节播放地址',
+                      title,
                       style: theme.textTheme.labelMedium?.copyWith(
                         color: AudioPlayerColors.muted,
                         fontWeight: FontWeight.w600,
@@ -488,19 +519,15 @@ class _ResourceUrlRow extends StatelessWidget {
                     ),
                   ),
                   IconButton(
-                    key: const Key('audio-details-resource-copy'),
-                    tooltip: isSourceUrl ? '复制来源地址' : '复制章节播放地址',
+                    key: copyKey,
+                    tooltip: copyMessage,
                     visualDensity: VisualDensity.compact,
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints.tightFor(
                       width: 32,
                       height: 32,
                     ),
-                    onPressed: () => _copyValue(
-                      context,
-                      value,
-                      isSourceUrl ? '来源地址已复制' : '章节播放地址已复制',
-                    ),
+                    onPressed: () => _copyValue(context, value, copyMessage),
                     icon: const Icon(Icons.copy_rounded, size: 18),
                   ),
                 ],
@@ -508,7 +535,7 @@ class _ResourceUrlRow extends StatelessWidget {
               const SizedBox(height: 2),
               Text(
                 value,
-                key: const Key('audio-details-resource'),
+                key: valueKey,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: theme.textTheme.bodySmall?.copyWith(
