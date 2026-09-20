@@ -7,10 +7,10 @@ export async function search(request) {
     const query = request.query.trim();
     if (query === '')
         return frozen({ items: [], nextCursor: null, totalCount: 0 });
-    const page = pageCursor(request.cursor, 'search');
-    const json = await fetchJson('/search', { audience: '', order: '', page, pageSize: clamp(request.pageSize), searchWord: query, subject: '' });
-    const values = pickList(json).filter((item) => matches(item, query)).slice(0, clamp(request.pageSize));
-    return frozen({ items: values.map(summaryFrom), nextCursor: values.length >= clamp(request.pageSize) ? `search:${page + 1}` : null, totalCount: null });
+    const page = pageCursor(request.cursor, 'search'), limit = clamp(request.pageSize);
+    const json = await fetchJson('/search', { audience: '', order: '', page, pageSize: limit, searchWord: query, subject: '' });
+    const values = pickList(json).slice(0, limit);
+    return frozen({ items: values.map(summaryFrom), nextCursor: values.length >= limit ? `search:${page + 1}` : null, totalCount: null });
 }
 export async function searchSuggestions(_request) { return frozen({ items: [], nextCursor: null }); }
 export async function discover(request) {
@@ -66,7 +66,7 @@ export async function getContent(request) {
     const episode = episodes[selectedIndex] ?? {};
     const choices = records(episode.videoClarityList);
     const best = pickBest(choices);
-    const upstream = text(best.url);
+    const upstream = text(best.url) || playSettingUrl(episode.playSetting);
     if (!safeUrl(upstream))
         throw new Error('Playback address is unavailable.');
     const resourceType = /\.m3u8(?:$|[?#])/iu.test(upstream) ? 'hls' : 'video';
@@ -79,13 +79,16 @@ async function fetchJson(path, body) {
     const init = body === undefined ? { method: 'GET', headers: requestHeaders } : { method: 'POST', headers: requestHeaders, body: JSON.stringify(body) };
     const response = await requireContext().http.fetch(url, init);
     if (!response.ok)
-        throw new Error('Source request failed.');
+        throw new Error(`Source request failed (${response.status}).`);
     const value = await response.json();
     if (!isObject(value))
         throw new Error('Source response is invalid.');
+    const code = Number(value.code);
+    if (Number.isFinite(code) && code !== 200)
+        throw new Error(`Source API rejected the request (${code}${text(value.msg) === '' ? '' : `: ${text(value.msg)}`}).`);
     return value;
 }
-function commonQuery() { return `version_code=1500&version_name=1.5.0&device_name=${encodeURIComponent('Pixel 8 Pro')}&device_type=phone&is_first_day=true&is_first_24h=true&app_launch_way=icon&default_homepage=homepage_interaction&device_owning_firm=Google&font_scale=default&os_type=1&clientInfo=${clientInfo}`; }
+function commonQuery() { return `version_code=1061&version_name=1.0.61&device_name=${encodeURIComponent('Pixel 8 Pro')}&device_type=phone&is_first_day=true&is_first_24h=true&app_launch_way=icon&default_homepage=homepage_interaction&device_owning_firm=Google&font_scale=default&os_type=1&clientInfo=${clientInfo}`; }
 function detailUrl(id) { return `${base}/shortVideoDetail?oneId=${encodeURIComponent(id)}`; }
 function detailEpisodes(json) { const direct = records(json.data); return direct.length > 0 ? direct : records(object(json.data).list); }
 function pickList(json) { const direct = records(json.data); if (direct.length > 0)
@@ -99,14 +102,23 @@ function summaryFrom(item) {
     return frozen({ id: `drama:${id}`, title: text(item.title) || text(item.name) || native, contentKind: 'video', coverOrientation: text(item.horzPoster) !== '' ? 'landscape' : 'portrait', author: null, url: detailUrl(native), coverUrl: proxyImage(first(item.horzPoster, item.vertPoster, item.cover)), description: nullable(item.description), language: 'zh-CN', status: 'unknown', access: 'unknown', wordCount: null, chapterCount: total, publishedAt: null, updatedAt: null, latestChapter: null, categories: [], tags: [], attributes: [] });
 }
 function chapter(id, episode, index) { const key = episodeKey(episode, index); const order = integer(episode.playOrder ?? episode.episode) ?? index + 1; return frozen({ id: `drama:${encodeKey(id)}:${encodeKey(key)}`, title: `第${order}集`, order: Math.max(0, order - 1), url: null, volumeTitle: '默认线路', wordCount: null, updatedAt: null, isLocked: null, attributes: [] }); }
-function episodeKey(episode, index) { const key = text(episode.id) || text(episode.videoId) || text(episode.playOrder) || text(episode.episode); if (key === '')
+function episodeKey(episode, index) { const key = text(episode.episodeOneId) || text(episode.id) || text(episode.videoId) || text(episode.playOrder) || text(episode.episode); if (key === '')
     throw new Error(`Episode ${index + 1} has no stable ID.`); return key; }
 function contentId(id) { const encoded = /^drama:([^:]+)$/u.exec(id)?.[1]; if (encoded === undefined)
     throw new Error('Content ID is invalid.'); return decodeKey(encoded); }
 function chapterKey(id, content) { const prefix = `drama:${encodeKey(content)}:`; if (!id.startsWith(prefix))
     throw new Error('Chapter ID is invalid.'); return decodeKey(id.slice(prefix.length)); }
 function pickBest(list) { return list.find((item) => /1080/iu.test(text(item.name))) ?? list[0] ?? {}; }
-function matches(item, query) { const value = `${text(item.title)} ${text(item.name)} ${text(item.bookName)}`.toLocaleLowerCase('zh-CN'); return value.includes(query.toLocaleLowerCase('zh-CN')); }
+function playSettingUrl(value) { if (typeof value !== 'string' || value.trim() === '')
+    return ''; try {
+    const setting = JSON.parse(value);
+    if (!isObject(setting))
+        return '';
+    return text(first(setting.super, setting.high, setting.normal));
+}
+catch {
+    return '';
+} }
 function pageCursor(cursor, scope) { if (cursor === null)
     return 1; const value = Number(new RegExp(`^${escape(scope)}:(\\d+)$`, 'u').exec(cursor)?.[1]); if (!Number.isSafeInteger(value) || value < 2 || value > 1000)
     throw new Error('Cursor is invalid.'); return value; }

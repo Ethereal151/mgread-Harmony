@@ -4,7 +4,7 @@ import * as plugin from '../dist/index.mjs';
 
 const detailUrl = 'https://www.wogg.net/voddetail/fixture.html';
 const html = `
-<div class="module-item module-search-item"><a href="/voddetail/fixture.html" title="玩偶测试片"><img data-src="/cover.jpg" alt="玩偶测试片"></a><div class="module-item-note">更新至 2 集</div></div>
+<div class="module-search-item"><div class="video-cover"><div class="module-item-cover"><div class="module-item-pic"><img data-src="/cover.jpg" alt="玩偶测试片"><div class="loading"></div></div></div></div><div class="video-info"><div class="video-info-header"><a class="video-serial" href="/voddetail/fixture.html" title="玩偶测试片">更新至 2 集</a><h3><a href="/voddetail/fixture.html" title="玩偶测试片">玩偶测试片</a></h3></div></div></div>
 <h1 class="page-title">玩偶测试片</h1><div id="download-list"><a class="fzlj" href="https://pan.quark.cn/s/fixture01">夸克</a></div>`;
 
 test('projects Wogg listing, share files and a user-login action through public APIs', async () => {
@@ -22,6 +22,7 @@ test('projects Wogg listing, share files and a user-login action through public 
   const resources = [];
   await plugin.activate({ dataDir: 'fixture-data', cacheDir: 'fixture-cache', app: { runtimeVersion: 'test', nodeVersion: process.versions.node, pluginApi: 1 }, plugin: { id: 'org.mgread.wanou-wangpan', version: '1.0.0' }, log: { debug() {}, info() {}, warn() {}, error() {} }, webview: { async open() { return page; } }, resource: { proxy(request) { resources.push(request); return `http://127.0.0.1/resource/${resources.length}`; } }, http: { async fetch(url) { assert.ok(String(url).includes('wogg.net')); return new Response(html); } } });
   const search = await plugin.search({ query: '测试', cursor: null, pageSize: 10 });
+  assert.equal(search.items.length, 1);
   const detail = await plugin.getDetail({ id: search.items[0].id });
   const chapters = await plugin.getChapters({ id: detail.id });
   assert.equal(chapters.groups[0].title, '夸克网盘');

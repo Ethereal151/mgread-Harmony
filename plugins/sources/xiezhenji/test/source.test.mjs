@@ -1,2 +1,63 @@
-import assert from 'node:assert/strict'; import test from 'node:test'; import { mkdtemp, readFile, rm } from 'node:fs/promises'; import { tmpdir } from 'node:os'; import { join } from 'node:path'; import * as plugin from '../dist/index.mjs';
-test('fixture chain covers direct HTTP, search, detail, catalog, gallery and proxy descriptors', async (t) => { const cacheDir = await mkdtemp(join(tmpdir(), 'xiezhenji-cache-')); t.after(() => rm(cacheDir, { recursive: true, force: true })); const list = await readFile(new URL('./fixtures/list.html', import.meta.url), 'utf8'); const detail = await readFile(new URL('./fixtures/detail.html', import.meta.url), 'utf8'); const second = await readFile(new URL('./fixtures/page-2.html', import.meta.url), 'utf8'); const proxied = []; let httpCalls = 0; await plugin.activate({ dataDir: cacheDir, cacheDir, app: {}, plugin: {}, log: { debug(){},info(){},warn(){},error(){} }, resource: { proxy(request){ proxied.push(request); return `http://127.0.0.1/resource/${proxied.length}`; } }, http: { async fetch(input, init){ httpCalls += 1; assert.equal(new Headers(init?.headers).get('user-agent'), null); const path = new URL(input).pathname; return new Response(path.endsWith('/page/2/') ? second : path === '/article/42/' ? detail : list); } } }); const home = await plugin.discover({ target: null, cursor: null, collectionId: null, pageSize: 20 }); assert.equal(home.document.components[0].children[0].layout, 'coverGrid'); assert.equal(home.document.components[1].children[0].layout, 'chips'); const search = await plugin.search({ query: 'fixture', cursor: null, pageSize: 20 }); assert.equal(search.items[0].title, 'Fixture Album'); const info = await plugin.getDetail({ id: search.items[0].id }); assert.equal(info.chapterCount, 1); const chapters = await plugin.getChapters({ id: info.id }); const content = await plugin.getContent({ id: info.id, chapterId: chapters.items[0].id }); assert.equal(content.pages.length, 2); assert.ok(httpCalls >= 4); assert.equal(new URL(proxied.at(-1).url).origin, 'https://xx.knit.bid'); assert.equal(new Headers(proxied.at(-1).headers).get('user-agent'), null); });
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import * as plugin from '../dist/index.mjs';
+
+test('fixture chain uses one browser session for discovery, detail and gallery HTML', async (t) => {
+  const cacheDir = await mkdtemp(join(tmpdir(), 'xiezhenji-cache-'));
+  t.after(() => rm(cacheDir, { recursive: true, force: true }));
+  const list = await readFile(new URL('./fixtures/list.html', import.meta.url), 'utf8');
+  const detail = await readFile(new URL('./fixtures/detail.html', import.meta.url), 'utf8');
+  const second = await readFile(new URL('./fixtures/page-2.html', import.meta.url), 'utf8');
+  const proxied = [];
+  const browserRequests = [];
+  const navigations = [];
+  let opened = 0;
+  const page = {
+    async navigate(url) { navigations.push(url); },
+    async getHtml() { return list; },
+    async fetch(request) {
+      browserRequests.push(request);
+      assert.equal(new Headers(request.headers).get('user-agent'), null);
+      const path = new URL(request.url).pathname;
+      return {
+        status: 200,
+        url: request.url,
+        headers: { 'content-type': 'text/html' },
+        body: path.endsWith('/page/2/') ? second : path === '/article/42/' ? detail : list,
+      };
+    },
+    async getUrl() { return 'https://xx.knit.bid/'; },
+    async show() { throw new Error('fixture is already verified'); },
+    async hide() {},
+  };
+  await plugin.activate({
+    dataDir: cacheDir,
+    cacheDir,
+    app: {},
+    plugin: {},
+    log: { debug() {}, info() {}, warn() {}, error() {} },
+    resource: { proxy(request) { proxied.push(request); return `http://127.0.0.1/resource/${proxied.length}`; } },
+    http: { async fetch() { throw new Error('direct HTTP must not be used for protected HTML'); } },
+    webview: { async open() { opened += 1; return page; } },
+    errors: { raise(error) { throw Object.assign(new Error(error.message), { publicCode: error.code }); } },
+  });
+  const home = await plugin.discover({ target: null, cursor: null, collectionId: null, pageSize: 20 });
+  assert.equal(home.document.components[0].children[0].layout, 'coverGrid');
+  assert.equal(home.document.components[1].children[0].layout, 'chips');
+  const search = await plugin.search({ query: 'fixture', cursor: null, pageSize: 20 });
+  assert.equal(search.items[0].title, 'Fixture Album');
+  const info = await plugin.getDetail({ id: search.items[0].id });
+  assert.equal(info.chapterCount, 1);
+  const chapters = await plugin.getChapters({ id: info.id });
+  const content = await plugin.getContent({ id: info.id, chapterId: chapters.items[0].id });
+  assert.equal(content.pages.length, 2);
+  assert.equal(opened, 1);
+  assert.deepEqual(navigations, ['https://xx.knit.bid/']);
+  assert.ok(browserRequests.length >= 4);
+  assert.equal(new URL(proxied.at(-1).url).origin, 'https://xx.knit.bid');
+  assert.equal(new Headers(proxied.at(-1).headers).get('user-agent'), null);
+});

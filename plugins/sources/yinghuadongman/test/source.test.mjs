@@ -47,7 +47,7 @@ test('fixture flow covers discovery, search, detail, neutral groups and both pla
   const results = await plugin.search({ query: 'fixture', cursor: null, pageSize: 5 });
   assert.equal(results.items[0].id, 'video:101');
   assert.equal(results.items[0].coverOrientation, 'portrait');
-  assert.equal(results.items[0].coverUrl, 'https://www.yinhuadm.xyz/upload/fixture-one.jpg');
+  assert.match(results.items[0].coverUrl, /^http:\/\/127\.0\.0\.1:9000\/v1\/source-resource\//u);
   assert.deepEqual(results.items[0].latestChapter, {
     id: null, title: '更新至第02集', updatedAt: null, url: null,
   });
@@ -69,23 +69,28 @@ test('fixture flow covers discovery, search, detail, neutral groups and both pla
 
   const directRequestsBeforePlayback = requests.length;
   const direct = await plugin.getContent({ id: info.id, chapterId: 'video:101:3:1' });
+  const directMedia = resources.find((resource) => resource.kind === 'video');
   assert.deepEqual(
     requests.slice(directRequestsBeforePlayback).map(({ url }) => url.pathname),
     ['/p/101-3-1.html'],
   );
   assert.equal(direct.media.resourceType, 'video');
   assert.equal(direct.media.resourcePolicy, 'sessionOnly');
-  assert.equal(resources[0].url, 'https://media.invalid/fixture-direct.mp4');
-  assert.equal(resources[0].proxyMode, 'direct');
+  assert.equal(directMedia.url, 'https://media.invalid/fixture-direct.mp4');
+  assert.equal(directMedia.proxyMode, 'direct');
   const mcueRequestsBeforePlayback = requests.length;
   const decrypted = await plugin.getContent({ id: info.id, chapterId: 'video:101:5:1' });
+  const hlsMedia = resources.find((resource) => resource.kind === 'hls');
   assert.equal(requests.length - mcueRequestsBeforePlayback, 2);
   assert.equal(requests[mcueRequestsBeforePlayback].url.pathname, '/p/101-5-1.html');
   assert.equal(requests[mcueRequestsBeforePlayback + 1].url.hostname, 'player.mcue.cc');
   assert.equal(decrypted.media.resourceType, 'hls');
-  assert.equal(resources[1].url, upstream);
-  assert.equal(resources[1].proxyMode, 'direct');
-  assert.equal(new URL(resources[1].headers.Referer).origin, 'https://player.mcue.cc');
+  assert.equal(hlsMedia.url, upstream);
+  assert.equal(hlsMedia.proxyMode, 'direct');
+  assert.equal(new URL(hlsMedia.headers.Referer).origin, 'https://player.mcue.cc');
+  const coverResources = resources.filter((resource) => resource.kind === 'image');
+  assert.ok(coverResources.length > 0);
+  assert.ok(coverResources.every((resource) => resource.proxyMode === 'direct'));
   assert.ok(requests.some(({ url }) => url.hostname === 'player.mcue.cc'));
   assert.ok(requests.every(({ init }) => init.proxyMode === 'direct'));
   assert.equal(

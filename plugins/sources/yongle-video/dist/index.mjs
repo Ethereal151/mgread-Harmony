@@ -19,7 +19,7 @@ export async function getChapters(request) { const id = contentId(request.id), l
     const values = bySid.get(link.sid) ?? [];
     values.push(link);
     bySid.set(link.sid, values);
-} const groups = [...bySid.entries()].map(([sid, values], index) => { const title = `线路${index + 1}`, episodes = values.map((link, order) => frozen({ id: `video:${id}:${sid}:${link.nid}`, title: link.title || `第${order + 1}集`, order, url: playUrl(id, sid, link.nid), volumeTitle: title, wordCount: null, updatedAt: null, isLocked: null, attributes: [] })); return frozen({ id: `group:${id}:${sid}`, title, order: index, episodes }); }); return frozen({ items: groups.flatMap(group => group.episodes), groups }); }
+} const groups = [...bySid.entries()].map(([sid, values], index) => { const title = `线路${index + 1}`, episodes = values.map((link, order) => frozen({ id: `video:${id}:${sid}:${link.nid}`, title: link.title || `第${order + 1}集`, order, url: playUrl(id, sid, link.nid), volumeTitle: title, wordCount: null, updatedAt: null, isLocked: null, attributes: [] })); return frozen({ id: `group:${id}:${sid}`, title, order: index, episodes }); }), items = groups.flatMap(group => group.episodes).map((episode, order) => frozen({ ...episode, order })); return frozen({ items, groups }); }
 export async function getContent(request) { const id = contentId(request.id), chapter = parseChapterId(request.chapterId, id), page = playUrl(id, chapter.sid, chapter.nid), data = parsePlayer(await fetchText(page)); let upstream = text(data.url).replaceAll('\\/', '/'); const encrypt = Number(data.encrypt ?? 0); if (encrypt === 2) {
     upstream = Buffer.from(upstream, 'base64').toString('utf8');
     try {
@@ -37,13 +37,18 @@ else if (encrypt === 1) {
 async function fetchText(url) { const response = await requireContext().http.fetch(url, { headers }); if (!response.ok)
     throw new Error('Source request failed.'); return response.text(); }
 function parseList(html) { const values = new Map(); for (const match of html.matchAll(/<a\b([^>]*)href=["']([^"']*\/voddetail\/(\d+)\/)["']([^>]*)>([\s\S]*?)<\/a>/giu)) {
-    const id = match[3] ?? '', attrs = `${match[1] ?? ''} ${match[4] ?? ''}`, body = match[5] ?? '', image = /<img\b[^>]*>/iu.exec(body)?.[0] ?? '', title = attribute(attrs, 'title') || attribute(image, 'alt') || strip(body) || `视频 ${id}`, cover = attribute(image, 'data-original') || attribute(image, 'data-src') || attribute(image, 'src');
-    if (id !== '' && !values.has(id))
+    const id = match[3] ?? '', attrs = `${match[1] ?? ''} ${match[4] ?? ''}`, body = match[5] ?? '', image = /<img\b[^>]*>/iu.exec(body)?.[0] ?? '', title = attribute(attrs, 'title') || attribute(image, 'alt') || strip(body), cover = attribute(image, 'data-original') || attribute(image, 'data-src') || attribute(image, 'src');
+    if (id !== '' && title !== '' && !values.has(id))
         values.set(id, summary(id, title, cover));
 } return [...values.values()]; }
-function parsePlayLinks(html) { const result = []; for (const match of html.matchAll(/<a\b([^>]*)href=["']([^"']*\/vodplay\/(\d+)-(\d+)-(\d+)\/)["']([^>]*)>([\s\S]*?)<\/a>/giu)) {
-    if (match[3] && match[4] && match[5])
-        result.push({ id: match[3], sid: match[4], nid: match[5], title: attribute(`${match[1] ?? ''} ${match[6] ?? ''}`, 'title') || strip(match[7] ?? '') });
+function parsePlayLinks(html) { const result = [], seen = new Set(); for (const match of html.matchAll(/<a\b([^>]*)href=["']([^"']*\/play\/(\d+)-(\d+)-(\d+)\/)["']([^>]*)>([\s\S]*?)<\/a>/giu)) {
+    if (match[3] && match[4] && match[5]) {
+        const key = `${match[3]}:${match[4]}:${match[5]}`;
+        if (!seen.has(key)) {
+            seen.add(key);
+            result.push({ id: match[3], sid: match[4], nid: match[5], title: attribute(`${match[1] ?? ''} ${match[6] ?? ''}`, 'title') || strip(match[7] ?? '') });
+        }
+    }
 } return result; }
 function parsePlayer(html) { const start = html.search(/(?:var\s+)?player_\w+\s*=\s*\{/iu); if (start < 0)
     throw new Error('Player data is unavailable.'); const brace = html.indexOf('{', start), raw = balancedObject(html, brace), value = JSON.parse(raw); if (!isObject(value))
@@ -76,7 +81,7 @@ function pageUrl(path, page) { if (page <= 1)
     return `${base}${path}`; if (path === '/')
     return `${base}/index-${page}.html`; return `${base}${path.replace(/\/$/u, '')}-${page}/`; }
 function detailUrl(id) { return `${base}/voddetail/${id}/`; }
-function playUrl(id, sid, nid) { return `${base}/vodplay/${id}-${sid}-${nid}/`; }
+function playUrl(id, sid, nid) { return `${base}/play/${id}-${sid}-${nid}/`; }
 function contentId(id) { const value = /^video:(\d+)$/u.exec(id)?.[1]; if (value === undefined)
     throw new Error('Content ID is invalid.'); return value; }
 function parseChapterId(id, content) { const match = new RegExp(`^video:${content}:(\\d+):(\\d+)$`, 'u').exec(id); if (!match?.[1] || !match[2])

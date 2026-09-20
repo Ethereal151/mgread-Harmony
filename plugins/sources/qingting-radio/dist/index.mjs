@@ -1,13 +1,24 @@
+/**
+ * 蜻蜓电台原生数据源。
+ *
+ * 职责：直接访问 qtfm GraphQL、详情与直播音频端点。
+ * 生命周期：activate 注入宿主上下文；不保存账号或跨会话状态。
+ * IO：元数据走 ctx.http，直播音频经 ctx.resource.proxy 交给 Runtime。
+ * 稳定标识：使用蜻蜓 channel/radio ID，章节固定为该频道的 live 节点。
+ */
+import { createHmac } from 'node:crypto';
 const web = 'https://www.qtfm.cn';
 const graphql = 'https://webbff.qtfm.cn/www';
 const detailBase = 'https://webapi.qtfm.cn/api/pc/radio/';
-const playBase = 'https://lhttp-hw.qtfm.cn/live/';
+const playBase = 'https://lhttp-hw.qtfm.cn';
+const liveSignKey = 'Lwrpu$K5oP';
 const headers = Object.freeze({ Accept: 'application/json,text/plain,*/*', 'Content-Type': 'application/json', Referer: web, 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0' });
 const categories = Object.freeze([
     ['217', '广东'], ['99', '浙江'], ['3', '北京'], ['5', '天津'], ['7', '河北'], ['83', '上海'], ['19', '山西'], ['31', '内蒙古'], ['44', '辽宁'], ['59', '吉林'], ['69', '黑龙江'], ['85', '江苏'], ['111', '安徽'], ['129', '福建'], ['139', '江西'], ['151', '山东'], ['169', '河南'], ['187', '湖北'], ['202', '湖南'], ['239', '广西'], ['254', '海南'], ['257', '重庆'], ['259', '四川'], ['281', '贵州'], ['291', '云南'], ['316', '陕西'], ['327', '甘肃'], ['351', '宁夏'], ['357', '新疆'], ['308', '西藏'], ['342', '青海'], ['433', '资讯'], ['442', '音乐'], ['429', '交通'], ['439', '经济'], ['432', '文艺'], ['441', '都市'], ['430', '体育'], ['431', '双语'], ['440', '综合'], ['438', '生活'], ['435', '旅游'], ['436', '曲艺'], ['434', '方言'],
 ]);
 let context;
-export async function activate(next) { context = next; next.log.info('source_activated'); }
+const channels = new Map();
+export async function activate(next) { context = next; channels.clear(); next.log.info('source_activated'); }
 export async function search(request) {
     const query = request.query.trim();
     if (query === '')
@@ -58,16 +69,16 @@ export async function getContent(request) {
     const id = contentId(request.id);
     if (request.chapterId !== `radio:${encodeKey(id)}:live`)
         throw new Error('Chapter ID is invalid.');
-    const upstream = `${playBase}${encodeURIComponent(id)}/64k.mp3`;
+    const resource = liveAudioResource(id);
     const mediaHeaders = { Referer: web, 'User-Agent': headers['User-Agent'] };
-    return frozen({ chapterId: request.chapterId, contentKind: 'audio', title: '直播', updatedAt: null, text: null, pages: [], media: { url: requireContext().resource.proxy({ kind: 'audio', url: upstream, headers: mediaHeaders }), resourceType: 'audio', resourcePolicy: 'sessionOnly', expiresAt: null, mimeType: 'audio/mpeg', headers: mediaHeaders } });
+    return frozen({ chapterId: request.chapterId, contentKind: 'audio', title: '直播', updatedAt: null, text: null, pages: [], media: { url: requireContext().resource.proxy({ kind: 'audio', url: resource.url, headers: mediaHeaders }), resourceType: 'audio', resourcePolicy: 'refreshable', expiresAt: resource.expiresAt, mimeType: 'audio/mpeg', headers: mediaHeaders } });
 }
 async function graph(query) { return fetchJson(graphql, { query }); }
 async function fetchJson(url, body) { const response = await requireContext().http.fetch(url, body === undefined ? { headers } : { method: 'POST', headers, body: JSON.stringify(body) }); if (!response.ok)
     throw new Error('Source request failed.'); const value = await response.json(); if (!isObject(value))
     throw new Error('Source response is invalid.'); return value; }
 function summary(value) { const native = text(first(value.id, value.channelId, value.radioId, value.cid)); if (native === '')
-    throw new Error('Source item has no ID.'); const id = encodeKey(native); const title = text(first(value.title, value.name, value.channelName, value.radioName)) || native; const category = nullable(first(value.categoryName, value.typeName)); return frozen({ id: `radio:${id}`, title, contentKind: 'audio', coverOrientation: 'portrait', author: nullable(first(value.nickName, value.anchor, value.dj, value.speaker)), url: `${web}/channels/${encodeURIComponent(native)}`, coverUrl: proxyImage(first(value.imgUrl, value.cover, value.coverUrl, value.img, value.pic, value.logo, value.image)), description: nullable(first(value.description, value.desc, value.intro, value.subtitle, value.subTitle)), language: 'zh-CN', status: 'ongoing', access: 'unknown', wordCount: null, chapterCount: 1, publishedAt: null, updatedAt: null, latestChapter: { id: `radio:${id}:live`, title: '直播', url: null, updatedAt: null }, categories: category === null ? [] : [category], tags: [], attributes: [] }); }
+    throw new Error('Source item has no ID.'); const merged = mergeChannel(channels.get(native), value); channels.set(native, merged); const id = encodeKey(native); const title = text(first(merged.title, merged.name, merged.channelName, merged.radioName)) || native; const category = nullable(first(merged.categoryName, merged.typeName)); return frozen({ id: `radio:${id}`, title, contentKind: 'audio', coverOrientation: 'portrait', author: nullable(first(merged.nickName, merged.anchor, merged.dj, merged.speaker)), url: `${web}/channels/${encodeURIComponent(native)}`, coverUrl: proxyImage(first(merged.imgUrl, merged.cover, merged.coverUrl, merged.img, merged.pic, merged.logo, merged.image)), description: nullable(first(merged.description, merged.desc, merged.intro, merged.subtitle, merged.subTitle)), language: 'zh-CN', status: 'ongoing', access: 'unknown', wordCount: null, chapterCount: 1, publishedAt: null, updatedAt: null, latestChapter: { id: `radio:${id}:live`, title: '直播', url: null, updatedAt: null }, categories: category === null ? [] : [category], tags: [], attributes: [] }); }
 function unwrap(value) { if (typeof value === 'string') {
     try {
         return unwrap(JSON.parse(value));
@@ -95,10 +106,22 @@ catch {
     return null;
 } }
 function proxyImage(value) { const url = absolute(value); return url === null ? null : requireContext().resource.proxy({ kind: 'image', url, headers: { Referer: web, 'User-Agent': headers['User-Agent'] } }); }
+function liveAudioResource(id) {
+    const path = `/live/${encodeURIComponent(id)}/64k.mp3`;
+    const expiresAtSeconds = Math.floor(Date.now() / 1000) + 3600;
+    const timestamp = expiresAtSeconds.toString(16);
+    const canonical = `app_id=${encodeURIComponent('web')}&path=${encodeURIComponent(path)}&ts=${encodeURIComponent(timestamp)}`;
+    const sign = createHmac('md5', liveSignKey).update(canonical).digest('hex');
+    const query = `app_id=${encodeURIComponent('web')}&ts=${encodeURIComponent(timestamp)}&sign=${encodeURIComponent(sign)}`;
+    return frozen({ url: `${playBase}${path}?${query}`, expiresAt: new Date(expiresAtSeconds * 1000).toISOString() });
+}
 function encodeKey(value) { return Buffer.from(value, 'utf8').toString('base64url'); }
 function decodeKey(value) { if (!/^[A-Za-z0-9_-]+$/u.test(value))
     throw new Error('Source key is invalid.'); return Buffer.from(value, 'base64url').toString('utf8'); }
 function first(...values) { return values.find((value) => value !== null && value !== undefined && value !== '') ?? ''; }
+function mergeChannel(previous, current) { const result = { ...(previous ?? {}) }; for (const [key, value] of Object.entries(current))
+    if (value !== null && value !== undefined && value !== '')
+        result[key] = value; return result; }
 function records(value) { return Array.isArray(value) ? value.filter(isObject) : []; }
 function object(value) { return isObject(value) ? value : {}; }
 function isObject(value) { return value !== null && typeof value === 'object' && !Array.isArray(value); }

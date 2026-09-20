@@ -48,7 +48,7 @@ export class ManhuaSource {
   async search(query: string): Promise<readonly Summary[]> {
     const url = new URL('/index.php/search', origin);
     url.searchParams.set('key', query);
-    return this.parseList(await this.#html(url), url);
+    return prioritizeSearchResults(this.parseList(await this.#html(url), url), query);
   }
 
   async discover(): Promise<HomeDiscovery> {
@@ -191,5 +191,10 @@ function isComic(url: URL): boolean { return isSite(url) && /^\/index\.php\/comi
 function isChapter(url: URL): boolean { return isSite(url) && /^\/index\.php\/chapter\/\d+\/?$/u.test(url.pathname); }
 function isImage(url: URL): boolean { return url.protocol === 'https:' && imageOrigins.has(url.origin) && /\.(?:jpe?g|png|webp|gif)(?:$|\?)/iu.test(url.pathname + url.search); }
 function imageMime(url: URL): string | null { const ext = /\.([a-z]+)(?:$|\?)/iu.exec(url.pathname + url.search)?.[1]?.toLowerCase(); return ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : ext === 'gif' ? 'image/gif' : null; }
+function prioritizeSearchResults(items: readonly Summary[], query: string): readonly Summary[] {
+  const expected = normalizeSearchText(query);
+  return Object.freeze([...items].sort((left, right) => Number(normalizeSearchText(right.title) === expected) - Number(normalizeSearchText(left.title) === expected)));
+}
+function normalizeSearchText(value: string): string { return value.normalize('NFKC').replace(/\s+/gu, '').toLocaleLowerCase('zh-CN'); }
 function clean(value: string | undefined): string | null { const result = value?.replace(/\s+/gu, ' ').trim() ?? ''; return result === '' ? null : result; }
 function hasAccessMarker(root: cheerio.Cheerio<any>): boolean { return root.is('[class*="vip" i], [class*="pay" i], [class*="lock" i]') || root.find('[class*="vip" i], [class*="pay" i], [class*="lock" i]').length > 0; }

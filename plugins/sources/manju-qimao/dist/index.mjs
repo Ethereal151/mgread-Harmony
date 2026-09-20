@@ -24,12 +24,12 @@ export async function getContent(request) { const id = contentId(request.id), in
 async function detail(id) { const values = list(await api(`detail?id=${encodeURIComponent(id)}`)); if (values[0] === undefined)
     throw new Error('Video detail is unavailable.'); return values[0]; }
 async function api(path) { const response = await requireContext().http.fetch(new URL(path, root).toString(), { headers }); if (!response.ok)
-    throw new Error('Source request failed.'); const raw = (await response.text()).trim(), plain = decrypt(raw); try {
-    return JSON.parse(plain);
+    throw new Error('Source request failed.'); const raw = (await response.text()).trim(), plain = decrypt(raw); let value; try {
+    value = JSON.parse(plain);
 }
 catch {
     throw new Error('Source response is invalid.');
-} }
+} raiseUpgradeRequired(value); return value; }
 function decrypt(raw) { if (raw.startsWith('{') || raw.startsWith('['))
     return raw; const parts = raw.split('.'); if (parts.length < 3)
     throw new Error('Encrypted response is invalid.'); const keyIv = derive(parts[1] ?? ''), decipher = createDecipheriv('aes-128-cbc', keyIv.subarray(0, 16), keyIv.subarray(16, 32)); return Buffer.concat([decipher.update(Buffer.from(parts[2] ?? '', 'base64')), decipher.final()]).toString('utf8'); }
@@ -43,6 +43,8 @@ function list(value) { if (Array.isArray(value))
     return []; if (Array.isArray(value.list))
     return value.list.filter(isObject); const data = isObject(value.data) ? value.data : null; if (data && Array.isArray(data.list))
     return data.list.filter(isObject); return []; }
+function raiseUpgradeRequired(value) { const notice = list(value).find(item => text(item.vod_id) === 'upgrade_required'); if (notice === undefined)
+    return; requireContext().errors.raise({ code: 'source_access_blocked', message: '漫剧小猫上游接口当前要求更新客户端，暂时没有可用内容。', annotation: text(first(notice.vod_name, notice.vod_remarks)) || 'upgrade_required' }); }
 function summaries(values) { const result = new Map(); for (const value of values) {
     const id = nativeId(first(value.vod_id, value.id));
     if (id !== null && text(first(value.vod_name, value.title)) !== '')

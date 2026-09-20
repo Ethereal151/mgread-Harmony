@@ -6,6 +6,7 @@
  * IO：元数据走 ctx.http，直播音频经 ctx.resource.proxy 交给 Runtime。
  * 稳定标识：使用蜻蜓 channel/radio ID，章节固定为该频道的 live 节点。
  */
+import { createHmac } from 'node:crypto';
 import type { MgReadPluginContext } from '@mgread/source-api';
 
 type Json = Record<string, unknown>;
@@ -14,14 +15,16 @@ type Context = MgReadPluginContext;
 const web = 'https://www.qtfm.cn';
 const graphql = 'https://webbff.qtfm.cn/www';
 const detailBase = 'https://webapi.qtfm.cn/api/pc/radio/';
-const playBase = 'https://lhttp-hw.qtfm.cn/live/';
+const playBase = 'https://lhttp-hw.qtfm.cn';
+const liveSignKey = 'Lwrpu$K5oP';
 const headers = Object.freeze({ Accept: 'application/json,text/plain,*/*', 'Content-Type': 'application/json', Referer: web, 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0' });
 const categories = Object.freeze([
   ['217','广东'],['99','浙江'],['3','北京'],['5','天津'],['7','河北'],['83','上海'],['19','山西'],['31','内蒙古'],['44','辽宁'],['59','吉林'],['69','黑龙江'],['85','江苏'],['111','安徽'],['129','福建'],['139','江西'],['151','山东'],['169','河南'],['187','湖北'],['202','湖南'],['239','广西'],['254','海南'],['257','重庆'],['259','四川'],['281','贵州'],['291','云南'],['316','陕西'],['327','甘肃'],['351','宁夏'],['357','新疆'],['308','西藏'],['342','青海'],['433','资讯'],['442','音乐'],['429','交通'],['439','经济'],['432','文艺'],['441','都市'],['430','体育'],['431','双语'],['440','综合'],['438','生活'],['435','旅游'],['436','曲艺'],['434','方言'],
 ] as const);
 let context: Context | undefined;
+const channels = new Map<string, Json>();
 
-export async function activate(next: Context): Promise<void> { context = next; next.log.info('source_activated'); }
+export async function activate(next: Context): Promise<void> { context = next; channels.clear(); next.log.info('source_activated'); }
 export async function search(request: { query: string; cursor: string | null; pageSize: number }) {
   const query = request.query.trim(); if (query === '') return frozen({ items: [], nextCursor: null, totalCount: 0 }); const page = cursorPage(request.cursor, 'search');
   const json = await graph(`{ searchResultsPage(keyword:${JSON.stringify(query)}, page:${page}, include:"channel_live") { searchData numFound } }`);
@@ -51,21 +54,31 @@ export async function getChapters(request: { id: string }) {
 }
 export async function getContent(request: { id: string; chapterId: string }) {
   const id = contentId(request.id); if (request.chapterId !== `radio:${encodeKey(id)}:live`) throw new Error('Chapter ID is invalid.');
-  const upstream = `${playBase}${encodeURIComponent(id)}/64k.mp3`; const mediaHeaders = { Referer: web, 'User-Agent': headers['User-Agent'] };
-  return frozen({ chapterId: request.chapterId, contentKind: 'audio', title: '直播', updatedAt: null, text: null, pages: [], media: { url: requireContext().resource.proxy({ kind: 'audio', url: upstream, headers: mediaHeaders }), resourceType: 'audio', resourcePolicy: 'sessionOnly', expiresAt: null, mimeType: 'audio/mpeg', headers: mediaHeaders } });
+  const resource = liveAudioResource(id); const mediaHeaders = { Referer: web, 'User-Agent': headers['User-Agent'] };
+  return frozen({ chapterId: request.chapterId, contentKind: 'audio', title: '直播', updatedAt: null, text: null, pages: [], media: { url: requireContext().resource.proxy({ kind: 'audio', url: resource.url, headers: mediaHeaders }), resourceType: 'audio', resourcePolicy: 'refreshable', expiresAt: resource.expiresAt, mimeType: 'audio/mpeg', headers: mediaHeaders } });
 }
 
 async function graph(query: string) { return fetchJson(graphql, { query }); }
 async function fetchJson(url: string, body?: Json): Promise<Json> { const response = await requireContext().http.fetch(url, body === undefined ? { headers } : { method: 'POST', headers, body: JSON.stringify(body) }); if (!response.ok) throw new Error('Source request failed.'); const value: unknown = await response.json(); if (!isObject(value)) throw new Error('Source response is invalid.'); return value; }
-function summary(value: Json) { const native = text(first(value.id,value.channelId,value.radioId,value.cid)); if (native === '') throw new Error('Source item has no ID.'); const id = encodeKey(native); const title = text(first(value.title,value.name,value.channelName,value.radioName)) || native; const category = nullable(first(value.categoryName,value.typeName)); return frozen({ id: `radio:${id}`, title, contentKind: 'audio', coverOrientation: 'portrait', author: nullable(first(value.nickName,value.anchor,value.dj,value.speaker)), url: `${web}/channels/${encodeURIComponent(native)}`, coverUrl: proxyImage(first(value.imgUrl,value.cover,value.coverUrl,value.img,value.pic,value.logo,value.image)), description: nullable(first(value.description,value.desc,value.intro,value.subtitle,value.subTitle)), language: 'zh-CN', status: 'ongoing', access: 'unknown', wordCount: null, chapterCount: 1, publishedAt: null, updatedAt: null, latestChapter: { id: `radio:${id}:live`, title: '直播', url: null, updatedAt: null }, categories: category === null ? [] : [category], tags: [], attributes: [] }); }
+function summary(value: Json) { const native = text(first(value.id,value.channelId,value.radioId,value.cid)); if (native === '') throw new Error('Source item has no ID.'); const merged = mergeChannel(channels.get(native), value); channels.set(native, merged); const id = encodeKey(native); const title = text(first(merged.title,merged.name,merged.channelName,merged.radioName)) || native; const category = nullable(first(merged.categoryName,merged.typeName)); return frozen({ id: `radio:${id}`, title, contentKind: 'audio', coverOrientation: 'portrait', author: nullable(first(merged.nickName,merged.anchor,merged.dj,merged.speaker)), url: `${web}/channels/${encodeURIComponent(native)}`, coverUrl: proxyImage(first(merged.imgUrl,merged.cover,merged.coverUrl,merged.img,merged.pic,merged.logo,merged.image)), description: nullable(first(merged.description,merged.desc,merged.intro,merged.subtitle,merged.subTitle)), language: 'zh-CN', status: 'ongoing', access: 'unknown', wordCount: null, chapterCount: 1, publishedAt: null, updatedAt: null, latestChapter: { id: `radio:${id}:live`, title: '直播', url: null, updatedAt: null }, categories: category === null ? [] : [category], tags: [], attributes: [] }); }
 function unwrap(value: unknown): Json[] { if (typeof value === 'string') { try { return unwrap(JSON.parse(value)); } catch { return []; } } if (Array.isArray(value)) return records(value); if (!isObject(value)) return []; for (const key of ['contents','items','list','data']) { const result = unwrap(value[key]); if (result.length > 0) return result; } return []; }
 function contentId(id: string) { const encoded = /^radio:([^:]+)$/u.exec(id)?.[1]; if (encoded === undefined) throw new Error('Content ID is invalid.'); return decodeKey(encoded); }
 function cursorPage(cursor: string | null, target: string) { if (cursor === null) return 1; const match = cursor.startsWith(`${target}:`) ? cursor.slice(target.length + 1) : ''; const page = Number(match); if (!Number.isSafeInteger(page) || page < 2 || page > 1000) throw new Error('Cursor is invalid.'); return page; }
 function absolute(value: unknown) { const raw = text(value); if (raw === '') return null; try { return new URL(raw, web).toString(); } catch { return null; } }
 function proxyImage(value: unknown) { const url = absolute(value); return url === null ? null : requireContext().resource.proxy({ kind: 'image', url, headers: { Referer: web, 'User-Agent': headers['User-Agent'] } }); }
+function liveAudioResource(id: string) {
+  const path = `/live/${encodeURIComponent(id)}/64k.mp3`;
+  const expiresAtSeconds = Math.floor(Date.now() / 1000) + 3600;
+  const timestamp = expiresAtSeconds.toString(16);
+  const canonical = `app_id=${encodeURIComponent('web')}&path=${encodeURIComponent(path)}&ts=${encodeURIComponent(timestamp)}`;
+  const sign = createHmac('md5', liveSignKey).update(canonical).digest('hex');
+  const query = `app_id=${encodeURIComponent('web')}&ts=${encodeURIComponent(timestamp)}&sign=${encodeURIComponent(sign)}`;
+  return frozen({ url: `${playBase}${path}?${query}`, expiresAt: new Date(expiresAtSeconds * 1000).toISOString() });
+}
 function encodeKey(value: string) { return Buffer.from(value, 'utf8').toString('base64url'); }
 function decodeKey(value: string) { if (!/^[A-Za-z0-9_-]+$/u.test(value)) throw new Error('Source key is invalid.'); return Buffer.from(value, 'base64url').toString('utf8'); }
 function first(...values: unknown[]) { return values.find((value) => value !== null && value !== undefined && value !== '') ?? ''; }
+function mergeChannel(previous: Json | undefined, current: Json) { const result: Json = { ...(previous ?? {}) }; for (const [key, value] of Object.entries(current)) if (value !== null && value !== undefined && value !== '') result[key] = value; return result; }
 function records(value: unknown): Json[] { return Array.isArray(value) ? value.filter(isObject) : []; }
 function object(value: unknown): Json { return isObject(value) ? value : {}; }
 function isObject(value: unknown): value is Json { return value !== null && typeof value === 'object' && !Array.isArray(value); }

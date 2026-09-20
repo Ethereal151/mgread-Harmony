@@ -55,7 +55,7 @@ export async function getContent(request) {
     return frozen({ chapterId: request.chapterId, contentKind: 'video', title: selected.title, updatedAt: null, text: null, pages: [], media: { url: requireContext().resource.proxy({ kind: resourceType, url: upstream, headers: mediaHeaders }), resourceType, resourcePolicy: 'sessionOnly', expiresAt: null, mimeType: resourceType === 'hls' ? 'application/vnd.apple.mpegurl' : 'video/mp4', headers: mediaHeaders } });
 }
 async function fetchText(url) { const response = await requireContext().http.fetch(url, { headers }); if (!response.ok)
-    throw new Error('Source request failed.'); return response.text(); }
+    throw new Error(`Source request failed (HTTP ${response.status}).`); return response.text(); }
 async function rootDocument(pageSize) {
     const limit = Math.min(clamp(pageSize), 10);
     const values = parseList(await fetchText(categoryUrl('1', 1))).slice(0, limit);

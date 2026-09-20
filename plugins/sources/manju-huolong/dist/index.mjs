@@ -26,10 +26,14 @@ async function detail(id) { const values = list(await api(`detail?id=${encodeURI
     throw new Error('Video detail is unavailable.'); return values[0]; }
 async function api(path) { const response = await requireContext().http.fetch(new URL(path, root).toString(), { headers }); if (!response.ok)
     throw new Error('Source request failed.'); const raw = (await response.text()).trim(), plain = decrypt(raw); try {
-    return JSON.parse(plain);
+    const value = JSON.parse(plain);
+    raiseUpgradeRequired(value);
+    return value;
 }
-catch {
-    throw new Error('Source response is invalid.');
+catch (error) {
+    if (error instanceof SyntaxError)
+        throw new Error('Source response is invalid.');
+    throw error;
 } }
 function decrypt(raw) { if (raw.startsWith('{') || raw.startsWith('['))
     return raw; const parts = raw.split('.'); if (parts.length < 3)
@@ -44,6 +48,9 @@ function list(value) { if (Array.isArray(value))
     return []; if (Array.isArray(value.list))
     return value.list.filter(isObject); const data = isObject(value.data) ? value.data : null; if (data && Array.isArray(data.list))
     return data.list.filter(isObject); return []; }
+function raiseUpgradeRequired(value) { const item = list(value)[0]; if (item === undefined)
+    return; const id = text(first(item.vod_id, item.id)), title = text(first(item.vod_name, item.title)); if (id === 'upgrade_required' || /请更新到.*最新版/u.test(title))
+    requireContext().errors.raise({ code: 'source_access_blocked', message: '漫剧小龙上游服务当前要求升级，暂时无法读取内容。', annotation: '上游仅返回“请更新到唐三最新版”，未提供真实作品或分集目录。' }); }
 function summaries(values) { const result = new Map(); for (const value of values) {
     const id = nativeId(first(value.vod_id, value.id));
     if (id !== null && text(first(value.vod_name, value.title)) !== '')

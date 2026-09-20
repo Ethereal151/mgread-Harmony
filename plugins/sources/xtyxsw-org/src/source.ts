@@ -1,5 +1,5 @@
 /**
- * Tianyue parser using public PC HTTP only; no browser, Cookie, or user-agent fallback.
+ * Tianyue parser using public PC HTTP only; origin HTML bypasses the configured proxy because the site closes proxied requests.
  * If direct search is empty, the new-book list and first three catalog categories are inspected, with two requests at most in flight and early cancellation at 20 matches.
  * GET display projections are cached according to the source policy; POST search and page parsing remain source-owned.
  */
@@ -23,9 +23,7 @@ export class TianyueSource{
   async search(query:string):Promise<readonly ContentSummary[]>{
     if(query.trim()==='')return Object.freeze([]);
     const url=new URL('/search.html',origin);const body=new URLSearchParams({searchkey:query}).toString();
-    const response=await this.#fetch(url,{method:'POST',headers:{accept:'text/html,application/xhtml+xml','accept-language':'zh-CN,zh;q=0.9','content-type':'application/x-www-form-urlencoded; charset=UTF-8',origin,referer:`${origin}/`},body});
-    const direct=this.parseList(response,url,null);
-    if(direct.length>0)return direct;
+    try{const response=await this.#fetch(url,{method:'POST',headers:{accept:'text/html,application/xhtml+xml','accept-language':'zh-CN,zh;q=0.9','content-type':'application/x-www-form-urlencoded; charset=UTF-8',origin,referer:`${origin}/`},body});const direct=this.parseList(response,url,null);if(direct.length>0)return direct;}catch{this.context.log.warn('source_direct_search_unavailable');}
     return this.#fallbackSearch(query);
   }
   async discover(categoryId:string,page:number):Promise<ListResult>{
@@ -65,7 +63,7 @@ export class TianyueSource{
     const worker=async()=>{for(;;){if(stopped)return;const index=next;next+=1;const category=candidates[index];if(category===undefined)return;let result:ListResult;try{result=await this.#loadDiscovery(category,1,controller.signal);}catch(error){if(stopped&&isAbortError(error))return;throw error;}if(stopped)return;for(const item of result.items){const hay=`${item.title} ${item.author??''}`.toLocaleLowerCase('zh-CN');if(hay.includes(needle)&&!seen.has(item.id)){seen.add(item.id);matches.push(item);if(matches.length>=searchFallbackPolicy.maxResults){stopped=true;controller.abort();return;}}}}};
     try{await Promise.all(Array.from({length:searchFallbackPolicy.concurrency},worker));}catch(error){stopped=true;controller.abort();throw error;}return Object.freeze(matches);
   }
-  async #fetch(url:URL,init?:RequestInit){const response=await this.context.http.fetch(url,init??{headers:{accept:'text/html,application/xhtml+xml','accept-language':'zh-CN,zh;q=0.9',referer:`${origin}/`}});const body=await response.text();if(!response.ok||/(?:cf-challenge|cf-turnstile|Just a moment|Checking your browser|challenge-platform)/iu.test(body))throw new Error('Source page is unavailable.');return body;}
+  async #fetch(url:URL,init?:RequestInit){const request={...(init??{headers:{accept:'text/html,application/xhtml+xml','accept-language':'zh-CN,zh;q=0.9',referer:`${origin}/`}}),proxyMode:'direct'as const};const response=await this.context.http.fetch(url,request);const body=await response.text();if(!response.ok||/(?:cf-challenge|cf-turnstile|Just a moment|Checking your browser|challenge-platform)/iu.test(body))throw new Error('Source page is unavailable.');return body;}
   #proxyImage(url:URL,referer:URL){return url.protocol==='https:'&&url.hostname==='img.xtyxsw.org'&&referer.origin===origin?this.context.resource.proxy({kind:'image',url:url.toString(),headers:{Accept:'image/*',Referer:referer.toString()}}):null;}
 }
 function summary(input:{readonly bookId:string;readonly title:string;readonly author:string|null;readonly url:URL;readonly coverUrl:string|null;readonly description:string|null;readonly status:ContentSummary['status'];readonly updatedAt:string|null;readonly latestTitle:string|null;readonly latestUrl:URL|null;readonly categories:readonly string[]}):ContentSummary{const chapter=input.latestUrl===null?null:chapterNumber(input.latestUrl,input.bookId);return Object.freeze({id:`book:${input.bookId}`,title:input.title,contentKind:'novel',author:input.author,url:input.url.toString(),coverUrl:input.coverUrl,description:input.description,language:'zh-CN',status:input.status,access:'free',wordCount:null,chapterCount:null,publishedAt:null,updatedAt:input.updatedAt,latestChapter:input.latestTitle===null?null:Object.freeze({id:chapter===null?null:`chapter:${input.bookId}:${chapter}`,title:input.latestTitle,url:chapter===null?null:input.latestUrl!.toString(),updatedAt:input.updatedAt}),categories:Object.freeze(input.categories),tags:Object.freeze([]),attributes:Object.freeze([])});}

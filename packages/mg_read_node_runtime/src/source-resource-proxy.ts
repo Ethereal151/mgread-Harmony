@@ -29,6 +29,12 @@ export async function openSourceProxyResource(
   if (typeof entry.request.kind !== "string" || typeof rawUrl !== "string" || !isHttpUrl(rawUrl)) return undefined;
   const forwarded = sourceHeaders(entry.request);
   if (forwarded === undefined) return undefined;
+  if (entry.request.resourceTransform === "aes-cbc-prefixed-iv-image-v1") {
+    return openAesCbcPrefixedIvImage(entry, forwarded, signal);
+  }
+  if (entry.request.resourceTransform === "aes-cbc-encrypt-then-split-image-v1") {
+    return openAesCbcEncryptThenSplitImage(entry, forwarded, signal);
+  }
   if (entry.request.resourceTransform === "aes-cbc-split-image-v1") {
     return openAesCbcSplitImage(entry, forwarded, signal);
   }
@@ -42,6 +48,47 @@ export async function openSourceProxyResource(
   const proxyMode = entry.request.proxyMode === "direct" ? "direct" : undefined;
   const response = await entry.fetch(rawUrl, { headers: forwarded, method: "GET", redirect: "follow", signal }, undefined, proxyMode);
   return Object.freeze({ proxy: entry.proxy, request: entry.request, response, responseUrl: response.url });
+}
+
+async function openAesCbcPrefixedIvImage(
+  entry: SourceProxyEntry,
+  headers: Readonly<Record<string, string>>,
+  signal: AbortSignal,
+): Promise<SourceProxyResource | undefined> {
+  const rawUrl = entry.request.url;
+  const key = aes256Key(entry.request.resourceTransformKey);
+  if (typeof rawUrl !== "string" || key === undefined) return undefined;
+  const proxyMode = entry.request.proxyMode === "direct" ? "direct" : undefined;
+  const upstream = await entry.fetch(
+    rawUrl,
+    { headers, method: "GET", redirect: "follow", signal },
+    undefined,
+    proxyMode,
+  );
+  if (!upstream.ok) {
+    return Object.freeze({ proxy: entry.proxy, request: entry.request, response: upstream, responseUrl: upstream.url });
+  }
+  const encrypted = Buffer.from(await upstream.arrayBuffer());
+  let media = encrypted;
+  let contentType = detectImageContentType(media);
+  if (contentType === undefined) {
+    if (encrypted.byteLength <= 16 || (encrypted.byteLength - 16) % 16 !== 0) {
+      throw new Error("source encrypted image format is invalid");
+    }
+    const decipher = createDecipheriv("aes-256-cbc", key, encrypted.subarray(0, 16));
+    media = Buffer.concat([decipher.update(encrypted.subarray(16)), decipher.final()]);
+    contentType = detectImageContentType(media);
+  }
+  if (contentType === undefined) throw new Error("source decrypted image format is invalid");
+  const response = new Response(media, {
+    status: 200,
+    headers: {
+      "cache-control": "no-store",
+      "content-length": String(media.byteLength),
+      "content-type": contentType,
+    },
+  });
+  return Object.freeze({ proxy: entry.proxy, request: entry.request, response, responseUrl: upstream.url || rawUrl });
 }
 
 async function openAesCbcSplitImage(
@@ -82,6 +129,41 @@ async function openAesCbcSplitImage(
   return Object.freeze({ proxy: entry.proxy, request: entry.request, response, responseUrl: firstUrl });
 }
 
+async function openAesCbcEncryptThenSplitImage(
+  entry: SourceProxyEntry,
+  headers: Readonly<Record<string, string>>,
+  signal: AbortSignal,
+): Promise<SourceProxyResource | undefined> {
+  const urls = imagePartUrls(entry.request.urls);
+  const firstUrl = urls?.[0];
+  if (urls === undefined || firstUrl === undefined) return undefined;
+  const proxyMode = entry.request.proxyMode === "direct" ? "direct" : undefined;
+  const parts = await Promise.all(urls.map((url) => entry.fetch(
+    url,
+    { headers, method: "GET", redirect: "follow", signal },
+    undefined,
+    proxyMode,
+  )));
+  if (parts.some((part) => !part.ok)) throw new Error("source image part request failed");
+  const encrypted = Buffer.concat(await Promise.all(parts.map(async (part) => Buffer.from(await part.arrayBuffer()))));
+  const decipher = createDecipheriv(
+    "aes-128-cbc",
+    Buffer.from("aaaaaaaaaaaaaaaa", "ascii"),
+    Buffer.from("0123456789aaaaaa", "ascii"),
+  );
+  const body = Buffer.concat([decipher.update(encrypted), decipher.final()]);
+  const media = restoreImageHeader(body);
+  const response = new Response(media, {
+    status: 200,
+    headers: {
+      "cache-control": "no-store",
+      "content-length": String(media.byteLength),
+      "content-type": imageContentType(body[0]),
+    },
+  });
+  return Object.freeze({ proxy: entry.proxy, request: entry.request, response, responseUrl: firstUrl });
+}
+
 function imagePartUrls(value: JsonObject["urls"] | undefined): readonly string[] | undefined {
   if (!Array.isArray(value) || value.length < 2 || value.length > 8) return undefined;
   if (!value.every((item) => typeof item === "string" && isHttpUrl(item))) return undefined;
@@ -102,6 +184,21 @@ function imageContentType(type: number | undefined): string {
   if (type === 3) return "image/gif";
   if (type === 4) return "image/avif";
   return "image/jpeg";
+}
+
+function aes256Key(value: JsonObject["resourceTransformKey"] | undefined): Buffer | undefined {
+  if (typeof value !== "string") return undefined;
+  const key = Buffer.from(value, "utf8");
+  return key.byteLength === 32 ? key : undefined;
+}
+
+function detectImageContentType(body: Buffer): string | undefined {
+  if (body.subarray(0, 3).equals(Buffer.from([0xff, 0xd8, 0xff]))) return "image/jpeg";
+  if (body.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return "image/png";
+  if (body.subarray(0, 4).toString("ascii") === "GIF8") return "image/gif";
+  if (body.subarray(0, 4).toString("ascii") === "RIFF" && body.subarray(8, 12).toString("ascii") === "WEBP") return "image/webp";
+  if (body.subarray(4, 8).toString("ascii") === "ftyp") return "image/avif";
+  return undefined;
 }
 
 function sourceHeaders(request: JsonObject): Record<string, string> | undefined {

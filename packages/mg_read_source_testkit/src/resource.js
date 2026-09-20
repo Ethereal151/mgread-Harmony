@@ -67,6 +67,39 @@ export async function probeReachableResource({
 }
 
 async function fetchRegisteredResource(request, runtimeFetch) {
+  if (request.resourceTransform === 'aes-cbc-prefixed-iv-image-v1') {
+    const key = aes256Key(request.resourceTransformKey);
+    if (key === null) throw new Error('invalid transformed resource key');
+    const response = await runtimeFetch(request.url, { headers: request.headers, redirect: 'follow' });
+    if (!response.ok) return response;
+    const body = Buffer.from(await response.arrayBuffer());
+    if (body.byteLength > 8 * 1024 * 1024) throw new Error('transformed resource body is too large');
+    let plain = body;
+    if (detectedImageContentType(plain) === null) {
+      if (body.byteLength <= 16 || (body.byteLength - 16) % 16 !== 0) {
+        throw new Error('invalid transformed resource body');
+      }
+      const decipher = createDecipheriv('aes-256-cbc', key, body.subarray(0, 16));
+      plain = Buffer.concat([decipher.update(body.subarray(16)), decipher.final()]);
+    }
+    return new Response(plain, { status: 200, headers: { 'content-type': imageContentType(plain) } });
+  }
+  if (request.resourceTransform === 'aes-cbc-encrypt-then-split-image-v1') {
+    const urls = Array.isArray(request.urls) ? request.urls : [];
+    if (urls.length < 2 || urls.length > 8 || !urls.every((url) => typeof url === 'string')) {
+      throw new Error('invalid transformed resource descriptor');
+    }
+    const parts = await Promise.all(urls.map((url) => runtimeFetch(url, {
+      headers: request.headers,
+      redirect: 'follow',
+    })));
+    const failed = parts.find((part) => !part.ok);
+    if (failed !== undefined) return failed;
+    const encrypted = Buffer.concat(await Promise.all(parts.map(async (part) => Buffer.from(await part.arrayBuffer()))));
+    const decipher = createDecipheriv('aes-128-cbc', Buffer.from('aaaaaaaaaaaaaaaa'), Buffer.from('0123456789aaaaaa'));
+    const body = Buffer.concat([decipher.update(encrypted), decipher.final()]);
+    return restoredBmiImageResponse(body);
+  }
   if (request.resourceTransform !== 'aes-cbc-split-image-v1') {
     return runtimeFetch(request.url, { headers: request.headers, redirect: 'follow' });
   }
@@ -87,6 +120,10 @@ async function fetchRegisteredResource(request, runtimeFetch) {
     return Buffer.concat([decipher.update(body), decipher.final()]);
   }));
   const body = Buffer.concat(bodies);
+  return restoredBmiImageResponse(body);
+}
+
+function restoredBmiImageResponse(body) {
   const type = body[0];
   const restored = type === 0
     ? Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01, ...body.subarray(12)])
@@ -99,6 +136,27 @@ async function fetchRegisteredResource(request, runtimeFetch) {
           : (() => { throw new Error('transformed resource format is invalid'); })();
   const contentType = type === 1 ? 'image/png' : type === 3 ? 'image/gif' : type === 4 ? 'image/avif' : 'image/jpeg';
   return new Response(restored, { status: 200, headers: { 'content-type': contentType } });
+}
+
+function aes256Key(value) {
+  if (typeof value !== 'string') return null;
+  const key = Buffer.from(value, 'utf8');
+  return key.byteLength === 32 ? key : null;
+}
+
+function imageContentType(body) {
+  const contentType = detectedImageContentType(body);
+  if (contentType !== null) return contentType;
+  throw new Error('invalid transformed resource image');
+}
+
+function detectedImageContentType(body) {
+  if (body.subarray(0, 3).equals(Buffer.from([0xff, 0xd8, 0xff]))) return 'image/jpeg';
+  if (body.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return 'image/png';
+  if (body.subarray(0, 4).toString('ascii') === 'GIF8') return 'image/gif';
+  if (body.subarray(0, 4).toString('ascii') === 'RIFF' && body.subarray(8, 12).toString('ascii') === 'WEBP') return 'image/webp';
+  if (body.subarray(4, 8).toString('ascii') === 'ftyp') return 'image/avif';
+  return null;
 }
 
 /**
@@ -351,7 +409,43 @@ function hasAudioSignature(bytes) {
     || startsWith(bytes, [0x4f, 0x67, 0x67, 0x53])
     || (startsWith(bytes, [0x52, 0x49, 0x46, 0x46]) && startsWith(bytes, [0x57, 0x41, 0x56, 0x45], 8))
     || startsWith(bytes, [0x66, 0x74, 0x79, 0x70], 4)
-    || (bytes.length >= 2 && bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0);
+    || hasMpegAudioFrames(bytes);
+}
+
+function hasMpegAudioFrames(bytes) {
+  const limit = Math.min(bytes.length - 4, 512);
+  for (let offset = 0; offset <= limit; offset += 1) {
+    const frameLength = mpegAudioFrameLength(bytes, offset);
+    if (frameLength === null) continue;
+    const nextOffset = offset + frameLength;
+    if (mpegAudioFrameLength(bytes, nextOffset) !== null) return true;
+  }
+  return false;
+}
+
+function mpegAudioFrameLength(bytes, offset) {
+  if (offset < 0 || offset + 4 > bytes.length || bytes[offset] !== 0xff || (bytes[offset + 1] & 0xe0) !== 0xe0) return null;
+  const version = (bytes[offset + 1] >> 3) & 0x03;
+  const layer = (bytes[offset + 1] >> 1) & 0x03;
+  const bitrateIndex = (bytes[offset + 2] >> 4) & 0x0f;
+  const sampleRateIndex = (bytes[offset + 2] >> 2) & 0x03;
+  if (version === 1 || layer === 0 || bitrateIndex === 0 || bitrateIndex === 15 || sampleRateIndex === 3) return null;
+  const mpeg1Bitrates = {
+    1: [32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320],
+    2: [32, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 384],
+    3: [32, 64, 96, 128, 160, 192, 224, 256, 288, 320, 352, 384, 416, 448],
+  };
+  const mpeg2Bitrates = {
+    1: [8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160],
+    2: [8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160],
+    3: [32, 48, 56, 64, 80, 96, 112, 128, 144, 160, 176, 192, 224, 256],
+  };
+  const sampleRates = version === 3 ? [44100, 48000, 32000] : version === 2 ? [22050, 24000, 16000] : [11025, 12000, 8000];
+  const bitrate = (version === 3 ? mpeg1Bitrates : mpeg2Bitrates)[layer][bitrateIndex - 1] * 1000;
+  const sampleRate = sampleRates[sampleRateIndex];
+  const padding = (bytes[offset + 2] >> 1) & 0x01;
+  if (layer === 3) return Math.floor((12 * bitrate / sampleRate + padding) * 4);
+  return Math.floor(((layer === 1 && version !== 3 ? 72 : 144) * bitrate / sampleRate) + padding);
 }
 
 function hasVideoOrHlsSignature(bytes, contentType, request) {

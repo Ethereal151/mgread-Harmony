@@ -11,7 +11,7 @@ test('live bounded search fallback and one public content chain remain reachable
     plugin: { id: 'org.mgread.xtyxsw-org', version: '1.0.1' },
     log: { debug() {}, info() {}, warn() {}, error() {} },
     resource: { proxy() { return 'http://127.0.0.1/live-resource'; } },
-    http: { fetch },
+    http: { fetch(input, init = {}) { assert.equal(init.proxyMode, 'direct'); const { proxyMode: _, ...requestInit } = init; return fetch(input, { ...requestInit, signal: AbortSignal.timeout(20_000) }); } },
   });
   const discovery = await plugin.discover({ target: 'category:fantasy', cursor: null, collectionId: null, pageSize: 5 });
   const seed = discovery.document.components[0].children[0].items[0]?.content;

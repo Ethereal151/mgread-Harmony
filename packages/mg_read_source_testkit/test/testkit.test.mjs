@@ -16,6 +16,7 @@ import {
   probeResourceGroups,
   runReadingSourceFlow,
 } from '../index.js';
+import { createRuntimeLikeFetch } from '../src/http.js';
 
 function fakePlugin(overrides = {}) {
   return {
@@ -108,6 +109,19 @@ test('creates an isolated host and records bounded resource metadata', async (t)
   );
   await harness.cleanup();
   await assert.rejects(access(harness.root));
+});
+
+test('runtime-like fetch routes direct requests outside the configured fetch', async () => {
+  const calls = [];
+  const runtimeFetch = createRuntimeLikeFetch(
+    async (_input, init) => { calls.push({ route: 'configured', init }); return new Response('configured'); },
+    { directFetch: async (_input, init) => { calls.push({ route: 'direct', init }); return new Response('direct'); } },
+  );
+  assert.equal(await (await runtimeFetch('https://fixture.invalid/configured')).text(), 'configured');
+  assert.equal(await (await runtimeFetch('https://fixture.invalid/direct', { proxyMode: 'direct' })).text(), 'direct');
+  assert.deepEqual(calls.map(({ route }) => route), ['configured', 'direct']);
+  assert.ok(calls.every(({ init }) => init.proxyMode === undefined));
+  assert.ok(calls.every(({ init }) => new Headers(init.headers).get('user-agent')?.startsWith('Mozilla/5.0')));
 });
 
 test('browser session retains host cookies between source requests', async (t) => {
@@ -203,6 +217,45 @@ test('resource probe verifies Node-side transformed image descriptors', async ()
       resourceTransform: 'aes-cbc-split-image-v1', headers: {},
     }],
     fetch: async (url) => parts.get(String(url)),
+  });
+  assert.equal(result.contentType, 'image/jpeg');
+  assert.ok(result.bytesRead > 0);
+});
+
+test('resource probe decodes AES-256-CBC images with a prefixed IV', async () => {
+  const key = Buffer.from('0123456789abcdef0123456789abcdef');
+  const iv = Buffer.from('abcdefghijklmnop');
+  const plain = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]);
+  const cipher = createCipheriv('aes-256-cbc', key, iv);
+  const encrypted = Buffer.concat([iv, cipher.update(plain), cipher.final()]);
+  const result = await probeReachableResource({
+    requests: [{
+      kind: 'image',
+      url: 'https://fixture.invalid/encrypted.jpg',
+      resourceTransform: 'aes-cbc-prefixed-iv-image-v1',
+      resourceTransformKey: key.toString('ascii'),
+      headers: {},
+    }],
+    fetch: async () => new Response(encrypted, { headers: { 'content-type': 'image/jpeg' } }),
+  });
+  assert.equal(result.contentType, 'image/jpeg');
+  assert.ok(result.bytesRead > 0);
+});
+
+test('resource probe joins encrypt-then-split AES-CBC images before decrypting', async () => {
+  const key = Buffer.from('aaaaaaaaaaaaaaaa');
+  const iv = Buffer.from('0123456789aaaaaa');
+  const plain = Buffer.from([0, 0, 0, 1, 0, 0, 0, 1, 74, 70, 73, 70, 1, 2, 3]);
+  const cipher = createCipheriv('aes-128-cbc', key, iv);
+  const encrypted = Buffer.concat([cipher.update(plain), cipher.final()]);
+  const urls = ['https://fixture.invalid/manifest-0', 'https://fixture.invalid/manifest-1'];
+  const parts = new Map([[urls[0], encrypted.subarray(0, 13)], [urls[1], encrypted.subarray(13)]]);
+  const result = await probeReachableResource({
+    requests: [{
+      kind: 'image', url: urls[0], urls,
+      resourceTransform: 'aes-cbc-encrypt-then-split-image-v1', headers: {},
+    }],
+    fetch: async (url) => new Response(parts.get(String(url))),
   });
   assert.equal(result.contentType, 'image/jpeg');
   assert.ok(result.bytesRead > 0);
@@ -322,6 +375,20 @@ test('rejects mismatched image signatures and accepts an HLS playlist prefix', a
     }),
   });
   assert.equal(videoGroups.video.status, 'passed');
+});
+
+test('accepts a live MP3 chunk that starts inside a frame', async () => {
+  const body = new Uint8Array(7 + 192 * 2);
+  body.set([0xff, 0xfb, 0x54, 0x00], 7);
+  body.set([0xff, 0xfb, 0x54, 0x00], 7 + 192);
+  const groups = await probeResourceGroups({
+    requests: [{ kind: 'audio', url: 'https://fixture.invalid/live.mp3', projectedUrl: 'proxy:audio' }],
+    detail: { contentKind: 'audio' },
+    contents: [{ contentKind: 'audio', media: { url: 'proxy:audio' } }],
+    contentKind: 'audio',
+    fetch: async () => new Response(body, { headers: { 'content-type': 'audio/mpeg' } }),
+  });
+  assert.equal(groups.audio.status, 'passed');
 });
 
 test('runs the standard reading chain and reports complete results', async () => {

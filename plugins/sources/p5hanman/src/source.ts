@@ -76,7 +76,7 @@ export class P5HanmanSource {
     const normalized = clean(query);
     if (normalized === null) return Object.freeze([]);
     const url = new URL('/search', siteOrigin);
-    url.searchParams.set('q', normalized);
+    url.searchParams.set('keyword', normalized);
     const html = await this.#cache.getOrFetchText(
       url,
       listingPolicy,

@@ -15,7 +15,7 @@ export class ManhuaSource {
     async search(query) {
         const url = new URL('/index.php/search', origin);
         url.searchParams.set('key', query);
-        return this.parseList(await this.#html(url), url);
+        return prioritizeSearchResults(this.parseList(await this.#html(url), url), query);
     }
     async discover() {
         const url = new URL('/', origin);
@@ -202,5 +202,10 @@ function isComic(url) { return isSite(url) && /^\/index\.php\/comic\/[^/?#]+\/?$
 function isChapter(url) { return isSite(url) && /^\/index\.php\/chapter\/\d+\/?$/u.test(url.pathname); }
 function isImage(url) { return url.protocol === 'https:' && imageOrigins.has(url.origin) && /\.(?:jpe?g|png|webp|gif)(?:$|\?)/iu.test(url.pathname + url.search); }
 function imageMime(url) { const ext = /\.([a-z]+)(?:$|\?)/iu.exec(url.pathname + url.search)?.[1]?.toLowerCase(); return ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : ext === 'gif' ? 'image/gif' : null; }
+function prioritizeSearchResults(items, query) {
+    const expected = normalizeSearchText(query);
+    return Object.freeze([...items].sort((left, right) => Number(normalizeSearchText(right.title) === expected) - Number(normalizeSearchText(left.title) === expected)));
+}
+function normalizeSearchText(value) { return value.normalize('NFKC').replace(/\s+/gu, '').toLocaleLowerCase('zh-CN'); }
 function clean(value) { const result = value?.replace(/\s+/gu, ' ').trim() ?? ''; return result === '' ? null : result; }
 function hasAccessMarker(root) { return root.is('[class*="vip" i], [class*="pay" i], [class*="lock" i]') || root.find('[class*="vip" i], [class*="pay" i], [class*="lock" i]').length > 0; }
