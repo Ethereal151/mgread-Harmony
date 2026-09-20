@@ -26,6 +26,8 @@ test('audio fixture covers search, catalog, locked items and proxy playback meta
   const detail = await plugin.getDetail({ id: search.items[0].id });
   const chapters = await plugin.getChapters({ id: detail.id });
   assert.equal(chapters.items.length, 2); assert.equal(chapters.items[1].isLocked, true);
+  assert.equal(chapters.groups.length, 1);
+  assert.deepEqual(chapters.groups[0].episodes.map((episode) => episode.id), chapters.items.map((episode) => episode.id));
   const content = await plugin.getContent({ id: detail.id, chapterId: chapters.items[0].id });
   assert.equal(content.media.resourceType, 'audio'); assert.equal(content.media.resourcePolicy, 'refreshable');
   assert.equal(content.media.url.startsWith('http://127.0.0.1:'), true);

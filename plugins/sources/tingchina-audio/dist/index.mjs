@@ -81,7 +81,10 @@ export async function getChapters(request) {
         chapterLocks.clear();
     for (const item of items)
         chapterLocks.set(item.id, item.isLocked === true);
-    return frozen({ items, groups: [] });
+    const groups = items.length === 0
+        ? []
+        : [frozen({ id: `group:${id}:default`, title: '节目', order: 0, episodes: items })];
+    return frozen({ items, groups });
 }
 export async function getContent(request) {
     const ctx = requireContext();

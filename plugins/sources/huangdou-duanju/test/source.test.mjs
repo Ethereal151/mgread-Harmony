@@ -55,6 +55,8 @@ test('encrypted fixture covers discovery, search, detail, episodes and HLS proxy
   assert.equal(detail.catalogUrl, null);
   const catalog = await plugin.getChapters({ id: detail.id });
   assert.equal(catalog.items.length, 2);
+  assert.equal(catalog.groups.length, 1);
+  assert.deepEqual(catalog.groups[0].episodes.map((episode) => episode.id), catalog.items.map((episode) => episode.id));
   assert.equal(catalog.items[0].isLocked, false);
   assert.equal(catalog.items[1].isLocked, true);
   assert.equal(catalog.items[1].attributes[0].value, '金币 3');

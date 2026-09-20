@@ -79,7 +79,10 @@ export async function getChapters(request: { id: string }) {
   const items = pages.flatMap((value) => value.list).slice(0, 5000).map((value, order) => chapter(id, value, order));
   if (chapterLocks.size + items.length > 10_000) chapterLocks.clear();
   for (const item of items) chapterLocks.set(item.id, item.isLocked === true);
-  return frozen({ items, groups: [] });
+  const groups = items.length === 0
+    ? []
+    : [frozen({ id: `group:${id}:default`, title: '节目', order: 0, episodes: items })];
+  return frozen({ items, groups });
 }
 
 export async function getContent(request: { id: string; chapterId: string }) {
