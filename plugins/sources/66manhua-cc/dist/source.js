@@ -1,20 +1,21 @@
 /**
- * 66manhua.cc public HTML parser. It reads only site pages, preserves the
+ * 66manhua.ua public HTML parser. It reads only site pages, preserves the
  * homepage's real discovery sections, returns opaque IDs, and proxies verified
  * image hosts.
  */
 import { Buffer } from 'node:buffer';
 import * as cheerio from 'cheerio/slim';
-const origin = 'https://66manhua.cc';
-const imageOrigins = new Set([origin, 'https://mh.aikanhanman.top']);
+const origin = 'https://66manhua.ua';
+const legacyOrigin = 'https://66manhua.cc';
+const siteOrigins = new Set([origin, legacyOrigin]);
+const imageOrigins = new Set([...siteOrigins, 'https://mh.aikanhanman.top']);
 export class ManhuaSource {
     context;
     constructor(context) {
         this.context = context;
     }
     async search(query) {
-        const url = new URL('/index.php/search', origin);
-        url.searchParams.set('key', query);
+        const url = new URL(`/index.php/search/${encodeURIComponent(query)}`, origin);
         return prioritizeSearchResults(this.parseList(await this.#html(url), url), query);
     }
     async discover() {
@@ -109,7 +110,24 @@ export class ManhuaSource {
     async #html(url) {
         if (!isSite(url))
             throw new Error('Source URL is invalid.');
-        const response = await this.context.http.fetch(url, { headers: { accept: 'text/html,application/xhtml+xml', referer: `${origin}/` } });
+        let response;
+        try {
+            response = await this.context.http.fetch(url, { headers: { accept: 'text/html,application/xhtml+xml', referer: `${origin}/` } });
+        }
+        catch (error) {
+            if (url.origin !== origin)
+                throw error;
+            const legacyUrl = new URL(`${url.pathname}${url.search}`, legacyOrigin);
+            try {
+                const legacyResponse = await this.context.http.fetch(legacyUrl, { headers: { accept: 'text/html,application/xhtml+xml', referer: `${legacyOrigin}/` } });
+                if (!legacyResponse.ok)
+                    throw error;
+                return legacyResponse.text();
+            }
+            catch {
+                throw error;
+            }
+        }
         if (!response.ok)
             throw new Error('Public page is unavailable.');
         return response.text();
@@ -197,7 +215,7 @@ function decode(id, prefix) { const match = new RegExp(`^${prefix}:([A-Za-z0-9_-
     throw new Error('Opaque ID is invalid.'); return url; }
 function decodeComic(id) { return decode(id, 'comic'); }
 function decodeChapter(id) { return decode(id, 'chapter'); }
-function isSite(url) { return url.origin === origin && url.protocol === 'https:'; }
+function isSite(url) { return siteOrigins.has(url.origin) && url.protocol === 'https:'; }
 function isComic(url) { return isSite(url) && /^\/index\.php\/comic\/[^/?#]+\/?$/u.test(url.pathname); }
 function isChapter(url) { return isSite(url) && /^\/index\.php\/chapter\/\d+\/?$/u.test(url.pathname); }
 function isImage(url) { return url.protocol === 'https:' && imageOrigins.has(url.origin) && /\.(?:jpe?g|png|webp|gif)(?:$|\?)/iu.test(url.pathname + url.search); }

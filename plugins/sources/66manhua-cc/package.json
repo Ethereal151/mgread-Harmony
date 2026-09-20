@@ -1,8 +1,8 @@
 {
   "name": "@mgread-plugin/66manhua-cc",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "private": true,
-  "description": "MgRead public HTML source for 66manhua.cc.",
+  "description": "MgRead public HTML source for 66manhua.ua (legacy 66manhua.cc alias).",
   "type": "module",
   "main": "dist/index.mjs",
   "packageManager": "npm@11.13.0",
