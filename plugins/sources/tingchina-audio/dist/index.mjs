@@ -4,9 +4,11 @@
  * 职责：调用听中国 JSON API，解析专辑、目录和播放地址，并把音频交给 Runtime 代理。
  * 生命周期：activate 保存当前 Runtime 上下文；播放地址只在当前插件进程内按书籍/章节缓存。
  * IO：来源请求和快速音频探测都走 ctx.http；媒体地址只经 ctx.resource.proxy 输出，不缓存媒体主体。
+ * 缓存：章节投影进入 Runtime 注入的持久化插件缓存，一天内直接命中；过期章节先返回旧目录并后台刷新。
  * 缓存：签名地址按上游失效时间（无法解析时使用短 TTL）管理；未过期的地址每次播放前用 HEAD 快速探测。
  */
 import { createHash } from 'node:crypto';
+import { PluginCache } from '@mgread/plugin-cache';
 const base = 'https://app.365ting.com';
 const api = `${base}/listen/Apitzg2025/`;
 const appHeaders = { Accept: 'application/json,text/html,*/*', 'User-Agent': 'TingShiJie/1.8.8 (m.i275.com)' };
@@ -18,12 +20,17 @@ const playbackExpirySafetyMs = 5 * 1000;
 const playbackProbeTimeoutMs = 1500;
 const playbackCacheMaxEntries = 256;
 const chapterPageConcurrency = 6;
+const chapterCacheTtlMs = 24 * 60 * 60 * 1000;
+const chapterCachePolicy = Object.freeze({ namespace: 'audio-chapters-v1', staleAfterMs: chapterCacheTtlMs, serveStaleWhileRevalidate: true, allowStaleOnError: true });
 let context;
 const chapterLocks = new Map();
 const playbackCache = new Map();
 const playbackLocks = new Map();
+let chapterCache;
 export async function activate(next) {
     context = next;
+    chapterCache = new PluginCache(next.cacheDir, { logger: next.log });
+    chapterLocks.clear();
     playbackCache.clear();
     playbackLocks.clear();
     next.log.info('source_activated');
@@ -71,19 +78,34 @@ export async function getDetail(request) {
 }
 export async function getChapters(request) {
     const id = contentId(request.id);
+    const result = await requireChapterCache().getOrFetchJson(id, chapterCachePolicy, async () => ({ value: await loadChapters(id), storedAtMs: Date.now() }), decodeChapters);
+    rememberChapterLocks(result.items);
+    return result;
+}
+async function loadChapters(id) {
     const first = await chapterPage(id, 1);
     const total = positive(first.count, first.list.length);
     const pageCount = Math.min(25, Math.ceil(total / 200));
     const pages = [first, ...(await chapterPages(id, pageCount))];
     const items = pages.flatMap((value) => value.list).slice(0, 5000).map((value, order) => chapter(id, value, order));
-    if (chapterLocks.size + items.length > 10_000)
-        chapterLocks.clear();
-    for (const item of items)
-        chapterLocks.set(item.id, item.isLocked === true);
+    rememberChapterLocks(items);
     const groups = items.length === 0
         ? []
         : [frozen({ id: `group:${id}:default`, title: '节目', order: 0, episodes: items })];
     return frozen({ items, groups });
+}
+function rememberChapterLocks(items) {
+    if (chapterLocks.size + items.length > 10_000)
+        chapterLocks.clear();
+    for (const item of items)
+        chapterLocks.set(item.id, item.isLocked === true);
+}
+function decodeChapters(value) {
+    if (!isObject(value) || !Array.isArray(value.items) || !Array.isArray(value.groups))
+        return undefined;
+    if (!value.items.every(isObject) || !value.groups.every(isObject))
+        return undefined;
+    return value;
 }
 async function chapterPages(id, pageCount) {
     const pages = [];
@@ -269,3 +291,5 @@ function frozen(value) { return Object.freeze(value); }
 function escape(value) { return value.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&'); }
 function requireContext() { if (context === undefined)
     throw new Error('Source is not activated.'); return context; }
+function requireChapterCache() { if (chapterCache === undefined)
+    throw new Error('Source is not activated.'); return chapterCache; }
