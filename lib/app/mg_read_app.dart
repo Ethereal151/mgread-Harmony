@@ -225,7 +225,6 @@ class _MgReadAppState extends ConsumerState<MgReadApp> with WidgetsBindingObserv
                   child: AppFatalErrorDialogHost(
                     reporter: ref.watch(fatalErrorReporterProvider),
                     child: AppBottomNavigationMotionScope(
-                      animateTexture: Platform.operatingSystem != 'ohos',
                       child: AppBackNavigationScope(
                         onBackRequested: popApplicationRoute,
                         child: AppThemeModeScope(
