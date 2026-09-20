@@ -25,6 +25,7 @@ final class AudioTrack {
     required this.resource,
     this.collectionTitle,
     this.creator,
+    this.sourceUrl,
     this.artwork,
     List<int>? artworkBytes,
     this.resourcePolicy = AudioResourcePolicy.sessionOnly,
@@ -44,6 +45,12 @@ final class AudioTrack {
   final String title;
   final String? collectionTitle;
   final String? creator;
+
+  /// Original source page for this chapter, when the host has one.
+  ///
+  /// This is separate from [resource], which may be a short-lived Runtime
+  /// proxy URL used only for playback.
+  final Uri? sourceUrl;
   final Uri resource;
   final Uri? artwork;
 

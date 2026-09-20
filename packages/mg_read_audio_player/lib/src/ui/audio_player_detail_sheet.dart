@@ -266,7 +266,10 @@ class _AudioDetailsSheet extends StatelessWidget {
                                 color: AudioPlayerColors.divider,
                               ),
                               const SizedBox(height: 13),
-                              _ResourceUrlRow(resource: track.resource),
+                              _ResourceUrlRow(
+                                resource: track.sourceUrl ?? track.resource,
+                                isSourceUrl: track.sourceUrl != null,
+                              ),
                               if (resourceUrlDecoder != null) ...<Widget>[
                                 const SizedBox(height: 13),
                                 const Divider(
@@ -451,9 +454,10 @@ class _DetailStat extends StatelessWidget {
 }
 
 class _ResourceUrlRow extends StatelessWidget {
-  const _ResourceUrlRow({required this.resource});
+  const _ResourceUrlRow({required this.resource, required this.isSourceUrl});
 
   final Uri resource;
+  final bool isSourceUrl;
 
   @override
   Widget build(BuildContext context) {
@@ -476,7 +480,7 @@ class _ResourceUrlRow extends StatelessWidget {
                 children: <Widget>[
                   Expanded(
                     child: Text(
-                      '章节地址',
+                      isSourceUrl ? '来源地址' : '章节播放地址',
                       style: theme.textTheme.labelMedium?.copyWith(
                         color: AudioPlayerColors.muted,
                         fontWeight: FontWeight.w600,
@@ -485,14 +489,18 @@ class _ResourceUrlRow extends StatelessWidget {
                   ),
                   IconButton(
                     key: const Key('audio-details-resource-copy'),
-                    tooltip: '复制章节地址',
+                    tooltip: isSourceUrl ? '复制来源地址' : '复制章节播放地址',
                     visualDensity: VisualDensity.compact,
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints.tightFor(
                       width: 32,
                       height: 32,
                     ),
-                    onPressed: () => _copyValue(context, value, '章节地址已复制'),
+                    onPressed: () => _copyValue(
+                      context,
+                      value,
+                      isSourceUrl ? '来源地址已复制' : '章节播放地址已复制',
+                    ),
                     icon: const Icon(Icons.copy_rounded, size: 18),
                   ),
                 ],

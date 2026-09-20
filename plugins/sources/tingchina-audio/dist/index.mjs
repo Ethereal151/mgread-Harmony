@@ -238,7 +238,7 @@ function summary(value, idOverride) {
 }
 function detail(item) { return frozen({ ...item, aliases: [], catalogUrl: item.url }); }
 function chapter(bookId, value, order) { const id = text(value.chapterId) || text(value.id) || text(value.url); if (id === '')
-    throw new Error('Source chapter has no ID.'); const price = number(value.price) || number(value.chapterPrice); return frozen({ id: `audio:${bookId}:${id}`, title: text(value.title) || `第${order + 1}集`, order, url: null, volumeTitle: null, wordCount: null, updatedAt: null, isLocked: price > 0, attributes: price > 0 ? [{ key: 'price', label: '听币', value: String(price) }] : [] }); }
+    throw new Error('Source chapter has no ID.'); const price = number(value.price) || number(value.chapterPrice); return frozen({ id: `audio:${bookId}:${id}`, title: text(value.title) || `第${order + 1}集`, order, url: `${base}/book/${encodeURIComponent(bookId)}/${encodeURIComponent(id)}`, volumeTitle: null, wordCount: null, updatedAt: null, isLocked: price > 0, attributes: price > 0 ? [{ key: 'price', label: '听币', value: String(price) }] : [] }); }
 function popular(data) { const root = object(data.data); return records(object(root.best).list).length > 0 ? records(object(root.best).list) : records(root.list); }
 function contentId(id) { const match = /^audio:([^:]+)$/u.exec(id); if (match?.[1] === undefined)
     throw new Error('Content ID is invalid.'); return match[1]; }

@@ -21,6 +21,7 @@ void main() {
     final playlist = await source.loadPlaylist('audio:book-1');
 
     expect(playlist.tracks.map((track) => track.id), <String>['chapter:free-2']);
+    expect(playlist.tracks.single.sourceUrl, Uri.parse('https://example.test/books/book-1/chapters/chapter:free-2'));
     expect(playlist.tracks.single.artworkBytes, orderedEquals(<int>[1, 2, 3]));
     expect(playlist.queueEntries.map((entry) => entry.id), <String>[
       'chapter:free-1',
@@ -229,7 +230,7 @@ PluginContentDetail _detail() => PluginContentDetail(
     title: '测试音频',
     contentKind: PluginContentKind.audio,
     author: '测试主播',
-    url: null,
+    url: Uri.parse('https://example.test/books/book-1'),
     coverUrl: null,
     coverBytes: const <int>[1, 2, 3],
     description: null,
@@ -264,7 +265,7 @@ PluginChapterSummary _chapter(String id, int order, {bool isLocked = false}) => 
   id: id,
   title: '第${order + 1}集',
   order: order,
-  url: null,
+  url: Uri.parse('https://example.test/books/book-1/chapters/$id'),
   volumeTitle: null,
   wordCount: null,
   updatedAt: null,

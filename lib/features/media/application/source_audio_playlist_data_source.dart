@@ -268,6 +268,7 @@ final class SourceAudioPlaylistDataSource implements AudioPlaylistQueueDataSourc
       title: chapter.title,
       collectionTitle: detail.summary.title,
       creator: detail.summary.author,
+      sourceUrl: chapter.url ?? detail.catalogUrl ?? detail.summary.url,
       resource: media.url,
       artwork: detail.summary.coverUrl,
       artworkBytes: detail.summary.coverBytes,

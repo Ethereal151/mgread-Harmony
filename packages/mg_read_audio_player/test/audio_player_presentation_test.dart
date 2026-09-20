@@ -313,7 +313,7 @@ void main() {
     );
     expect(
       tester.widget<Text>(find.byKey(const Key('audio-details-resource'))).data,
-      'https://example.test/audio/1.mp3',
+      'https://example.test/books/book-1/chapters/chapter-1',
     );
     expect(
       tester
@@ -325,6 +325,7 @@ void main() {
       find.byKey(const Key('audio-details-resource-copy')),
       findsOneWidget,
     );
+    expect(find.text('来源地址'), findsOneWidget);
     expect(find.byKey(const Key('audio-details-progress')), findsNothing);
     expect(find.text('播放信息'), findsNothing);
     expect(find.text('播放速度'), findsNothing);
@@ -717,6 +718,9 @@ AudioPlaylist _presentationPlaylist() => AudioPlaylist(
       title: '第一章 从这里开始',
       collectionTitle: '风声书场',
       creator: '讲述者',
+      sourceUrl: Uri.parse(
+        'https://example.test/books/book-1/chapters/chapter-1',
+      ),
       resource: Uri.parse('https://example.test/audio/1.mp3'),
     ),
     AudioTrack(

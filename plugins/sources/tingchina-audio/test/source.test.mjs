@@ -26,6 +26,7 @@ test('audio fixture covers search, catalog, locked items and proxy playback meta
   const detail = await plugin.getDetail({ id: search.items[0].id });
   const chapters = await plugin.getChapters({ id: detail.id });
   assert.equal(chapters.items.length, 2); assert.equal(chapters.items[1].isLocked, true);
+  assert.equal(chapters.items[0].url, 'https://app.365ting.com/book/book-a/c-1');
   assert.equal(chapters.groups.length, 1);
   assert.deepEqual(chapters.groups[0].episodes.map((episode) => episode.id), chapters.items.map((episode) => episode.id));
   const content = await plugin.getContent({ id: detail.id, chapterId: chapters.items[0].id });
