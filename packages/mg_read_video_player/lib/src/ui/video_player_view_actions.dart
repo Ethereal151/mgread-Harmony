@@ -356,7 +356,8 @@ extension _VideoPlayerViewActions on _VideoPlayerViewState {
   }
 
   bool get _lifecycleAllowsPlayback =>
-      _lifecycleState == null || _lifecycleState == AppLifecycleState.resumed;
+      _lifecycleState == null ||
+      allowsVideoPlaybackForLifecycle(_lifecycleState!);
 
   Future<void> _actionResumeForForeground() async {
     if (!_playbackDesired || !_lifecycleAllowsPlayback) return;

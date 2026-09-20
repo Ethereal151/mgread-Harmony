@@ -10,6 +10,7 @@ library;
 
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mg_read_video_player/mg_read_video_player.dart';
@@ -107,6 +108,77 @@ void main() {
       containsAllInOrder(<String>['open:end', 'pause', 'play']),
     );
     expect(backend.state.value.playing, isTrue);
+  });
+
+  testWidgets('keeps video playing in the Windows and macOS background', (
+    WidgetTester tester,
+  ) async {
+    final previousPlatform = debugDefaultTargetPlatformOverride;
+    try {
+      for (final platform in <TargetPlatform>[
+        TargetPlatform.windows,
+        TargetPlatform.macOS,
+      ]) {
+        debugDefaultTargetPlatformOverride = platform;
+        final backend = _OrderedBackend();
+        await tester.pumpWidget(_app(backend: backend));
+        await tester.pumpAndSettle();
+        final pauseCount = backend.events
+            .where((event) => event == 'pause')
+            .length;
+
+        for (final state in <AppLifecycleState>[
+          AppLifecycleState.inactive,
+          AppLifecycleState.hidden,
+          AppLifecycleState.paused,
+        ]) {
+          tester.binding.handleAppLifecycleStateChanged(state);
+          await tester.pump();
+        }
+        tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+        await tester.pump();
+        tester.binding.handleAppLifecycleStateChanged(
+          AppLifecycleState.inactive,
+        );
+        await tester.pump();
+
+        expect(
+          backend.events.where((event) => event == 'pause').length,
+          pauseCount,
+        );
+        expect(backend.state.value.playing, isTrue);
+
+        tester.binding.handleAppLifecycleStateChanged(
+          AppLifecycleState.resumed,
+        );
+        await tester.pump();
+      }
+    } finally {
+      debugDefaultTargetPlatformOverride = previousPlatform;
+    }
+  });
+
+  testWidgets('retains mobile background pause behavior', (
+    WidgetTester tester,
+  ) async {
+    final previousPlatform = debugDefaultTargetPlatformOverride;
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    try {
+      final backend = _OrderedBackend();
+      await tester.pumpWidget(_app(backend: backend));
+      await tester.pumpAndSettle();
+
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+      await tester.pump();
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      await tester.pump();
+      await tester.pump();
+
+      expect(backend.events, contains('pause'));
+      expect(backend.state.value.playing, isFalse);
+    } finally {
+      debugDefaultTargetPlatformOverride = previousPlatform;
+    }
   });
 
   testWidgets('foreground does not resume a user-paused video', (
