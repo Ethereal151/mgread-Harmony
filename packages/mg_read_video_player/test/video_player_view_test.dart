@@ -16,6 +16,27 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mg_read_video_player/mg_read_video_player.dart';
 
 void main() {
+  testWidgets('rejects enhancement requests on a non-shader backend', (
+    WidgetTester tester,
+  ) async {
+    final controller = VideoPlayerController();
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      _playerApp(
+        contentId: 'show',
+        backend: _FakeVideoBackend(),
+        controller: controller,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await expectLater(
+      controller.setEnhancementMode(VideoEnhancementMode.anime4kFast),
+      throwsUnsupportedError,
+    );
+    await controller.setEnhancementMode(VideoEnhancementMode.off);
+  });
+
   testWidgets('owns transparent system bars while the video session loads', (
     WidgetTester tester,
   ) async {

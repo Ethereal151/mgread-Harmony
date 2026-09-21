@@ -3,6 +3,7 @@ library;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mg_read/features/media/application/source_video_playback_platform_controller.dart';
+import 'package:mg_read/platform/platform_capabilities.dart';
 
 void main() {
   test('playing holds the screen awake and pause releases it', () async {
@@ -59,6 +60,13 @@ void main() {
     await controller.setSystemVolume(72);
 
     expect(platform.systemVolumes, <double>[72]);
+  });
+
+  test('OHOS system volume is an explicit unsupported operation', () async {
+    final platform = SystemSourceVideoPlaybackPlatform(capabilities: PlatformCapabilities.forOperatingSystem('ohos'));
+
+    await expectLater(platform.readSystemVolume(), throwsUnsupportedError);
+    await expectLater(platform.setSystemVolume(72), throwsUnsupportedError);
   });
 }
 

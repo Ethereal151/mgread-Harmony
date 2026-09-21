@@ -31,12 +31,14 @@ abstract interface class SourceVideoPlaybackPlatform {
 }
 
 final class SystemSourceVideoPlaybackPlatform implements SourceVideoPlaybackPlatform {
-  const SystemSourceVideoPlaybackPlatform();
+  SystemSourceVideoPlaybackPlatform({PlatformCapabilities? capabilities}) : _capabilities = capabilities ?? platformCapabilities;
+
+  final PlatformCapabilities _capabilities;
 
   @override
   Future<void> setScreenAwake(bool active) {
-    if (!platformCapabilities.supportsKeepScreenOn) return Future<void>.value();
-    if (platformCapabilities.isOhos) {
+    if (!_capabilities.supportsKeepScreenOn) return Future<void>.value();
+    if (_capabilities.isOhos) {
       return ReaderPlatform.instance.setReaderSystemUi(keepScreenOn: active, immersiveMode: false);
     }
     return WakelockPlus.toggle(enable: active);
@@ -44,7 +46,7 @@ final class SystemSourceVideoPlaybackPlatform implements SourceVideoPlaybackPlat
 
   @override
   Future<double> readApplicationBrightness() {
-    if (!platformCapabilities.supportsApplicationBrightness) {
+    if (!_capabilities.supportsApplicationBrightness) {
       return Future<double>.value(1);
     }
     return ScreenBrightness.instance.application;
@@ -52,7 +54,7 @@ final class SystemSourceVideoPlaybackPlatform implements SourceVideoPlaybackPlat
 
   @override
   Future<void> setApplicationBrightness(double brightness) {
-    if (!platformCapabilities.supportsApplicationBrightness) {
+    if (!_capabilities.supportsApplicationBrightness) {
       return Future<void>.value();
     }
     return ScreenBrightness.instance.setApplicationScreenBrightness(brightness.clamp(0.05, 1).toDouble());
@@ -60,7 +62,7 @@ final class SystemSourceVideoPlaybackPlatform implements SourceVideoPlaybackPlat
 
   @override
   Future<void> resetApplicationBrightness() {
-    if (!platformCapabilities.supportsApplicationBrightness) {
+    if (!_capabilities.supportsApplicationBrightness) {
       return Future<void>.value();
     }
     return ScreenBrightness.instance.resetApplicationScreenBrightness();
@@ -68,7 +70,7 @@ final class SystemSourceVideoPlaybackPlatform implements SourceVideoPlaybackPlat
 
   @override
   Future<double> readSystemVolume() async {
-    if (!platformCapabilities.isAndroid && !platformCapabilities.isWindows) {
+    if (!_capabilities.isAndroid && !_capabilities.isWindows) {
       throw UnsupportedError('System volume is not available on this platform.');
     }
     final value = await _systemVolumeChannel.invokeMethod<num>('getSystemVolume');
@@ -77,8 +79,8 @@ final class SystemSourceVideoPlaybackPlatform implements SourceVideoPlaybackPlat
 
   @override
   Future<void> setSystemVolume(double volume) {
-    if (!platformCapabilities.isAndroid && !platformCapabilities.isWindows) {
-      return Future<void>.value();
+    if (!_capabilities.isAndroid && !_capabilities.isWindows) {
+      return Future<void>.error(UnsupportedError('System volume is not available on this platform.'));
     }
     return _systemVolumeChannel.invokeMethod<void>('setSystemVolume', <String, Object>{'volume': volume.clamp(0, 100).toDouble()});
   }
@@ -87,7 +89,7 @@ final class SystemSourceVideoPlaybackPlatform implements SourceVideoPlaybackPlat
 }
 
 final class SourceVideoPlaybackPlatformController {
-  SourceVideoPlaybackPlatformController() : _platform = const SystemSourceVideoPlaybackPlatform();
+  SourceVideoPlaybackPlatformController() : _platform = SystemSourceVideoPlaybackPlatform();
 
   @visibleForTesting
   SourceVideoPlaybackPlatformController.withPlatform(this._platform);

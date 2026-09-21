@@ -555,7 +555,12 @@ final class _VideoPlayerViewState extends State<VideoPlayerView>
   @override
   Future<void> setEnhancementMode(VideoEnhancementMode mode) async {
     final backend = _backend;
-    if (backend is! MediaKitVideoPlaybackBackend) return;
+    if (backend is! MediaKitVideoPlaybackBackend) {
+      if (mode == VideoEnhancementMode.off) return;
+      throw UnsupportedError(
+        'Video enhancement is not available on this playback backend.',
+      );
+    }
     await backend.setEnhancementMode(mode);
   }
 

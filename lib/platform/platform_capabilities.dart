@@ -125,7 +125,6 @@ final class PlatformCapabilities {
       OhosPlatformCapability.sourceSystemProxy => true,
       // AVPlayer has no supported per-session HTTP proxy contract on OHOS.
       OhosPlatformCapability.playerHttpProxy => false,
-      // AVPlayer reports buffering percentage only; it does not expose a
       // AVPlayer exposes BufferingInfoType.CACHED_DURATION in milliseconds.
       OhosPlatformCapability.videoBufferedPosition => true,
       OhosPlatformCapability.videoEnhancement => false,
