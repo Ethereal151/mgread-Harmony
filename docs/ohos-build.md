@@ -88,6 +88,7 @@ hdc install build/ohos/hap/entry-default-signed.hap
 - 本地能力/代理/Profile/Runtime 宿主单测：通过；签名 arm64 HAP：通过；`hdc install -r`：通过。增量安装后真机回归因 HDC 设备 `192.168.3.48:45975` 暂时离线，状态为 `not-run`，不将其冒充为真机通过。
 - 当前 `127.0.0.1:5555` OHOS x64 模拟器复验：`ohos_browser_session_smoke_test.dart`、`ohos_media_smoke_test.dart`、`ohos_video_smoke_test.dart`、`library_first_run_test.dart` 和 `ohos_x64_runtime_stub_test.dart` 全部通过；每组均重新构建、安装并启动签名 HAP。模拟器证据不替代缺失的本轮 arm64 真机增量回归。
 - 来源层固定 Node 快速检查报告：`artifacts/source-tests/quick-all-20260921-deps.json`，56 个来源中 28 个通过、6 个部分通过、22 个因外部站点/交互/资源或 testkit 能力边界失败；这不是 OHOS 真机验收。Windows Release 实际检查暂未执行，`flutter build windows --release --no-pub` 被当前系统未启用符号链接支持阻止。
+- 独立 HAP 启动复验：当前 `build/ohos/hap/entry-default-signed.hap` SHA-256 为 `CCCE0C9F1C58E1727D5F70F03240B754E874ECBC9702638FC721041BB488866C`；`hdc install -r`、`aa force-stop`、`aa start` 均成功，`aa dump -a` 显示 `com.ohos.mgread` 的 `EntryAbility` 处于前台且 `READY`。
 
 当前计划验收总状态：`partial`。代码适配和明确不支持能力的直接证据已完成；最终 `pass` 仍需要 arm64 真机增量回归及真实来源、代理音视频、系统中断、跨设备同步等外部门禁。
 
