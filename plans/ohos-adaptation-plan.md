@@ -15,6 +15,18 @@
 - 当前模拟器复验：`127.0.0.1:5555` OHOS x64 模拟器上的 ArkWeb 浏览、AVPlayer 音频、视频纹理/窗口恢复、首次运行首页和 x64 Runtime 稳定降级共 5 组 integration test 均通过，并且每组均重新构建、安装并启动签名 HAP；x64 Runtime 仍按架构限制保持 `unsupported`。
 - 来源快速检查（固定 Node，不能替代真实 MgRead EXE 或 OHOS 真机）：56 个来源中 28 个 `passed`、6 个 `partial`、22 个因站点阻断/交互验证/资源不可达或 testkit 能力边界失败；报告为 `artifacts/source-tests/quick-all-20260921-deps.json`。Windows Release 主程序实际检查尚未执行，因为当前 Windows 未启用 Flutter 所需的符号链接支持。
 
+### 2026-09-21 验收矩阵快照
+
+| 表面 | 状态 | 当前证据 | 尚缺证据或边界 |
+| --- | --- | --- | --- |
+| Runtime | `partial` | x64 模拟器稳定 `runtime_architecture_unavailable`；既有 arm64 真机 Runtime/fixture 证据 | 本轮代码后的 arm64 增量回归未执行 |
+| ArkWeb | `partial` | x64 模拟器浏览 smoke；既有 arm64 ArkWeb/fixture 证据 | 本轮代码后的 arm64 增量回归未执行 |
+| 来源网络/代理 | `partial` | OHOS HTTP、系统/自定义来源代理单测；固定 Node 快速检查报告 | 真实 EXE、真实 OHOS arm64 外部来源及代理资源链路 |
+| 音频 | `partial` | x64 模拟器 AVPlayer 音频 smoke；既有 arm64 音频证据 | 本轮代码后的 arm64 代理/中断增量回归 |
+| 视频 | `partial` | x64 模拟器 Texture/首帧/窗口恢复；缓冲事件和播放器能力单测；既有 arm64 视频证据 | 本轮代码后的 arm64 代理/HLS/中断增量回归 |
+| Reader/主应用 | `partial` | 模拟器首次运行和页面测试；音量键不支持公开 API 测试；既有扫码 UI 证据 | 有效二维码载荷、完整阅读迁移和本轮 arm64 回归 |
+| OHOS SDK 明确不支持能力 | `pass` | Capability flags、UI 隐藏和公开 API 直接测试；官方 API 边界已记录 | 无；这些能力按 `unsupported` 管理，不冒充可用 |
+
 因此，“计划内可实现项”的代码实现已完成；上面列出的 OHOS SDK 能力边界属于有证据的 `unsupported`，不是遗留的静默空操作。但按本计划完成定义，当前总验收状态仍为 `partial`：真实 arm64 设备的本轮增量回归、真实外部来源、代理下音视频/HLS、系统中断和跨设备同步仍需对应真实环境才能标为 `pass`。
 
 目标是让 OpenHarmony（以下简称 OHOS）在需要的产品能力上达到 Android 基线，并明确哪些能力需要 Windows 级别的额外能力，哪些能力保持平台差异。
