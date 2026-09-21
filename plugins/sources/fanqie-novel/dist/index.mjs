@@ -1,7 +1,9 @@
 const NOVEL_HOST = 'https://novel.snssdk.com';
 const WEB_HOST = 'https://fanqienovel.com';
 const LOGIN_URL = `${WEB_HOST}/`;
-const BOOKSHELF_URL = `${WEB_HOST}/bookshelf?enter_from=menu`;
+const USER_INFO_URL = `${WEB_HOST}/api/user/info/v2`;
+const BOOKSHELF_URL = `${WEB_HOST}/reading/bookapi/bookshelf/info/v:version/?aid=1967&iid=0&version_code=57700&update_version_code=57700`;
+const BROWSER_SESSION_KEY = 'fanqie-webview';
 const BOOK_HOST = 'https://fq-book.netsite.cc';
 const CONTENT_HOSTS = ['https://gofq.52dns.cc', 'https://pyfq.52dns.cc', BOOK_HOST];
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36';
@@ -14,39 +16,6 @@ const WEB_HEADERS = {
     Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
     'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
 };
-const BOOKSHELF_PROBE = String.raw `(async()=>{
-  const collectBookIds=()=>{
-    const ids=new Set();
-    const nodes=document.querySelectorAll('a[href],[data-book-id],[data-bookid],[book-id]');
-    for(const node of nodes){
-      const href=node.getAttribute('href')||'';
-      for(const match of href.matchAll(/(?:^|\/)page\/(\d+)(?:[/?#]|$)/gu))ids.add(match[1]);
-      for(const name of ['data-book-id','data-bookid','book-id']){
-        const value=node.getAttribute(name)||'';
-        if(/^\d+$/u.test(value))ids.add(value);
-      }
-    }
-    return [...ids];
-  };
-  const readState=()=>{
-    const title=document.title||'';
-    const body=(document.body?.innerText||'').slice(0,12000);
-    const marker=title+' '+body;
-    const bookIds=collectBookIds();
-    const common=window.__INITIAL_STATE__?.common||{};
-    const hasLogout=!!document.querySelector('[data-testid*="logout" i],[class*="logout" i]')||/退出登录|退出账号/u.test(marker);
-    const hasAccount=!!document.querySelector('[data-testid*="avatar" i],[class*="avatar" i],[class*="user-info" i]')||/个人中心|我的账号|账号设置/u.test(marker)||!!common.id||!!common.name||!!common.avatar||common.hasRegistered===true;
-    const needsLogin=/登录后查看|请先登录|立即登录|扫码登录|手机号登录|账号登录|未登录/u.test(marker);
-    const status=hasLogout||hasAccount||(bookIds.length>0&&!needsLogin)?'loggedIn':needsLogin?'loggedOut':'unknown';
-    return {bookIds,status,url:location.href};
-  };
-  for(let attempt=0;attempt<40;attempt+=1){
-    const state=readState();
-    if(state.bookIds.length>0||state.status!=='unknown'||attempt===39)return state;
-    await new Promise(resolve=>setTimeout(resolve,250));
-  }
-  return readState();
-})()`;
 const CHANNELS = [
     ['1', '都市', 1], ['2', '都市生活', 1], ['7', '玄幻', 1], ['8', '科幻', 1],
     ['10', '悬疑', 1], ['11', '乡村', 1], ['12', '仙侠', 1], ['13', '历史', 1],
@@ -158,21 +127,21 @@ async function openLogin() {
     return statusDocument('番茄网页登录已打开', '请在打开的官方 WebView 中完成登录，然后使用“检查登录状态”或“读取书架”。');
 }
 async function checkLoginStatus() {
-    const snapshot = await withPage(readBookshelfSnapshot);
-    if (snapshot.status === 'loggedIn') {
-        return statusDocument('番茄已登录', `已检测到当前 WebView 登录态；书架发现到 ${snapshot.bookIds.length} 本书。`);
+    const snapshot = await readUserSnapshot();
+    if (snapshot === 'loggedIn') {
+        return statusDocument('番茄已登录', '已使用当前浏览器 Profile 的完整登录 Cookie 确认当前用户。');
     }
-    if (snapshot.status === 'loggedOut') {
+    if (snapshot === 'loggedOut') {
         return statusDocument('番茄未登录', '请先使用“登录番茄小说”在官方 WebView 中完成登录。');
     }
-    return statusDocument('登录状态无法确认', '页面没有返回明确的登录状态，请在官方 WebView 中完成登录后重试。');
+    return statusDocument('登录状态无法确认', '番茄用户接口没有返回明确的登录状态，请在官方 WebView 中完成登录后重试。');
 }
 async function openBookshelf(request) {
-    const snapshot = await withPage(readBookshelfSnapshot);
+    const snapshot = await readBookshelfSnapshot();
     if (snapshot.status === 'loggedOut')
         return statusDocument('番茄未登录', '请先使用“登录番茄小说”在官方 WebView 中完成登录。');
     if (snapshot.status !== 'loggedIn')
-        return statusDocument('登录状态无法确认', '请先在官方 WebView 中完成登录，然后重新读取书架。');
+        return statusDocument('登录状态无法确认', '番茄书架接口没有返回明确的登录状态，请先在官方 WebView 中完成登录，然后重试。');
     const offset = bookshelfOffset(request.cursor);
     const pageSize = clamp(request.pageSize);
     const ids = snapshot.bookIds.slice(offset, offset + pageSize);
@@ -205,19 +174,58 @@ async function openBookshelf(request) {
                 }] },
     });
 }
-async function readBookshelfSnapshot(page) {
-    await page.navigate(BOOKSHELF_URL, { timeoutMs: 45_000 });
-    await page.show({ timeoutMs: 15_000 });
-    const raw = await page.executeJavaScript(BOOKSHELF_PROBE, { timeoutMs: 20_000 });
-    return parseBookshelfSnapshot(raw);
+async function readUserSnapshot() {
+    const response = await requestBrowserJson(USER_INFO_URL);
+    return loginState(response.code);
 }
-function parseBookshelfSnapshot(value) {
-    const raw = isObject(value) ? value : {};
-    const status = text(raw.status);
-    const bookIds = Array.isArray(raw.bookIds)
-        ? [...new Set(raw.bookIds.filter((bookId) => typeof bookId === 'string' && /^\d+$/u.test(bookId)))]
-        : [];
-    return { status: status === 'loggedIn' || status === 'loggedOut' ? status : 'unknown', bookIds, url: text(raw.url) };
+async function readBookshelfSnapshot() {
+    const response = await requestBrowserJson(BOOKSHELF_URL);
+    if (response.code !== 0)
+        return { status: loginState(response.code), bookIds: [] };
+    const data = isObject(response.data) ? response.data : {};
+    const shelf = Array.isArray(data.book_shelf_info) ? data.book_shelf_info : [];
+    const bookIds = [...new Set(shelf.flatMap((entry) => {
+            if (!isObject(entry))
+                return [];
+            const bookId = text(entry.book_id);
+            return /^\d+$/u.test(bookId) ? [bookId] : [];
+        }))];
+    return { status: 'loggedIn', bookIds };
+}
+function loginState(code) {
+    if (code === 0)
+        return 'loggedIn';
+    if (code === -1 || code === 101119)
+        return 'loggedOut';
+    return 'unknown';
+}
+async function requestBrowserJson(url) {
+    const raw = await requireContext().browser.sessionV1.request({
+        version: 1,
+        sessionKey: BROWSER_SESSION_KEY,
+        url,
+        method: 'GET',
+        headers: { Accept: 'application/json, text/plain, */*' },
+        body: null,
+        interaction: 'silent',
+        presentation: 'hidden',
+        transport: 'http',
+        timeoutMs: 30_000,
+        maxResponseBytes: 2 * 1024 * 1024,
+    });
+    if (!isObject(raw) || typeof raw.status !== 'number' || raw.status < 200 || raw.status >= 400 || typeof raw.body !== 'string') {
+        return { code: null, data: null };
+    }
+    try {
+        const value = JSON.parse(raw.body);
+        if (!isObject(value))
+            return { code: null, data: null };
+        const code = typeof value.code === 'number' ? value.code : typeof value.code === 'string' ? Number(value.code) : null;
+        return { code: Number.isSafeInteger(code) ? code : null, data: isObject(value.data) ? value.data : null };
+    }
+    catch {
+        return { code: null, data: null };
+    }
 }
 function statusDocument(title, subtitle) {
     return frozen({
