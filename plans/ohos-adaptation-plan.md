@@ -25,7 +25,7 @@
 | 音频 | `partial` | x64 模拟器 AVPlayer 音频 smoke；既有 arm64 音频证据 | 本轮代码后的 arm64 代理/中断增量回归 |
 | 视频 | `partial` | x64 模拟器 Texture/首帧/窗口恢复；缓冲事件和播放器能力单测；既有 arm64 视频证据 | 本轮代码后的 arm64 代理/HLS/中断增量回归 |
 | Reader/主应用 | `partial` | 模拟器首次运行和页面测试；音量键不支持公开 API 测试；OHOS 外链桥接成功/拒绝/异常 fake-platform 测试；既有扫码 UI 证据 | 有效二维码载荷、完整阅读迁移和本轮 arm64 回归 |
-| 跨设备同步/HAP 传输 | `partial` | 协议、QR 载荷、恢复和容量单测；OHOS host/client integration 入口已具备 | 必须同时连接第二台真实 peer，完成三组双向同步及 HAP 传输确认 |
+| 跨设备同步/HAP 传输 | `partial` | 协议、QR 载荷、恢复和容量单测；OHOS x64 虚拟器与 MI 8 Android peer 的正向、反向双向同步 integration 均通过 | 仍需第二台 OHOS 真机完成第三组矩阵及 HAP 传输确认 |
 | OHOS SDK 明确不支持能力 | `pass` | Capability flags、UI 隐藏和公开 API 直接测试；官方 API 边界已记录 | 无；这些能力按 `unsupported` 管理，不冒充可用 |
 
 因此，“计划内可实现项”的代码实现已完成；上面列出的 OHOS SDK 能力边界属于有证据的 `unsupported`，不是遗留的静默空操作。但按本计划完成定义，当前总验收状态仍为 `partial`：真实 arm64 设备的本轮增量回归、真实外部来源、代理下音视频/HLS、系统中断和跨设备同步仍需对应真实环境才能标为 `pass`。
