@@ -112,7 +112,7 @@ hdc install build/ohos/hap/entry-default-signed.hap
 - `integration_test/ohos_stage2_runtime_arkweb_test.dart`：5 个本地 fixture 的安装、发现、搜索、详情、目录、正文、资源代理、Cookie/JS、`interaction_required` 恢复和卸载后列表确认通过；这不是 5 个真实外部数据源的替代证据；
 - `integration_test/ohos_real_source_smoke_test.dart`：在 `PLA-AL10` arm64 真机导入并验证 `35ge-info`、`deqi-novel`、`fanqie-novel`、`midu-novel`、`shukuge-365` 五个真实来源的发现、搜索、详情、目录和正文；OHOS 的 `--jitless` Node host 在 WebAssembly 不可用时走原生 HTTP/HTTPS parser，并通过 gzip 响应解压单测和真实来源链路验证；同一 fallback 的 HTTP 代理、SOCKS5 代理和既有桌面/Android 代理回归均通过，HTTPS CONNECT 与系统代理仍未宣称有 arm64 专项证据；
 - `integration_test/ohos_media_smoke_test.dart`、`integration_test/ohos_video_smoke_test.dart`：音频控制、视频 Texture/首帧/窗口恢复通过；
-- 使用 Apple BipBop 示例 HLS 地址对 `ohos_video_smoke_test.dart` 做了 arm64 真机专项尝试，AVPlayer 在 `open` 阶段返回 `avplayer_state_error`；因此 HLS 仍记录为未通过，不能用普通 MP4 smoke 替代；
+- 使用 Apple BipBop 示例 HLS 地址对 `ohos_video_smoke_test.dart` 做了 arm64 真机专项尝试；按华为媒体 FAQ 的 `AVPlayer.url` 入口补齐后，AVPlayer 仍在 `open` 阶段返回 `avplayer_state_error`，因此 HLS 仍记录为未通过，不能用普通 MP4 smoke 替代；普通 MP4 在同一改动后复验通过；
 - `integration_test/library_first_run_test.dart`：首次启动首页和空书架通过；
 - `integration_test/library_reader_start_test.dart`：书架启动阅读器、系统返回、退出前保存与书架刷新时序通过；
 - 音频复验发现 OHOS `AVPlayer.play()` 返回早于 `playing` 状态的真实竞态，原生已改为等待 `playing` 再完成 play 命令，修复后的真机音频 smoke 通过；

@@ -151,11 +151,18 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
         return
       }
       const headers = this.headers(args?.get('headers'))
-      const source = media.createMediaSourceWithUrl(url, headers)
       const session: MediaSession = {player, texture, video}
       this.sessions.set(sessionId, session)
       this.bind(sessionId, session)
-      await player.setMediaSource(source)
+      // HarmonyOS documents network HLS playback through the AVPlayer.url
+      // property. Keep ordinary files/HTTP resources on the header-aware
+      // AVMediaSource path, but do not force .m3u8 manifests through it.
+      if (this.isHlsUrl(url)) {
+        player.url = url
+      } else {
+        const source = media.createMediaSourceWithUrl(url, headers)
+        await player.setMediaSource(source)
+      }
       await this.waitForState(player, 'initialized')
       if (texture !== undefined) player.surfaceId = String(texture.getSurfaceId())
       await player.prepare()
@@ -324,6 +331,11 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
       if (typeof name === 'string' && typeof header === 'string') result[name] = header
     })
     return result
+  }
+
+  private isHlsUrl(url: string): boolean {
+    const path = url.split('?', 1)[0].split('#', 1)[0].toLowerCase()
+    return path.endsWith('.m3u8')
   }
 
   private errorMessage(error: Object): string {
