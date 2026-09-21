@@ -81,6 +81,12 @@ hdc install build/ohos/hap/entry-default-signed.hap
 
 ## 当前验证结果
 
+### 2026-09-21 增量适配验证
+
+- 根据 HarmonyOS API 的 `webview.ProxyController`，ArkWeb 已支持应用级 HTTP/HTTPS/SOCKS 代理覆盖，并在清空自定义代理时调用 `removeProxyOverride` 恢复系统路由；播放器代理仍明确关闭，因为 AVPlayer 没有可用的会话级代理契约。
+- 根据 HarmonyOS Media API 的 `BufferingInfoType.CACHED_DURATION`，OHOS AVPlayer 现在向 Flutter 发出毫秒级 `buffered` 事件，视频后端将其作为时间缓冲位置使用；`videoEnhancement` 和 `systemVolume` 继续保持明确不支持，UI 不显示对应控制。
+- 本地能力/代理/Profile/Runtime 宿主单测：通过；签名 arm64 HAP：通过；`hdc install -r`：通过。增量安装后真机回归因 HDC 设备 `192.168.3.48:45975` 暂时离线，状态为 `not-run`，不将其冒充为真机通过。
+
 2026-09-19 使用 DevEco IP 设备 `192.168.3.48:45975`（`PLA-AL10`、HarmonyOS `7.0.0.105`、API 26、`arm64-v8a`）完成以下直接验收：
 
 - `integration_test/ohos_runtime_smoke_test.dart`：Node 24.16.0 arm64 host、Runtime ping、Network Kit 地址和能力降级通过；

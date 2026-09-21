@@ -120,6 +120,9 @@ export default class OhosArkWebHost implements MethodCallHandler {
         this.cancel(call.args as Map<string, Any> | null)
         result.success(null)
         break
+      case 'configureProxy':
+        this.configureProxy(call.args as Map<string, Any> | null, result)
+        break
       case 'dispose':
         this.dispose()
         result.success(null)
@@ -127,6 +130,40 @@ export default class OhosArkWebHost implements MethodCallHandler {
       default:
         result.notImplemented()
         break
+    }
+  }
+
+  private configureProxy(args: Map<string, Any> | null, result: MethodResult): void {
+    const raw: Any = args?.get('proxyUri')
+    if (raw !== undefined && raw !== null && typeof raw !== 'string') {
+      result.error('invalid_argument', 'proxyUri must be a URI string or null.', null)
+      return
+    }
+    try {
+      if (raw === undefined || raw === null || (raw as string).length === 0) {
+        webview.ProxyController.removeProxyOverride((): void => result.success(null))
+        return
+      }
+      const proxy = raw as string
+      const separator = proxy.indexOf('://')
+      if (separator <= 0 || separator + 3 >= proxy.length) {
+        result.error('invalid_argument', 'proxyUri must include a scheme and endpoint.', null)
+        return
+      }
+      const inputScheme = proxy.substring(0, separator).toLowerCase()
+      const scheme = inputScheme === 'socks5' ? 'socks' : inputScheme
+      if (scheme !== 'http' && scheme !== 'https' && scheme !== 'socks') {
+        result.error('invalid_argument', 'OHOS ArkWeb supports HTTP, HTTPS, and SOCKS proxies.', null)
+        return
+      }
+      const config = new webview.ProxyConfig()
+      config.insertProxyRule(`${scheme}://${proxy.substring(separator + 3)}`)
+      config.insertBypassRule('localhost')
+      config.insertBypassRule('127.0.0.1')
+      config.insertBypassRule('::1')
+      webview.ProxyController.applyProxyOverride(config, (): void => result.success(null))
+    } catch (error) {
+      result.error('proxy_failed', this.errorMessage(error), null)
     }
   }
 

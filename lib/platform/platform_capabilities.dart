@@ -126,8 +126,8 @@ final class PlatformCapabilities {
       // AVPlayer has no supported per-session HTTP proxy contract on OHOS.
       OhosPlatformCapability.playerHttpProxy => false,
       // AVPlayer reports buffering percentage only; it does not expose a
-      // stable time-based buffered position on the supported device matrix.
-      OhosPlatformCapability.videoBufferedPosition => false,
+      // AVPlayer exposes BufferingInfoType.CACHED_DURATION in milliseconds.
+      OhosPlatformCapability.videoBufferedPosition => true,
       OhosPlatformCapability.videoEnhancement => false,
       // HarmonyOS application APIs can read but cannot directly adjust the
       // global system media volume for a normal third-party application.

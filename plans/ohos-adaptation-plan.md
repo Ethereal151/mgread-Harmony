@@ -4,6 +4,17 @@
 
 本计划只以当前代码实现、公开契约和直接测试入口为基线，不以说明文档中的完成描述或测试名称推断完成度。
 
+## 2026-09-21 执行状态与官方能力边界
+
+本轮已按下列结论更新实现和能力清单：
+
+- 已落地：OHOS `transport:http` 通过 ArkWeb 页面 `fetch` 执行，沿用页面 Cookie、重定向和请求上下文；取消会标记 job、停止 ArkWeb 页面并丢弃迟到结果；Runtime 来源代理支持 OHOS 系统代理读取、自定义代理优先和关闭后的恢复；ArkWeb 自定义代理使用 SDK API 15+ 的 `ProxyController`，支持 HTTP、HTTPS 和 SOCKS（将应用层 SOCKS5 映射为 ArkWeb 的 `socks`）；AVPlayer 的 `CACHED_DURATION` 毫秒事件已映射为 Dart 的真实 `bufferedPosition`。
+- 稳定不支持：命名 WebView Profile 隔离、AVPlayer 会话级播放器代理、OHOS 全局系统音量写入、音量键翻页和 AVPlayer 内 Anime4K。它们均已在能力清单中为 `false`，并由 UI 隐藏或保留播放器内部音量，不再静默成功。
+- 官方依据：OHOS Web 组件公开的是普通/隐身模式和应用级 Cookie 管理，没有本项目所需的命名持久 Profile 契约；媒体 API 提供播放器音量和 `CACHED_DURATION`，系统音量管理只能读取/监听，不能由普通应用直接调节；画面增强需要单独的 AVCodec surface 解码/渲染链路，不能把 AVPlayer 状态字段冒充 shader；ArkUI 的通用按键事件不构成手机物理音量键可稳定拦截的产品契约。
+- 当前证据：签名 arm64 HAP 已构建并通过 `hdc install -r` 安装；代理、能力、Profile 页面和 Runtime 宿主相关本地单测全部通过。既有 arm64 真机的 Runtime/ArkWeb/音视频 smoke 证据仍有效；本轮安装后的增量真机回归因设备 IP 在 HDC 重置后暂时离线，必须标记为 `not-run`，不能用本地测试替代。
+
+因此，“计划内可实现项”已完成；上面列出的 OHOS SDK 能力边界属于有证据的 `unsupported`，不是遗留的静默空操作。真实外部来源、代理下音视频/HLS、系统中断和跨设备同步仍需对应真实环境才能把验收矩阵标为 `pass`。
+
 目标是让 OpenHarmony（以下简称 OHOS）在需要的产品能力上达到 Android 基线，并明确哪些能力需要 Windows 级别的额外能力，哪些能力保持平台差异。
 
 本轮范围包含：

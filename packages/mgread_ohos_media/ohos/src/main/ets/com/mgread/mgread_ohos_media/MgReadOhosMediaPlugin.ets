@@ -209,6 +209,10 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
         this.emit(sessionId, 'buffering', false)
       } else if (kind === media.BufferingInfoType.BUFFERING_PERCENT) {
         this.emit(sessionId, 'bufferingPercent', value)
+      } else if (kind === media.BufferingInfoType.CACHED_DURATION) {
+        // HarmonyOS reports the playable cache in milliseconds. Preserve it
+        // as a real time-based buffered position for the Flutter backend.
+        this.emit(sessionId, 'buffered', value)
       }
     })
     player.on('startRenderFrame', () => this.emit(sessionId, 'firstFrame', true))

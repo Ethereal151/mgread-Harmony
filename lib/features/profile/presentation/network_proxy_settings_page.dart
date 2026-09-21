@@ -385,7 +385,9 @@ class _ProxyTrafficCard extends StatelessWidget {
               _ProxyTrafficRow(
                 traffic: traffic,
                 value: enabled[traffic] ?? false,
-                enabled: !saving && !(Platform.isOhos && (traffic == NetworkProxyTraffic.video || traffic == NetworkProxyTraffic.audio)),
+                enabled:
+                    !saving &&
+                    !(Platform.operatingSystem == 'ohos' && (traffic == NetworkProxyTraffic.video || traffic == NetworkProxyTraffic.audio)),
                 onChanged: (bool value) => onChanged(traffic, value),
               ),
               if (traffic != NetworkProxyTraffic.values.last)

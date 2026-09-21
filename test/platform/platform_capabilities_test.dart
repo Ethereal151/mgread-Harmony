@@ -23,7 +23,7 @@ void main() {
     expect(capabilities.supportsOhosWebViewCancellation, isTrue);
     expect(capabilities.supportsOhosSourceSystemProxy, isTrue);
     expect(capabilities.supportsOhosPlayerHttpProxy, isFalse);
-    expect(capabilities.supportsOhosVideoBufferedPosition, isFalse);
+    expect(capabilities.supportsOhosVideoBufferedPosition, isTrue);
     expect(capabilities.supportsOhosVideoEnhancement, isFalse);
     expect(capabilities.supportsOhosSystemVolume, isFalse);
     expect(capabilities.supportsOhosReaderVolumeKeys, isFalse);

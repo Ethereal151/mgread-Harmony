@@ -30,6 +30,21 @@ final class OhosBrowserSessionHost implements BrowserSessionHost {
   final Set<String> _jobs = <String>{};
   bool _disposed = false;
 
+  /// Applies the app-scoped ArkWeb proxy override on OHOS. HarmonyOS exposes
+  /// this as a global WebView setting, so it is intentionally kept separate
+  /// from the per-session browser request contract.
+  static Future<void> configureProxy(Uri? proxy) async {
+    try {
+      await const MethodChannel(
+        'mgread_plugin_runtime/ohos_browser_session',
+      ).invokeMethod<void>('configureProxy', <String, Object?>{
+        'proxyUri': proxy?.toString(),
+      });
+    } on MissingPluginException {
+      // Non-OHOS callers may share the manager in tests or desktop builds.
+    }
+  }
+
   @override
   Future<Map<String, Object?>> request({
     required String jobId,

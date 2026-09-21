@@ -42,7 +42,7 @@ final class FlutterNetworkProxyManager {
 
   /// Returns the actual user-configured upstream endpoint for [traffic].
   Uri? proxyUriFor(NetworkProxyTraffic traffic) {
-    if (Platform.isOhos && (traffic == NetworkProxyTraffic.video || traffic == NetworkProxyTraffic.audio)) {
+    if (Platform.operatingSystem == 'ohos' && (traffic == NetworkProxyTraffic.video || traffic == NetworkProxyTraffic.audio)) {
       return null;
     }
     if (!_settings.isEnabled(traffic)) return null;
@@ -57,7 +57,7 @@ final class FlutterNetworkProxyManager {
     // OHOS AVPlayer has no supported per-session HTTP proxy API.  Returning
     // null here is paired with a disabled media-proxy control in the settings
     // page; the configured source proxy remains independent.
-    if (Platform.isOhos) return null;
+    if (Platform.operatingSystem == 'ohos') return null;
     final proxy = proxyUriFor(traffic);
     return proxy?.scheme == 'http' ? proxy : null;
   }
@@ -77,7 +77,10 @@ final class FlutterNetworkProxyManager {
   /// process startup so per-scheme proxy and NO_PROXY behavior remain intact.
   Future<Uri?> runtimeSourceProxyUri() async {
     final custom = proxyUriFor(NetworkProxyTraffic.sourceHttp);
-    if (custom != null || (!Platform.isAndroid && !Platform.isOhos)) {
+    if (Platform.operatingSystem == 'ohos') {
+      await OhosBrowserSessionHost.configureProxy(custom);
+    }
+    if (custom != null || (!Platform.isAndroid && Platform.operatingSystem != 'ohos')) {
       return custom;
     }
     return systemProxyUriFor(Uri.parse('https://system-proxy.invalid'));
