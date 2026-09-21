@@ -19,7 +19,7 @@
 
 | 表面 | 状态 | 当前证据 | 尚缺证据或边界 |
 | --- | --- | --- | --- |
-| Runtime | `partial` | x64 模拟器稳定 `runtime_architecture_unavailable`；既有 arm64 真机 Runtime/fixture 证据 | 本轮代码后的 arm64 增量回归未执行 |
+| Runtime | `partial` | x64 模拟器稳定 `runtime_architecture_unavailable`；当前源码可生成含 `libs/arm64-v8a/libnode.so` 的无签名 arm64 HAP；既有 arm64 真机 Runtime/fixture 证据 | 本轮代码后的 arm64 增量回归未执行 |
 | ArkWeb | `partial` | x64 模拟器浏览 smoke；既有 arm64 ArkWeb/fixture 证据 | 本轮代码后的 arm64 增量回归未执行 |
 | 来源网络/代理 | `partial` | OHOS HTTP、系统/自定义来源代理单测；固定 Node 快速检查报告 | 真实 EXE、真实 OHOS arm64 外部来源及代理资源链路 |
 | 音频 | `partial` | x64 模拟器 AVPlayer 音频 smoke；既有 arm64 音频证据 | 本轮代码后的 arm64 代理/中断增量回归 |

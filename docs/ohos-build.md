@@ -94,6 +94,7 @@ hdc install build/ohos/hap/entry-default-signed.hap
 - 当前 `127.0.0.1:5555` OHOS x64 模拟器复验：`ohos_browser_session_smoke_test.dart`、`ohos_media_smoke_test.dart`、`ohos_video_smoke_test.dart`、`library_first_run_test.dart` 和 `ohos_x64_runtime_stub_test.dart` 全部通过；本轮最新复验的 ArkWeb 与视频 smoke 也重新构建、安装并通过，期间清理过一次残留 `hdc fport` 后重试。每组均重新构建、安装并启动签名 HAP。模拟器证据不替代缺失的本轮 arm64 真机增量回归。
 - 来源层固定 Node 快速检查报告：`artifacts/source-tests/quick-all-20260921-deps.json`，56 个来源中 28 个通过、6 个部分通过、22 个因外部站点/交互/资源或 testkit 能力边界失败；这不是 OHOS 真机验收。Windows Release 实际检查暂未执行，`flutter build windows --release --no-pub` 被当前系统未启用符号链接支持阻止。
 - 独立 HAP 启动复验：当前 `build/ohos/hap/entry-default-signed.hap` SHA-256 为 `41155569160041DE7DD4996EFD8CE9086C2DCE59711BF6E3631E60308942C936`；`hdc install -r`、`aa force-stop`、`aa start` 均成功，`aa dump -a` 显示 `com.ohos.mgread` 的 `EntryAbility` 处于前台且 `READY`。
+- 本轮当前源码的无签名 arm64 构建：`flutter build hap --debug --target-platform ohos-arm64 --no-pub --no-codesign` 成功；`build/ohos/hap/entry-default-unsigned.hap` SHA-256 为 `44DECC19BB910D7721372304CA0DE8DED463BCB46BEE8C43CC69CF61A84A1D54`，HAP 清单包含 `libs/arm64-v8a/libnode.so`、`libmgread_node_host.so`、`libflutter.so` 和 `libsqlite3.so`。无签名产物仅证明 ABI/资源打包，不能代替签名安装与真机回归。
 
 当前计划验收总状态：`partial`。代码适配和明确不支持能力的直接证据已完成；最终 `pass` 仍需要 arm64 真机增量回归及真实来源、代理音视频、系统中断、跨设备同步等外部门禁。
 
