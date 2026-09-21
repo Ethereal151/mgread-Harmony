@@ -13,6 +13,7 @@
 - 官方依据：OHOS Web 组件公开的是普通/隐身模式和应用级 Cookie 管理，没有本项目所需的命名持久 Profile 契约；媒体 API 提供播放器音量和 `CACHED_DURATION`，系统音量管理只能读取/监听，不能由普通应用直接调节；画面增强需要单独的 AVCodec surface 解码/渲染链路，不能把 AVPlayer 状态字段冒充 shader；ArkUI 的通用按键事件不构成手机物理音量键可稳定拦截的产品契约。
 - 当前证据：签名 arm64 HAP 已构建并通过 `hdc install -r` 安装；代理、能力、Profile 页面和 Runtime 宿主相关本地单测全部通过。既有 arm64 真机的 Runtime/ArkWeb/音视频 smoke 证据仍有效；本轮安装后的增量真机回归因设备 IP 在 HDC 重置后暂时离线，必须标记为 `not-run`，不能用本地测试替代。
 - 当前模拟器复验：`127.0.0.1:5555` OHOS x64 模拟器上的 ArkWeb 浏览、AVPlayer 音频、视频纹理/窗口恢复、首次运行首页和 x64 Runtime 稳定降级共 5 组 integration test 均通过，并且每组均重新构建、安装并启动签名 HAP；x64 Runtime 仍按架构限制保持 `unsupported`。
+- 来源快速检查（固定 Node，不能替代真实 MgRead EXE 或 OHOS 真机）：56 个来源中 28 个 `passed`、6 个 `partial`、22 个因站点阻断/交互验证/资源不可达或 testkit 能力边界失败；报告为 `artifacts/source-tests/quick-all-20260921-deps.json`。Windows Release 主程序实际检查尚未执行，因为当前 Windows 未启用 Flutter 所需的符号链接支持。
 
 因此，“计划内可实现项”已完成；上面列出的 OHOS SDK 能力边界属于有证据的 `unsupported`，不是遗留的静默空操作。真实外部来源、代理下音视频/HLS、系统中断和跨设备同步仍需对应真实环境才能把验收矩阵标为 `pass`。
 
