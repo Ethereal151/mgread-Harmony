@@ -22,7 +22,7 @@
 | --- | --- | --- | --- |
 | Runtime | `pass` | `ohos_runtime_smoke_test.dart` 在 arm64 真机通过 Node host、Runtime ping、Network Kit 地址和 9 项产品能力状态；`ohos_runtime_lifecycle_test.dart` 补充原生 restart、同一 Facade 恢复、两轮诊断和敏感字段检查；`ohos_stage2_runtime_arkweb_test.dart` 补充受控长耗时调用取消后 `cancelled`、后续调用恢复和插件卸载后列表确认；x64 模拟器仍稳定返回 `runtime_architecture_unavailable` | 无新的 Runtime 功能缺口；x64 仅按发布约束保持 unsupported |
 | ArkWeb | `pass` | `ohos_browser_session_smoke_test.dart` 和 `ohos_stage2_runtime_arkweb_test.dart` 在 arm64 真机通过页面导航、HTML、5 个 fixture、资源代理、Cookie/JS 和 `interaction_required` 恢复 | 代理路由在来源网络和音视频边界分别验收，ArkWeb 本身无新增阻塞 |
-| 来源网络/代理 | `partial` | OHOS HTTP、系统/自定义来源代理单测；固定 Node `--jitless` 快速检查；无 WebAssembly fallback 已补原生直连、HTTP 代理和 SOCKS5 代理通道并支持 gzip 解压；`ohos_real_source_smoke_test.dart` 在 `PLA-AL10` arm64 真机通过 35ge、德奇、番茄、米读、书库 365 五个真实来源的插件导入、发现、搜索、详情、目录和正文链路 | 真实系统代理、自定义代理、NO_PROXY 路由和 HTTPS CONNECT 代理的 arm64 专项证据仍需单独验收；播放器代理继续按 OHOS SDK 不支持处理 |
+| 来源网络/代理 | `partial` | OHOS HTTP、系统/自定义来源代理单测；固定 Node `--jitless` 快速检查；无 WebAssembly fallback 已补原生直连、HTTP 代理和 SOCKS5 代理通道并支持 gzip 解压；`ohos_real_source_smoke_test.dart` 在 `PLA-AL10` arm64 真机通过 35ge、德奇、番茄、米读、书库 365 五个真实来源的插件导入、发现、搜索、详情、目录和正文链路；`ohos_browser_proxy_smoke_test.dart` 在同一 arm64 真机通过本地 LAN HTTP 代理命中验证 | 真实系统代理、非 loopback NO_PROXY 和 HTTPS CONNECT 代理的 arm64 专项证据仍需单独验收；播放器代理继续按 OHOS SDK 不支持处理 |
 | 音频 | `partial` | arm64 真机 AVPlayer 普通资源播放/暂停/跳转/倍速 smoke 通过；OHOS `play()` 状态竞态已修复；x64 复验也通过 | 代理资源、切歌、后台 AVSession 和系统中断恢复 |
 | 视频 | `partial` | arm64 真机 Texture、首帧、进度、`CACHED_DURATION -> bufferedPosition` 和窗口恢复通过；x64 复验也通过；Apple BipBop HLS 明确返回 `open_failed / avplayer_state_error`，Mux H.264 HLS 可打开但 `play` 超时，均未冒充通过 | 代理/HLS 成功播放、全屏、系统中断和真实系统音量边界的播放证据 |
 | Reader/主应用 | `partial` | arm64 真机首次运行首页、阅读器启动、系统返回、退出前保存/书架刷新通过；音量键不支持公开 API 测试；OHOS 外链桥接成功/拒绝/异常 fake-platform 测试；既有扫码 UI 证据 | 有效二维码载荷、真实内容完整阅读迁移、文件导入/导出/分享和反馈页面真机闭环 |
@@ -62,20 +62,20 @@
 
 这些内容只能说明“代码路径存在”，不能直接说明真实设备上的完整链路已经通过。
 
-### 明确未完全适配项
+### 明确未完全适配项与已收口边界
 
 | 优先级 | 能力 | 当前代码事实 | 对比基线 |
 | --- | --- | --- | --- |
-| P0 | 来源 HTTP 传输 | OHOS `legacyRequest` 对 `transport == http` 直接返回 `unsupported`。见 `packages/mgread_plugin_runtime/ohos/src/main/ets/com/mgread/mgread_plugin_runtime/OhosArkWebHost.ets`。 | Android 会进入原生 HTTP；Windows 会进入 `_httpFetch`。 |
-| P0 | WebView Profile/Cookie 隔离 | OHOS 只有 `pluginId -> WebView` 映射，没有建立独立 profile 或 Cookie store。 | Android 使用 WebView multi-profile；Windows 为插件创建独立 profile 目录。 |
-| P0 | Runtime/播放器代理 | Runtime 系统代理读取路径只对 Android 生效；OHOS AVPlayer 后端接收不到音视频 `proxyUri`。 | Android/Windows 具备系统代理或 MediaKit HTTP 代理路径。 |
-| P0 | 视频缓冲位置 | OHOS 原生发 `bufferingPercent`，Dart 后端丢弃该事件；`bufferedPosition` 依赖未由原生发出的 `buffered` 事件。 | MediaKit 后端提供真实缓冲位置。 |
-| P0 | 系统音量 | 应用层只对 Android/Windows 调用 `mgread/media_system_volume`；OHOS 读取抛异常、设置为空操作。 | Android/Windows 有系统音量通道。 |
-| P1 | WebView 取消 | OHOS 取消只记录 jobId，正在执行的 JS/fetch 不会主动 abort/stop。 | Android/Windows 会停止网络或 WebView 工作。 |
-| P1 | 视频增强 | OHOS 使用 AVPlayer 后端，播放器增强操作只对 MediaKit 后端执行；Anime4K 在 OHOS 上没有实际处理。 | Android/Windows MediaKit 支持 Anime4K。 |
-| P1 | 反馈外链 | `feedback_page.dart` 直接调用 `url_launcher`，没有走已有的 OHOS `openExternalUri` 桥接。 | Android/Windows 有对应 url_launcher 实现。 |
-| P1 | Android 风格音量键翻页 | Reader 平台方法只对 Android 调用，OHOS 是空操作。 | 这是 OHOS 相对 Android 的缺口；Windows 也不要求该能力。 |
-| P2 | Runtime 诊断 | OHOS `latestDiagnostics` 永远为空，Android 已有 facade invoke 的开始、完成、拒绝、超时和失败记录。 | Android 诊断能力更完整。 |
+| P0 | 来源 HTTP 传输 | 已完成：OHOS `transport:http` 通过 ArkWeb 页面 `fetch`，并有 arm64 五个真实来源直连验收。 | Android/Windows 仍保留各自原生路径。 |
+| P0 | WebView Profile/Cookie 隔离 | 命名持久 Profile 隔离保持 `unsupported`：华为公开 ArkWeb API 没有本项目所需的命名持久 Profile 契约；Cookie/JS 和页面生命周期仍按应用级 WebView 管理。 | Android 使用 WebView multi-profile；Windows 为插件创建独立 profile 目录。 |
+| P0 | Runtime/播放器代理 | Runtime 系统代理、自定义来源代理和 Node 无 WASM 代理通道已实现；OHOS AVPlayer HTTP 播放器代理按 SDK 能力明确为 `unsupported`，UI 不再把它当成可用。 | Android/Windows 具备播放器 HTTP 代理路径。 |
+| P0 | 视频缓冲位置 | 已完成：OHOS 原生 `CACHED_DURATION` 毫秒事件映射为 Dart `bufferedPosition`，arm64 普通视频真实 smoke 通过。 | MediaKit 后端提供真实缓冲位置。 |
+| P0 | 系统音量 | 保持 `unsupported`：华为公开音量管理能力允许普通应用读取/监听，不提供本应用直接设置系统媒体音量的契约；公开 API 与 UI 已直接表达该边界。 | Android/Windows 有系统音量通道。 |
+| P1 | WebView 取消 | 已完成：取消会标记 job、停止 ArkWeb 页面并丢弃迟到结果；arm64 受控长调用得到稳定 `cancelled`，后续调用恢复。 | Android/Windows 会停止网络或 WebView 工作。 |
+| P1 | 视频增强 | 保持 `unsupported`：OHOS AVPlayer 没有本项目所需 Anime4K shader 链路；能力标志、UI 和公开调用均不报告伪成功。 | Android/Windows MediaKit 支持 Anime4K。 |
+| P1 | 反馈外链 | 已完成：`feedback_page.dart` 通过 `openExternalUri`，OHOS 走 `OhosSystemClient.openUri`；已有成功、拒绝和异常测试。 | Android/Windows 使用 `url_launcher` 外部应用模式。 |
+| P1 | Android 风格音量键翻页 | 保持 `unsupported`：OHOS 没有稳定拦截手机物理音量键的公开应用契约；能力标志和 UI 已隐藏该选项。 | 这是 OHOS 相对 Android 的缺口；Windows 也不要求该能力。 |
+| P2 | Runtime 诊断 | 已完成：OHOS facade/native restart、诊断快照、敏感字段过滤和恢复链路均已验收。 | Android 诊断字段更多，但不影响 OHOS 公开契约。 |
 | P2 | Runtime 架构覆盖 | OHOS x86 stub 明确要求 arm64 真机；模拟器或 x86 环境不能运行嵌入式 Node。 | 作为发布限制管理，不把 x86 当作已支持环境。 |
 | 条件项 | `page.cdp` | OHOS 没有实现；Android 也明确返回 `unsupported`。 | Windows WebView2 支持 CDP。若 Android 是移动基线，不把 CDP 作为 OHOS 阻塞项。 |
 

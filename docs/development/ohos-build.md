@@ -111,6 +111,7 @@ hdc install build/ohos/hap/entry-default-signed.hap
 - `integration_test/ohos_runtime_lifecycle_test.dart`：同一 arm64 真机完成原生 Runtime `restart` 后的 Facade 恢复 ping，并校验两轮生命周期诊断；测试专用 `debugDispose()` 不作为真机证据，因为它会关闭 Flutter 调试通道；
 - `integration_test/ohos_browser_session_smoke_test.dart`：ArkWeb 页面打开、导航和 HTML 获取通过；
 - `integration_test/ohos_stage2_runtime_arkweb_test.dart`：5 个本地 fixture 的安装、发现、搜索、详情、目录、正文、资源代理、Cookie/JS、`interaction_required` 恢复、受控长耗时调用取消后的 `cancelled`/后续调用恢复和卸载后列表确认通过；这不是 5 个真实外部数据源的替代证据；
+- `integration_test/ohos_browser_proxy_smoke_test.dart`：在 `PLA-AL10` arm64 真机启动本地 origin 与 HTTP proxy，先验证 ArkWeb 页面挂载，再通过 `ProxyController` 配置自定义代理，页面导航成功且 HTML 命中 `custom-proxy-hit`；证明 OHOS ArkWeb 自定义 HTTP 代理路由真实生效。系统代理、非 loopback NO_PROXY 与 HTTPS CONNECT 仍单独保留为未完成证据；
 - `integration_test/ohos_real_source_smoke_test.dart`：在 `PLA-AL10` arm64 真机导入并验证 `35ge-info`、`deqi-novel`、`fanqie-novel`、`midu-novel`、`shukuge-365` 五个真实来源的发现、搜索、详情、目录和正文；OHOS 的 `--jitless` Node host 在 WebAssembly 不可用时走原生 HTTP/HTTPS parser，并通过 gzip 响应解压单测和真实来源链路验证；同一 fallback 的 HTTP 代理、SOCKS5 代理和既有桌面/Android 代理回归均通过，HTTPS CONNECT 与系统代理仍未宣称有 arm64 专项证据；
 - `integration_test/ohos_media_smoke_test.dart`、`integration_test/ohos_video_smoke_test.dart`：音频控制、视频 Texture/首帧/窗口恢复通过；
 - 使用 Apple BipBop 示例 HLS 地址对 `ohos_video_smoke_test.dart` 做了 arm64 真机专项尝试；按华为媒体 FAQ 的 `AVPlayer.url` 入口补齐后，AVPlayer 仍在 `open` 阶段返回 `avplayer_state_error`。第二个 Mux H.264 HLS 地址可以打开但 `play` 阶段超时，故 HLS 仍记录为未通过，不能用普通 MP4 smoke 替代；普通 MP4 在同一改动后复验通过；
