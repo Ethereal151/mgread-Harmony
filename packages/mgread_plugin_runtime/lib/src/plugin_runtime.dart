@@ -336,6 +336,14 @@ final class PluginRuntime {
     );
   }
 
+  /// Creates an OHOS Facade backed by the package-owned MethodChannel for diagnostics and wire-contract tests.
+  ///
+  /// This is deliberately not a production host-selection API.
+  @visibleForTesting
+  factory PluginRuntime.ohosForTesting() {
+    return PluginRuntime._(_OhosRuntimeSupervisor());
+  }
+
   /// Emits bounded Runtime lifecycle diagnostics.
   ///
   /// This is intentionally not a raw stderr or transport stream. Consumers can

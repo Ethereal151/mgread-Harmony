@@ -11,7 +11,7 @@
 - 已落地：OHOS `transport:http` 通过 ArkWeb 页面 `fetch` 执行，沿用页面 Cookie、重定向和请求上下文；取消会标记 job、停止 ArkWeb 页面并丢弃迟到结果；Runtime 来源代理支持 OHOS 系统代理读取、自定义代理优先和关闭后的恢复；ArkWeb 自定义代理使用 SDK API 15+ 的 `ProxyController`，支持 HTTP、HTTPS 和 SOCKS（将应用层 SOCKS5 映射为 ArkWeb 的 `socks`）；AVPlayer 的 `CACHED_DURATION` 毫秒事件已映射为 Dart 的真实 `bufferedPosition`。
 - 稳定不支持：命名 WebView Profile 隔离、AVPlayer 会话级播放器代理、OHOS 全局系统音量写入、音量键翻页和 AVPlayer 内 Anime4K。它们均已在能力清单中为 `false`，并由 UI 隐藏或保留播放器内部音量，不再静默成功。
 - 官方依据：OHOS Web 组件公开的是普通/隐身模式和应用级 Cookie 管理，没有本项目所需的命名持久 Profile 契约；媒体 API 提供播放器音量和 `CACHED_DURATION`，系统音量管理只能读取/监听，不能由普通应用直接调节；画面增强需要单独的 AVCodec surface 解码/渲染链路，不能把 AVPlayer 状态字段冒充 shader；ArkUI 的通用按键事件不构成手机物理音量键可稳定拦截的产品契约。
-- 当前证据：签名 arm64 HAP 已构建并通过 `hdc install -r` 安装；代理、能力、Profile 页面和 Runtime 宿主相关本地单测全部通过。既有 arm64 真机的 Runtime/ArkWeb/音视频 smoke 证据仍有效；本轮安装后的增量真机回归因设备 IP 在 HDC 重置后暂时离线，必须标记为 `not-run`，不能用本地测试替代。
+- 当前证据：签名 arm64 HAP 已构建并通过 `hdc install -r` 安装；代理、能力、Profile 页面、OHOS 外链桥接和 Runtime 宿主诊断相关本地单测全部通过。既有 arm64 真机的 Runtime/ArkWeb/音视频 smoke 证据仍有效；本轮安装后的增量真机回归因设备 IP 在 HDC 重置后暂时离线，必须标记为 `not-run`，不能用本地测试替代。
 - 当前模拟器复验：`127.0.0.1:5555` OHOS x64 模拟器上的 ArkWeb 浏览、AVPlayer 音频、视频纹理/窗口恢复、首次运行首页和 x64 Runtime 稳定降级共 5 组 integration test 均通过，并且每组均重新构建、安装并启动签名 HAP；x64 Runtime 仍按架构限制保持 `unsupported`。
 - 来源快速检查（固定 Node，不能替代真实 MgRead EXE 或 OHOS 真机）：56 个来源中 28 个 `passed`、6 个 `partial`、22 个因站点阻断/交互验证/资源不可达或 testkit 能力边界失败；报告为 `artifacts/source-tests/quick-all-20260921-deps.json`。Windows Release 主程序实际检查尚未执行，因为当前 Windows 未启用 Flutter 所需的符号链接支持。
 

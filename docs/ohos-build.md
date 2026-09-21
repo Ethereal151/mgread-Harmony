@@ -87,6 +87,7 @@ hdc install build/ohos/hap/entry-default-signed.hap
 - 根据 HarmonyOS Media API 的 `BufferingInfoType.CACHED_DURATION`，OHOS AVPlayer 现在向 Flutter 发出毫秒级 `buffered` 事件，视频后端将其作为时间缓冲位置使用；`videoEnhancement` 和 `systemVolume` 继续保持明确不支持，UI 不显示对应控制。
 - `readerVolumeKeys` 现在不仅由 OHOS capabilities 隐藏，公开 `MethodChannelReaderPlatform` 调用也返回稳定 `UnsupportedError`；对应 package 测试已通过，避免绕过 UI 后静默成功。
 - `openExternalUri` 支持注入 OHOS fake capabilities；直接测试覆盖原生打开成功、原生拒绝和 `PlatformException`，反馈、来源详情与插件帮助共用同一外链桥接边界。
+- `_OhosRuntimeSupervisor` 通过测试专用构造入口直接覆盖 invoke started/completed、rejected、bridge_failed 诊断，并验证 `latestDiagnostics` 是有界不可变快照。
 - `OhosBrowserSessionHost.cancel()` 已有 MethodChannel 直接测试，确认活动 job 会向 ArkWeb 宿主发送 `cancel`，不是只在 Dart 侧丢弃迟到结果。
 - `ohos_video_smoke_test.dart` 现在直接等待并校验 OHOS AVPlayer 的 `buffered` 事件为非负毫秒值；模拟器实测通过，覆盖 `CACHED_DURATION -> bufferedPosition` 链路。
 - 本地能力/代理/Profile/Runtime 宿主单测：通过；签名 arm64 HAP：通过；`hdc install -r`：通过。增量安装后真机回归因 HDC 设备 `192.168.3.48:45975` 暂时离线，状态为 `not-run`，不将其冒充为真机通过。
