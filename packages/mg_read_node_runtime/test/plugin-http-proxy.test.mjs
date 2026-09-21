@@ -21,6 +21,7 @@ test("plugin HTTP client switches future requests between system and explicit pr
 
   let proxyTunnels = 0;
   const proxy = http.createServer();
+  proxy.on("request", (request, response) => forwardHttpRequest(request, response, () => proxyTunnels += 1));
   proxy.on("connect", (request, downstream, head) => {
     proxyTunnels += 1;
     const target = new URL(`http://${request.url}`);
@@ -82,6 +83,7 @@ test("plugin HTTP client follows the environment proxy when no explicit override
   await listen(origin);
   let proxyTunnels = 0;
   const proxy = http.createServer();
+  proxy.on("request", (request, response) => forwardHttpRequest(request, response, () => proxyTunnels += 1));
   proxy.on("connect", (request, downstream, head) => {
     proxyTunnels += 1;
     const target = new URL(`http://${request.url}`);
@@ -119,6 +121,16 @@ test("plugin HTTP client follows the environment proxy when no explicit override
   const direct = await client.fetch(`http://127.0.0.1:${originAddress.port}/content`, {}, undefined, "direct");
   assert.equal(await direct.text(), "system");
   assert.equal(proxyTunnels, 1);
+
+  const bypassClient = new ConfigurablePluginHttpClient({
+    httpProxy: endpoint,
+    httpsProxy: endpoint,
+    noProxy: "127.0.0.1",
+  });
+  t.after(() => bypassClient.close());
+  const bypassed = await bypassClient.fetch(`http://127.0.0.1:${originAddress.port}/content`, {});
+  assert.equal(await bypassed.text(), "system");
+  assert.equal(proxyTunnels, 1);
 });
 
 test("Runtime configuration routes the installed plugin ctx.http.fetch boundary only", async (t) => {
@@ -133,6 +145,7 @@ test("Runtime configuration routes the installed plugin ctx.http.fetch boundary 
 
   let proxyTunnels = 0;
   const proxy = http.createServer();
+  proxy.on("request", (request, response) => forwardHttpRequest(request, response, () => proxyTunnels += 1));
   proxy.on("connect", (request, downstream, head) => {
     proxyTunnels += 1;
     const target = new URL(`http://${request.url}`);
@@ -218,6 +231,26 @@ function close(server) {
   return new Promise((resolve, reject) => {
     server.close((error) => error === undefined ? resolve() : reject(error));
   });
+}
+
+function forwardHttpRequest(request, response, onRequest) {
+  onRequest();
+  const target = new URL(request.url);
+  const upstream = http.request({
+    hostname: target.hostname,
+    port: Number(target.port),
+    path: `${target.pathname}${target.search}`,
+    method: request.method,
+    headers: request.headers,
+  }, (upstreamResponse) => {
+    response.writeHead(upstreamResponse.statusCode ?? 502, upstreamResponse.headers);
+    upstreamResponse.pipe(response);
+  });
+  upstream.once("error", (error) => {
+    response.writeHead(502);
+    response.end(String(error));
+  });
+  request.pipe(upstream);
 }
 
 function createSocks5Proxy(onTunnel) {

@@ -57,11 +57,13 @@ export interface PluginHttpEnvironmentProxyOptions {
 export class ConfigurablePluginHttpClient implements PluginRuntimeHttpClient {
   readonly #directAgent: Dispatcher;
   readonly #systemProxyAgent: Dispatcher;
+  readonly #environmentProxy: PluginHttpEnvironmentProxyOptions;
   #proxyAgent: Dispatcher | undefined;
   #proxyUrl: string | undefined;
   readonly #retiring = new Set<Promise<void>>();
 
   constructor(environmentProxy: PluginHttpEnvironmentProxyOptions = {}) {
+    this.#environmentProxy = environmentProxy;
     this.#directAgent = new Agent(http2TlsOptions);
     this.#systemProxyAgent = new EnvHttpProxyAgent({
       allowH2: true,
@@ -100,7 +102,10 @@ export class ConfigurablePluginHttpClient implements PluginRuntimeHttpClient {
     // public fetch contract alive with Node's native HTTP parser on that
     // platform; desktop and Android retain the negotiated Undici path.
     if ((globalThis as { readonly WebAssembly?: unknown }).WebAssembly === undefined) {
-      return fetchWithoutWebAssembly(input, requestInit, 0, proxyMode === "direct" ? undefined : this.#proxyUrl);
+      const fallbackProxy = proxyMode === "direct"
+        ? undefined
+        : this.#proxyUrl ?? fallbackSystemProxy(new URL(input.toString()), this.#environmentProxy);
+      return fetchWithoutWebAssembly(input, requestInit, 0, fallbackProxy);
     }
     const dispatcher = proxyMode === "direct"
       ? this.#directAgent
@@ -229,6 +234,47 @@ function parseFallbackProxy(proxyUrl: string): FallbackProxy {
   url.username = "";
   url.password = "";
   return usernamePassword === undefined ? { url } : { url, usernamePassword };
+}
+
+function fallbackSystemProxy(url: URL, environment: PluginHttpEnvironmentProxyOptions): string | undefined {
+  if (matchesNoProxy(url, environment.noProxy)) return undefined;
+  return url.protocol === "https:"
+    ? environment.httpsProxy ?? environment.httpProxy
+    : environment.httpProxy;
+}
+
+function matchesNoProxy(url: URL, noProxy: string | undefined): boolean {
+  if (noProxy === undefined) return false;
+  const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  const port = url.port || (url.protocol === "https:" ? "443" : "80");
+  return noProxy.split(/[;,\s]+/u).some((rawEntry) => {
+    let entry = rawEntry.trim().toLowerCase();
+    if (entry.length === 0) return false;
+    if (entry === "*") return true;
+    if (entry.includes("://")) {
+      try {
+        entry = new URL(entry).host.toLowerCase();
+      } catch (_) {
+        return false;
+      }
+    }
+    let entryHost = entry;
+    let entryPort: string | undefined;
+    if (entry.startsWith("[") && entry.includes("]")) {
+      const closing = entry.indexOf("]");
+      entryHost = entry.slice(1, closing);
+      if (entry.charAt(closing + 1) === ":") entryPort = entry.slice(closing + 2);
+    } else {
+      const separator = entry.lastIndexOf(":");
+      if (separator > 0 && entry.indexOf(":") === separator) {
+        entryHost = entry.slice(0, separator);
+        entryPort = entry.slice(separator + 1);
+      }
+    }
+    if (entryHost.startsWith(".")) entryHost = entryHost.slice(1);
+    if (entryPort !== undefined && entryPort !== port) return false;
+    return host === entryHost || host.endsWith(`.${entryHost}`);
+  });
 }
 
 function createFallbackTransport(url: URL, proxy: FallbackProxy | undefined, headers: Headers, method: string): FallbackTransport {
