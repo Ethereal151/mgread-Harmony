@@ -89,9 +89,9 @@ hdc install build/ohos/hap/entry-default-signed.hap
 - `OhosBrowserSessionHost.cancel()` 已有 MethodChannel 直接测试，确认活动 job 会向 ArkWeb 宿主发送 `cancel`，不是只在 Dart 侧丢弃迟到结果。
 - `ohos_video_smoke_test.dart` 现在直接等待并校验 OHOS AVPlayer 的 `buffered` 事件为非负毫秒值；模拟器实测通过，覆盖 `CACHED_DURATION -> bufferedPosition` 链路。
 - 本地能力/代理/Profile/Runtime 宿主单测：通过；签名 arm64 HAP：通过；`hdc install -r`：通过。增量安装后真机回归因 HDC 设备 `192.168.3.48:45975` 暂时离线，状态为 `not-run`，不将其冒充为真机通过。
-- 当前 `127.0.0.1:5555` OHOS x64 模拟器复验：`ohos_browser_session_smoke_test.dart`、`ohos_media_smoke_test.dart`、`ohos_video_smoke_test.dart`、`library_first_run_test.dart` 和 `ohos_x64_runtime_stub_test.dart` 全部通过；每组均重新构建、安装并启动签名 HAP。模拟器证据不替代缺失的本轮 arm64 真机增量回归。
+- 当前 `127.0.0.1:5555` OHOS x64 模拟器复验：`ohos_browser_session_smoke_test.dart`、`ohos_media_smoke_test.dart`、`ohos_video_smoke_test.dart`、`library_first_run_test.dart` 和 `ohos_x64_runtime_stub_test.dart` 全部通过；本轮最新复验的 ArkWeb 与视频 smoke 也重新构建、安装并通过，期间清理过一次残留 `hdc fport` 后重试。每组均重新构建、安装并启动签名 HAP。模拟器证据不替代缺失的本轮 arm64 真机增量回归。
 - 来源层固定 Node 快速检查报告：`artifacts/source-tests/quick-all-20260921-deps.json`，56 个来源中 28 个通过、6 个部分通过、22 个因外部站点/交互/资源或 testkit 能力边界失败；这不是 OHOS 真机验收。Windows Release 实际检查暂未执行，`flutter build windows --release --no-pub` 被当前系统未启用符号链接支持阻止。
-- 独立 HAP 启动复验：当前 `build/ohos/hap/entry-default-signed.hap` SHA-256 为 `2850C2E569E42AC2617DE3B40C65D1B40D7B33D597BE9220095436FC6C295AE4`；`hdc install -r`、`aa force-stop`、`aa start` 均成功，`aa dump -a` 显示 `com.ohos.mgread` 的 `EntryAbility` 处于前台且 `READY`。
+- 独立 HAP 启动复验：当前 `build/ohos/hap/entry-default-signed.hap` SHA-256 为 `41155569160041DE7DD4996EFD8CE9086C2DCE59711BF6E3631E60308942C936`；`hdc install -r`、`aa force-stop`、`aa start` 均成功，`aa dump -a` 显示 `com.ohos.mgread` 的 `EntryAbility` 处于前台且 `READY`。
 
 当前计划验收总状态：`partial`。代码适配和明确不支持能力的直接证据已完成；最终 `pass` 仍需要 arm64 真机增量回归及真实来源、代理音视频、系统中断、跨设备同步等外部门禁。
 
