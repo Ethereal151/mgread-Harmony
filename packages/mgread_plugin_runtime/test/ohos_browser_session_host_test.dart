@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mgread_plugin_runtime/src/ohos_browser_session_host.dart';
@@ -47,6 +49,40 @@ void main() {
         ),
       ),
     );
+    await host.dispose();
+  });
+
+  test('forwards cancellation to the native ArkWeb job', () async {
+    const channel = MethodChannel('mgread_plugin_runtime/ohos_browser_session');
+    final calls = <MethodCall>[];
+    final requestStarted = Completer<void>();
+    final requestResult = Completer<Object?>();
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      calls.add(call);
+      if (call.method == 'request') {
+        requestStarted.complete();
+        return requestResult.future;
+      }
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+
+    final host = OhosBrowserSessionHost(channel: channel);
+    final request = host.request(
+      jobId: 'cancel-me',
+      deadlineUnixMs: DateTime.now().millisecondsSinceEpoch + 5000,
+      raw: const <String, Object?>{'operation': 'request'},
+    );
+    await requestStarted.future;
+
+    await host.cancel('cancel-me');
+    expect(calls.map((call) => call.method), <String>['request', 'cancel']);
+    expect(calls.last.arguments, <String, Object?>{'jobId': 'cancel-me'});
+
+    requestResult.complete(<String, Object?>{'cancelled': true});
+    expect(await request, <String, Object?>{'cancelled': true});
     await host.dispose();
   });
 
