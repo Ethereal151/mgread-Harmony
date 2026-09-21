@@ -25,7 +25,7 @@
 | 音频 | `partial` | arm64 真机 AVPlayer 普通资源播放/暂停/跳转/倍速 smoke 通过；OHOS `play()` 状态竞态已修复；x64 复验也通过 | 代理资源、切歌、后台 AVSession 和系统中断恢复 |
 | 视频 | `partial` | arm64 真机 Texture、首帧、进度、`CACHED_DURATION -> bufferedPosition` 和窗口恢复通过；x64 复验也通过 | 代理/HLS、全屏、系统中断和真实系统音量边界的播放证据 |
 | Reader/主应用 | `partial` | arm64 真机首次运行首页、阅读器启动、系统返回、退出前保存/书架刷新通过；音量键不支持公开 API 测试；OHOS 外链桥接成功/拒绝/异常 fake-platform 测试；既有扫码 UI 证据 | 有效二维码载荷、真实内容完整阅读迁移、文件导入/导出/分享和反馈页面真机闭环 |
-| 跨设备同步/HAP 传输 | `partial` | 协议、QR 载荷、恢复和容量单测；OHOS x64 虚拟器与 MI 8 Android peer 的正向、反向双向同步 integration 均通过 | 仍需第二台 OHOS 真机完成第三组矩阵及 HAP 传输确认 |
+| 跨设备同步/HAP 传输 | `partial` | 协议、QR 载荷、恢复和容量单测；OHOS x64 虚拟器与 MI 8 Android peer 的正向、反向双向同步通过；`PLA-AL10` arm64 OHOS Host 与 MI 8 Android peer 的双向同步也通过 | 仍需第二台 OHOS 真机完成 OHOS↔OHOS 第三组矩阵及 HAP 传输确认 |
 | OHOS SDK 明确不支持能力 | `pass` | Capability flags、UI 隐藏和公开 API 直接测试；官方 API 边界已记录 | 无；这些能力按 `unsupported` 管理，不冒充可用 |
 
 因此，“计划内可实现项”的代码实现已完成；上面列出的 OHOS SDK 能力边界属于有证据的 `unsupported`，不是遗留的静默空操作。当前总验收状态仍为 `partial`：真实外部来源、代理下音视频/HLS、系统中断、有效二维码业务闭环、第二台 OHOS 设备和完整跨设备/HAP 门禁仍未全部满足完成定义。
