@@ -16,8 +16,8 @@ void main() {
     expect(_ohosAddress, isNotEmpty);
     expect(_ohosPort, inInclusiveRange(1, 65535));
     final gateway = CrossDeviceSyncGateway(
-      side: 'windows',
-      pluginIds: const <String>['org.example.windows.one', 'org.example.windows.two', 'org.example.windows.three'],
+      side: 'ohos',
+      pluginIds: const <String>['org.example.ohos.one'],
     );
     final session = await PairedSyncClientSession.connectAny(
       endpoints: <PairedSyncEndpoint>[
@@ -29,8 +29,8 @@ void main() {
           port: _ohosPort,
         ),
       ],
-      identity: crossDeviceWindowsIdentity,
-      peer: crossDevicePeer(crossDeviceOhosIdentity, PairedDevicePlatform.ohos),
+      identity: crossDeviceOhosIdentity,
+      peer: crossDevicePeer(crossDeviceWindowsIdentity, PairedDevicePlatform.windows),
       sharedSecret: crossDeviceSecret(),
     );
 
@@ -40,7 +40,11 @@ void main() {
     expect(summary.receivedPlugins, 1);
     expect(summary.sentBooks, 1);
     expect(summary.sentPlugins, 3);
-    expect(gateway.appliedShelfItems.single.remoteContentId, 'ohos-book');
-    expect(gateway.importedPluginIds, <String>{'org.example.ohos.one'});
+    expect(gateway.appliedShelfItems.single.remoteContentId, 'windows-book');
+    expect(gateway.importedPluginIds, <String>{
+      'org.example.windows.one',
+      'org.example.windows.two',
+      'org.example.windows.three',
+    });
   });
 }
