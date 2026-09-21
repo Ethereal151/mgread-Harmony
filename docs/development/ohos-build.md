@@ -103,6 +103,7 @@ hdc install build/ohos/hap/entry-default-signed.hap
 - 随后在 `PLA-AL10` arm64 真机上再次运行 `ohos_paired_sync_host_test.dart`（OHOS Host）与 `android_paired_sync_to_ohos_test.dart`（MI 8 Android peer），两端均 `All tests passed!`，并输出 `MGREAD_CROSS_DEVICE_OHOS_SUCCESS=true`；这补充了真实 arm64 OHOS 的双向书架/插件同步证据。OHOS↔OHOS 不在本轮验收范围内。
 - HAP 传输补充尝试启动了 OHOS Host；Android 接收端经回环映射在连接前被 `normalizeLanSyncAddresses` 正确拒绝 `127.0.0.1`，未伪造 LAN 地址，未宣称 HAP 传输通过。该次失败只记录为历史诊断，不影响后续真实局域网 Android peer 验收。
 - 2026-09-21 进一步以 `PLA-AL10` arm64 OHOS 为 HAP Host、MI 8 Android 为接收端，在真实局域网地址 `192.168.3.48` 上完成 `ohos_app_transfer_host_test.dart` + `ohos_app_transfer_client_test.dart`；接收端输出 `permissionConfirmed=true`、`bytes=262147` 和校验和，协议/校验/用户确认安装边界通过。OHOS↔OHOS 按用户明确要求跳过。
+- 2026-09-21 继续以 `PLA-AL10` arm64 OHOS 为同步 Host、Windows 为 Client，在真实局域网地址 `192.168.3.48` 上运行 `ohos_paired_sync_host_test.dart` + `paired_sync_windows_client_test.dart`；两端均 `All tests passed!`，OHOS Host 输出 `MGREAD_CROSS_DEVICE_OHOS_SUCCESS=true`，验证双向书架与插件同步。反向 Windows Host→OHOS Client 仍受本机入站网络条件影响为 `peer_offline`，因此跨设备总状态保持 `partial`；OHOS↔OHOS 与 HAP 市场跳转按用户要求跳过。
 
 2026-09-21 使用 DevEco IP 设备 `192.168.3.48:45975`（`PLA-AL10`、HarmonyOS `7.0.0.105`、API 26、`arm64-v8a`）完成以下直接验收：
 
