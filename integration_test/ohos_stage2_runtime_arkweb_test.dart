@@ -109,6 +109,15 @@ void main() {
       runtime.invoke(const SourceSearchInvocation(pluginId: 'org.mgread.ohos.stage2.interaction', query: 'stage2')),
     )).items.single.title;
     expect(interactionTitle, 'interaction_required:true');
+
+    // Keep the device fixture set bounded and prove the destructive Runtime
+    // lifecycle boundary on the same arm64 host. The next run reinstalls the
+    // fixture through the normal import path when it is absent.
+    await runtime.invoke(
+      const UninstallPluginInvocation(pluginId: 'org.mgread.ohos.stage2.source-one'),
+    );
+    final afterUninstall = await runtime.invoke(const InstalledPluginsInvocation());
+    expect(afterUninstall.any((plugin) => plugin.id == 'org.mgread.ohos.stage2.source-one'), isFalse);
   }, timeout: const Timeout(Duration(minutes: 8)));
 }
 

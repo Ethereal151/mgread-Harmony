@@ -20,16 +20,16 @@
 
 | 表面 | 状态 | 当前证据 | 尚缺证据或边界 |
 | --- | --- | --- | --- |
-| Runtime | `pass` | `ohos_runtime_smoke_test.dart` 在 arm64 真机通过 Node host、Runtime ping、Network Kit 地址和 9 项产品能力状态；`ohos_runtime_lifecycle_test.dart` 补充原生 restart、同一 Facade 恢复、两轮诊断和敏感字段检查；x64 模拟器仍稳定返回 `runtime_architecture_unavailable` | 取消、插件卸载等完整生命周期仍需独立真机用例 |
-| ArkWeb | `pass` | `ohos_browser_session_smoke_test.dart` 和 `ohos_stage2_runtime_arkweb_test.dart` 在 arm64 真机通过页面导航、HTML、5 个 fixture、资源代理、Cookie/JS 和 `interaction_required` 恢复 | 真实外部来源的完整链路和代理路由仍未全部覆盖 |
-| 来源网络/代理 | `partial` | OHOS HTTP、系统/自定义来源代理单测；固定 Node 快速检查报告 | 真实 EXE、真实 OHOS arm64 外部来源及代理资源链路 |
+| Runtime | `pass` | `ohos_runtime_smoke_test.dart` 在 arm64 真机通过 Node host、Runtime ping、Network Kit 地址和 9 项产品能力状态；`ohos_runtime_lifecycle_test.dart` 补充原生 restart、同一 Facade 恢复、两轮诊断和敏感字段检查；`ohos_stage2_runtime_arkweb_test.dart` 补充插件卸载后列表确认；x64 模拟器仍稳定返回 `runtime_architecture_unavailable` | 独立的长耗时取消真机用例仍可继续补强 |
+| ArkWeb | `pass` | `ohos_browser_session_smoke_test.dart` 和 `ohos_stage2_runtime_arkweb_test.dart` 在 arm64 真机通过页面导航、HTML、5 个 fixture、资源代理、Cookie/JS 和 `interaction_required` 恢复 | 代理路由在来源网络和音视频边界分别验收，ArkWeb 本身无新增阻塞 |
+| 来源网络/代理 | `partial` | OHOS HTTP、系统/自定义来源代理单测；固定 Node `--jitless` 快速检查；`ohos_real_source_smoke_test.dart` 在 `PLA-AL10` arm64 真机通过 35ge、德奇、番茄、米读、书库 365 五个真实来源的插件导入、发现、搜索、详情、目录和正文链路；无 WebAssembly 时用 Node 原生 HTTP/HTTPS parser 并支持 gzip 解压 | 真实系统代理、自定义代理、NO_PROXY 路由和播放器代理边界仍需单独验收；播放器代理继续按 OHOS SDK 不支持处理 |
 | 音频 | `partial` | arm64 真机 AVPlayer 普通资源播放/暂停/跳转/倍速 smoke 通过；OHOS `play()` 状态竞态已修复；x64 复验也通过 | 代理资源、切歌、后台 AVSession 和系统中断恢复 |
 | 视频 | `partial` | arm64 真机 Texture、首帧、进度、`CACHED_DURATION -> bufferedPosition` 和窗口恢复通过；x64 复验也通过 | 代理/HLS、全屏、系统中断和真实系统音量边界的播放证据 |
 | Reader/主应用 | `partial` | arm64 真机首次运行首页、阅读器启动、系统返回、退出前保存/书架刷新通过；音量键不支持公开 API 测试；OHOS 外链桥接成功/拒绝/异常 fake-platform 测试；既有扫码 UI 证据 | 有效二维码载荷、真实内容完整阅读迁移、文件导入/导出/分享和反馈页面真机闭环 |
-| 跨设备同步/HAP 传输 | `partial` | 协议、QR 载荷、恢复和容量单测；x64 OHOS 与 MI 8 Android 的正向、反向同步通过；`PLA-AL10` arm64 OHOS Host 与 MI 8 Android peer 的双向同步及 HAP 包传输/校验/用户确认边界通过 | OHOS↔OHOS 按用户明确要求跳过，不作为本轮完成门禁；HAP 市场跳转和完整跨设备门禁仍未全部覆盖 |
+| 跨设备同步/HAP 传输 | `partial` | 协议、QR 载荷、恢复和容量单测；x64 OHOS 与 MI 8 Android 的正向、反向同步通过；`PLA-AL10` arm64 OHOS Host 与 MI 8 Android peer 的双向同步及 HAP 包传输/校验/用户确认边界通过 | OHOS↔OHOS 按用户明确要求跳过，不作为本轮完成门禁；不上架，因此 HAP 市场跳转也按用户要求跳过；完整跨设备门禁仍未全部覆盖 |
 | OHOS SDK 明确不支持能力 | `pass` | Capability flags、arm64 真机 9 项状态断言、UI 隐藏和公开 API 直接测试；官方 API 边界已记录 | 无；这些能力按 `unsupported` 管理，不冒充可用 |
 
-因此，“计划内可实现项”的代码实现已完成；上面列出的 OHOS SDK 能力边界属于有证据的 `unsupported`，不是遗留的静默空操作。当前总验收状态仍为 `partial`：真实外部来源、代理下音视频/HLS、系统中断、有效二维码业务闭环和完整跨设备/HAP 门禁仍未全部满足完成定义；OHOS↔OHOS 已按用户要求明确跳过，不计入本轮阻塞项。
+因此，“计划内可实现项”的代码实现已完成；上面列出的 OHOS SDK 能力边界属于有证据的 `unsupported`，不是遗留的静默空操作。当前总验收状态仍为 `partial`：代理下音视频/HLS、系统中断、有效二维码业务闭环和完整跨设备/HAP 门禁仍未全部满足完成定义；五个真实来源直连链路已通过，OHOS↔OHOS 与不上架的 HAP 市场跳转均已按用户要求明确跳过，不计入本轮阻塞项。
 
 目标是让 OpenHarmony（以下简称 OHOS）在需要的产品能力上达到 Android 基线，并明确哪些能力需要 Windows 级别的额外能力，哪些能力保持平台差异。
 

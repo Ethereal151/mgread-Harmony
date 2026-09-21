@@ -1,6 +1,6 @@
 # OHOS 构建基线
 
-本文记录 MgRead 鸿蒙适配阶段 1～6 的源代码、工具链和构建验证结果。当前已完成签名 HAP 构建、arm64 真机启动、Node Runtime/ArkWeb fixture、AVPlayer 音视频 smoke 和窗口亮度 bridge 验证；真实来源、系统媒体控制、跨设备互通和有效扫码业务仍未宣称完成。
+本文记录 MgRead 鸿蒙适配阶段 1～6 的源代码、工具链和构建验证结果。当前已完成签名 HAP 构建、arm64 真机启动、Node Runtime/ArkWeb fixture、五个真实来源直连链路、AVPlayer 音视频 smoke 和窗口亮度 bridge 验证；系统媒体控制、代理音视频/HLS、跨设备互通的完整门禁和有效扫码业务仍未宣称完成。
 
 ## 源代码基线
 
@@ -96,7 +96,7 @@ hdc install build/ohos/hap/entry-default-signed.hap
 - 独立 HAP 启动复验：arm64 真机传输验收所用 `build/ohos/hap/entry-default-signed.hap` SHA-256 为 `A0B8C9D9F98610FCB68E029594BFDA4938B8D266B6F80CD083EBFAD558F1CF6C`；随后为跳过的 OHOS↔OHOS x64 虚拟器复验生成的本地签名产物 SHA-256 为 `3280A412A9F15A0467FD475FC306C45A0314B3D11D952038490E6E9802312B73`。本轮源码已在 `PLA-AL10` 真机多次通过 `hdc install -r` 和 Flutter 调试启动，Runtime/ArkWeb/媒体/阅读器集成测试均完成连接与断言。
 - 本轮当前源码的无签名 arm64 构建：`flutter build hap --debug --target-platform ohos-arm64 --no-pub --no-codesign` 成功；`build/ohos/hap/entry-default-unsigned.hap` SHA-256 为 `44DECC19BB910D7721372304CA0DE8DED463BCB46BEE8C43CC69CF61A84A1D54`，HAP 清单包含 `libs/arm64-v8a/libnode.so`、`libmgread_node_host.so`、`libflutter.so` 和 `libsqlite3.so`。无签名产物仅证明 ABI/资源打包，不能代替签名安装与真机回归。
 
-当前计划验收总状态：`partial`。代码适配和明确不支持能力的直接证据已完成，arm64 真机基础回归已补齐；最终 `pass` 仍需要真实外部来源、代理音视频/HLS、系统中断、有效二维码业务闭环和完整跨设备/HAP 门禁。OHOS↔OHOS 按用户明确要求跳过，不作为本轮阻塞项。
+当前计划验收总状态：`partial`。代码适配和明确不支持能力的直接证据已完成，arm64 真机基础回归已补齐；最终 `pass` 仍需要真实外部来源、代理音视频/HLS、系统中断、有效二维码业务闭环和完整跨设备/HAP 门禁。OHOS↔OHOS 按用户明确要求跳过；不上架，因此 HAP 市场跳转也按用户要求跳过，均不作为本轮阻塞项。
 
 跨设备同步补充尝试：曾启动 OHOS x64 Host 并准备使用在线 MI 8 Android peer。首次 Android 构建受 DevEco JBR 缺失 `jlink.exe` 和 Kotlin 增量缓存跨盘路径影响；切换到本机 Temurin 17 后 APK 已成功构建并安装，但 OHOS 虚拟器位于 `10.0.2.15` NAT，经本机 HDC 映射的 `192.168.3.26:36979` 对手机连接超时，未进入同步断言，状态仍为 `not-run`。
 - 随后通过 `adb reverse` + HDC `fport/rport` 回环映射完成两组真实 peer 同步：`ohos_paired_sync_host_test.dart` + `android_paired_sync_to_ohos_test.dart` 通过，`android_paired_sync_host_test.dart` + `ohos_paired_sync_cross_device_test.dart` 通过；两组均验证双向书架与插件计数。该证据使用 OHOS x64 虚拟器，不替代 arm64 真机回归；OHOS↔OHOS 按用户明确要求跳过。
@@ -109,14 +109,15 @@ hdc install build/ohos/hap/entry-default-signed.hap
 - `integration_test/ohos_runtime_smoke_test.dart`：Node 24.16.0 arm64 host、Runtime ping、Network Kit 地址和 9 项 OHOS 产品能力状态断言通过；
 - `integration_test/ohos_runtime_lifecycle_test.dart`：同一 arm64 真机完成原生 Runtime `restart` 后的 Facade 恢复 ping，并校验两轮生命周期诊断；测试专用 `debugDispose()` 不作为真机证据，因为它会关闭 Flutter 调试通道；
 - `integration_test/ohos_browser_session_smoke_test.dart`：ArkWeb 页面打开、导航和 HTML 获取通过；
-- `integration_test/ohos_stage2_runtime_arkweb_test.dart`：5 个本地 fixture 的安装、发现、搜索、详情、目录、正文、资源代理、Cookie/JS 和 `interaction_required` 恢复通过；这不是 5 个真实外部数据源的替代证据；
+- `integration_test/ohos_stage2_runtime_arkweb_test.dart`：5 个本地 fixture 的安装、发现、搜索、详情、目录、正文、资源代理、Cookie/JS、`interaction_required` 恢复和卸载后列表确认通过；这不是 5 个真实外部数据源的替代证据；
+- `integration_test/ohos_real_source_smoke_test.dart`：在 `PLA-AL10` arm64 真机导入并验证 `35ge-info`、`deqi-novel`、`fanqie-novel`、`midu-novel`、`shukuge-365` 五个真实来源的发现、搜索、详情、目录和正文；OHOS 的 `--jitless` Node host 在 WebAssembly 不可用时走原生 HTTP/HTTPS parser，并通过 gzip 响应解压单测和真实来源链路验证；自定义代理仍按显式不支持错误处理，不宣称代理路径完成；
 - `integration_test/ohos_media_smoke_test.dart`、`integration_test/ohos_video_smoke_test.dart`：音频控制、视频 Texture/首帧/窗口恢复通过；
 - `integration_test/library_first_run_test.dart`：首次启动首页和空书架通过；
 - `integration_test/library_reader_start_test.dart`：书架启动阅读器、系统返回、退出前保存与书架刷新时序通过；
 - 音频复验发现 OHOS `AVPlayer.play()` 返回早于 `playing` 状态的真实竞态，原生已改为等待 `playing` 再完成 play 命令，修复后的真机音频 smoke 通过；
 - HAP 使用 `flutter build hap --debug --target-platform ohos-arm64 --no-pub` 成功签名并通过 `hdc install -r` 安装启动。
 
-以下门禁仍需保留为未完成：真实来源至少 5 个全链路、锁屏/蓝牙/焦点与中断恢复、现有跨设备矩阵的完整补充、有效二维码载荷路由、HAP 市场跳转真机确认和本地阅读完整迁移回归；OHOS↔OHOS 已按用户要求跳过。
+以下门禁仍需保留为未完成：代理音视频/HLS、锁屏/蓝牙/焦点与中断恢复、现有跨设备矩阵的完整补充、有效二维码载荷路由和本地阅读完整迁移回归；五个真实来源直连链路已通过，OHOS↔OHOS 与不上架的 HAP 市场跳转已按用户要求跳过。
 
 最近一次 VM 验证使用 `127.0.0.1:5555` API 26 x86_64 模拟器：
 
