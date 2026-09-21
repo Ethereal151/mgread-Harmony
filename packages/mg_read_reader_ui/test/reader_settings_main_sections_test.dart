@@ -10,6 +10,19 @@ import 'package:novel_reader_ui/src/ui/settings/reader_settings_font_size_contro
 import 'package:novel_reader_ui/src/ui/settings/reader_settings_sheet.dart';
 
 void main() {
+  test('OHOS volume-key page turning is an explicit unsupported operation', () {
+    final platform = MethodChannelReaderPlatform(operatingSystem: 'ohos');
+
+    expect(
+      platform.setVolumeKeyPageTurningEnabled(true),
+      throwsA(isA<UnsupportedError>()),
+    );
+    expect(
+      platform.setVolumeKeyPageTurningEnabled(false),
+      throwsA(isA<UnsupportedError>()),
+    );
+  });
+
   testWidgets('font controls share one adaptive row with a section label', (
     WidgetTester tester,
   ) async {

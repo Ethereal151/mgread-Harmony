@@ -89,9 +89,13 @@ class MethodChannelReaderPlatform extends ReaderPlatform {
   static final StreamController<ReaderVolumeKey> _volumeKeyController =
       StreamController<ReaderVolumeKey>.broadcast();
 
-  MethodChannelReaderPlatform() {
+  MethodChannelReaderPlatform({String? operatingSystem})
+    : _operatingSystem =
+          operatingSystem ?? (kIsWeb ? '' : Platform.operatingSystem) {
     _channel.setMethodCallHandler(_handleInputMethodCall);
   }
+
+  final String _operatingSystem;
 
   static Stream<ReaderVolumeKey> get volumeKeyEvents =>
       _volumeKeyController.stream;
@@ -109,7 +113,7 @@ class MethodChannelReaderPlatform extends ReaderPlatform {
     if (direction != null) _volumeKeyController.add(direction);
   }
 
-  bool get _isOhos => !kIsWeb && Platform.operatingSystem == 'ohos';
+  bool get _isOhos => !kIsWeb && _operatingSystem == 'ohos';
 
   @override
   bool get supportsKeepScreenOn =>
@@ -175,6 +179,13 @@ class MethodChannelReaderPlatform extends ReaderPlatform {
 
   @override
   Future<void> setVolumeKeyPageTurningEnabled(bool enabled) {
+    if (_isOhos) {
+      return Future<void>.error(
+        UnsupportedError(
+          'OHOS does not expose a supported volume-key page-turn bridge.',
+        ),
+      );
+    }
     if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) {
       return Future<void>.value();
     }
