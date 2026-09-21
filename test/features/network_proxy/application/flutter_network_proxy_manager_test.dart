@@ -181,6 +181,29 @@ void main() {
     );
     expect(manager.playerProxyUriFor(NetworkProxyTraffic.video), isNull);
   });
+
+  test('OHOS keeps player proxy routes explicitly unsupported', () async {
+    final manager = FlutterNetworkProxyManager(operatingSystem: 'ohos')
+      ..update(
+        NetworkProxySettings(
+          protocol: NetworkProxyProtocol.http,
+          host: '127.0.0.1',
+          port: 8080,
+          enabled: const <NetworkProxyTraffic, bool>{
+            NetworkProxyTraffic.sourceHttp: false,
+            NetworkProxyTraffic.cover: false,
+            NetworkProxyTraffic.manga: false,
+            NetworkProxyTraffic.video: true,
+            NetworkProxyTraffic.audio: true,
+          },
+        ),
+      );
+
+    expect(manager.proxyUriFor(NetworkProxyTraffic.video), isNull);
+    expect(manager.proxyUriFor(NetworkProxyTraffic.audio), isNull);
+    expect(manager.playerProxyUriFor(NetworkProxyTraffic.video), isNull);
+    expect(manager.playerProxyUriFor(NetworkProxyTraffic.audio), isNull);
+  });
 }
 
 NetworkProxySettings _settings(HttpServer proxy, {bool cover = false, bool manga = false, bool video = false}) => NetworkProxySettings(

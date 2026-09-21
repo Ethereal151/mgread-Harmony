@@ -32,17 +32,21 @@ final configuredFlutterNetworkProxyManagerProvider = Provider<FlutterNetworkProx
 });
 
 final class FlutterNetworkProxyManager {
-  FlutterNetworkProxyManager({SystemProxyEnvironmentLoader? systemProxyEnvironmentLoader})
-    : _systemProxyEnvironmentLoader = systemProxyEnvironmentLoader ?? readSystemProxyEnvironment;
+  FlutterNetworkProxyManager({SystemProxyEnvironmentLoader? systemProxyEnvironmentLoader, String? operatingSystem})
+    : _systemProxyEnvironmentLoader = systemProxyEnvironmentLoader ?? readSystemProxyEnvironment,
+      _operatingSystem = operatingSystem ?? Platform.operatingSystem;
 
   final SystemProxyEnvironmentLoader _systemProxyEnvironmentLoader;
+  final String _operatingSystem;
   NetworkProxySettings _settings = NetworkProxySettings.defaults;
+
+  bool get _isOhos => _operatingSystem == 'ohos';
 
   void update(NetworkProxySettings value) => _settings = value;
 
   /// Returns the actual user-configured upstream endpoint for [traffic].
   Uri? proxyUriFor(NetworkProxyTraffic traffic) {
-    if (Platform.operatingSystem == 'ohos' && (traffic == NetworkProxyTraffic.video || traffic == NetworkProxyTraffic.audio)) {
+    if (_isOhos && (traffic == NetworkProxyTraffic.video || traffic == NetworkProxyTraffic.audio)) {
       return null;
     }
     if (!_settings.isEnabled(traffic)) return null;
@@ -57,7 +61,7 @@ final class FlutterNetworkProxyManager {
     // OHOS AVPlayer has no supported per-session HTTP proxy API.  Returning
     // null here is paired with a disabled media-proxy control in the settings
     // page; the configured source proxy remains independent.
-    if (Platform.operatingSystem == 'ohos') return null;
+    if (_isOhos) return null;
     final proxy = proxyUriFor(traffic);
     return proxy?.scheme == 'http' ? proxy : null;
   }
@@ -77,10 +81,10 @@ final class FlutterNetworkProxyManager {
   /// process startup so per-scheme proxy and NO_PROXY behavior remain intact.
   Future<Uri?> runtimeSourceProxyUri() async {
     final custom = proxyUriFor(NetworkProxyTraffic.sourceHttp);
-    if (Platform.operatingSystem == 'ohos') {
+    if (_isOhos) {
       await OhosBrowserSessionHost.configureProxy(custom);
     }
-    if (custom != null || (!Platform.isAndroid && Platform.operatingSystem != 'ohos')) {
+    if (custom != null || (!Platform.isAndroid && !_isOhos)) {
       return custom;
     }
     return systemProxyUriFor(Uri.parse('https://system-proxy.invalid'));
