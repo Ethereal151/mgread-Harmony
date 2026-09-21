@@ -114,7 +114,7 @@ hdc install build/ohos/hap/entry-default-signed.hap
 - `integration_test/ohos_browser_proxy_smoke_test.dart`：在 `PLA-AL10` arm64 真机启动本地 origin 与 HTTP proxy，先验证 ArkWeb 页面挂载，再通过 `ProxyController` 配置自定义代理，页面导航成功且 HTML 命中 `custom-proxy-hit`；证明 OHOS ArkWeb 自定义 HTTP 代理路由真实生效。系统代理、非 loopback NO_PROXY 与 HTTPS CONNECT 仍单独保留为未完成证据；
 - `integration_test/ohos_real_source_smoke_test.dart`：在 `PLA-AL10` arm64 真机导入并验证 `35ge-info`、`deqi-novel`、`fanqie-novel`、`midu-novel`、`shukuge-365` 五个真实来源的发现、搜索、详情、目录和正文；OHOS 的 `--jitless` Node host 在 WebAssembly 不可用时走原生 HTTP/HTTPS parser，并通过 gzip 响应解压单测和真实来源链路验证；同一 fallback 的 HTTP 代理、SOCKS5 代理和既有桌面/Android 代理回归均通过，HTTPS CONNECT 与系统代理仍未宣称有 arm64 专项证据；
 - `integration_test/ohos_media_smoke_test.dart`、`integration_test/ohos_video_smoke_test.dart`：音频控制、视频 Texture/首帧/窗口恢复通过；
-- 使用 Apple BipBop 示例 HLS 地址对 `ohos_video_smoke_test.dart` 做了 arm64 真机专项尝试；按华为媒体 FAQ 的 `AVPlayer.url` 入口补齐后，AVPlayer 仍在 `open` 阶段返回 `avplayer_state_error`。第二个 Mux H.264 HLS 地址可以打开但 `play` 阶段超时，故 HLS 仍记录为未通过，不能用普通 MP4 smoke 替代；普通 MP4 在同一改动后复验通过；
+- 使用 Apple BipBop 示例 HLS 地址对 `ohos_video_smoke_test.dart` 做了 arm64 真机专项尝试；按华为媒体 FAQ 的 `AVPlayer.url` 入口补齐后，该地址仍在 `open` 阶段返回 `avplayer_state_error`。随后以 Unified Streaming 的 H.264 `tears-of-steel.ism/.m3u8` 在同一 `PLA-AL10` 真机通过打开、首帧、缓冲、播放和暂停，证明 HLS 路由本身已可用；Mux `x36xhzz` 地址可打开但 `play` 超时，Mux `tos_ismc` 地址在 `open` 阶段返回 `avplayer_state_error`，这些保留为外部流兼容性边界，不能用单一流替代所有 HLS 兼容性；普通 MP4 也复验通过；
 - `integration_test/library_first_run_test.dart`：首次启动首页和空书架通过；
 - `integration_test/library_reader_start_test.dart`：书架启动阅读器、系统返回、退出前保存与书架刷新时序通过；
 - 音频复验发现 OHOS `AVPlayer.play()` 返回早于 `playing` 状态的真实竞态，原生已改为等待 `playing` 再完成 play 命令，修复后的真机音频 smoke 通过；
