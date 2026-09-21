@@ -110,6 +110,25 @@ void main() {
     )).items.single.title;
     expect(interactionTitle, 'interaction_required:true');
 
+    final cancellation = PluginInvocationCancellation();
+    final delayedInvocation = runtime.invoke(
+      const SourceSearchInvocation(pluginId: 'org.mgread.ohos.stage2.source-one', query: 'cancel'),
+      cancellation: cancellation,
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+    cancellation.cancel();
+    PluginRuntimeException? cancellationFailure;
+    try {
+      await _invokeWithFrames(tester, delayedInvocation);
+    } on PluginRuntimeException catch (error) {
+      cancellationFailure = error;
+    }
+    expect(cancellationFailure?.code, 'cancelled');
+    final postCancellation = await runtime.invoke(
+      const SourceSearchInvocation(pluginId: 'org.mgread.ohos.stage2.source-one', query: 'stage2'),
+    );
+    expect(postCancellation.items, hasLength(1));
+
     // Keep the device fixture set bounded and prove the destructive Runtime
     // lifecycle boundary on the same arm64 host. The next run reinstalls the
     // fixture through the normal import path when it is absent.
@@ -247,7 +266,7 @@ async function cookieJs(){const p=await c.webview.open({visible:false,timeoutMs:
 async function javascriptPage(){const p=await c.webview.open({visible:false,timeoutMs:30000});try{await p.navigate('https://example.com/',{timeoutMs:30000});const title=await p.executeJavaScript('document.title',{timeoutMs:30000});const url=await p.getUrl({timeoutMs:30000});const html=await p.getHtml({timeoutMs:30000});return `js:${title}:${url.startsWith('https://example.com/')}:${html.includes('Example Domain')}`}finally{await p.close({timeoutMs:30000})}}
 async function interactionRecovery(){const p=await c.webview.open({visible:false,timeoutMs:30000});await p.navigate('https://example.com/',{timeoutMs:30000});let required=false;try{await c.browser.sessionV1.requestCoordinates(coordinates('hidden'))}catch(e){if(e?.code!=='interaction_required')throw e;required=true}if(!required)throw new Error('hidden interaction did not return interaction_required');await p.show({timeoutMs:30000});try{const accepted=await c.browser.sessionV1.requestCoordinates(coordinates('visible'));return `interaction_required:${accepted.accepted===true}`}finally{await p.hide({timeoutMs:30000});await p.close({timeoutMs:30000})}}
 export async function discover(){return {kind:'document',document:{components:[{type:'section',id:`${c.plugin.id}:section`,title:'OHOS Stage 2 fixture',subtitle:null,children:[{type:'contentCollection',id:`${c.plugin.id}:collection`,layout:'list',continuation:null,items:[{content:summary(`${c.plugin.id}:book`,'OHOS Stage 2 fixture'),rank:null,metric:null,recommendation:null}]}]}]}}}
-export async function search(r){if(c.plugin.id.endsWith('cookie-js'))return result(await cookieJs());if(c.plugin.id.endsWith('javascript'))return result(await javascriptPage());if(c.plugin.id.endsWith('interaction')){if(r.query==='interaction-required'){const p=await c.webview.open({visible:false,timeoutMs:30000});await p.navigate('https://example.com/',{timeoutMs:30000});return c.browser.sessionV1.requestCoordinates(coordinates('hidden'))}return result(await interactionRecovery())}return result(`normal:${c.plugin.id}`)}
+export async function search(r){if(r.query==='cancel'){await new Promise(resolve=>setTimeout(resolve,20000));}if(c.plugin.id.endsWith('cookie-js'))return result(await cookieJs());if(c.plugin.id.endsWith('javascript'))return result(await javascriptPage());if(c.plugin.id.endsWith('interaction')){if(r.query==='interaction-required'){const p=await c.webview.open({visible:false,timeoutMs:30000});await p.navigate('https://example.com/',{timeoutMs:30000});return c.browser.sessionV1.requestCoordinates(coordinates('hidden'))}return result(await interactionRecovery())}return result(`normal:${c.plugin.id}`)}
 export async function getDetail(r){return {...summary(r.id,`detail:${c.plugin.id}`),id:r.id,aliases:[],catalogUrl:null}}
 export async function getChapters(r){return {items:[0,1].map(order=>({id:`${r.id}:chapter-${order+1}`,title:`Chapter ${order+1}`,order,url:null,volumeTitle:null,wordCount:16,updatedAt:null,isLocked:false,attributes:[]}))}}
 export async function getContent(r){return {contentKind:'novel',chapterId:r.chapterId,title:'OHOS Stage 2 fixture content',updatedAt:null,text:`Runtime content path complete: ${r.chapterId}`,pages:[]}}

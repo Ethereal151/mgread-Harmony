@@ -20,7 +20,7 @@
 
 | 表面 | 状态 | 当前证据 | 尚缺证据或边界 |
 | --- | --- | --- | --- |
-| Runtime | `pass` | `ohos_runtime_smoke_test.dart` 在 arm64 真机通过 Node host、Runtime ping、Network Kit 地址和 9 项产品能力状态；`ohos_runtime_lifecycle_test.dart` 补充原生 restart、同一 Facade 恢复、两轮诊断和敏感字段检查；`ohos_stage2_runtime_arkweb_test.dart` 补充插件卸载后列表确认；x64 模拟器仍稳定返回 `runtime_architecture_unavailable` | 独立的长耗时取消真机用例仍可继续补强 |
+| Runtime | `pass` | `ohos_runtime_smoke_test.dart` 在 arm64 真机通过 Node host、Runtime ping、Network Kit 地址和 9 项产品能力状态；`ohos_runtime_lifecycle_test.dart` 补充原生 restart、同一 Facade 恢复、两轮诊断和敏感字段检查；`ohos_stage2_runtime_arkweb_test.dart` 补充受控长耗时调用取消后 `cancelled`、后续调用恢复和插件卸载后列表确认；x64 模拟器仍稳定返回 `runtime_architecture_unavailable` | 无新的 Runtime 功能缺口；x64 仅按发布约束保持 unsupported |
 | ArkWeb | `pass` | `ohos_browser_session_smoke_test.dart` 和 `ohos_stage2_runtime_arkweb_test.dart` 在 arm64 真机通过页面导航、HTML、5 个 fixture、资源代理、Cookie/JS 和 `interaction_required` 恢复 | 代理路由在来源网络和音视频边界分别验收，ArkWeb 本身无新增阻塞 |
 | 来源网络/代理 | `partial` | OHOS HTTP、系统/自定义来源代理单测；固定 Node `--jitless` 快速检查；无 WebAssembly fallback 已补原生直连、HTTP 代理和 SOCKS5 代理通道并支持 gzip 解压；`ohos_real_source_smoke_test.dart` 在 `PLA-AL10` arm64 真机通过 35ge、德奇、番茄、米读、书库 365 五个真实来源的插件导入、发现、搜索、详情、目录和正文链路 | 真实系统代理、自定义代理、NO_PROXY 路由和 HTTPS CONNECT 代理的 arm64 专项证据仍需单独验收；播放器代理继续按 OHOS SDK 不支持处理 |
 | 音频 | `partial` | arm64 真机 AVPlayer 普通资源播放/暂停/跳转/倍速 smoke 通过；OHOS `play()` 状态竞态已修复；x64 复验也通过 | 代理资源、切歌、后台 AVSession 和系统中断恢复 |
