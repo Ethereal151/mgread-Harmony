@@ -409,6 +409,42 @@ void main() {
     expect(find.text('《诡秘之主》已刷新'), findsOneWidget);
   });
 
+  testWidgets('offers a manual shelf refresh from the top-right more menu', (WidgetTester tester) async {
+    var refreshCount = 0;
+    await tester.pumpWidget(
+      _host(
+        onRefresh: () async {
+          refreshCount++;
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('更多操作'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('刷新书架'));
+    await tester.pumpAndSettle();
+
+    expect(refreshCount, 1);
+  });
+
+  testWidgets('uses the manual shelf refresh callback for mobile pull-to-refresh', (WidgetTester tester) async {
+    var refreshCount = 0;
+    await tester.pumpWidget(
+      _host(
+        onRefresh: () async {
+          refreshCount++;
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.drag(find.byKey(const Key('library-home-content')), const Offset(0, 420));
+    await tester.pumpAndSettle();
+
+    expect(refreshCount, 1);
+  });
+
   testWidgets('shows a copyable modal with the original reason when bookshelf refresh fails', (WidgetTester tester) async {
     await tester.pumpWidget(
       _host(
@@ -1037,6 +1073,7 @@ Widget _host({
   LibraryHomeLayoutMode initialLayoutMode = LibraryHomeLayoutMode.list,
   Future<void> Function(LibraryHomeLayoutMode mode)? onLayoutModeChanged,
   LibraryHomeCoverMetadataMode initialCoverMetadataMode = LibraryHomeCoverMetadataMode.belowCover,
+  Future<void> Function()? onRefresh,
 }) {
   return MaterialApp(
     theme: AppTheme.light(),
@@ -1056,7 +1093,7 @@ Widget _host({
         initialCoverMetadataMode: initialCoverMetadataMode,
         callbacks: callbacks,
         isRefreshing: false,
-        onRefresh: () async {},
+        onRefresh: onRefresh ?? () async {},
         onToggleTheme: onToggleTheme,
         preparingBookId: preparingBookId,
       ),

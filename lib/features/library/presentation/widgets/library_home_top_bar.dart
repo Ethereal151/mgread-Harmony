@@ -20,6 +20,7 @@ import 'package:mg_read/features/library/presentation/widgets/library_anchored_m
 class LibraryHomeTopBar extends StatelessWidget {
   const LibraryHomeTopBar({
     required this.onSearch,
+    required this.onRefresh,
     required this.onReadingHistory,
     required this.onManageSources,
     required this.onPrivacyLibrary,
@@ -30,6 +31,7 @@ class LibraryHomeTopBar extends StatelessWidget {
   });
 
   final VoidCallback onSearch;
+  final VoidCallback onRefresh;
   final VoidCallback? onToggleTheme;
   final VoidCallback onReadingHistory;
   final VoidCallback onManageSources;
@@ -62,6 +64,7 @@ class LibraryHomeTopBar extends StatelessWidget {
             tooltip: '更多操作',
             menuKey: const Key('library-top-overflow-menu'),
             actions: <LibraryAnchoredMenuAction>[
+              LibraryAnchoredMenuAction(label: '刷新书架', onSelected: onRefresh),
               LibraryAnchoredMenuAction(
                 label: layoutMode == LibraryHomeLayoutMode.list ? '切换为卡片模式' : '切换为列表模式',
                 onSelected: onLayoutModeToggle,

@@ -167,6 +167,15 @@ class LibraryPage extends ConsumerWidget {
     final LibraryBookRefreshOperation? bookRefreshOperation = bookRefresher == null
         ? null
         : LibraryBookRefreshOperation(refresher: bookRefresher, diagnostics: diagnostics);
+    Future<void> refreshShelf() async {
+      final operation = bookRefreshOperation;
+      if (operation != null && state.overview!.items.isNotEmpty) {
+        await operation.refreshAll(state.overview!.items.map((item) => item.id));
+        catalogRefreshCoordinator?.markCheckedNow();
+      }
+      await controller.refresh();
+    }
+
     final SourceContentGateway sourceGateway = ref.read(sourceContentGatewayProvider);
     void prepareAndOpen(String bookId) {
       final callback = readerRequested;
@@ -510,11 +519,11 @@ class LibraryPage extends ConsumerWidget {
           callbacks: resolvedCallbacks,
           preparingBookId: readerLaunch.status == ShelfReaderPreparationStatus.preparing ? readerLaunch.bookId : null,
           isRefreshing: state.status == LibraryPageStatus.refreshing,
-          onRefresh: controller.refresh,
+          onRefresh: refreshShelf,
           onToggleTheme: () {
             themeModeScope.onToggleTheme(Theme.of(context).brightness);
           },
-          errorNotice: state.hasFailure ? _LibraryErrorCard(error: state.error!, onRetry: controller.refresh, hasRetainedData: true) : null,
+          errorNotice: state.hasFailure ? _LibraryErrorCard(error: state.error!, onRetry: refreshShelf, hasRetainedData: true) : null,
         ),
       ),
     );

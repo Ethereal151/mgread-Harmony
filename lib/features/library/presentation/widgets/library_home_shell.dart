@@ -102,6 +102,8 @@ class _LibraryHomeShellState extends State<LibraryHomeShell> {
   bool _coverMetadataModeChangePending = false;
   bool _privacyRevealActive = false;
   bool _continueReadingTapPending = false;
+  bool _manualRefreshPending = false;
+  Future<void>? _manualRefreshFuture;
 
   @override
   void initState() {
@@ -150,7 +152,7 @@ class _LibraryHomeShellState extends State<LibraryHomeShell> {
               final bool useWidePagePadding = constraints.maxWidth >= AppSpacing.compactLayoutBreakpoint;
               final double pagePadding = useWidePagePadding ? AppSpacing.widePagePadding : AppSpacing.compactPagePadding;
               return RefreshIndicator(
-                onRefresh: widget.onRefresh,
+                onRefresh: _handleRefresh,
                 child: Scrollbar(
                   controller: _scrollController,
                   child: CustomScrollView(
@@ -225,6 +227,9 @@ class _LibraryHomeShellState extends State<LibraryHomeShell> {
                           ),
                         LibraryHomeTopBar(
                           onSearch: _handleSearch,
+                          onRefresh: () {
+                            unawaited(_handleRefresh());
+                          },
                           onToggleTheme: widget.onToggleTheme,
                           onReadingHistory: _handleReadingHistory,
                           onManageSources: _handleManageSources,
@@ -234,7 +239,7 @@ class _LibraryHomeShellState extends State<LibraryHomeShell> {
                         ),
                       ],
                     ),
-                    if (widget.isRefreshing) ...<Widget>[
+                    if (widget.isRefreshing || _manualRefreshPending) ...<Widget>[
                       const SizedBox(height: AppSpacing.regular),
                       Semantics(label: '正在刷新书架', child: const LinearProgressIndicator()),
                     ],
@@ -411,6 +416,35 @@ class _LibraryHomeShellState extends State<LibraryHomeShell> {
 
   void _handleSearch() {
     _invoke(widget.callbacks.onSearch);
+  }
+
+  Future<void> _handleRefresh() {
+    final Future<void>? current = _manualRefreshFuture;
+    if (current != null) return current;
+
+    if (mounted) {
+      setState(() {
+        _manualRefreshPending = true;
+      });
+    }
+
+    late Future<void> tracked;
+    try {
+      tracked = widget.onRefresh().whenComplete(() {
+        if (!mounted) return;
+        setState(() {
+          _manualRefreshPending = false;
+        });
+        if (identical(_manualRefreshFuture, tracked)) {
+          _manualRefreshFuture = null;
+        }
+      });
+    } catch (_) {
+      _manualRefreshPending = false;
+      rethrow;
+    }
+    _manualRefreshFuture = tracked;
+    return tracked;
   }
 
   Future<void> _handleLayoutModeToggle() async {
