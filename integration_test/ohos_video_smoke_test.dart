@@ -29,11 +29,15 @@ void main() {
     final client = OhosMediaClient.instance;
     const sessionId = 'ohos-video-smoke';
     final firstFrame = Completer<void>();
+    final buffered = Completer<void>();
     final events = <OhosMediaEvent>[];
     final subscription = client.events.where((event) => event.sessionId == sessionId).listen((event) {
       events.add(event);
       if (event.kind == 'firstFrame' && !firstFrame.isCompleted) {
         firstFrame.complete();
+      }
+      if (event.kind == 'buffered' && event.value is num && !buffered.isCompleted) {
+        buffered.complete();
       }
     });
     addTearDown(subscription.cancel);
@@ -56,10 +60,14 @@ void main() {
     await client.command('seek', sessionId, arguments: const <String, Object?>{'positionMs': 0});
     await client.command('play', sessionId);
     await firstFrame.future.timeout(const Duration(seconds: 30));
+    await buffered.future.timeout(const Duration(seconds: 30));
     await client.command('pause', sessionId);
 
     expect(events.any((event) => event.kind == 'playing'), isTrue);
     expect(events.any((event) => event.kind == 'firstFrame'), isTrue);
+    final bufferedEvent = events.lastWhere((event) => event.kind == 'buffered');
+    expect(bufferedEvent.value, isA<num>());
+    expect((bufferedEvent.value! as num).toDouble(), greaterThanOrEqualTo(0));
     await client.command('dispose', sessionId);
     await tester.pump(const Duration(milliseconds: 200));
   }, timeout: const Timeout(Duration(minutes: 2)));
