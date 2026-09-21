@@ -93,7 +93,7 @@ hdc install build/ohos/hap/entry-default-signed.hap
 - 本地能力/代理/Profile/Runtime 宿主单测：通过；签名 arm64 HAP：通过；`hdc install -r`：通过。2026-09-21 设备 `192.168.3.48:45975` 重新在线后，当前源码已在 `PLA-AL10` arm64 真机完成 Runtime、ArkWeb、Stage 2 fixture、音频、视频、首次运行首页和阅读器启动/系统返回保存时序验收。
 - 当前 `127.0.0.1:5555` OHOS x64 模拟器复验：`ohos_browser_session_smoke_test.dart`、`ohos_media_smoke_test.dart`、`ohos_video_smoke_test.dart`、`library_first_run_test.dart` 和 `ohos_x64_runtime_stub_test.dart` 全部通过；本轮最新复验的 ArkWeb 与视频 smoke 也重新构建、安装并通过，期间清理过一次残留 `hdc fport` 后重试。每组均重新构建、安装并启动签名 HAP。模拟器证据不替代缺失的本轮 arm64 真机增量回归。
 - 来源层固定 Node 快速检查报告：`artifacts/source-tests/quick-all-20260921-deps.json`，56 个来源中 28 个通过、6 个部分通过、22 个因外部站点/交互/资源或 testkit 能力边界失败；这不是 OHOS 真机验收。Windows Release 实际检查暂未执行，`flutter build windows --release --no-pub` 被当前系统未启用符号链接支持阻止。
-- 独立 HAP 启动复验：当前 `build/ohos/hap/entry-default-signed.hap` SHA-256 为 `4F0937709C4354B5BB88C1806AA4F1EE510D5D31E200F3F2F8AED82F1332E39F`；本轮源码已在 `PLA-AL10` 真机多次通过 `hdc install -r` 和 Flutter 调试启动，Runtime/ArkWeb/媒体/阅读器集成测试均完成连接与断言。
+- 独立 HAP 启动复验：当前 `build/ohos/hap/entry-default-signed.hap` SHA-256 为 `A0B8C9D9F98610FCB68E029594BFDA4938B8D266B6F80CD083EBFAD558F1CF6C`；本轮源码已在 `PLA-AL10` 真机多次通过 `hdc install -r` 和 Flutter 调试启动，Runtime/ArkWeb/媒体/阅读器集成测试均完成连接与断言。
 - 本轮当前源码的无签名 arm64 构建：`flutter build hap --debug --target-platform ohos-arm64 --no-pub --no-codesign` 成功；`build/ohos/hap/entry-default-unsigned.hap` SHA-256 为 `44DECC19BB910D7721372304CA0DE8DED463BCB46BEE8C43CC69CF61A84A1D54`，HAP 清单包含 `libs/arm64-v8a/libnode.so`、`libmgread_node_host.so`、`libflutter.so` 和 `libsqlite3.so`。无签名产物仅证明 ABI/资源打包，不能代替签名安装与真机回归。
 
 当前计划验收总状态：`partial`。代码适配和明确不支持能力的直接证据已完成，arm64 真机基础回归已补齐；最终 `pass` 仍需要真实外部来源、代理音视频/HLS、系统中断、有效二维码业务闭环、第二台 OHOS 设备和完整跨设备/HAP 门禁。
@@ -102,6 +102,7 @@ hdc install build/ohos/hap/entry-default-signed.hap
 - 随后通过 `adb reverse` + HDC `fport/rport` 回环映射完成两组真实 peer 同步：`ohos_paired_sync_host_test.dart` + `android_paired_sync_to_ohos_test.dart` 通过，`android_paired_sync_host_test.dart` + `ohos_paired_sync_cross_device_test.dart` 通过；两组均验证双向书架与插件计数。该证据使用 OHOS x64 虚拟器，不替代 arm64 真机回归，也不替代第二台 OHOS 真机的 HAP 传输验收。
 - 随后在 `PLA-AL10` arm64 真机上再次运行 `ohos_paired_sync_host_test.dart`（OHOS Host）与 `android_paired_sync_to_ohos_test.dart`（MI 8 Android peer），两端均 `All tests passed!`，并输出 `MGREAD_CROSS_DEVICE_OHOS_SUCCESS=true`；这补充了真实 arm64 OHOS 的双向书架/插件同步证据，但仍不等价于第二台 OHOS 设备或 HAP 传输验收。
 - HAP 传输补充尝试启动了 OHOS Host；Android 接收端经回环映射在连接前被 `normalizeLanSyncAddresses` 正确拒绝 `127.0.0.1`，未伪造 LAN 地址，未宣称 HAP 传输通过。该门禁仍需真实可达的第二台 OHOS 设备。
+- 2026-09-21 进一步以 `PLA-AL10` arm64 OHOS 为 HAP Host、MI 8 Android 为接收端，在真实局域网地址 `192.168.3.48` 上完成 `ohos_app_transfer_host_test.dart` + `ohos_app_transfer_client_test.dart`；接收端输出 `permissionConfirmed=true`、`bytes=262147` 和校验和，协议/校验/用户确认安装边界通过。但接收端不是 OHOS，故仍不能替代计划要求的第二台 OHOS HAP 传输验收。
 
 2026-09-21 使用 DevEco IP 设备 `192.168.3.48:45975`（`PLA-AL10`、HarmonyOS `7.0.0.105`、API 26、`arm64-v8a`）完成以下直接验收：
 
