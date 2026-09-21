@@ -98,6 +98,8 @@ hdc install build/ohos/hap/entry-default-signed.hap
 
 当前计划验收总状态：`partial`。代码适配和明确不支持能力的直接证据已完成；最终 `pass` 仍需要 arm64 真机增量回归及真实来源、代理音视频、系统中断、跨设备同步等外部门禁。
 
+跨设备同步补充尝试：曾启动 OHOS x64 Host 并准备使用在线 MI 8 Android peer；Android 端在 Gradle 编译阶段因缺失 `D:\DevEco Studio\jbr\bin\jlink.exe` 及 Kotlin 增量缓存跨盘路径错误而未进入测试，状态仍为 `not-run`，没有宣称同步通过。
+
 2026-09-19 使用 DevEco IP 设备 `192.168.3.48:45975`（`PLA-AL10`、HarmonyOS `7.0.0.105`、API 26、`arm64-v8a`）完成以下直接验收：
 
 - `integration_test/ohos_runtime_smoke_test.dart`：Node 24.16.0 arm64 host、Runtime ping、Network Kit 地址和能力降级通过；
