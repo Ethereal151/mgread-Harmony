@@ -12,6 +12,7 @@
 - 稳定不支持：命名 WebView Profile 隔离、AVPlayer 会话级播放器代理、OHOS 全局系统音量写入、音量键翻页和 AVPlayer 内 Anime4K。它们均已在能力清单中为 `false`，并由 UI 隐藏或保留播放器内部音量，不再静默成功。
 - 官方依据：华为 [ArkWeb Web 组件文档](https://developer.huawei.com/consumer/en/doc/harmonyos-references/arkts-basic-components-web)公开普通/隐身模式和应用级 Cookie 管理，没有本项目所需的命名持久 Profile 契约；[音量管理文档](https://developer.huawei.com/consumer/en/doc/harmonyos-guides-V5/volume-management-V5)明确系统音量只能读取/监听、不能由普通应用直接调节，而 [Media API](https://developer.huawei.com/consumer/en/doc/harmonyos-references-V3/js-apis-media-0000001281201038-V3) 的 `setVolume` 是播放器/音频流音量；[AVCodec surface 播放文档](https://developer.huawei.com/consumer/en/doc/harmonyos-guides/video-decoding-play-remote)说明图像处理能力属于独立解码渲染链路，不能把 AVPlayer 状态字段冒充 shader；[ArkUI 按键事件文档](https://developer.huawei.com/consumer/en/doc/harmonyos-guides-V13/arkts-common-events-device-input-event-V13)描述的是有焦点组件和外设键事件，不能构成手机物理音量键可稳定拦截的产品契约。
 - 当前证据：签名 arm64 HAP 已构建并通过 `hdc install -r` 安装；2026-09-21 在 `PLA-AL10`（`192.168.3.48:45975`、HarmonyOS 7.0/API 26、`arm64-v8a`）重新通过 Runtime、ArkWeb、5 个 Stage 2 fixture、音频、视频、首次运行首页和阅读器启动/系统返回保存时序。音频过程中发现并修复了 OHOS `play()` 异步状态竞态：原生现在等待 `playing` 再返回，修复后的真机音频 smoke 已通过。
+- Runtime 生命周期补充：`integration_test/ohos_runtime_lifecycle_test.dart` 在同一 arm64 真机完成首次 ping、原生 `restart` 和同一 Facade 恢复 ping，并校验两轮 `runtime_facade_invoke_started/completed` 诊断；测试专用 `debugDispose()` 不纳入真机验收，因为会关闭 Flutter 调试通道。
 - 当前模拟器复验：`127.0.0.1:5555` OHOS x64 模拟器上的 ArkWeb 浏览、AVPlayer 音频、视频纹理/窗口恢复、首次运行首页和 x64 Runtime 稳定降级共 5 组 integration test 均通过，并且每组均重新构建、安装并启动签名 HAP；x64 Runtime 仍按架构限制保持 `unsupported`。
 - 来源快速检查（固定 Node，不能替代真实 MgRead EXE 或 OHOS 真机）：56 个来源中 28 个 `passed`、6 个 `partial`、22 个因站点阻断/交互验证/资源不可达或 testkit 能力边界失败；报告为 `artifacts/source-tests/quick-all-20260921-deps.json`。Windows Release 主程序实际检查尚未执行，因为当前 Windows 未启用 Flutter 所需的符号链接支持。
 
@@ -19,7 +20,7 @@
 
 | 表面 | 状态 | 当前证据 | 尚缺证据或边界 |
 | --- | --- | --- | --- |
-| Runtime | `pass` | `ohos_runtime_smoke_test.dart` 在 arm64 真机通过 Node host、Runtime ping、Network Kit 地址和能力降级；x64 模拟器仍稳定返回 `runtime_architecture_unavailable` | 取消/重启/插件卸载等完整生命周期仍需独立真机用例 |
+| Runtime | `pass` | `ohos_runtime_smoke_test.dart` 在 arm64 真机通过 Node host、Runtime ping、Network Kit 地址和能力降级；`ohos_runtime_lifecycle_test.dart` 补充原生 restart、同一 Facade 恢复和两轮诊断；x64 模拟器仍稳定返回 `runtime_architecture_unavailable` | 取消、插件卸载等完整生命周期仍需独立真机用例 |
 | ArkWeb | `pass` | `ohos_browser_session_smoke_test.dart` 和 `ohos_stage2_runtime_arkweb_test.dart` 在 arm64 真机通过页面导航、HTML、5 个 fixture、资源代理、Cookie/JS 和 `interaction_required` 恢复 | 真实外部来源的完整链路和代理路由仍未全部覆盖 |
 | 来源网络/代理 | `partial` | OHOS HTTP、系统/自定义来源代理单测；固定 Node 快速检查报告 | 真实 EXE、真实 OHOS arm64 外部来源及代理资源链路 |
 | 音频 | `partial` | arm64 真机 AVPlayer 普通资源播放/暂停/跳转/倍速 smoke 通过；OHOS `play()` 状态竞态已修复；x64 复验也通过 | 代理资源、切歌、后台 AVSession 和系统中断恢复 |
