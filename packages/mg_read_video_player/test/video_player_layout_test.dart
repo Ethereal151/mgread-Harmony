@@ -259,6 +259,29 @@ void main() {
     },
   );
 
+  testWidgets('does not start the system-volume gesture when unsupported', (
+    tester,
+  ) async {
+    final backend = _Backend();
+    final observer = _Observer();
+    await tester.pumpWidget(
+      _playerApp(
+        backend: backend,
+        observer: observer,
+        supportsSystemVolume: false,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final gesture = await tester.startGesture(const Offset(700, 280));
+    await gesture.moveBy(const Offset(0, 180));
+    await gesture.up();
+    await tester.pumpAndSettle();
+
+    expect(observer.systemVolumes, isEmpty);
+    expect(find.text('系统音量'), findsNothing);
+  });
+
   testWidgets('drag seek updates the bottom slider and central target live', (
     tester,
   ) async {
@@ -381,6 +404,7 @@ Widget _playerApp({
   required _Backend backend,
   VideoPlayerObserver? observer,
   VideoPlayerController? controller,
+  bool supportsSystemVolume = true,
 }) => MaterialApp(
   home: VideoPlayerView(
     contentId: 'show',
@@ -388,6 +412,7 @@ Widget _playerApp({
     stateStore: const _Store(),
     controller: controller,
     observer: observer,
+    supportsSystemVolume: supportsSystemVolume,
     backendFactory: () => backend,
     controlsAutoHideDelay: const Duration(hours: 1),
   ),
