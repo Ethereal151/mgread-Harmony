@@ -7,7 +7,10 @@ import 'package:integration_test/integration_test.dart';
 import 'package:novel_reader_ui/novel_reader_ui.dart';
 import 'package:mgread_ohos_media/mgread_ohos_media.dart';
 
-const _videoUrl = String.fromEnvironment('OHOS_VIDEO_SMOKE_URL', defaultValue: 'https://samplelib.com/lib/preview/mp4/sample-5s.mp4');
+// This small H.264 sample is accepted by the arm64 device media stack used by
+// the OHOS acceptance test. Keep the define override for local codec/source
+// experiments without making the default smoke test depend on that choice.
+const _videoUrl = String.fromEnvironment('OHOS_VIDEO_SMOKE_URL', defaultValue: 'https://www.w3schools.com/html/mov_bbb.mp4');
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
