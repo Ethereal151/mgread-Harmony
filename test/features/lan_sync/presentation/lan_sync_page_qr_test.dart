@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 
 import 'package:mg_read/app/app_theme.dart';
 import 'package:mg_read/features/lan_sync/application/app_update_service.dart';
@@ -65,6 +66,46 @@ void main() {
 
     expect(find.byKey(const Key('lan-sync-sender-qr')), findsOneWidget);
     expect(find.textContaining('请使用接收设备扫描二维码'), findsOneWidget);
+  });
+
+  testWidgets('a valid sync QR routes the page into the temporary receive flow', (WidgetTester tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    final container = ProviderContainer(
+      overrides: [
+        lanSyncGatewayProvider.overrideWithValue(const _EmptyGateway()),
+        appUpdateServiceProvider.overrideWithValue(const _TestAppUpdateService()),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          theme: AppTheme.light(),
+          home: LanSyncPage(onBackRequested: () {}, onDestinationRequested: (_) {}),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('lan-sync-scan')));
+    await tester.pumpAndSettle();
+
+    final payload = LanSyncQrPayload.encode(
+      LanSyncConnectionOffer(sessionId: 'sync_session_123456', port: 1, addresses: const <String>['192.168.1.20']),
+    );
+    final scanner = tester.widget<MobileScanner>(find.byKey(const Key('lan-sync-qr-scanner')));
+    scanner.onDetect!(BarcodeCapture(barcodes: <Barcode>[Barcode(rawValue: payload)]));
+    await tester.pumpAndSettle();
+
+    expect(find.text('接收临时数据'), findsOneWidget);
+    expect(find.text('已识别传输二维码，正在建立连接。'), findsOneWidget);
+
+    await tester.tap(find.text('关闭').last);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('lan-sync-sheet-scroll')), findsNothing);
+    debugDefaultTargetPlatformOverride = null;
   });
 }
 
