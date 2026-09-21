@@ -65,9 +65,16 @@ try {
     'docs/core.md'
     'docs/development/README.md'
   )
-  $actualCoreDocs = Get-ChildItem -LiteralPath (Join-Path $repoRoot 'docs') -Filter '*.md' -File -Recurse |
+  # Only the top-level docs directory is the core entry surface. Nested
+  # development records are routed documents and must not be rejected as
+  # extra root entries.
+  $actualCoreDocs = Get-ChildItem -LiteralPath (Join-Path $repoRoot 'docs') -Filter '*.md' -File |
     ForEach-Object { [System.IO.Path]::GetRelativePath($repoRoot, $_.FullName).Replace('\', '/') } |
     Sort-Object
+  $developmentReadme = Join-Path $repoRoot 'docs/development/README.md'
+  if (Test-Path -LiteralPath $developmentReadme -PathType Leaf) {
+    $actualCoreDocs += [System.IO.Path]::GetRelativePath($repoRoot, $developmentReadme).Replace('\', '/')
+  }
   foreach ($path in @($actualCoreDocs | Where-Object { $_ -notin $expectedCoreDocs })) {
     $failures.Add("根 docs 存在非核心文档: $path")
   }

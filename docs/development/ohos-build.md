@@ -20,7 +20,7 @@ origin    https://github.com/Ethereal151/mgread-Harmony.git
 
 ## 工具链
 
-固定版本和本机路径见仓库根目录 [`toolchain.lock`](../toolchain.lock)。当前检查结果：
+固定版本和本机路径见仓库根目录 [`toolchain.lock`](../../toolchain.lock)。当前检查结果：
 
 - Flutter OHOS：`3.44.9+ohos-0.0.1-canary1`
 - Dart：`3.12.2`
