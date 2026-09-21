@@ -61,8 +61,8 @@ try {
   }
 
   $expectedCoreDocs = @(
-    'docs/README.md'
-    'docs/core.md'
+    'docs/README.md',
+    'docs/core.md',
     'docs/development/README.md'
   )
   # Only the top-level docs directory is the core entry surface. Nested

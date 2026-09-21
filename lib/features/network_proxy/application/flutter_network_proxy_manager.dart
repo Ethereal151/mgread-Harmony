@@ -32,12 +32,17 @@ final configuredFlutterNetworkProxyManagerProvider = Provider<FlutterNetworkProx
 });
 
 final class FlutterNetworkProxyManager {
-  FlutterNetworkProxyManager({SystemProxyEnvironmentLoader? systemProxyEnvironmentLoader, String? operatingSystem})
-    : _systemProxyEnvironmentLoader = systemProxyEnvironmentLoader ?? readSystemProxyEnvironment,
-      _operatingSystem = operatingSystem ?? Platform.operatingSystem;
+  FlutterNetworkProxyManager({
+    SystemProxyEnvironmentLoader? systemProxyEnvironmentLoader,
+    String? operatingSystem,
+    Future<void> Function(Uri?)? ohosProxyConfigurator,
+  }) : _systemProxyEnvironmentLoader = systemProxyEnvironmentLoader ?? readSystemProxyEnvironment,
+       _operatingSystem = operatingSystem ?? Platform.operatingSystem,
+       _ohosProxyConfigurator = ohosProxyConfigurator ?? OhosBrowserSessionHost.configureProxy;
 
   final SystemProxyEnvironmentLoader _systemProxyEnvironmentLoader;
   final String _operatingSystem;
+  final Future<void> Function(Uri?) _ohosProxyConfigurator;
   NetworkProxySettings _settings = NetworkProxySettings.defaults;
 
   bool get _isOhos => _operatingSystem == 'ohos';
@@ -82,12 +87,13 @@ final class FlutterNetworkProxyManager {
   Future<Uri?> runtimeSourceProxyUri() async {
     final custom = proxyUriFor(NetworkProxyTraffic.sourceHttp);
     if (_isOhos) {
-      await OhosBrowserSessionHost.configureProxy(custom);
+      await _ohosProxyConfigurator(custom);
     }
-    if (custom != null || (!Platform.isAndroid && !_isOhos)) {
-      return custom;
+    if (custom != null) return custom;
+    if (Platform.isAndroid || _isOhos) {
+      return systemProxyUriFor(Uri.parse('https://system-proxy.invalid'));
     }
-    return systemProxyUriFor(Uri.parse('https://system-proxy.invalid'));
+    return null;
   }
 
   /// Creates an isolated Dart client using the custom route or system default.

@@ -110,7 +110,7 @@ hdc install build/ohos/hap/entry-default-signed.hap
 - `integration_test/ohos_runtime_lifecycle_test.dart`：同一 arm64 真机完成原生 Runtime `restart` 后的 Facade 恢复 ping，并校验两轮生命周期诊断；测试专用 `debugDispose()` 不作为真机证据，因为它会关闭 Flutter 调试通道；
 - `integration_test/ohos_browser_session_smoke_test.dart`：ArkWeb 页面打开、导航和 HTML 获取通过；
 - `integration_test/ohos_stage2_runtime_arkweb_test.dart`：5 个本地 fixture 的安装、发现、搜索、详情、目录、正文、资源代理、Cookie/JS、`interaction_required` 恢复和卸载后列表确认通过；这不是 5 个真实外部数据源的替代证据；
-- `integration_test/ohos_real_source_smoke_test.dart`：在 `PLA-AL10` arm64 真机导入并验证 `35ge-info`、`deqi-novel`、`fanqie-novel`、`midu-novel`、`shukuge-365` 五个真实来源的发现、搜索、详情、目录和正文；OHOS 的 `--jitless` Node host 在 WebAssembly 不可用时走原生 HTTP/HTTPS parser，并通过 gzip 响应解压单测和真实来源链路验证；自定义代理仍按显式不支持错误处理，不宣称代理路径完成；
+- `integration_test/ohos_real_source_smoke_test.dart`：在 `PLA-AL10` arm64 真机导入并验证 `35ge-info`、`deqi-novel`、`fanqie-novel`、`midu-novel`、`shukuge-365` 五个真实来源的发现、搜索、详情、目录和正文；OHOS 的 `--jitless` Node host 在 WebAssembly 不可用时走原生 HTTP/HTTPS parser，并通过 gzip 响应解压单测和真实来源链路验证；同一 fallback 的 HTTP 代理、SOCKS5 代理和既有桌面/Android 代理回归均通过，HTTPS CONNECT 与系统代理仍未宣称有 arm64 专项证据；
 - `integration_test/ohos_media_smoke_test.dart`、`integration_test/ohos_video_smoke_test.dart`：音频控制、视频 Texture/首帧/窗口恢复通过；
 - `integration_test/library_first_run_test.dart`：首次启动首页和空书架通过；
 - `integration_test/library_reader_start_test.dart`：书架启动阅读器、系统返回、退出前保存与书架刷新时序通过；

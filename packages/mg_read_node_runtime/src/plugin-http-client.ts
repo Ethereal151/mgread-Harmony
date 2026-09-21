@@ -21,8 +21,11 @@ import {
   Socks5ProxyAgent,
   type Dispatcher,
 } from "undici";
-import { request as httpRequest, type ClientRequest } from "node:http";
-import { request as httpsRequest } from "node:https";
+import { Agent as HttpAgent, request as httpRequest, type ClientRequest } from "node:http";
+import { Agent as HttpsAgent, request as httpsRequest } from "node:https";
+import { connect as netConnect } from "node:net";
+import type { Duplex } from "node:stream";
+import { connect as tlsConnect } from "node:tls";
 import { createBrotliDecompress, createGunzip, createInflate } from "node:zlib";
 
 import type {
@@ -97,10 +100,7 @@ export class ConfigurablePluginHttpClient implements PluginRuntimeHttpClient {
     // public fetch contract alive with Node's native HTTP parser on that
     // platform; desktop and Android retain the negotiated Undici path.
     if ((globalThis as { readonly WebAssembly?: unknown }).WebAssembly === undefined) {
-      if (this.#proxyUrl !== undefined && proxyMode !== "direct") {
-        return Promise.reject(new TypeError("The no-WebAssembly HTTP fallback does not support an explicit proxy."));
-      }
-      return fetchWithoutWebAssembly(input, requestInit);
+      return fetchWithoutWebAssembly(input, requestInit, 0, proxyMode === "direct" ? undefined : this.#proxyUrl);
     }
     const dispatcher = proxyMode === "direct"
       ? this.#directAgent
@@ -128,7 +128,12 @@ export class ConfigurablePluginHttpClient implements PluginRuntimeHttpClient {
 
 const fallbackMaximumRedirects = 10;
 
-function fetchWithoutWebAssembly(input: string | URL, init: RequestInit, redirectCount = 0): Promise<Response> {
+function fetchWithoutWebAssembly(
+  input: string | URL,
+  init: RequestInit,
+  redirectCount = 0,
+  proxyUrl?: string,
+): Promise<Response> {
   const url = new URL(input.toString());
   if (url.protocol !== "http:" && url.protocol !== "https:") {
     return Promise.reject(new TypeError(`Unsupported URL protocol: ${url.protocol}`));
@@ -156,15 +161,9 @@ function fetchWithoutWebAssembly(input: string | URL, init: RequestInit, redirec
       return;
     }
 
-    const requestOptions = {
-      protocol: url.protocol,
-      hostname: url.hostname,
-      ...(url.port.length === 0 ? {} : { port: Number(url.port) }),
-      path: `${url.pathname || "/"}${url.search}`,
-      method,
-      headers: Object.fromEntries(headers.entries()),
-    };
-    request = (url.protocol === "https:" ? httpsRequest : httpRequest)(requestOptions, (response) => {
+    const proxy = proxyUrl === undefined ? undefined : parseFallbackProxy(proxyUrl);
+    const transport = createFallbackTransport(url, proxy, headers, method);
+    request = transport.request((response) => {
       const chunks: Buffer[] = [];
       const contentEncoding = (String(response.headers["content-encoding"] ?? "").split(",", 1)[0] ?? "").trim().toLowerCase();
       const decoded = contentEncoding === "gzip"
@@ -188,7 +187,7 @@ function fetchWithoutWebAssembly(input: string | URL, init: RequestInit, redirec
           if (status === 301 || status === 302 || status === 303) {
             nextInit = { ...nextInit, method: "GET", body: null };
           }
-          fetchWithoutWebAssembly(new URL(location, url), nextInit, redirectCount + 1).then(
+          fetchWithoutWebAssembly(new URL(location, url), nextInit, redirectCount + 1, proxyUrl).then(
             (value) => finish(resolve, value),
             (error: unknown) => finish(reject, error),
           );
@@ -209,6 +208,203 @@ function fetchWithoutWebAssembly(input: string | URL, init: RequestInit, redirec
     request.end();
   });
 }
+
+type FallbackProxy = {
+  readonly url: URL;
+  readonly usernamePassword?: string;
+};
+
+type FallbackTransport = {
+  readonly request: (callback: (response: import("node:http").IncomingMessage) => void) => ClientRequest;
+};
+
+function parseFallbackProxy(proxyUrl: string): FallbackProxy {
+  const url = new URL(proxyUrl);
+  if (url.protocol !== "http:" && url.protocol !== "https:" && url.protocol !== "socks5:") {
+    throw new TypeError(`The no-WebAssembly HTTP fallback does not support proxy protocol ${url.protocol}`);
+  }
+  const usernamePassword = url.username.length === 0 && url.password.length === 0
+    ? undefined
+    : `Basic ${Buffer.from(`${decodeURIComponent(url.username)}:${decodeURIComponent(url.password)}`).toString("base64")}`;
+  url.username = "";
+  url.password = "";
+  return usernamePassword === undefined ? { url } : { url, usernamePassword };
+}
+
+function createFallbackTransport(url: URL, proxy: FallbackProxy | undefined, headers: Headers, method: string): FallbackTransport {
+  const targetHeaders = Object.fromEntries(headers.entries());
+  if (proxy === undefined) {
+    return {
+      request: (callback) => (url.protocol === "https:" ? httpsRequest : httpRequest)({
+        protocol: url.protocol,
+        hostname: url.hostname,
+        ...(url.port.length === 0 ? {} : { port: Number(url.port) }),
+        path: `${url.pathname || "/"}${url.search}`,
+        method,
+        headers: targetHeaders,
+      }, callback),
+    };
+  }
+  if (proxy.url.protocol === "socks5:") {
+    const agent = url.protocol === "https:"
+      ? new Socks5FallbackAgent(proxy.url)
+      : new Socks5HttpFallbackAgent(proxy.url);
+    return {
+      request: (callback) => (url.protocol === "https:" ? httpsRequest : httpRequest)({
+        protocol: url.protocol,
+        hostname: url.hostname,
+        ...(url.port.length === 0 ? {} : { port: Number(url.port) }),
+        path: `${url.pathname || "/"}${url.search}`,
+        method,
+        headers: targetHeaders,
+        agent,
+      }, callback),
+    };
+  }
+  if (url.protocol === "http:") {
+    const proxyHeaders = { ...targetHeaders };
+    if (proxyHeaders.host === undefined) proxyHeaders.host = url.host;
+    if (proxy.usernamePassword !== undefined) proxyHeaders["proxy-authorization"] = proxy.usernamePassword;
+    return {
+      request: (callback) => (proxy.url.protocol === "https:" ? httpsRequest : httpRequest)({
+        protocol: proxy.url.protocol,
+        hostname: proxy.url.hostname,
+        ...(proxy.url.port.length === 0 ? {} : { port: Number(proxy.url.port) }),
+        path: url.toString(),
+        method,
+        headers: proxyHeaders,
+      }, callback),
+    };
+  }
+  const agent = new HttpConnectFallbackAgent(proxy.url, proxy.usernamePassword);
+  return {
+    request: (callback) => httpsRequest({
+      protocol: url.protocol,
+      hostname: url.hostname,
+      ...(url.port.length === 0 ? {} : { port: Number(url.port) }),
+      path: `${url.pathname || "/"}${url.search}`,
+      method,
+      headers: targetHeaders,
+      agent,
+    }, callback),
+  };
+}
+
+class HttpConnectFallbackAgent extends HttpsAgent {
+  constructor(private readonly proxy: URL, private readonly proxyAuthorization?: string) {
+    super({ keepAlive: false });
+  }
+
+  override createConnection(options: { host?: string; hostname?: string; port?: number | string }, callback: (error: Error | null, socket?: Duplex) => void): Duplex | undefined {
+    const targetHost = options.hostname ?? options.host ?? "";
+    const targetPort = Number(options.port ?? 443);
+    const connectRequest = (this.proxy.protocol === "https:" ? httpsRequest : httpRequest)({
+      protocol: this.proxy.protocol,
+      hostname: this.proxy.hostname,
+      ...(this.proxy.port.length === 0 ? {} : { port: Number(this.proxy.port) }),
+      method: "CONNECT",
+      path: `${targetHost}:${targetPort}`,
+      headers: {
+        host: `${targetHost}:${targetPort}`,
+        ...(this.proxyAuthorization === undefined ? {} : { "proxy-authorization": this.proxyAuthorization }),
+      },
+    });
+    const fail = (error: Error): void => callback(error);
+    connectRequest.once("error", fail);
+    connectRequest.once("connect", (response, socket) => {
+      if (response.statusCode !== 200) {
+        socket.destroy();
+        fail(new Error(`HTTP proxy CONNECT failed with status ${response.statusCode ?? 0}`));
+        return;
+      }
+      const secureSocket = tlsConnect({ socket, servername: targetHost });
+      secureSocket.once("error", fail);
+      secureSocket.once("secureConnect", () => callback(null, secureSocket));
+    });
+    connectRequest.end();
+    return undefined;
+  }
+}
+
+class Socks5FallbackAgent extends HttpsAgent {
+  constructor(private readonly proxy: URL) {
+    super({ keepAlive: false });
+  }
+
+  override createConnection(options: { host?: string; hostname?: string; port?: number | string }, callback: (error: Error | null, socket?: Duplex) => void): Duplex | undefined {
+    return createSocks5Connection(this.proxy, options, callback, true);
+  }
+}
+
+class Socks5HttpFallbackAgent extends HttpAgent {
+  constructor(private readonly proxy: URL) {
+    super({ keepAlive: false });
+  }
+
+  override createConnection(options: { host?: string; hostname?: string; port?: number | string }, callback: (error: Error | null, socket?: Duplex) => void): Duplex | undefined {
+    return createSocks5Connection(this.proxy, options, callback, false);
+  }
+}
+
+function createSocks5Connection(
+  proxy: URL,
+  options: { host?: string; hostname?: string; port?: number | string },
+  callback: (error: Error | null, socket?: Duplex) => void,
+  secure: boolean,
+): Duplex | undefined {
+    const targetHost = options.hostname ?? options.host ?? "";
+    const targetPort = Number(options.port ?? 80);
+    const socket = netConnect({ host: proxy.hostname, port: Number(proxy.port || 1080) });
+    const fail = (error: Error): void => {
+      socket.destroy();
+      callback(error);
+    };
+    socket.once("error", fail);
+    socket.once("connect", () => {
+      socket.write(Buffer.from([5, 1, 0]));
+      let buffer = Buffer.alloc(0);
+      const onGreeting = (chunk: Buffer): void => {
+        buffer = Buffer.concat([buffer, chunk]);
+        if (buffer.length < 2) return;
+        if (buffer[0] !== 5 || buffer[1] !== 0) {
+          fail(new Error("SOCKS5 proxy requires unauthenticated access"));
+          return;
+        }
+        socket.off("data", onGreeting);
+        const host = Buffer.from(targetHost);
+        socket.write(Buffer.concat([
+          Buffer.from([5, 1, 0, 3, host.length]),
+          host,
+          Buffer.from([(targetPort >> 8) & 0xff, targetPort & 0xff]),
+        ]));
+        buffer = Buffer.alloc(0);
+        socket.on("data", onConnect);
+      };
+      const onConnect = (chunk: Buffer): void => {
+        buffer = Buffer.concat([buffer, chunk]);
+        if (buffer.length < 5) return;
+        const addressType = buffer[3] ?? 0;
+        const addressLength = addressType === 1 ? 4 : addressType === 4 ? 16 : 1 + (buffer[4] ?? 0);
+        const packetLength = 4 + addressLength + 2;
+        if (buffer.length < packetLength) return;
+        socket.off("data", onConnect);
+        if (buffer[0] !== 5 || buffer[1] !== 0) {
+          fail(new Error(`SOCKS5 proxy CONNECT failed with status ${buffer[1] ?? 0}`));
+          return;
+        }
+        if (!secure) {
+          callback(null, socket);
+          return;
+        }
+        const secureSocket = tlsConnect({ socket, servername: targetHost });
+        secureSocket.once("error", fail);
+        secureSocket.once("secureConnect", () => callback(null, secureSocket));
+      };
+      socket.on("data", onGreeting);
+    });
+    return undefined;
+}
+
 
 function fallbackRequestBody(body: unknown): Uint8Array | undefined {
   if (body === undefined || body === null) return undefined;

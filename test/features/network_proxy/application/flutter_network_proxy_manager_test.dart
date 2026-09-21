@@ -204,6 +204,16 @@ void main() {
     expect(manager.playerProxyUriFor(NetworkProxyTraffic.video), isNull);
     expect(manager.playerProxyUriFor(NetworkProxyTraffic.audio), isNull);
   });
+
+  test('OHOS routes source Runtime traffic through the sampled system proxy', () async {
+    final manager = FlutterNetworkProxyManager(
+      operatingSystem: 'ohos',
+      ohosProxyConfigurator: (_) async {},
+      systemProxyEnvironmentLoader: () async => <String, String>{'HTTPS_PROXY': 'http://127.0.0.1:8899', 'NO_PROXY': ''},
+    );
+
+    expect(await manager.runtimeSourceProxyUri(), Uri.parse('http://127.0.0.1:8899'));
+  });
 }
 
 NetworkProxySettings _settings(HttpServer proxy, {bool cover = false, bool manga = false, bool video = false}) => NetworkProxySettings(
