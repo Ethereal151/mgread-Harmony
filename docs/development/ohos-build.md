@@ -96,14 +96,14 @@ hdc install build/ohos/hap/entry-default-signed.hap
 - 独立 HAP 启动复验：arm64 真机传输验收所用 `build/ohos/hap/entry-default-signed.hap` SHA-256 为 `A0B8C9D9F98610FCB68E029594BFDA4938B8D266B6F80CD083EBFAD558F1CF6C`；随后为跳过的 OHOS↔OHOS x64 虚拟器复验生成的本地签名产物 SHA-256 为 `3280A412A9F15A0467FD475FC306C45A0314B3D11D952038490E6E9802312B73`。本轮源码已在 `PLA-AL10` 真机多次通过 `hdc install -r` 和 Flutter 调试启动，Runtime/ArkWeb/媒体/阅读器集成测试均完成连接与断言。
 - 本轮当前源码的无签名 arm64 构建：`flutter build hap --debug --target-platform ohos-arm64 --no-pub --no-codesign` 成功；`build/ohos/hap/entry-default-unsigned.hap` SHA-256 为 `44DECC19BB910D7721372304CA0DE8DED463BCB46BEE8C43CC69CF61A84A1D54`，HAP 清单包含 `libs/arm64-v8a/libnode.so`、`libmgread_node_host.so`、`libflutter.so` 和 `libsqlite3.so`。无签名产物仅证明 ABI/资源打包，不能代替签名安装与真机回归。
 
-当前计划验收总状态：`partial`。代码适配和明确不支持能力的直接证据已完成，arm64 真机基础回归已补齐；最终 `pass` 仍需要真实外部来源、代理音视频/HLS、系统中断、有效二维码业务闭环和完整跨设备/HAP 门禁。OHOS↔OHOS 按用户明确要求跳过；不上架，因此 HAP 市场跳转也按用户要求跳过，均不作为本轮阻塞项。
+当前计划验收总状态：`partial`。代码适配和明确不支持能力的直接证据已完成，arm64 真机基础回归已补齐；最终 `pass` 仍需要播放器代理边界、系统中断、有效二维码业务闭环和本地阅读完整迁移。来源代理、HLS、真实跨设备/HAP 传输证据已补齐；OHOS↔OHOS 按用户明确要求跳过；不上架，因此 HAP 市场跳转也按用户要求跳过，均不作为本轮阻塞项。
 
 跨设备同步补充尝试：曾启动 OHOS x64 Host 并准备使用在线 MI 8 Android peer。首次 Android 构建受 DevEco JBR 缺失 `jlink.exe` 和 Kotlin 增量缓存跨盘路径影响；切换到本机 Temurin 17 后 APK 已成功构建并安装，但 OHOS 虚拟器位于 `10.0.2.15` NAT，经本机 HDC 映射的 `192.168.3.26:36979` 对手机连接超时，未进入同步断言，状态仍为 `not-run`。
 - 随后通过 `adb reverse` + HDC `fport/rport` 回环映射完成两组真实 peer 同步：`ohos_paired_sync_host_test.dart` + `android_paired_sync_to_ohos_test.dart` 通过，`android_paired_sync_host_test.dart` + `ohos_paired_sync_cross_device_test.dart` 通过；两组均验证双向书架与插件计数。该证据使用 OHOS x64 虚拟器，不替代 arm64 真机回归；OHOS↔OHOS 按用户明确要求跳过。
 - 随后在 `PLA-AL10` arm64 真机上再次运行 `ohos_paired_sync_host_test.dart`（OHOS Host）与 `android_paired_sync_to_ohos_test.dart`（MI 8 Android peer），两端均 `All tests passed!`，并输出 `MGREAD_CROSS_DEVICE_OHOS_SUCCESS=true`；这补充了真实 arm64 OHOS 的双向书架/插件同步证据。OHOS↔OHOS 不在本轮验收范围内。
 - HAP 传输补充尝试启动了 OHOS Host；Android 接收端经回环映射在连接前被 `normalizeLanSyncAddresses` 正确拒绝 `127.0.0.1`，未伪造 LAN 地址，未宣称 HAP 传输通过。该次失败只记录为历史诊断，不影响后续真实局域网 Android peer 验收。
 - 2026-09-21 进一步以 `PLA-AL10` arm64 OHOS 为 HAP Host、MI 8 Android 为接收端，在真实局域网地址 `192.168.3.48` 上完成 `ohos_app_transfer_host_test.dart` + `ohos_app_transfer_client_test.dart`；接收端输出 `permissionConfirmed=true`、`bytes=262147` 和校验和，协议/校验/用户确认安装边界通过。OHOS↔OHOS 按用户明确要求跳过。
-- 2026-09-21 继续以 `PLA-AL10` arm64 OHOS 为同步 Host、Windows 为 Client，在真实局域网地址 `192.168.3.48` 上运行 `ohos_paired_sync_host_test.dart` + `paired_sync_windows_client_test.dart`；两端均 `All tests passed!`，OHOS Host 输出 `MGREAD_CROSS_DEVICE_OHOS_SUCCESS=true`，验证双向书架与插件同步。反向 Windows Host→OHOS Client 仍受本机入站网络条件影响为 `peer_offline`，因此跨设备总状态保持 `partial`；OHOS↔OHOS 与 HAP 市场跳转按用户要求跳过。
+- 2026-09-21/22 继续在真实局域网地址 `192.168.3.48` 上完成两个方向的 arm64 OHOS↔Windows 验收：OHOS Host + `paired_sync_windows_client_test.dart` 输出 `MGREAD_CROSS_DEVICE_OHOS_SUCCESS=true`；Windows Host + `ohos_paired_sync_cross_device_test.dart` 输出 `MGREAD_CROSS_DEVICE_WINDOWS_OHOS_SUCCESS=true`，两端均 `All tests passed!`，验证双向书架与插件同步。此前 Windows 入站网络的 `peer_offline` 已通过清理 HDC 映射并使用 WLAN 地址 `192.168.3.26` 复验排除；OHOS↔OHOS 与 HAP 市场跳转按用户要求跳过。
 
 2026-09-21 使用 DevEco IP 设备 `192.168.3.48:45975`（`PLA-AL10`、HarmonyOS `7.0.0.105`、API 26、`arm64-v8a`）完成以下直接验收：
 
@@ -120,7 +120,7 @@ hdc install build/ohos/hap/entry-default-signed.hap
 - 音频复验发现 OHOS `AVPlayer.play()` 返回早于 `playing` 状态的真实竞态，原生已改为等待 `playing` 再完成 play 命令，修复后的真机音频 smoke 通过；
 - HAP 使用 `flutter build hap --debug --target-platform ohos-arm64 --no-pub` 成功签名并通过 `hdc install -r` 安装启动。
 
-以下门禁仍需保留为未完成：代理音视频/HLS、锁屏/蓝牙/焦点与中断恢复、现有跨设备矩阵的完整补充、有效二维码载荷路由和本地阅读完整迁移回归；五个真实来源直连链路已通过，OHOS↔OHOS 与不上架的 HAP 市场跳转已按用户要求跳过。
+以下门禁仍需保留为未完成：播放器代理边界、锁屏/蓝牙/焦点与中断恢复、有效二维码载荷路由和本地阅读完整迁移回归；五个真实来源直连链路、HLS 样本和完整的相关跨设备/HAP 传输矩阵已通过，OHOS↔OHOS 与不上架的 HAP 市场跳转已按用户要求跳过。
 
 最近一次 VM 验证使用 `127.0.0.1:5555` API 26 x86_64 模拟器：
 

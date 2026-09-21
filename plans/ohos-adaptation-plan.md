@@ -26,10 +26,10 @@
 | 音频 | `partial` | arm64 真机 AVPlayer 普通资源播放/暂停/跳转/倍速 smoke 通过；OHOS `play()` 状态竞态已修复；x64 复验也通过 | 代理资源、切歌、后台 AVSession 和系统中断恢复 |
 | 视频 | `partial` | arm64 真机 Texture、首帧、进度、`CACHED_DURATION -> bufferedPosition`、窗口恢复和 Unified Streaming H.264 HLS 播放通过；x64 复验也通过；Apple BipBop HLS 返回 `open_failed / avplayer_state_error`，Mux x36xhzz HLS 可打开但 `play` 超时，Mux tears-of-steel HLS 返回 `open_failed / avplayer_state_error`，均保留为兼容性边界 | OHOS 播放器代理、全屏、系统中断和真实系统音量边界的播放证据；HLS 已有至少一条 arm64 成功样本，但外部流兼容性仍不统一 |
 | Reader/主应用 | `partial` | arm64 真机首次运行首页、阅读器启动、系统返回、退出前保存/书架刷新通过；音量键不支持公开 API 测试；OHOS 外链桥接成功/拒绝/异常 fake-platform 测试；既有扫码 UI 证据 | 有效二维码载荷、真实内容完整阅读迁移、文件导入/导出/分享和反馈页面真机闭环 |
-| 跨设备同步/HAP 传输 | `partial` | 协议、QR 载荷、恢复和容量单测；x64 OHOS 与 MI 8 Android 的正向、反向同步通过；`PLA-AL10` arm64 OHOS Host 与 MI 8 Android peer 的双向同步及 HAP 包传输/校验/用户确认边界通过；arm64 OHOS Host 与 Windows Client 的双向书架/插件同步通过 | OHOS↔OHOS 按用户明确要求跳过，不作为本轮完成门禁；不上架，因此 HAP 市场跳转也按用户要求跳过；Windows Host→OHOS Client 仍受本机入站网络条件影响未通过，完整跨设备门禁仍未全部覆盖 |
+| 跨设备同步/HAP 传输 | `pass` | 协议、QR 载荷、恢复和容量单测；x64 OHOS 与 MI 8 Android 的正向、反向同步通过；`PLA-AL10` arm64 OHOS Host 与 MI 8 Android peer 的双向同步及 HAP 包传输/校验/用户确认边界通过；arm64 OHOS Host↔Windows Client 双向书架/插件同步均通过 | OHOS↔OHOS 按用户明确要求跳过，不作为本轮完成门禁；不上架，因此 HAP 市场跳转也按用户要求跳过 |
 | OHOS SDK 明确不支持能力 | `pass` | Capability flags、arm64 真机 9 项状态断言、UI 隐藏和公开 API 直接测试；官方 API 边界已记录 | 无；这些能力按 `unsupported` 管理，不冒充可用 |
 
-因此，“计划内可实现项”的代码实现已完成；上面列出的 OHOS SDK 能力边界属于有证据的 `unsupported`，不是遗留的静默空操作。当前总验收状态仍为 `partial`：代理下音视频/HLS、系统中断、有效二维码业务闭环和完整跨设备/HAP 门禁仍未全部满足完成定义；五个真实来源直连链路已通过，OHOS↔OHOS 与不上架的 HAP 市场跳转均已按用户要求明确跳过，不计入本轮阻塞项。
+因此，“计划内可实现项”的代码实现已完成；上面列出的 OHOS SDK 能力边界属于有证据的 `unsupported`，不是遗留的静默空操作。当前总验收状态仍为 `partial`：播放器代理、系统中断、有效二维码业务闭环和本地阅读完整迁移仍未全部满足完成定义；来源代理、HLS、真实跨设备同步和 HAP 传输已补齐对应证据，OHOS↔OHOS 与不上架的 HAP 市场跳转均已按用户要求明确跳过，不计入本轮阻塞项。
 
 目标是让 OpenHarmony（以下简称 OHOS）在需要的产品能力上达到 Android 基线，并明确哪些能力需要 Windows 级别的额外能力，哪些能力保持平台差异。
 
