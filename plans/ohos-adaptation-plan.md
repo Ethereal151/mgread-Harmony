@@ -24,7 +24,7 @@
 | ArkWeb | `pass` | `ohos_browser_session_smoke_test.dart` 和 `ohos_stage2_runtime_arkweb_test.dart` 在 arm64 真机通过页面导航、HTML、5 个 fixture、资源代理、Cookie/JS 和 `interaction_required` 恢复 | 代理路由在来源网络和音视频边界分别验收，ArkWeb 本身无新增阻塞 |
 | 来源网络/代理 | `partial` | OHOS HTTP、系统/自定义来源代理单测；固定 Node `--jitless` 快速检查；无 WebAssembly fallback 已补原生直连、HTTP 代理和 SOCKS5 代理通道并支持 gzip 解压；`ohos_real_source_smoke_test.dart` 在 `PLA-AL10` arm64 真机通过 35ge、德奇、番茄、米读、书库 365 五个真实来源的插件导入、发现、搜索、详情、目录和正文链路 | 真实系统代理、自定义代理、NO_PROXY 路由和 HTTPS CONNECT 代理的 arm64 专项证据仍需单独验收；播放器代理继续按 OHOS SDK 不支持处理 |
 | 音频 | `partial` | arm64 真机 AVPlayer 普通资源播放/暂停/跳转/倍速 smoke 通过；OHOS `play()` 状态竞态已修复；x64 复验也通过 | 代理资源、切歌、后台 AVSession 和系统中断恢复 |
-| 视频 | `partial` | arm64 真机 Texture、首帧、进度、`CACHED_DURATION -> bufferedPosition` 和窗口恢复通过；x64 复验也通过；针对 Apple BipBop 示例 HLS 的 arm64 尝试明确返回 `open_failed / avplayer_state_error`，未冒充通过 | 代理/HLS 成功播放、全屏、系统中断和真实系统音量边界的播放证据 |
+| 视频 | `partial` | arm64 真机 Texture、首帧、进度、`CACHED_DURATION -> bufferedPosition` 和窗口恢复通过；x64 复验也通过；Apple BipBop HLS 明确返回 `open_failed / avplayer_state_error`，Mux H.264 HLS 可打开但 `play` 超时，均未冒充通过 | 代理/HLS 成功播放、全屏、系统中断和真实系统音量边界的播放证据 |
 | Reader/主应用 | `partial` | arm64 真机首次运行首页、阅读器启动、系统返回、退出前保存/书架刷新通过；音量键不支持公开 API 测试；OHOS 外链桥接成功/拒绝/异常 fake-platform 测试；既有扫码 UI 证据 | 有效二维码载荷、真实内容完整阅读迁移、文件导入/导出/分享和反馈页面真机闭环 |
 | 跨设备同步/HAP 传输 | `partial` | 协议、QR 载荷、恢复和容量单测；x64 OHOS 与 MI 8 Android 的正向、反向同步通过；`PLA-AL10` arm64 OHOS Host 与 MI 8 Android peer 的双向同步及 HAP 包传输/校验/用户确认边界通过 | OHOS↔OHOS 按用户明确要求跳过，不作为本轮完成门禁；不上架，因此 HAP 市场跳转也按用户要求跳过；完整跨设备门禁仍未全部覆盖 |
 | OHOS SDK 明确不支持能力 | `pass` | Capability flags、arm64 真机 9 项状态断言、UI 隐藏和公开 API 直接测试；官方 API 边界已记录 | 无；这些能力按 `unsupported` 管理，不冒充可用 |
