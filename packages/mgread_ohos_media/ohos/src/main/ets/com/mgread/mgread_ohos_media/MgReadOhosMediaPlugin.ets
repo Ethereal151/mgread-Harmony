@@ -96,7 +96,7 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
         })
         break
       case 'play':
-        this.run(args, (session) => session.player.play(), result)
+        this.run(args, (session) => this.playSession(session), result)
         break
       case 'pause':
         this.run(args, (session) => session.player.pause(), result)
@@ -248,6 +248,14 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
       return
     }
     Promise.resolve().then(() => operation(session)).then(() => result.success(null)).catch((error: Error) => result.error('operation_failed', this.errorMessage(error), null))
+  }
+
+  private async playSession(session: MediaSession): Promise<void> {
+    await session.player.play()
+    // HarmonyOS resolves AVPlayer.play() before the asynchronous state change
+    // is observable. Do not let Dart issue pause/seek-after-play while the
+    // player is still in `prepared`, because OHOS rejects pause in that state.
+    await this.waitForState(session.player, 'playing')
   }
 
   private emit(sessionId: string, kind: string, value?: Any, message?: string): void {
@@ -410,7 +418,7 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
     let operation: Promise<void>
     switch (command) {
       case 'play':
-        operation = session.player.play()
+        operation = this.playSession(session)
         break
       case 'pause':
         operation = session.player.pause()

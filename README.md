@@ -19,7 +19,7 @@
 [![GitHub stars](https://img.shields.io/github/stars/lingy-Mg/mg_read?style=flat&logo=github)](https://github.com/lingy-Mg/mg_read/stargazers)
 [![GitHub last commit](https://img.shields.io/github/last-commit/lingy-Mg/mg_read)](https://github.com/lingy-Mg/mg_read/commits/main)
 
-[快速开始](#-快速开始) · [核心能力](#-核心能力) · [数据源](#-数据源与扩展) · [开发文档](#-开发入口) · [GitHub](https://github.com/lingy-Mg/mg_read)
+[快速开始](#快速开始) · [核心能力](#核心能力) · [数据源](#数据源与扩展) · [开发文档](#开发入口) · [GitHub](https://github.com/lingy-Mg/mg_read)
 
 </div>
 
