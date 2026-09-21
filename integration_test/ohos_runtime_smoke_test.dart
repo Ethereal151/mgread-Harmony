@@ -33,6 +33,17 @@ void main() {
     expect(localAddresses, isNotEmpty);
     expect(await PlatformLanSyncNetworkEnvironment().isLocalNetworkAvailable(), isTrue);
 
+    final productCapabilities = PlatformCapabilities.forOperatingSystem('ohos');
+    expect(productCapabilities.supportsOhosSourceHttpTransport, isTrue);
+    expect(productCapabilities.supportsOhosWebViewProfileIsolation, isFalse);
+    expect(productCapabilities.supportsOhosWebViewCancellation, isTrue);
+    expect(productCapabilities.supportsOhosSourceSystemProxy, isTrue);
+    expect(productCapabilities.supportsOhosPlayerHttpProxy, isFalse);
+    expect(productCapabilities.supportsOhosVideoBufferedPosition, isTrue);
+    expect(productCapabilities.supportsOhosVideoEnhancement, isFalse);
+    expect(productCapabilities.supportsOhosSystemVolume, isFalse);
+    expect(productCapabilities.supportsOhosReaderVolumeKeys, isFalse);
+
     final runtime = PluginRuntime();
     final ping = await runtime.invoke(const RuntimePingInvocation());
     expect(ping.isHealthy, isTrue);

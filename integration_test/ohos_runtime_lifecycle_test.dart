@@ -19,6 +19,12 @@ void main() {
       first.latestDiagnostics.map((diagnostic) => diagnostic.code),
       containsAllInOrder(<String>['runtime_facade_invoke_started', 'runtime_facade_invoke_completed']),
     );
+    for (final diagnostic in first.latestDiagnostics) {
+      expect(diagnostic.message, isNot(contains('http://')));
+      expect(diagnostic.message, isNot(contains('https://')));
+      expect(diagnostic.message, isNot(contains('token')));
+      expect(diagnostic.message, isNot(contains('signature')));
+    }
 
     await const MethodChannel('mgread_plugin_runtime/ohos').invokeMethod<String>('restart');
     final secondPing = await first.invoke(const RuntimePingInvocation());
