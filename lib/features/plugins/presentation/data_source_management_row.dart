@@ -224,10 +224,10 @@ class _DataSourceBrandMark extends StatelessWidget {
                 shape: BoxShape.circle,
                 border: Border.all(color: theme.colorScheme.surface, width: 2),
               ),
-              child: const SizedBox(
+              child: SizedBox(
                 width: AppSpacing.regular,
                 height: AppSpacing.regular,
-                child: Icon(Icons.code_rounded, size: AppSpacing.compact, color: Colors.white),
+                child: Icon(Icons.code_rounded, size: AppSpacing.compact, color: theme.colorScheme.onPrimary),
               ),
             ),
           ),

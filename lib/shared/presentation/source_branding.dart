@@ -134,6 +134,7 @@ class _FallbackSourceIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final tokens = AppThemeTokens.of(context);
     final glyph = displayName.isEmpty ? '源' : displayName.characters.first;
     return DecoratedBox(
@@ -147,7 +148,7 @@ class _FallbackSourceIcon extends StatelessWidget {
         child: Center(
           child: Text(
             glyph,
-            style: TextStyle(color: Colors.white, fontSize: size * 0.42, fontWeight: FontWeight.w700),
+            style: TextStyle(color: theme.colorScheme.onPrimary, fontSize: size * 0.42, fontWeight: FontWeight.w700),
           ),
         ),
       ),

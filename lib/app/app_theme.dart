@@ -142,7 +142,7 @@ enum AppDarkThemeColor {
 abstract final class AppTheme {
   /// Temporary product switch while the source-picker visual baseline is light-only.
   static const bool darkModeEnabled = false;
-  static final ThemeData _novelReaderTheme = light(color: AppThemeColor.warm);
+  static final ThemeData _novelReaderTheme = _light(color: AppThemeColor.warm, connectMaterialSurfaces: false);
 
   /// Stable host baseline for novel and comic reading surfaces.
   ///
@@ -151,7 +151,9 @@ abstract final class AppTheme {
   /// their entry, detail, or catalog UI.
   static ThemeData novelReader() => _novelReaderTheme;
 
-  static ThemeData light({AppThemeColor color = AppThemeColor.warm}) {
+  static ThemeData light({AppThemeColor color = AppThemeColor.warm}) => _light(color: color, connectMaterialSurfaces: true);
+
+  static ThemeData _light({required AppThemeColor color, required bool connectMaterialSurfaces}) {
     const pageBackground = Color(0xFFFDFBFA);
     const surface = Color(0xFFFEFDFB);
     final Color featureSurface = color == AppThemeColor.warm
@@ -190,7 +192,7 @@ abstract final class AppTheme {
       coverEmberEnd: Color(0xFFCA8B40),
     );
     final ColorScheme seededScheme = ColorScheme.fromSeed(seedColor: tokens.accent, brightness: Brightness.light);
-    final ColorScheme colorScheme = seededScheme.copyWith(
+    final ColorScheme baseColorScheme = seededScheme.copyWith(
       primary: tokens.accent,
       onPrimary: Colors.white,
       primaryContainer: tokens.accentSoft,
@@ -199,6 +201,7 @@ abstract final class AppTheme {
       onSurface: const Color(0xFF201C18),
       outlineVariant: tokens.divider,
     );
+    final ColorScheme colorScheme = connectMaterialSurfaces ? _connectMaterialSurfaces(baseColorScheme, tokens) : baseColorScheme;
     return _theme(colorScheme, tokens);
   }
 
@@ -231,7 +234,7 @@ abstract final class AppTheme {
       coverEmberStart: Color(0xFF3C2735),
       coverEmberEnd: Color(0xFF8A5167),
     );
-    final ColorScheme colorScheme = ColorScheme.fromSeed(seedColor: tokens.accent, brightness: Brightness.dark).copyWith(
+    final ColorScheme baseColorScheme = ColorScheme.fromSeed(seedColor: tokens.accent, brightness: Brightness.dark).copyWith(
       primary: tokens.accent,
       onPrimary: color == AppDarkThemeColor.seaSaltBlue ? const Color(0xFF07111F) : const Color(0xFF111111),
       primaryContainer: tokens.accentSoft,
@@ -240,7 +243,39 @@ abstract final class AppTheme {
       onSurface: const Color(0xFFE8EDF3),
       outlineVariant: tokens.divider,
     );
+    final ColorScheme colorScheme = _connectMaterialSurfaces(baseColorScheme, tokens);
     return _theme(colorScheme, tokens);
+  }
+
+  /// Connects Material 3's component-level roles to the host token system.
+  ///
+  /// Cards, dialogs, menus, navigation surfaces, chips and filled inputs read
+  /// these roles directly instead of [ColorScheme.surface]. Keeping the map at
+  /// this boundary prevents those widgets from falling back to an unrelated
+  /// seed-generated neutral palette. Reader-owned themes deliberately skip it.
+  static ColorScheme _connectMaterialSurfaces(ColorScheme scheme, AppThemeTokens tokens) {
+    final bool isDark = scheme.brightness == Brightness.dark;
+    return scheme.copyWith(
+      secondary: tokens.accent,
+      onSecondary: scheme.onPrimary,
+      secondaryContainer: tokens.accentSoft,
+      onSecondaryContainer: scheme.onPrimaryContainer,
+      error: tokens.notification,
+      surfaceDim: isDark ? tokens.pageBackground : tokens.mutedSurface,
+      surfaceBright: isDark ? tokens.featureSurface : tokens.surface,
+      surfaceContainerLowest: isDark ? tokens.pageBackground : tokens.surface,
+      surfaceContainerLow: tokens.surface,
+      surfaceContainer: tokens.mutedSurface,
+      surfaceContainerHigh: tokens.featureSurface,
+      surfaceContainerHighest: tokens.featureSurface,
+      onSurfaceVariant: tokens.mutedText,
+      outline: tokens.mutedText,
+      outlineVariant: tokens.divider,
+      inverseSurface: scheme.onSurface,
+      onInverseSurface: tokens.pageBackground,
+      inversePrimary: tokens.accent,
+      surfaceTint: Colors.transparent,
+    );
   }
 
   static ThemeData _theme(ColorScheme colorScheme, AppThemeTokens tokens) {
