@@ -210,6 +210,22 @@ void main() {
     expect(find.byKey(const Key('library-grid-book-overlay-subtitle-fixture-lord-of-mysteries')), findsOneWidget);
   });
 
+  testWidgets('card metadata mode follows the latest app-owned setting', (WidgetTester tester) async {
+    final ValueNotifier<LibraryHomeCoverMetadataMode> metadataMode = ValueNotifier<LibraryHomeCoverMetadataMode>(
+      LibraryHomeCoverMetadataMode.insideCover,
+    );
+    addTearDown(metadataMode.dispose);
+    await tester.pumpWidget(_host(initialLayoutMode: LibraryHomeLayoutMode.card, coverMetadataModeListenable: metadataMode));
+    await tester.pumpAndSettle();
+
+    expect(tester.widget<LibraryBookSliverGrid>(find.byType(LibraryBookSliverGrid)).metadataMode, LibraryHomeCoverMetadataMode.insideCover);
+
+    metadataMode.value = LibraryHomeCoverMetadataMode.belowCover;
+    await tester.pumpAndSettle();
+
+    expect(tester.widget<LibraryBookSliverGrid>(find.byType(LibraryBookSliverGrid)).metadataMode, LibraryHomeCoverMetadataMode.belowCover);
+  });
+
   testWidgets('card menu stays subtle until hover or expansion', (WidgetTester tester) async {
     await tester.pumpWidget(
       _host(
@@ -1073,31 +1089,39 @@ Widget _host({
   LibraryHomeLayoutMode initialLayoutMode = LibraryHomeLayoutMode.list,
   Future<void> Function(LibraryHomeLayoutMode mode)? onLayoutModeChanged,
   LibraryHomeCoverMetadataMode initialCoverMetadataMode = LibraryHomeCoverMetadataMode.belowCover,
+  ValueNotifier<LibraryHomeCoverMetadataMode>? coverMetadataModeListenable,
   Future<void> Function()? onRefresh,
 }) {
+  Widget buildShell(LibraryHomeCoverMetadataMode coverMetadataMode) => MediaQuery(
+    data: MediaQueryData(
+      disableAnimations: disableAnimations,
+      textScaler: textScaler,
+      padding: EdgeInsets.only(top: topInset),
+      viewPadding: EdgeInsets.only(top: topInset),
+    ),
+    child: LibraryHomeShell(
+      data: data ?? LibraryHomeFixtures.preview,
+      initialLayoutMode: initialLayoutMode,
+      onLayoutModeChanged: onLayoutModeChanged,
+      initialCoverMetadataMode: coverMetadataMode,
+      callbacks: callbacks,
+      isRefreshing: false,
+      onRefresh: onRefresh ?? () async {},
+      onToggleTheme: onToggleTheme,
+      preparingBookId: preparingBookId,
+    ),
+  );
+
   return MaterialApp(
     theme: AppTheme.light(),
     darkTheme: AppTheme.dark(),
     themeMode: themeMode,
-    home: MediaQuery(
-      data: MediaQueryData(
-        disableAnimations: disableAnimations,
-        textScaler: textScaler,
-        padding: EdgeInsets.only(top: topInset),
-        viewPadding: EdgeInsets.only(top: topInset),
-      ),
-      child: LibraryHomeShell(
-        data: data ?? LibraryHomeFixtures.preview,
-        initialLayoutMode: initialLayoutMode,
-        onLayoutModeChanged: onLayoutModeChanged,
-        initialCoverMetadataMode: initialCoverMetadataMode,
-        callbacks: callbacks,
-        isRefreshing: false,
-        onRefresh: onRefresh ?? () async {},
-        onToggleTheme: onToggleTheme,
-        preparingBookId: preparingBookId,
-      ),
-    ),
+    home: coverMetadataModeListenable == null
+        ? buildShell(initialCoverMetadataMode)
+        : ValueListenableBuilder<LibraryHomeCoverMetadataMode>(
+            valueListenable: coverMetadataModeListenable,
+            builder: (BuildContext context, LibraryHomeCoverMetadataMode coverMetadataMode, Widget? child) => buildShell(coverMetadataMode),
+          ),
   );
 }
 
