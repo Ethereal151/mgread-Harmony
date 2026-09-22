@@ -51,7 +51,7 @@ class ProfileSettingsList extends StatelessWidget {
   }
 }
 
-/// One fixed-height, touch-safe profile setting row.
+/// One touch-safe profile setting row that grows for accessibility text scaling.
 class ProfileSettingsRow extends StatelessWidget {
   /// Creates a custom profile settings row.
   const ProfileSettingsRow({required this.item, required this.onPressed, super.key});
@@ -63,6 +63,8 @@ class ProfileSettingsRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
     final AppThemeTokens tokens = AppThemeTokens.of(context);
+    final bool isTextScaled = MediaQuery.textScalerOf(context).scale(1) > 1;
+    final int textMaxLines = isTextScaled ? 2 : 1;
     final String accessibilityLabel = item.trailingLabel == null
         ? '${item.title}，${item.description}'
         : '${item.title}，${item.description}，${item.trailingLabel}';
@@ -75,8 +77,8 @@ class ProfileSettingsRow extends StatelessWidget {
         child: InkWell(
           key: ValueKey<String>('profile-setting-${item.id}'),
           onTap: onPressed,
-          child: SizedBox(
-            height: AppSpacing.profileSettingsRowHeight,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: AppSpacing.profileSettingsRowHeight),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.profileSettingsTrailingRight),
               child: Row(
@@ -96,14 +98,14 @@ class ProfileSettingsRow extends StatelessWidget {
                       children: <Widget>[
                         Text(
                           item.title,
-                          maxLines: 1,
+                          maxLines: textMaxLines,
                           overflow: TextOverflow.ellipsis,
                           style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600, height: 1.15),
                         ),
                         const SizedBox(height: AppSpacing.unit / 2),
                         Text(
                           item.description,
-                          maxLines: 1,
+                          maxLines: textMaxLines,
                           overflow: TextOverflow.ellipsis,
                           style: theme.textTheme.bodyMedium?.copyWith(color: tokens.mutedText, fontWeight: FontWeight.w400, height: 1.25),
                         ),

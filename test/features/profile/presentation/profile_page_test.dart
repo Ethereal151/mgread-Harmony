@@ -5,6 +5,7 @@ import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mg_read/app/app_theme.dart';
 import 'package:mg_read/features/profile/presentation/profile_page.dart';
+import 'package:mg_read/features/profile/presentation/profile_view_data.dart';
 import 'package:mg_read/features/profile/presentation/widgets/profile_overview_card.dart';
 import 'package:mg_read/features/profile/presentation/widgets/profile_settings_list.dart';
 import 'package:mg_read/features/profile/domain/profile_identity.dart';
@@ -230,6 +231,49 @@ void main() {
     expect(card.center.dx, closeTo(640, 0.1));
     expect(card.width, closeTo(AppSpacing.contentMaxWidth - AppSpacing.widePagePadding * 2, 0.1));
   });
+
+  testWidgets('profile setting rows grow for large text without losing semantics', (WidgetTester tester) async {
+    await _setViewport(tester, const Size(320, 640));
+    final SemanticsHandle semantics = tester.ensureSemantics();
+    try {
+      const String longTitle = '一个很长的阅读器与播放器设置标题';
+      const String longDescription = '这是一个很长的设置描述，用于验证大字体下仍然可以换行阅读完整内容。';
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light(),
+          builder: (BuildContext context, Widget? child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(textScaler: const TextScaler.linear(2)),
+            child: child ?? const SizedBox.shrink(),
+          ),
+          home: Scaffold(
+            body: ProfileSettingsList(
+              items: const <ProfileSettingsItemViewData>[
+                ProfileSettingsItemViewData(
+                  id: 'large-text',
+                  title: longTitle,
+                  description: longDescription,
+                  icon: ProfileSettingsIcon.reading,
+                ),
+              ],
+              onItemPressed: (_) {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final Finder row = find.byKey(const Key('profile-setting-large-text'));
+      expect(tester.getRect(row).height, greaterThan(AppSpacing.profileSettingsRowHeight));
+      expect(find.text(longTitle), findsOneWidget);
+      expect(find.text(longDescription), findsOneWidget);
+      expect(tester.widget<Text>(find.text(longTitle)).maxLines, 2);
+      expect(tester.widget<Text>(find.text(longDescription)).maxLines, 2);
+      expect(tester.getSemantics(row).label, contains(longDescription));
+      expect(tester.takeException(), isNull);
+    } finally {
+      semantics.dispose();
+    }
+  });
 }
 
 Widget _host({
@@ -237,6 +281,7 @@ Widget _host({
   VoidCallback? onToggleTheme,
   VoidCallback? onDiagnosticsRequested,
   double topInset = 0,
+  TextScaler? textScaler,
 }) {
   return MaterialApp(
     theme: AppTheme.light(),
@@ -247,6 +292,7 @@ Widget _host({
         data: mediaQuery.copyWith(
           padding: EdgeInsets.only(top: topInset),
           viewPadding: EdgeInsets.only(top: topInset),
+          textScaler: textScaler ?? mediaQuery.textScaler,
         ),
         child: child ?? const SizedBox.shrink(),
       );
