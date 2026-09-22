@@ -97,7 +97,7 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
         })
         break
       case 'play':
-        this.run(args, (session) => this.playSession(session), result)
+        this.run(args, (session) => this.playSession(this.sessionId(args), session), result)
         break
       case 'pause':
         this.run(args, (session) => session.player.pause(), result)
@@ -294,7 +294,16 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
     Promise.resolve().then(() => operation(session)).then(() => result.success(null)).catch((error: Error) => result.error('operation_failed', this.errorMessage(error), null))
   }
 
-  private async playSession(session: MediaSession): Promise<void> {
+  private async playSession(sessionId: string, session: MediaSession): Promise<void> {
+    // Some API 26 devices send the interruption begin callback but omit the
+    // matching RESUME after a third-party player is paused or force-stopped.
+    // An explicit user play is a safe focus reassertion and clears that stale
+    // state without claiming that the system sent a recovery event.
+    if (!session.video && this.audioInterruptionActive) {
+      this.audioInterruptionActive = false
+      this.audioWasPlayingBeforeInterrupt = false
+      this.emit(sessionId, 'interrupted', false)
+    }
     await session.player.play()
     // HarmonyOS resolves AVPlayer.play() before the asynchronous state change
     // is observable. Do not let Dart issue pause/seek-after-play while the
@@ -490,7 +499,7 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
     let operation: Promise<void>
     switch (command) {
       case 'play':
-        operation = this.playSession(session)
+        operation = this.playSession(activeSessionId, session)
         break
       case 'pause':
         operation = session.player.pause()
