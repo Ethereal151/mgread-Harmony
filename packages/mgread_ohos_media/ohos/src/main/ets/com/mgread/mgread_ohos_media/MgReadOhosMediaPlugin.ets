@@ -171,10 +171,10 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
       const initialPosition = this.number(args, 'initialPositionMs')
       if (initialPosition > 0) player.seek(initialPosition)
       if (!video) {
-        // The default SHARE_MODE lets concurrent streams mix.  MgRead needs
-        // the AVPlayer interruption callback for another app's focus change,
-        // so select an independent focus unit before the first play call.
-        player.audioInterruptMode = audio.InterruptMode.INDEPENDENT_MODE
+        if (this.booleanValue(args, 'loop')) player.loop = true
+        // Share the system interruption unit so another app's audio focus
+        // change reaches AVPlayer's interruption callback.
+        player.audioInterruptMode = audio.InterruptMode.SHARE_MODE
         await this.prepareAudioSession(sessionId, args, player.duration)
       }
       if (this.booleanValue(args, 'play')) await player.play()
