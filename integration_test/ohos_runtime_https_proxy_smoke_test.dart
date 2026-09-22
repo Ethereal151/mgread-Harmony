@@ -7,9 +7,12 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
+import 'package:mg_read/features/network_proxy/application/flutter_network_proxy_manager.dart';
 import 'package:mgread_plugin_runtime/mgread_plugin_runtime.dart';
 
 const _pluginId = 'org.mgread.ohos.https-proxy-smoke';
+const _useSystemProxy = bool.fromEnvironment('OHOS_RUNTIME_SYSTEM_PROXY_MODE');
+const _systemProxyPort = int.fromEnvironment('OHOS_RUNTIME_SYSTEM_PROXY_PORT', defaultValue: 35555);
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -17,7 +20,7 @@ void main() {
   testWidgets('OHOS arm64 Runtime reaches HTTPS through an explicit CONNECT proxy', (WidgetTester tester) async {
     if (Platform.operatingSystem != 'ohos') return;
 
-    final proxy = await _ConnectProxy.start();
+    final proxy = await _ConnectProxy.start(port: _useSystemProxy ? _systemProxyPort : null);
     final runtime = PluginRuntime();
     addTearDown(() async {
       await runtime.configurePluginHttpProxy(null);
@@ -46,7 +49,9 @@ void main() {
     );
     expect(result.single.status, PluginTransferImportStatus.installed);
 
-    await runtime.configurePluginHttpProxy(Uri(scheme: 'http', host: '127.0.0.1', port: proxy.port));
+    final proxyUri = _useSystemProxy ? await _readConfiguredSystemProxy() : Uri(scheme: 'http', host: '127.0.0.1', port: proxy.port);
+    expect(proxyUri, isNotNull);
+    await runtime.configurePluginHttpProxy(proxyUri!);
     final search = await runtime.invoke(const SourceSearchInvocation(pluginId: _pluginId, query: 'https-connect'));
 
     expect(search.items, hasLength(1));
@@ -55,6 +60,14 @@ void main() {
     expect(proxy.targetHosts, contains('example.com'));
     await tester.pump();
   }, timeout: const Timeout(Duration(minutes: 5)));
+}
+
+Future<Uri?> _readConfiguredSystemProxy() async {
+  final manager = FlutterNetworkProxyManager(operatingSystem: 'ohos', ohosProxyConfigurator: (_) async {});
+  final proxy = await manager.runtimeSourceProxyUri();
+  expect(proxy?.host, '127.0.0.1');
+  expect(proxy?.port, _systemProxyPort);
+  return proxy;
 }
 
 Uint8List _proxyFixtureBytes() {
@@ -150,8 +163,8 @@ final class _ConnectProxy {
 
   int get port => _server.port;
 
-  static Future<_ConnectProxy> start() async {
-    final server = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+  static Future<_ConnectProxy> start({int? port}) async {
+    final server = await ServerSocket.bind(InternetAddress.loopbackIPv4, port ?? 0);
     final proxy = _ConnectProxy._(server);
     server.listen(proxy._accept);
     return proxy;
