@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -118,6 +119,36 @@ void main() {
     expect(compactList.left, AppSpacing.discoveryPagePadding);
     expect(390 - compactList.right, AppSpacing.discoveryPagePadding);
     await expectLater(find.byType(MaterialApp), matchesGoldenFile('goldens/runtime_discovery_composite_compact_light.png'));
+  });
+
+  testWidgets('keeps a compact tab visual while exposing the full touch target', (tester) async {
+    final semantics = tester.ensureSemantics();
+    var pressed = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: Scaffold(
+          body: Center(
+            child: DiscoveryComponentChip(label: '推荐', onPressed: () => pressed = true),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final chip = find.byType(DiscoveryComponentChip);
+    final visualChip = find.byType(ChoiceChip);
+    expect(tester.getSize(chip).height, AppSpacing.minimumTouchTarget);
+    expect(tester.getSize(visualChip).height, AppSpacing.discoveryChipVisualHeight);
+
+    final Rect target = tester.getRect(chip);
+    await tester.tapAt(Offset(target.center.dx, target.top + 1));
+    expect(pressed, isTrue);
+
+    final SemanticsNode semanticsNode = tester.getSemantics(find.bySemanticsLabel('推荐'));
+    expect(semanticsNode.rect.height, AppSpacing.minimumTouchTarget);
+    expect(semanticsNode.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+    semantics.dispose();
   });
 
   testWidgets('passes the remote cover identity through the recommendation carousel', (tester) async {
