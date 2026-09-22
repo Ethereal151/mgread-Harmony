@@ -128,7 +128,7 @@ hdc install build/ohos/hap/entry-default-signed.hap
 - 音频复验发现 OHOS `AVPlayer.play()` 返回早于 `playing` 状态的真实竞态，原生已改为等待 `playing` 再完成 play 命令，修复后的真机音频 smoke 通过；
 - HAP 使用 `flutter build hap --debug --target-platform ohos-arm64 --no-pub` 成功签名并通过 `hdc install -r` 安装启动。
 
-以下门禁仍需保留为未完成：播放器代理边界、锁屏/蓝牙/焦点与中断恢复的真机证据；反馈页面 UI、鸿蒙仓库 Issues 目标页面、有效二维码载荷路由、真实来源→书架→Reader 迁移、文件导入/导出选择器、文件分享分发、HTTPS 外链桥接、五个真实来源直连链路、HLS 样本和完整的相关跨设备/HAP 传输矩阵已通过，OHOS↔OHOS 与不上架的 HAP 市场跳转已按用户要求跳过。
+以下门禁仍需保留为未完成：播放器代理边界、系统代理实际切换与非 loopback `NO_PROXY`、外部系统音频抢占/恢复的真机证据，以及视频系统控制专项证据；反馈页面 UI、鸿蒙仓库 Issues 目标页面、有效二维码载荷路由、真实来源→书架→Reader 迁移、文件导入/导出选择器、文件分享分发、HTTPS 外链桥接、五个真实来源直连链路、HLS 样本和完整的相关跨设备/HAP 传输矩阵已通过，OHOS↔OHOS 与不上架的 HAP 市场跳转已按用户要求跳过。
 
 最近一次 VM 验证使用 `127.0.0.1:5555` API 26 x86_64 模拟器：
 
@@ -147,7 +147,7 @@ hdc install build/ohos/hap/entry-default-signed.hap
 - 阶段 3：新增 `lib/platform/platform_capabilities.dart`，集中描述 OHOS 文件选择、分享、包信息、外部链接、亮度、常亮、窗口和 Runtime 宿主能力；导入导出、版本展示、视频亮度/常亮和窗口初始化均按能力降级。
 - 阶段 4：`mgread_plugin_runtime` 增加 OHOS 插件声明、MethodChannel、进度 EventChannel 和单例 supervisor；x86_64 返回稳定 `runtime_architecture_unavailable`，arm64 已接入 Node 24.16.0 native host，Dart Facade/wire protocol 不变。
 - 阶段 4/5：新增 `mgread_ohos_media` 包，以 OHOS `AVPlayer` 承载音频和视频；音频、视频 package 仅通过 backend adapter 使用它，视频通过 Flutter Texture 输出 Surface。阶段 3 的 `screen_brightness_ohos` 已改为 `@ohos.window` 应用窗口亮度控制；全局系统亮度仍返回明确错误。
-- 阶段 6：新增 `mgread_ohos_scanner` 包，使用 HMS ScanKit 默认系统 UI；Dart 页面只负责调用、取消/错误反馈和现有四类载荷校验路由，原生层不复制同步业务。真机已确认系统扫码 UI、后置相机预览和取消返回；有效载荷路由仍需准备配对二维码后继续做业务闭环。
+- 阶段 6：新增 `mgread_ohos_scanner` 包，使用 HMS ScanKit 默认系统 UI；Dart 页面只负责调用、取消/错误反馈和现有四类载荷校验路由，原生层不复制同步业务。真机已确认系统扫码 UI、后置相机预览和取消返回；有效同步二维码到“接收临时数据”的业务路由回归已通过。
 
 本次代码变更后的签名 x64 debug/release HAP 均已构建：
 
