@@ -257,12 +257,18 @@ class _VerifySourceButton extends StatelessWidget {
   final VoidCallback? onPressed;
 
   @override
-  Widget build(BuildContext context) => FilledButton.icon(
-    key: const Key('data-source-detail-verify'),
-    onPressed: onPressed,
-    icon: const Icon(Icons.fact_check_outlined),
-    label: const Text('检测搜索、发现与阅读链路'),
-  );
+  Widget build(BuildContext context) {
+    final bool compact = _useCompactDetailActionLayout(context);
+    return SizedBox(
+      width: compact ? double.infinity : null,
+      child: FilledButton.icon(
+        key: const Key('data-source-detail-verify'),
+        onPressed: onPressed,
+        icon: const Icon(Icons.fact_check_outlined),
+        label: _detailActionLabel('检测搜索、发现与阅读链路', compact),
+      ),
+    );
+  }
 }
 
 class _RemoveSourceButton extends StatelessWidget {
@@ -274,6 +280,7 @@ class _RemoveSourceButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = AppThemeTokens.of(context);
+    final bool compact = _useCompactDetailActionLayout(context);
     return SizedBox(
       width: double.infinity,
       child: OutlinedButton.icon(
@@ -282,7 +289,7 @@ class _RemoveSourceButton extends StatelessWidget {
         icon: isRemoving
             ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
             : const Icon(Icons.delete_outline),
-        label: Text(isRemoving ? '正在删除' : '删除数据源'),
+        label: _detailActionLabel(isRemoving ? '正在删除' : '删除数据源', compact),
         style: OutlinedButton.styleFrom(foregroundColor: tokens.notification),
       ),
     );
@@ -421,20 +428,27 @@ class _OpenDirectoryButton extends StatelessWidget {
   final VoidCallback? onPressed;
 
   @override
-  Widget build(BuildContext context) => FilledButton.icon(
-    key: const Key('data-source-detail-open-directory'),
-    onPressed: onPressed,
-    icon: isOpening
-        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-        : const Icon(Icons.folder_open_outlined),
-    label: Text(
-      isOpening
-          ? '正在打开…'
-          : isDevelopment
-          ? '打开开发项目文件夹'
-          : '打开已安装源码文件夹',
-    ),
-  );
+  Widget build(BuildContext context) {
+    final bool compact = _useCompactDetailActionLayout(context);
+    return SizedBox(
+      width: compact ? double.infinity : null,
+      child: FilledButton.icon(
+        key: const Key('data-source-detail-open-directory'),
+        onPressed: onPressed,
+        icon: isOpening
+            ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+            : const Icon(Icons.folder_open_outlined),
+        label: _detailActionLabel(
+          isOpening
+              ? '正在打开…'
+              : isDevelopment
+              ? '打开开发项目文件夹'
+              : '打开已安装源码文件夹',
+          compact,
+        ),
+      ),
+    );
+  }
 }
 
 class _PackageDevelopmentButton extends StatelessWidget {
@@ -444,15 +458,26 @@ class _PackageDevelopmentButton extends StatelessWidget {
   final VoidCallback? onPressed;
 
   @override
-  Widget build(BuildContext context) => OutlinedButton.icon(
-    key: const Key('data-source-detail-package-development'),
-    onPressed: onPressed,
-    icon: isPackaging
-        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-        : const Icon(Icons.inventory_2_outlined),
-    label: Text(isPackaging ? '正在打包…' : '打包数据源插件'),
-  );
+  Widget build(BuildContext context) {
+    final bool compact = _useCompactDetailActionLayout(context);
+    return SizedBox(
+      width: compact ? double.infinity : null,
+      child: OutlinedButton.icon(
+        key: const Key('data-source-detail-package-development'),
+        onPressed: onPressed,
+        icon: isPackaging
+            ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+            : const Icon(Icons.inventory_2_outlined),
+        label: _detailActionLabel(isPackaging ? '正在打包…' : '打包数据源插件', compact),
+      ),
+    );
+  }
 }
+
+bool _useCompactDetailActionLayout(BuildContext context) =>
+    MediaQuery.sizeOf(context).width < 360 || MediaQuery.textScalerOf(context).scale(1) > 1;
+
+Widget _detailActionLabel(String label, bool compact) => compact ? Text(label, textAlign: TextAlign.center, softWrap: true) : Text(label);
 
 class _DetailFailure extends StatelessWidget {
   const _DetailFailure({required this.onRetry, this.message = '数据源详情暂不可用。'});

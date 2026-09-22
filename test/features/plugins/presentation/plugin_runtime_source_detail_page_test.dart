@@ -139,18 +139,72 @@ void main() {
     expect(find.text('org.mgread.discovery-demo'), findsOneWidget);
     expect(tester.getSize(find.text('0.1.3-devsync.1787755401237')).height, lessThan(64));
   });
+
+  testWidgets('keeps detail actions reachable at narrow large text sizes', (WidgetTester tester) async {
+    final gateway = _DirectoryGateway(_installedConnection);
+    final SemanticsHandle semantics = tester.ensureSemantics();
+    await _setViewport(tester, const Size(390, 900));
+    try {
+      await tester.pumpWidget(_host(gateway, 'org.example.installed'));
+      await tester.pumpAndSettle();
+      final Finder scrollable = find.byType(Scrollable);
+      final Finder verify = find.byKey(const Key('data-source-detail-verify'));
+      await tester.scrollUntilVisible(verify, 200, scrollable: scrollable);
+      final Rect normalButton = tester.getRect(verify);
+      expect(normalButton.height, greaterThanOrEqualTo(48));
+      expect(
+        tester.getRect(find.byIcon(Icons.fact_check_outlined)).center.dy,
+        closeTo(tester.getRect(find.text('检测搜索、发现与阅读链路')).center.dy, 1),
+      );
+
+      tester.view.physicalSize = const Size(320, 900);
+      await tester.pumpWidget(_host(gateway, 'org.example.installed', textScaler: const TextScaler.linear(2)));
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(verify, 200, scrollable: find.byType(Scrollable));
+
+      for (final Key key in <Key>[const Key('data-source-detail-verify'), const Key('data-source-detail-remove')]) {
+        await tester.scrollUntilVisible(find.byKey(key), 200, scrollable: find.byType(Scrollable));
+        final Rect rect = tester.getRect(find.byKey(key));
+        expect(rect.left, greaterThanOrEqualTo(0));
+        expect(rect.right, lessThanOrEqualTo(320));
+        expect(rect.height, greaterThanOrEqualTo(48));
+      }
+      expect(find.text('检测搜索、发现与阅读链路'), findsOneWidget);
+      expect(find.text('删除数据源'), findsOneWidget);
+      expect(tester.getSemantics(verify).label, contains('检测搜索、发现与阅读链路'));
+      await tester.scrollUntilVisible(verify, 200, scrollable: find.byType(Scrollable));
+      expect(tester.takeException(), isNull);
+    } finally {
+      semantics.dispose();
+    }
+  });
 }
 
-Widget _host(_DirectoryGateway gateway, String pluginId, {ValueChanged<String>? onVerificationRequested}) => ProviderScope(
-  overrides: [
-    pluginRuntimeGatewayProvider.overrideWithValue(gateway),
-    pluginRuntimeConnectionProvider.overrideWith((Ref ref) async => gateway.connection),
-  ],
-  child: MaterialApp(
-    theme: AppTheme.light(),
-    home: PluginRuntimeSourceDetailPage(pluginId: pluginId, onBackRequested: () {}, onVerificationRequested: onVerificationRequested),
-  ),
-);
+Widget _host(_DirectoryGateway gateway, String pluginId, {ValueChanged<String>? onVerificationRequested, TextScaler? textScaler}) =>
+    ProviderScope(
+      overrides: [
+        pluginRuntimeGatewayProvider.overrideWithValue(gateway),
+        pluginRuntimeConnectionProvider.overrideWith((Ref ref) async => gateway.connection),
+      ],
+      child: MaterialApp(
+        theme: AppTheme.light(),
+        builder: (BuildContext context, Widget? child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(textScaler: textScaler ?? MediaQuery.textScalerOf(context)),
+          child: child ?? const SizedBox.shrink(),
+        ),
+        home: PluginRuntimeSourceDetailPage(pluginId: pluginId, onBackRequested: () {}, onVerificationRequested: onVerificationRequested),
+      ),
+    );
+
+Future<void> _setViewport(WidgetTester tester, Size size) async {
+  tester.view.physicalSize = size;
+  tester.view.devicePixelRatio = 1;
+  addTearDown(() {
+    tester.view.resetPhysicalSize();
+    tester.view.resetDevicePixelRatio();
+  });
+  await tester.pump();
+}
 
 const _developmentConnection = PluginRuntimeConnection(
   isHealthy: true,
