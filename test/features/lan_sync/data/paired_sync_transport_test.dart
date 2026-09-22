@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:mg_read/features/lan_sync/application/device_identity_store.dart';

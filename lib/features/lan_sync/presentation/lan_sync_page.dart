@@ -23,6 +23,7 @@ import 'package:mg_read/app/app_theme.dart';
 import 'package:mg_read/features/lan_sync/application/app_transfer_controller.dart';
 import 'package:mg_read/features/lan_sync/application/device_sync_controller.dart';
 import 'package:mg_read/features/lan_sync/application/lan_sync_controller.dart';
+import 'package:mg_read/features/lan_sync/domain/app_update_models.dart';
 import 'package:mg_read/features/lan_sync/domain/lan_sync_models.dart';
 import 'package:mg_read/features/lan_sync/domain/app_transfer_qr_payload.dart';
 import 'package:mg_read/features/lan_sync/domain/lan_pairing_payload.dart';
@@ -38,6 +39,7 @@ import 'paired_device_widgets.dart';
 import 'app_transfer_widgets.dart';
 
 part 'lan_sync_app_transfer_actions.dart';
+part 'lan_sync_paired_device_actions.dart';
 part 'lan_sync_page_cards.dart';
 part 'lan_sync_status_widgets.dart';
 
@@ -121,6 +123,9 @@ class _LanSyncPageState extends ConsumerState<LanSyncPage> {
                           state: deviceState,
                           onAddDevice: _showAddDeviceSheet,
                           onManage: _manageDevice,
+                          onSync: (deviceId, operation) =>
+                              unawaited(ref.read(deviceSyncControllerProvider.notifier).syncNow(deviceId, operation: operation)),
+                          onAppUpdate: (deviceId, force) => unawaited(_confirmPairedAppUpdate(deviceId, force)),
                           onShowAll: _showAllDevicesSheet,
                         ),
                         const SizedBox(height: AppSpacing.section),
@@ -269,102 +274,6 @@ class _LanSyncPageState extends ConsumerState<LanSyncPage> {
 
     final appOffer = AppTransferQrPayload.decode(payload);
     if (appOffer != null) await _connectScannedAppOffer(appOffer);
-  }
-
-  Future<void> _manageDevice(PairedDevice device) async {
-    await showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      isScrollControlled: true,
-      builder: (context) => DeviceSettingsSheet(deviceId: device.deviceId),
-    );
-  }
-
-  Future<void> _showAddDeviceSheet({bool beginPairing = true}) async {
-    final controller = ref.read(deviceSyncControllerProvider.notifier);
-    if (beginPairing && !ref.read(deviceSyncControllerProvider).pairingBusy) unawaited(controller.beginPairing());
-    if (!mounted) return;
-    await showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      isScrollControlled: true,
-      builder: (context) => Consumer(
-        builder: (context, ref, _) => DevicePairingSheet(
-          state: ref.watch(deviceSyncControllerProvider),
-          onBeginPairing: () => unawaited(ref.read(deviceSyncControllerProvider.notifier).beginPairing()),
-          onApprovePairing: () => unawaited(ref.read(deviceSyncControllerProvider.notifier).approvePairing()),
-          onRejectPairing: () => unawaited(ref.read(deviceSyncControllerProvider.notifier).rejectPairing()),
-          onCancelPairing: () {
-            unawaited(ref.read(deviceSyncControllerProvider.notifier).cancelPairing());
-            Navigator.of(context).pop();
-          },
-        ),
-      ),
-    );
-  }
-
-  Future<void> _showAllDevicesSheet() => showModalBottomSheet<void>(
-    context: context,
-    showDragHandle: true,
-    builder: (sheetContext) {
-      final state = ref.read(deviceSyncControllerProvider);
-      return _AllDevicesSheet(
-        devices: state.devices,
-        onlineDeviceIds: state.onlineDeviceIds,
-        onManage: (device) {
-          Navigator.of(sheetContext).pop();
-          unawaited(_manageDevice(device));
-        },
-      );
-    },
-  );
-
-  Future<void> _showAppTransferSheet() async {
-    unawaited(ref.read(appTransferControllerProvider.notifier).startSending());
-    await showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      isScrollControlled: true,
-      builder: (sheetContext) => Consumer(
-        builder: (context, ref, _) {
-          final appState = ref.watch(appTransferControllerProvider);
-          return LanSyncSheetFrame(
-            title: '发送 App',
-            description: '生成二维码后，对方使用“扫码连接 / 接收”即可继续。',
-            closeLabel: appState.active ? '取消 App 传输' : '关闭',
-            onClose: () {
-              if (appState.active) unawaited(ref.read(appTransferControllerProvider.notifier).cancel());
-              Navigator.of(sheetContext).pop();
-            },
-            footer: appState.phase == AppTransferPhase.completed || appState.phase == AppTransferPhase.failed
-                ? FilledButton(
-                    key: const Key('app-transfer-finish'),
-                    onPressed: () {
-                      unawaited(ref.read(appTransferControllerProvider.notifier).reset());
-                      Navigator.of(sheetContext).pop();
-                    },
-                    child: const Text('完成'),
-                  )
-                : null,
-            child: AppTransferPanel(
-              state: appState,
-              showActions: false,
-              onScanQr: null,
-              onInstall: (force) => unawaited(ref.read(appTransferControllerProvider.notifier).install(force: force)),
-              onCancel: () {
-                unawaited(ref.read(appTransferControllerProvider.notifier).cancel());
-                Navigator.of(sheetContext).pop();
-              },
-              onReset: () {
-                unawaited(ref.read(appTransferControllerProvider.notifier).reset());
-                Navigator.of(sheetContext).pop();
-              },
-            ),
-          );
-        },
-      ),
-    );
-    if (mounted && ref.read(appTransferControllerProvider).active) await ref.read(appTransferControllerProvider.notifier).cancel();
   }
 
   Future<void> _showTemporarySendSheet() {

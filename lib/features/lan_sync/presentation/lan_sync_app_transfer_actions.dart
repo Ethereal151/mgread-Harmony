@@ -4,6 +4,54 @@
 part of 'lan_sync_page.dart';
 
 extension _LanSyncAppTransferActions on _LanSyncPageState {
+  Future<void> _showAppTransferSheet() async {
+    unawaited(ref.read(appTransferControllerProvider.notifier).startSending());
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (sheetContext) => Consumer(
+        builder: (context, ref, _) {
+          final appState = ref.watch(appTransferControllerProvider);
+          return LanSyncSheetFrame(
+            title: '发送 App',
+            description: '生成二维码后，对方使用“扫码连接 / 接收”即可继续。',
+            closeLabel: appState.active ? '取消 App 传输' : '关闭',
+            onClose: () {
+              if (appState.active) unawaited(ref.read(appTransferControllerProvider.notifier).cancel());
+              Navigator.of(sheetContext).pop();
+            },
+            footer: appState.phase == AppTransferPhase.completed || appState.phase == AppTransferPhase.failed
+                ? FilledButton(
+                    key: const Key('app-transfer-finish'),
+                    onPressed: () {
+                      unawaited(ref.read(appTransferControllerProvider.notifier).reset());
+                      Navigator.of(sheetContext).pop();
+                    },
+                    child: const Text('完成'),
+                  )
+                : null,
+            child: AppTransferPanel(
+              state: appState,
+              showActions: false,
+              onScanQr: null,
+              onInstall: (force) => unawaited(ref.read(appTransferControllerProvider.notifier).install(force: force)),
+              onCancel: () {
+                unawaited(ref.read(appTransferControllerProvider.notifier).cancel());
+                Navigator.of(sheetContext).pop();
+              },
+              onReset: () {
+                unawaited(ref.read(appTransferControllerProvider.notifier).reset());
+                Navigator.of(sheetContext).pop();
+              },
+            ),
+          );
+        },
+      ),
+    );
+    if (mounted && ref.read(appTransferControllerProvider).active) await ref.read(appTransferControllerProvider.notifier).cancel();
+  }
+
   Future<void> _connectScannedAppOffer(AppTransferConnectionOffer offer) async {
     final notifier = ref.read(appTransferControllerProvider.notifier);
     await notifier.connectOffer(offer);
