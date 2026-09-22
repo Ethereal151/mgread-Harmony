@@ -94,12 +94,14 @@ final class OhosMediaClient {
     required Map<String, String> headers,
     required Duration initialPosition,
     required bool play,
+    bool loop = false,
   }) => _open('video.open', <String, Object?>{
     'sessionId': sessionId,
     'url': uri.toString(),
     'headers': headers,
     'initialPositionMs': initialPosition.inMilliseconds,
     'play': play,
+    'loop': loop,
   });
 
   Future<OhosMediaOpenResult> _open(

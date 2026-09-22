@@ -170,13 +170,11 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
       await this.waitForState(player, 'prepared')
       const initialPosition = this.number(args, 'initialPositionMs')
       if (initialPosition > 0) player.seek(initialPosition)
-      if (!video) {
-        if (this.booleanValue(args, 'loop')) player.loop = true
-        // Share the system interruption unit so another app's audio focus
-        // change reaches AVPlayer's interruption callback.
-        player.audioInterruptMode = audio.InterruptMode.SHARE_MODE
-        await this.prepareAudioSession(sessionId, args, player.duration)
-      }
+      if (this.booleanValue(args, 'loop')) player.loop = true
+      // Use the shared interruption unit for every AVPlayer with an audio
+      // track, including video, so another app's focus change is observable.
+      player.audioInterruptMode = audio.InterruptMode.SHARE_MODE
+      await this.prepareAudioSession(sessionId, args, player.duration, video ? 'video' : 'audio')
       if (this.booleanValue(args, 'play')) await player.play()
       result.success({
         sessionId,
@@ -385,6 +383,7 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
     sessionId: string,
     args: Map<string, Object> | null,
     duration: number,
+    sessionType: avSession.AVSessionType,
   ): Promise<void> {
     if (this.context === undefined) {
       throw new Error('avsession_unavailable: The OHOS ability context is not ready.')
@@ -408,7 +407,7 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
     }
     if (this.audioSession === undefined) {
       try {
-        const session = await avSession.createAVSession(this.context, 'MgRead', 'audio')
+        const session = await avSession.createAVSession(this.context, 'MgRead', sessionType)
         this.audioSession = session
         session.on('play', () => this.runAudioCommand('play'))
         session.on('pause', () => this.runAudioCommand('pause'))
