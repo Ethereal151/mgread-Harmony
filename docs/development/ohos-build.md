@@ -1,6 +1,6 @@
 # OHOS 构建基线
 
-本文记录 MgRead 鸿蒙适配阶段 1～6 的源代码、工具链和构建验证结果。当前已完成签名 HAP 构建、arm64 真机启动、Node Runtime/ArkWeb fixture、五个真实来源直连链路、AVPlayer 音视频 smoke 和窗口亮度 bridge 验证；系统媒体控制、代理音视频/HLS、跨设备互通的完整门禁和有效扫码业务仍未宣称完成。
+本文记录 MgRead 鸿蒙适配阶段 1～6 的源代码、工具链和构建验证结果。签名 HAP、arm64 真机 Runtime/ArkWeb、五个真实来源、音视频、Reader、反馈目标页、有效扫码业务路由与跨设备互通均已有分项证据；系统代理切换、外部系统音频中断恢复和视频系统控制仍按下文的未完成边界验收，播放器代理等无公开 SDK 契约的能力按 `unsupported` 管理。
 
 ## 源代码基线
 
@@ -84,6 +84,7 @@ hdc install build/ohos/hap/entry-default-signed.hap
 ### 2026-09-21 增量适配验证
 
 - 根据 HarmonyOS API 的 `webview.ProxyController`，ArkWeb 已支持应用级 HTTP/HTTPS/SOCKS 代理覆盖，并在清空自定义代理时调用 `removeProxyOverride` 恢复系统路由；播放器代理仍明确关闭，因为 AVPlayer 没有可用的会话级代理契约。
+- OHOS 系统代理桥接读取 `connection.getDefaultHttpProxy()` 后只填补缺失的 `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY`，不覆盖进程环境或显式代理配置；系统代理读取失败和空值仍稳定直连回退。
 - 根据 HarmonyOS Media API 的 `BufferingInfoType.CACHED_DURATION`，OHOS AVPlayer 现在向 Flutter 发出毫秒级 `buffered` 事件，视频后端将其作为时间缓冲位置使用；`videoEnhancement` 和 `systemVolume` 继续保持明确不支持，UI 不显示对应控制。
 - `readerVolumeKeys` 现在不仅由 OHOS capabilities 隐藏，公开 `MethodChannelReaderPlatform` 调用也返回稳定 `UnsupportedError`；对应 package 测试已通过，避免绕过 UI 后静默成功。
 - `openExternalUri` 支持注入 OHOS fake capabilities；直接测试覆盖原生打开成功、原生拒绝和 `PlatformException`，反馈、来源详情与插件帮助共用同一外链桥接边界。
@@ -92,12 +93,13 @@ hdc install build/ohos/hap/entry-default-signed.hap
 - `ohos_video_smoke_test.dart` 现在直接等待并校验 OHOS AVPlayer 的 `buffered` 事件为非负毫秒值；模拟器实测通过，覆盖 `CACHED_DURATION -> bufferedPosition` 链路。
 - 本地能力/代理/Profile/Runtime 宿主单测：通过；签名 arm64 HAP：通过；`hdc install -r`：通过。2026-09-21 设备 `192.168.3.48:45975` 重新在线后，当前源码已在 `PLA-AL10` arm64 真机完成 Runtime、ArkWeb、Stage 2 fixture、音频、视频、首次运行首页和阅读器启动/系统返回保存时序验收。
 - AudioSession 增量适配：`MgReadOhosMediaPlugin.ets` 已设置媒体场景、激活 `CONCURRENCY_DEFAULT`、监听 PAUSE/STOP/TIME_OUT_STOP/RESUME，并将 AVPlayer 设为 `INDEPENDENT_MODE`；API 26 arm64 无签名 HAP 重新编译通过。当前 HDC 目标为空且历史 IP 重连失败，因此外部系统音频抢占/恢复仍不宣称真机通过。
+- 2026-09-22 外部音频中断专项重试：HDC 一度识别 `82.156.132.184:19001` 为 `PLA-AL10`/`arm64-v8a`/API 26；测试 HAP 成功签名构建并进入设备启动流程，但 Flutter 调试连接在测试主体启动前报 `waiting for a debug connection: null` 与 `The log reader stopped unexpectedly`，随后 HDC 目标再次消失。没有取得 `interrupted` 事件或恢复播放断言，因此此轮只算构建和设备连接诊断，不算音频中断验收通过。
 - 当前 `127.0.0.1:5555` OHOS x64 模拟器复验：`ohos_browser_session_smoke_test.dart`、`ohos_media_smoke_test.dart`、`ohos_video_smoke_test.dart`、`library_first_run_test.dart` 和 `ohos_x64_runtime_stub_test.dart` 全部通过；本轮最新复验的 ArkWeb 与视频 smoke 也重新构建、安装并通过，期间清理过一次残留 `hdc fport` 后重试。每组均重新构建、安装并启动签名 HAP。模拟器证据不替代缺失的本轮 arm64 真机增量回归。
 - 来源层固定 Node 快速检查报告：`artifacts/source-tests/quick-all-20260921-deps.json`，56 个来源中 28 个通过、6 个部分通过、22 个因外部站点/交互/资源或 testkit 能力边界失败；这不是 OHOS 真机验收。Windows Release 实际检查暂未执行，`flutter build windows --release --no-pub` 被当前系统未启用符号链接支持阻止。
 - 独立 HAP 启动复验：arm64 真机传输验收所用 `build/ohos/hap/entry-default-signed.hap` SHA-256 为 `A0B8C9D9F98610FCB68E029594BFDA4938B8D266B6F80CD083EBFAD558F1CF6C`；随后为跳过的 OHOS↔OHOS x64 虚拟器复验生成的本地签名产物 SHA-256 为 `3280A412A9F15A0467FD475FC306C45A0314B3D11D952038490E6E9802312B73`。本轮源码已在 `PLA-AL10` 真机多次通过 `hdc install -r` 和 Flutter 调试启动，Runtime/ArkWeb/媒体/阅读器集成测试均完成连接与断言。
 - 本轮当前源码的无签名 arm64 构建：`flutter build hap --debug --target-platform ohos-arm64 --no-pub --no-codesign` 成功；`build/ohos/hap/entry-default-unsigned.hap` SHA-256 为 `44DECC19BB910D7721372304CA0DE8DED463BCB46BEE8C43CC69CF61A84A1D54`，HAP 清单包含 `libs/arm64-v8a/libnode.so`、`libmgread_node_host.so`、`libflutter.so` 和 `libsqlite3.so`。无签名产物仅证明 ABI/资源打包，不能代替签名安装与真机回归。
 
-当前计划验收总状态：`partial`。代码适配和明确不支持能力的直接证据已完成，arm64 真机基础回归已补齐；最终 `pass` 仍需要播放器代理边界、系统中断、有效二维码业务闭环和本地阅读完整迁移。来源代理、HLS、真实跨设备/HAP 传输证据已补齐；OHOS↔OHOS 按用户明确要求跳过；不上架，因此 HAP 市场跳转也按用户要求跳过，均不作为本轮阻塞项。
+当前计划验收总状态：`partial`。代码适配和明确不支持能力的直接证据已完成，arm64 真机基础回归已补齐；仍缺系统代理实际切换与非 loopback `NO_PROXY` 的真机证据、外部系统音频中断恢复、视频全屏/系统中断专项证据。播放器会话代理和系统音量写入等已按公开 SDK 边界稳定降级，不能冒充支持；有效二维码业务路由、本地阅读迁移、来源代理、HLS、真实跨设备/HAP 传输均有分项证据。OHOS↔OHOS 按用户要求跳过；不上架的 HAP 市场跳转同样跳过，均不作为本轮阻塞项。
 
 跨设备同步补充尝试：曾启动 OHOS x64 Host 并准备使用在线 MI 8 Android peer。首次 Android 构建受 DevEco JBR 缺失 `jlink.exe` 和 Kotlin 增量缓存跨盘路径影响；切换到本机 Temurin 17 后 APK 已成功构建并安装，但 OHOS 虚拟器位于 `10.0.2.15` NAT，经本机 HDC 映射的 `192.168.3.26:36979` 对手机连接超时，未进入同步断言，状态仍为 `not-run`。
 - 随后通过 `adb reverse` + HDC `fport/rport` 回环映射完成两组真实 peer 同步：`ohos_paired_sync_host_test.dart` + `android_paired_sync_to_ohos_test.dart` 通过，`android_paired_sync_host_test.dart` + `ohos_paired_sync_cross_device_test.dart` 通过；两组均验证双向书架与插件计数。该证据使用 OHOS x64 虚拟器，不替代 arm64 真机回归；OHOS↔OHOS 按用户明确要求跳过。

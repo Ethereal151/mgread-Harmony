@@ -40,7 +40,7 @@ Future<Map<String, String>> readSystemProxyEnvironment() async {
         for (final entry in raw.entries) {
           final value = entry.value;
           if (value is String && value.isNotEmpty) {
-            values[entry.key.toUpperCase()] = value;
+            values.putIfAbsent(entry.key.toUpperCase(), () => value);
           }
         }
       }
