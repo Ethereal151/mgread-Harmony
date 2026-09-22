@@ -185,6 +185,7 @@ class _DeferredSourceDetailScreen extends StatelessWidget {
                       sourceVariants: const <SourceSearchHit>[],
                       onSourceVariantRequested: null,
                       isRefreshing: !snapshot.hasError,
+                      hasLoadFailure: snapshot.hasError,
                       onTextChapterRequested: onTextChapterRequested,
                       onComicChapterRequested: onComicChapterRequested,
                       onAudioChapterRequested: onAudioChapterRequested,

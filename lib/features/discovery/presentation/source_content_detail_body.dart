@@ -17,6 +17,7 @@ class _SourceDetailBody extends StatelessWidget {
     required this.sourceVariants,
     required this.onSourceVariantRequested,
     required this.isRefreshing,
+    required this.hasLoadFailure,
     required this.onTextChapterRequested,
     required this.onComicChapterRequested,
     required this.onAudioChapterRequested,
@@ -43,6 +44,7 @@ class _SourceDetailBody extends StatelessWidget {
   final List<SourceSearchHit> sourceVariants;
   final SourceSearchVariantRequested? onSourceVariantRequested;
   final bool isRefreshing;
+  final bool hasLoadFailure;
   final SourceTextChapterRequested? onTextChapterRequested;
   final SourceComicChapterRequested? onComicChapterRequested;
   final SourceAudioChapterRequested? onAudioChapterRequested;
@@ -71,15 +73,19 @@ class _SourceDetailBody extends StatelessWidget {
     final firstChapter = bundle.chapters.items.isEmpty ? null : bundle.chapters.items.first;
     final canStartReading =
         !isRefreshing &&
+        !hasLoadFailure &&
         firstChapter != null &&
         switch (content.contentKind) {
           PluginContentKind.audio => onAudioChapterRequested != null,
           PluginContentKind.video => onVideoEpisodeRequested != null,
           _ => true,
         };
-    final canChangeShelf = shelfState != SourceDetailShelfState.canAdd
-        ? onRemoveFromShelf != null && !isRemovingFromShelf
-        : onAddToShelf != null && !isSavingToShelf;
+    final canChangeShelf =
+        !isRefreshing &&
+        !hasLoadFailure &&
+        (shelfState != SourceDetailShelfState.canAdd
+            ? onRemoveFromShelf != null && !isRemovingFromShelf
+            : onAddToShelf != null && !isSavingToShelf);
     final labels = <String>{...content.categories, ...content.tags}.take(3).toList(growable: false);
     final attributes = _displayAttributes(content.attributes).toList(growable: false);
     final chapterTotal = _chapterTotal(detailTotal: content.chapterCount, loadedCount: bundle.chapters.items.length);
@@ -124,6 +130,7 @@ class _SourceDetailBody extends StatelessWidget {
             isCoverBlurred: isCoverBlurred,
             onAction: onShelfAction!,
             onStartReading: onStartReading!,
+            canStartReading: canStartReading,
           )
         else
           Row(

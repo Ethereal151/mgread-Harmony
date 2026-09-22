@@ -187,6 +187,7 @@ void main() {
     expect(copiedPayload, contains('可重试：不建议'));
     expect(find.byKey(const Key('source-detail-start-reading')), findsOneWidget);
     expect(tester.widget<FilledButton>(find.byKey(const Key('source-detail-start-reading'))).onPressed, isNull);
+    expect(tester.widget<OutlinedButton>(find.byKey(const Key('source-detail-add-shelf'))).onPressed, isNull);
 
     await tester.tap(find.byKey(const Key('source-detail-retry')));
     await tester.pumpAndSettle();
@@ -270,8 +271,9 @@ class _DetailEntryState extends State<_DetailEntry> {
           initialContent: widget.includeInitialContent ? widget.gateway.detail.summary : null,
           initialSourceName: widget.includeInitialContent ? widget.gateway.detail.sourceName : null,
           relatedContents: widget.gateway.recommendations,
+          onAddToShelf: (_, _) async {},
           onExternalUrlRequested: (_) async => true,
-          onRecommendationRequested: widget.onRecommendationRequested,
+          onRecommendationRequested: widget.onRecommendationRequested ?? (_) async {},
           onCopyFailure: widget.onCopyFailure ?? (String _) async {},
         ),
       );

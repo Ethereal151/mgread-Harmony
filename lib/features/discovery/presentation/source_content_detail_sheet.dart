@@ -422,6 +422,7 @@ class _SourceDetailScreenState extends State<_SourceDetailScreen> {
                             sourceVariants: widget.sourceVariants,
                             onSourceVariantRequested: widget.onSourceVariantRequested,
                             isRefreshing: true,
+                            hasLoadFailure: false,
                             onTextChapterRequested: widget.onTextChapterRequested,
                             onComicChapterRequested: widget.onComicChapterRequested,
                             onAudioChapterRequested: widget.onAudioChapterRequested,
@@ -483,6 +484,7 @@ class _SourceDetailScreenState extends State<_SourceDetailScreen> {
                                 sourceVariants: widget.sourceVariants,
                                 onSourceVariantRequested: widget.onSourceVariantRequested,
                                 isRefreshing: false,
+                                hasLoadFailure: true,
                                 onTextChapterRequested: widget.onTextChapterRequested,
                                 onComicChapterRequested: widget.onComicChapterRequested,
                                 onAudioChapterRequested: widget.onAudioChapterRequested,
@@ -523,6 +525,7 @@ class _SourceDetailScreenState extends State<_SourceDetailScreen> {
                         sourceVariants: widget.sourceVariants,
                         onSourceVariantRequested: widget.onSourceVariantRequested,
                         isRefreshing: false,
+                        hasLoadFailure: false,
                         onTextChapterRequested: widget.onTextChapterRequested,
                         onComicChapterRequested: widget.onComicChapterRequested,
                         onAudioChapterRequested: widget.onAudioChapterRequested,
@@ -557,6 +560,7 @@ class _SourceDetailView extends StatefulWidget {
     required this.sourceVariants,
     required this.onSourceVariantRequested,
     required this.isRefreshing,
+    required this.hasLoadFailure,
     required this.onTextChapterRequested,
     required this.onComicChapterRequested,
     required this.onAudioChapterRequested,
@@ -577,6 +581,7 @@ class _SourceDetailView extends StatefulWidget {
   final List<SourceSearchHit> sourceVariants;
   final SourceSearchVariantRequested? onSourceVariantRequested;
   final bool isRefreshing;
+  final bool hasLoadFailure;
   final SourceTextChapterRequested? onTextChapterRequested;
   final SourceComicChapterRequested? onComicChapterRequested;
   final SourceAudioChapterRequested? onAudioChapterRequested;
@@ -684,6 +689,7 @@ class _SourceDetailViewState extends State<_SourceDetailView> {
     sourceVariants: widget.sourceVariants,
     onSourceVariantRequested: widget.onSourceVariantRequested,
     isRefreshing: widget.isRefreshing,
+    hasLoadFailure: widget.hasLoadFailure,
     onTextChapterRequested: widget.onTextChapterRequested,
     onComicChapterRequested: widget.onComicChapterRequested,
     onAudioChapterRequested: widget.onAudioChapterRequested,
