@@ -39,6 +39,7 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
   private textures?: TextureRegistry
   private context?: common.UIAbilityContext
   private audioSession?: avSession.AVSession
+  private audioSessionManager?: audio.AudioSessionManager
   private audioSessionId?: string
   private audioState: avSession.PlaybackState = avSession.PlaybackState.PLAYBACK_STATE_INITIAL
   private audioPosition = 0
@@ -46,6 +47,7 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
   private audioSpeed = 1
   private audioVolume = 1
   private audioWasPlayingBeforeInterrupt = false
+  private audioInterruptionActive = false
 
   getUniqueClassName(): string {
     return 'MgReadOhosMediaPlugin'
@@ -75,8 +77,7 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
     this.eventChannel?.setStreamHandler(null)
     this.methodChannel = undefined
     this.eventChannel = undefined
-    this.disposeAll()
-    this.destroyAudioSession()
+    this.disposeAll().then(() => this.destroyAudioSession()).catch(() => {})
     this.context = undefined
     this.textures = undefined
   }
@@ -169,7 +170,13 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
       await this.waitForState(player, 'prepared')
       const initialPosition = this.number(args, 'initialPositionMs')
       if (initialPosition > 0) player.seek(initialPosition)
-      if (!video) await this.prepareAudioSession(sessionId, args, player.duration)
+      if (!video) {
+        // The default SHARE_MODE lets concurrent streams mix.  MgRead needs
+        // the AVPlayer interruption callback for another app's focus change,
+        // so select an independent focus unit before the first play call.
+        player.audioInterruptMode = audio.InterruptMode.INDEPENDENT_MODE
+        await this.prepareAudioSession(sessionId, args, player.duration)
+      }
       if (this.booleanValue(args, 'play')) await player.play()
       result.success({
         sessionId,
@@ -234,18 +241,50 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
     })
     player.on('error', (error: Error) => this.emit(sessionId, 'error', null, this.errorMessage(error)))
     player.on('audioInterrupt', (event: audio.InterruptEvent) => {
-      const interrupted = event.eventType === audio.InterruptType.INTERRUPT_TYPE_BEGIN
-      if (interrupted) {
-        this.audioWasPlayingBeforeInterrupt = player.state === 'playing'
-        if (this.audioWasPlayingBeforeInterrupt) {
-          player.pause().catch((error: Error) => this.emit(sessionId, 'error', null, `audio_interrupt_pause_failed: ${this.errorMessage(error)}`))
-        }
-      } else if (this.audioWasPlayingBeforeInterrupt) {
-        this.audioWasPlayingBeforeInterrupt = false
-        player.play().catch((error: Error) => this.emit(sessionId, 'error', null, `audio_interrupt_resume_failed: ${this.errorMessage(error)}`))
+      if (event.eventType === audio.InterruptType.INTERRUPT_TYPE_BEGIN) {
+        this.beginAudioInterruption(sessionId, player)
+      } else {
+        this.endAudioInterruption(sessionId, player)
       }
-      this.emit(sessionId, 'interrupted', interrupted)
     })
+  }
+
+  private handleAudioSessionState(sessionId: string, event: audio.AudioSessionStateChangedEvent): void {
+    const session = this.sessions.get(sessionId)
+    if (session === undefined) return
+    switch (event.stateChangeHint) {
+      case audio.AudioSessionStateChangeHint.AUDIO_SESSION_STATE_CHANGE_HINT_PAUSE:
+      case audio.AudioSessionStateChangeHint.AUDIO_SESSION_STATE_CHANGE_HINT_STOP:
+      case audio.AudioSessionStateChangeHint.AUDIO_SESSION_STATE_CHANGE_HINT_TIME_OUT_STOP:
+        this.beginAudioInterruption(sessionId, session.player)
+        break
+      case audio.AudioSessionStateChangeHint.AUDIO_SESSION_STATE_CHANGE_HINT_RESUME:
+        this.endAudioInterruption(sessionId, session.player)
+        break
+      default:
+        break
+    }
+  }
+
+  private beginAudioInterruption(sessionId: string, player: media.AVPlayer): void {
+    if (this.audioInterruptionActive) return
+    this.audioInterruptionActive = true
+    this.audioWasPlayingBeforeInterrupt = player.state === 'playing'
+    if (this.audioWasPlayingBeforeInterrupt) {
+      player.pause().catch((error: Error) => this.emit(sessionId, 'error', null, `audio_interrupt_pause_failed: ${this.errorMessage(error)}`))
+    }
+    this.emit(sessionId, 'interrupted', true)
+  }
+
+  private endAudioInterruption(sessionId: string, player: media.AVPlayer): void {
+    if (!this.audioInterruptionActive) return
+    this.audioInterruptionActive = false
+    const resume = this.audioWasPlayingBeforeInterrupt
+    this.audioWasPlayingBeforeInterrupt = false
+    if (resume) {
+      player.play().catch((error: Error) => this.emit(sessionId, 'error', null, `audio_interrupt_resume_failed: ${this.errorMessage(error)}`))
+    }
+    this.emit(sessionId, 'interrupted', false)
   }
 
   private run(args: Map<string, Object> | null, operation: (session: MediaSession) => Promise<void>, result: MethodResult): void {
@@ -276,7 +315,7 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
     const session = this.sessions.get(sessionId)
     if (session === undefined) return
     this.sessions.delete(sessionId)
-    if (sessionId === this.audioSessionId) this.destroyAudioSession()
+    if (sessionId === this.audioSessionId) await this.destroyAudioSession()
     try {
       await session.player.release()
     } catch (_) {
@@ -350,15 +389,37 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
     if (this.context === undefined) {
       throw new Error('avsession_unavailable: The OHOS ability context is not ready.')
     }
+    if (this.audioSessionManager === undefined) {
+      const manager = audio.getAudioManager().getSessionManager()
+      manager.setAudioSessionScene(audio.AudioSessionScene.AUDIO_SESSION_SCENE_MEDIA)
+      manager.on('audioSessionStateChanged', (event: audio.AudioSessionStateChangedEvent) => {
+        this.handleAudioSessionState(sessionId, event)
+      })
+      this.audioSessionManager = manager
+      try {
+        await manager.activateAudioSession({
+          concurrencyMode: audio.AudioConcurrencyMode.CONCURRENCY_DEFAULT,
+        })
+      } catch (error) {
+        manager.off('audioSessionStateChanged')
+        this.audioSessionManager = undefined
+        throw new Error(this.errorMessage(error as Object))
+      }
+    }
     if (this.audioSession === undefined) {
-      const session = await avSession.createAVSession(this.context, 'MgRead', 'audio')
-      session.on('play', () => this.runAudioCommand('play'))
-      session.on('pause', () => this.runAudioCommand('pause'))
-      session.on('playNext', () => this.emitRemoteCommand('next'))
-      session.on('playPrevious', () => this.emitRemoteCommand('previous'))
-      session.on('seek', (position: number) => this.runAudioCommand('seek', position))
-      await session.activate()
-      this.audioSession = session
+      try {
+        const session = await avSession.createAVSession(this.context, 'MgRead', 'audio')
+        this.audioSession = session
+        session.on('play', () => this.runAudioCommand('play'))
+        session.on('pause', () => this.runAudioCommand('pause'))
+        session.on('playNext', () => this.emitRemoteCommand('next'))
+        session.on('playPrevious', () => this.emitRemoteCommand('previous'))
+        session.on('seek', (position: number) => this.runAudioCommand('seek', position))
+        await session.activate()
+      } catch (error) {
+        await this.destroyAudioSession()
+        throw new Error(this.errorMessage(error as Object))
+      }
     }
     this.audioSessionId = sessionId
     this.audioState = avSession.PlaybackState.PLAYBACK_STATE_PREPARE
@@ -445,11 +506,28 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
     operation.catch((error: Error) => this.emit(activeSessionId, 'error', null, `avsession_control_failed: ${this.errorMessage(error)}`))
   }
 
-  private destroyAudioSession(): void {
+  private async destroyAudioSession(): Promise<void> {
+    const manager = this.audioSessionManager
     const session = this.audioSession
+    this.audioSessionManager = undefined
     this.audioSession = undefined
     this.audioSessionId = undefined
     this.audioWasPlayingBeforeInterrupt = false
-    if (session !== undefined) session.destroy().catch(() => {})
+    this.audioInterruptionActive = false
+    if (manager !== undefined) {
+      manager.off('audioSessionStateChanged')
+      try {
+        await manager.deactivateAudioSession()
+      } catch (_) {
+        // The service may already have released the session during teardown.
+      }
+    }
+    if (session !== undefined) {
+      try {
+        await session.destroy()
+      } catch (_) {
+        // AVSession cleanup is best effort after the media registry is closed.
+      }
+    }
   }
 }

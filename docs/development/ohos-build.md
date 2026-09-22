@@ -91,6 +91,7 @@ hdc install build/ohos/hap/entry-default-signed.hap
 - `OhosBrowserSessionHost.cancel()` 已有 MethodChannel 直接测试，确认活动 job 会向 ArkWeb 宿主发送 `cancel`，不是只在 Dart 侧丢弃迟到结果。
 - `ohos_video_smoke_test.dart` 现在直接等待并校验 OHOS AVPlayer 的 `buffered` 事件为非负毫秒值；模拟器实测通过，覆盖 `CACHED_DURATION -> bufferedPosition` 链路。
 - 本地能力/代理/Profile/Runtime 宿主单测：通过；签名 arm64 HAP：通过；`hdc install -r`：通过。2026-09-21 设备 `192.168.3.48:45975` 重新在线后，当前源码已在 `PLA-AL10` arm64 真机完成 Runtime、ArkWeb、Stage 2 fixture、音频、视频、首次运行首页和阅读器启动/系统返回保存时序验收。
+- AudioSession 增量适配：`MgReadOhosMediaPlugin.ets` 已设置媒体场景、激活 `CONCURRENCY_DEFAULT`、监听 PAUSE/STOP/TIME_OUT_STOP/RESUME，并将 AVPlayer 设为 `INDEPENDENT_MODE`；API 26 arm64 无签名 HAP 重新编译通过。当前 HDC 目标为空且历史 IP 重连失败，因此外部系统音频抢占/恢复仍不宣称真机通过。
 - 当前 `127.0.0.1:5555` OHOS x64 模拟器复验：`ohos_browser_session_smoke_test.dart`、`ohos_media_smoke_test.dart`、`ohos_video_smoke_test.dart`、`library_first_run_test.dart` 和 `ohos_x64_runtime_stub_test.dart` 全部通过；本轮最新复验的 ArkWeb 与视频 smoke 也重新构建、安装并通过，期间清理过一次残留 `hdc fport` 后重试。每组均重新构建、安装并启动签名 HAP。模拟器证据不替代缺失的本轮 arm64 真机增量回归。
 - 来源层固定 Node 快速检查报告：`artifacts/source-tests/quick-all-20260921-deps.json`，56 个来源中 28 个通过、6 个部分通过、22 个因外部站点/交互/资源或 testkit 能力边界失败；这不是 OHOS 真机验收。Windows Release 实际检查暂未执行，`flutter build windows --release --no-pub` 被当前系统未启用符号链接支持阻止。
 - 独立 HAP 启动复验：arm64 真机传输验收所用 `build/ohos/hap/entry-default-signed.hap` SHA-256 为 `A0B8C9D9F98610FCB68E029594BFDA4938B8D266B6F80CD083EBFAD558F1CF6C`；随后为跳过的 OHOS↔OHOS x64 虚拟器复验生成的本地签名产物 SHA-256 为 `3280A412A9F15A0467FD475FC306C45A0314B3D11D952038490E6E9802312B73`。本轮源码已在 `PLA-AL10` 真机多次通过 `hdc install -r` 和 Flutter 调试启动，Runtime/ArkWeb/媒体/阅读器集成测试均完成连接与断言。
@@ -125,7 +126,7 @@ hdc install build/ohos/hap/entry-default-signed.hap
 - 音频复验发现 OHOS `AVPlayer.play()` 返回早于 `playing` 状态的真实竞态，原生已改为等待 `playing` 再完成 play 命令，修复后的真机音频 smoke 通过；
 - HAP 使用 `flutter build hap --debug --target-platform ohos-arm64 --no-pub` 成功签名并通过 `hdc install -r` 安装启动。
 
-以下门禁仍需保留为未完成：播放器代理边界、锁屏/蓝牙/焦点与中断恢复；反馈页面 UI、鸿蒙仓库 Issues 目标页面、有效二维码载荷路由、真实来源→书架→Reader 迁移、文件导入/导出选择器、文件分享分发、HTTPS 外链桥接、五个真实来源直连链路、HLS 样本和完整的相关跨设备/HAP 传输矩阵已通过，OHOS↔OHOS 与不上架的 HAP 市场跳转已按用户要求跳过。
+以下门禁仍需保留为未完成：播放器代理边界、锁屏/蓝牙/焦点与中断恢复的真机证据；反馈页面 UI、鸿蒙仓库 Issues 目标页面、有效二维码载荷路由、真实来源→书架→Reader 迁移、文件导入/导出选择器、文件分享分发、HTTPS 外链桥接、五个真实来源直连链路、HLS 样本和完整的相关跨设备/HAP 传输矩阵已通过，OHOS↔OHOS 与不上架的 HAP 市场跳转已按用户要求跳过。
 
 最近一次 VM 验证使用 `127.0.0.1:5555` API 26 x86_64 模拟器：
 
