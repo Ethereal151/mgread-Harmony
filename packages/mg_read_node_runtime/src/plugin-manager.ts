@@ -355,13 +355,12 @@ export class PluginManager {
   /**
    * Measures one installed source subtree asynchronously.
    *
-   * Data excludes every `node_modules` directory; npm includes the complete
-   * materialized dependency tree; archive reports the retained original
-   * `.mgplugin.js` or `.mgplugin`. Only totals cross the Facade.
+   * Data reports the installed source tree; archive reports the retained
+   * original `.mgplugin.js` or `.mgplugin`. Only totals cross the Facade.
    */
   async measureInstallationUsage(
     pluginId: string,
-    scope: "archive" | "data" | "npm",
+    scope: "archive" | "data",
   ): Promise<PluginInstallationUsage> {
     return this.#storage.measureInstallationUsage(pluginId, scope);
   }
@@ -446,12 +445,11 @@ export class PluginManager {
       this.#embedded ? EMBEDDED_UNINSTALL_CONCURRENCY : DEFAULT_UNINSTALL_CONCURRENCY,
       async (snapshot) => {
         this.#reportUninstallProgress("plugin_uninstall_started", snapshot, completedCount, snapshots.length);
-        await this.#uninstallInstalled(snapshot.id, signal, deadlineUnixMs, false);
+        await this.#uninstallInstalled(snapshot.id, signal, deadlineUnixMs);
         completedCount += 1;
         this.#reportUninstallProgress("plugin_uninstall_completed", snapshot, completedCount, snapshots.length);
       },
     );
-    await this.#installer.collectUnusedDependencies();
     return Object.freeze({ removedCount: snapshots.length } satisfies PluginUninstallAllResult);
   }
 
@@ -459,14 +457,12 @@ export class PluginManager {
     pluginId: string,
     signal?: AbortSignal,
     deadlineUnixMs?: string,
-    collectUnusedDependencies = true,
   ): Promise<void> {
     const cancellation = signal ?? new AbortController().signal;
     const deadline = deadlineUnixMs ?? String(Date.now() + this.#cacheClearTimeoutMs);
     const release = await this.#pluginOperations.acquireCacheClear(pluginId, cancellation, deadline);
     try {
       await this.#catalog.remove(pluginId);
-      if (collectUnusedDependencies) await this.#installer.collectUnusedDependencies();
       this.#installedLoaded.delete(pluginId);
       this.#installedLoadPromises.delete(pluginId);
       this.#installedSnapshots = Object.freeze(
@@ -903,7 +899,7 @@ export class PluginManager {
   async #loadModule(entryPath: string): Promise<Record<string, unknown>> {
     if (this.#embedded) {
       // Javet owns the V8 module resolver on Android. Ask that resolver to
-      // compile the plugin module so installed files and their dependencies
+      // compile the bundled plugin module so it and Node builtin modules
       // stay in the same VM/module cache as the Runtime Core.
       const loader = (globalThis as {
         __mgreadLoadPluginModule?: (path: string) => Record<string, unknown>;

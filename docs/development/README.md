@@ -8,7 +8,7 @@
 | 仓库布局、依赖方向、模块所有权 | [仓库与所有权](../core.md#仓库与所有权) |
 | 主应用数据库、设置、书架、目录、正文、受控文件 | [主应用持久化与 Content Library](../core.md#主应用持久化与-content-library) |
 | Runtime 生命周期、Facade、Supervisor、WS/HTTP、WebView2/Android WebView、CF、浏览器 Profile、平台宿主 | [Runtime 与平台宿主](../core.md#runtime-与平台宿主) |
-| 插件 package、lock、artifact、安装、开发加载 | [标准插件项目、artifact 与安装](../core.md#标准插件项目artifact-与安装) |
+| 插件单文件构建、artifact、安装、开发加载 | [标准插件项目、artifact 与安装](../core.md#标准插件项目artifact-与安装) |
 | 真实数据源插件、fixture/CF mock、发现、搜索、详情、目录、资源代理与源级验证 | [插件内容 API](../core.md#插件内容-api) |
 | 小说/漫画阅读器、音频/视频播放器的公共 API、会话、进度与 UI | [阅读器](../core.md#阅读器) |
 | 主应用页面、状态、共享组件、主题和异步生命周期 | [UI、状态与组件](../core.md#ui状态与组件) |

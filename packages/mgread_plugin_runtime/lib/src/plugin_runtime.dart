@@ -126,7 +126,7 @@ final class PluginRuntime {
   /// Routes only data-source `ctx.http.fetch` requests through [proxyUri].
   ///
   /// Runtime source resources share this direct upstream route. Runtime control
-  /// traffic, dependency installation, WebView and ambient Node.js requests
+  /// traffic, WebView and ambient Node.js requests
   /// keep their existing routing behavior.
   Future<void> configurePluginHttpProxy(Uri? proxyUri) {
     if (proxyUri != null &&

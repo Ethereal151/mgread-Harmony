@@ -78,7 +78,6 @@ void main() {
     expect(find.textContaining('整个数据源插件：0 B'), findsOneWidget);
     expect(find.textContaining('原始安装包'), findsOneWidget);
     expect(find.textContaining('数据文件'), findsOneWidget);
-    expect(find.textContaining('npm 包'), findsOneWidget);
     await tester.scrollUntilVisible(find.byKey(const Key('data-source-detail-verify')), 200, scrollable: find.byType(Scrollable));
     expect(find.byKey(const Key('data-source-detail-verify')), findsOneWidget);
     await tester.tap(find.byKey(const Key('data-source-detail-verify')));

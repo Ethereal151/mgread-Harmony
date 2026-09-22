@@ -95,12 +95,12 @@ export class PluginManagerStorage {
 
   async measureInstallationUsage(
     pluginId: string,
-    scope: "archive" | "data" | "npm",
+    scope: "archive" | "data",
   ): Promise<PluginInstallationUsage> {
     await this.#initialize();
     if (
       !isPluginId(pluginId) ||
-      (scope !== "archive" && scope !== "data" && scope !== "npm")
+      (scope !== "archive" && scope !== "data")
     ) {
       throw new PluginManagerError("invalid_request");
     }
@@ -117,10 +117,8 @@ export class PluginManagerStorage {
     );
     const root = scope === "archive"
       ? await retainedArtifactPath(this.#dataRoot, pluginId, version)
-      : scope === "npm"
-        ? resolve(versionRoot, "node_modules")
-        : versionRoot;
-    const result = await measureInstallationTree(root, scope);
+      : versionRoot;
+    const result = await measureInstallationTree(root);
     return Object.freeze({
       bytes: result.bytes,
       fileCount: result.fileCount,

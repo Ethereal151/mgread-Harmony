@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
 import {
   chmod,
   cp,
@@ -19,7 +18,6 @@ import test from "node:test";
 
 import {
   createPluginArchive,
-  DependencyStore,
   extractPluginArchive,
   PluginArchiveError,
   PluginBrowserSessionError,
@@ -45,9 +43,7 @@ import {
 import {
   createDelayedPlugin,
   createDevelopmentPlugin,
-  createRegistryPlugin,
   fileExists,
-  makeNpmTarball,
   replaceAllAscii,
   writeTarOctal,
   writeTarString,
@@ -383,132 +379,15 @@ test("complete chapter catalogs enforce count, byte, uniqueness, and shape limit
   );
 });
 
-test("registry dependencies are verified, shared once, copied on hardlink failure and swept", async (t) => {
-  const dataRoot = await temporaryDirectory(t, "mgread-dependency-store-");
-  const tarball = makeNpmTarball({
-    "package.json": JSON.stringify({
-      name: "fixture-dependency",
-      version: "1.0.0",
-      type: "module",
-      main: "index.js",
-    }),
-    "index.js": "export const suffix = '共享依赖';\n",
-    "data/rules.json": "{\"enabled\":true}\n",
-    "wasm/parser.wasm": Buffer.from([0, 97, 115, 109]),
-  });
-  const integrity = `sha512-${createHash("sha512").update(tarball).digest("base64")}`;
-  let downloads = 0;
-  const fetchPackage = async () => {
-    downloads += 1;
-    return {
-      ok: true,
-      status: 200,
-      async arrayBuffer() {
-        return tarball.buffer.slice(
-          tarball.byteOffset,
-          tarball.byteOffset + tarball.byteLength,
-        );
-      },
-    };
-  };
-  const store = new DependencyStore(dataRoot, { fetchPackage });
-  const installer = new PluginInstaller(dataRoot, { dependencyStore: store });
-  const firstProject = await createRegistryPlugin(
-    join(dataRoot, "project-a"),
-    "org.example.registry.a",
-    "@mgread-plugin/registry-a",
-    integrity,
-  );
-  const secondProject = await createRegistryPlugin(
-    join(dataRoot, "project-b"),
-    "org.example.registry.b",
-    "@mgread-plugin/registry-b",
-    integrity,
-  );
-  const [first, second] = await Promise.all([
-    installer.installProject(firstProject),
-    installer.installProject(secondProject),
-  ]);
-  assert.equal(downloads, 1);
-  assert.ok(first.hardlinkedFiles >= 4);
-  assert.ok(second.hardlinkedFiles >= 4);
-  assert.equal(
-    await readFile(
-      join(
-        dataRoot,
-        "plugins",
-        "org.example.registry.a",
-        "versions",
-        "1.0.0",
-        "node_modules",
-        "fixture-dependency",
-        "data",
-        "rules.json",
-      ),
-      "utf8",
-    ),
-    '{"enabled":true}\n',
-  );
-  assert.deepEqual(
-    await readFile(
-      join(
-        dataRoot,
-        "plugins",
-        "org.example.registry.a",
-        "versions",
-        "1.0.0",
-        "node_modules",
-        "fixture-dependency",
-        "wasm",
-        "parser.wasm",
-      ),
-    ),
-    Buffer.from([0, 97, 115, 109]),
-  );
-  assert.equal((await installer.collectUnusedDependencies()).removedObjects, 0);
-
-  await installer.scheduleUninstall("org.example.registry.a");
-  await installer.scheduleUninstall("org.example.registry.b");
-  await new PluginManager(dataRoot).initialize();
-  assert.equal((await installer.collectUnusedDependencies()).removedObjects, 1);
-
-  const copyRoot = await temporaryDirectory(t, "mgread-dependency-copy-");
-  const copyStore = new DependencyStore(copyRoot, {
-    fetchPackage,
-    hardlinkFile: async () => {
-      throw Object.assign(new Error("hardlink unavailable"), { code: "EPERM" });
-    },
-  });
-  const copyInstaller = new PluginInstaller(copyRoot, {
-    dependencyStore: copyStore,
-  });
-  const copyProject = await createRegistryPlugin(
-    join(copyRoot, "project"),
-    "org.example.registry.copy",
-    "@mgread-plugin/registry-copy",
-    integrity,
-  );
-  const copied = await copyInstaller.installProject(copyProject);
-  assert.equal(copied.hardlinkedFiles, 0);
-  assert.ok(copied.copiedFiles >= 4);
-});
-
 test("running Runtime removes all installed sources immediately", async (t) => {
   const root = await temporaryDirectory(t, "mgread-uninstall-all-");
   const dataRoot = join(root, "runtime-data");
   const secondProject = join(root, "second-project");
   await cp(fixtureRoot, secondProject, { recursive: true });
   const packageJson = JSON.parse(await readFile(join(secondProject, "package.json"), "utf8"));
-  const lockfile = JSON.parse(await readFile(join(secondProject, "package-lock.json"), "utf8"));
   packageJson.name = "@mgread-plugin/fixture-second";
   packageJson.mgread.id = "org.mgread.runtime.fixture.second";
-  lockfile.name = packageJson.name;
-  lockfile.packages[""].name = packageJson.name;
-  lockfile.packages[""].version = packageJson.version;
-  await Promise.all([
-    writeFile(join(secondProject, "package.json"), `${JSON.stringify(packageJson, null, 2)}\n`),
-    writeFile(join(secondProject, "package-lock.json"), `${JSON.stringify(lockfile, null, 2)}\n`),
-  ]);
+  await writeFile(join(secondProject, "package.json"), `${JSON.stringify(packageJson, null, 2)}\n`);
 
   const installer = new PluginInstaller(dataRoot);
   await installer.installProject(fixtureRoot);
@@ -536,48 +415,6 @@ test("running Runtime removes all installed sources immediately", async (t) => {
   assert.deepEqual(await restarted.listInstalled(), []);
 });
 
-test("integrity failure produces one install terminal and leaves no version", async (t) => {
-  const dataRoot = await temporaryDirectory(t, "mgread-integrity-failure-");
-  const tarball = makeNpmTarball({
-    "package.json": "{\"name\":\"bad\",\"version\":\"1.0.0\"}",
-    "index.js": "export {};\n",
-  });
-  const events = [];
-  const store = new DependencyStore(dataRoot, {
-    fetchPackage: async () => ({
-      ok: true,
-      status: 200,
-      async arrayBuffer() {
-        return tarball.buffer.slice(
-          tarball.byteOffset,
-          tarball.byteOffset + tarball.byteLength,
-        );
-      },
-    }),
-  });
-  const installer = new PluginInstaller(dataRoot, {
-    dependencyStore: store,
-    events: (event) => events.push(event),
-  });
-  const project = await createRegistryPlugin(
-    join(dataRoot, "project"),
-    "org.example.integrity",
-    "@mgread-plugin/integrity",
-    `sha512-${Buffer.alloc(64).toString("base64")}`,
-  );
-  await assert.rejects(installer.installProject(project));
-  assert.deepEqual(
-    events.map((event) => event.code),
-    ["plugin_install_started", "plugin_install_failed"],
-  );
-  assert.equal(
-    await fileExists(
-      join(dataRoot, "plugins", "org.example.integrity", "versions", "1.0.0"),
-    ),
-    false,
-  );
-});
-
 test("a legacy default-export pending update fails and keeps current active", async (t) => {
   const dataRoot = await temporaryDirectory(t, "mgread-plugin-rollback-");
   const installer = new PluginInstaller(dataRoot);
@@ -589,20 +426,11 @@ test("a legacy default-export pending update fails and keeps current active", as
   const packageJson = JSON.parse(
     await readFile(join(updateRoot, "package.json"), "utf8"),
   );
-  const lockfile = JSON.parse(
-    await readFile(join(updateRoot, "package-lock.json"), "utf8"),
-  );
   packageJson.version = "2.0.0";
-  lockfile.version = "2.0.0";
-  lockfile.packages[""].version = "2.0.0";
   await Promise.all([
     writeFile(
       join(updateRoot, "package.json"),
       `${JSON.stringify(packageJson, null, 2)}\n`,
-    ),
-    writeFile(
-      join(updateRoot, "package-lock.json"),
-      `${JSON.stringify(lockfile, null, 2)}\n`,
     ),
     writeFile(
       join(updateRoot, "dist", "index.mjs"),
@@ -654,15 +482,11 @@ test("a broken current source is quarantined without blocking other sources", as
   const brokenRoot = join(dataRoot, "broken-project");
   await cp(fixtureRoot, brokenRoot, { recursive: true });
   const packageJson = JSON.parse(await readFile(join(brokenRoot, "package.json"), "utf8"));
-  const lockfile = JSON.parse(await readFile(join(brokenRoot, "package-lock.json"), "utf8"));
   packageJson.name = "@mgread-plugin/broken-fixture";
   packageJson.mgread.id = "org.mgread.runtime.broken";
   packageJson.mgread.displayName = "Broken fixture";
-  lockfile.name = packageJson.name;
-  lockfile.packages[""].name = packageJson.name;
   await Promise.all([
     writeFile(join(brokenRoot, "package.json"), `${JSON.stringify(packageJson, null, 2)}\n`),
-    writeFile(join(brokenRoot, "package-lock.json"), `${JSON.stringify(lockfile, null, 2)}\n`),
     writeFile(join(brokenRoot, "dist", "index.mjs"), "export const broken = ;\n"),
   ]);
   await installer.installProject(brokenRoot);
@@ -696,11 +520,8 @@ test("a broken current source is quarantined without blocking other sources", as
   assert.deepEqual(await restarted.consumeStartupRecovery(), { quarantinedCount: 0 });
 
   packageJson.version = "2.0.0";
-  lockfile.version = "2.0.0";
-  lockfile.packages[""].version = "2.0.0";
   await Promise.all([
     writeFile(join(brokenRoot, "package.json"), `${JSON.stringify(packageJson, null, 2)}\n`),
-    writeFile(join(brokenRoot, "package-lock.json"), `${JSON.stringify(lockfile, null, 2)}\n`),
     cp(join(fixtureRoot, "dist", "index.mjs"), join(brokenRoot, "dist", "index.mjs")),
   ]);
   await installer.installProject(brokenRoot);
@@ -913,32 +734,6 @@ test("plugin execution failures stay distinct from invalid plugin responses", as
       error?.code === "source_access_blocked" &&
       error?.detail === "访问异常，请稍后再试。\n注释：当前 IP 可能异常，请更换 IP 后重试。",
   );
-});
-
-test("an unavailable optional dependency is skipped without changing install success", async (t) => {
-  const dataRoot = await temporaryDirectory(t, "mgread-plugin-optional-");
-  const integrity = `sha512-${Buffer.alloc(64).toString("base64")}`;
-  const project = await createRegistryPlugin(
-    join(dataRoot, "project"),
-    "org.example.optional",
-    "@mgread-plugin/optional",
-    integrity,
-    { optional: true },
-  );
-  const store = new DependencyStore(dataRoot, {
-    fetchPackage: async () => ({
-      ok: false,
-      status: 503,
-      async arrayBuffer() {
-        return new ArrayBuffer(0);
-      },
-    }),
-  });
-  const result = await new PluginInstaller(dataRoot, {
-    dependencyStore: store,
-  }).installProject(project);
-  assert.equal(result.skippedOptionalDependencies, 1);
-  assert.equal(result.pendingActivation, true);
 });
 
 test("media catalogs preserve neutral groups and require proxy playback metadata", () => {

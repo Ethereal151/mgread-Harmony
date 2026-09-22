@@ -52,7 +52,8 @@ packages\mg_read_node_runtime\tools\node-v24.16.0-win-x64\node.exe --use-env-pro
 派生查询时的后备，不得固定 `contentId` 绕过发现与搜索。
 
 CLI 退出码：`0` 所有来源严格通过、`1` 已完成但存在 `failed/partial`、`2` 参数或启动失败。全源必须
-遇错继续到最后一个来源。缺 `node_modules` 导致的 build `127` 先按 lock 恢复依赖，不记为来源代码失败。
+遇错继续到最后一个来源。源码项目缺 `node_modules` 导致的 build `127` 先按 lock 恢复开发依赖，
+不记为来源代码失败。安装或同步发布产物时不得恢复依赖；两种 artifact 都运行单个已打包 JS。
 
 testkit 自身变化时运行固定 Node 的离线直接测试：
 

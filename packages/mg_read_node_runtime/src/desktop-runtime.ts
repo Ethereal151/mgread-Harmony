@@ -208,7 +208,7 @@ export class DesktopRuntime {
   /** Requested port captured at construction to avoid mutable launch options. */
   readonly #port: number;
 
-  /** Runtime-owned plugin/dependency/data root, never exposed through Facade. */
+  /** Runtime-owned plugin/data root, never exposed through Facade. */
   readonly #dataRoot: string;
   readonly #developmentPluginRoot: string | undefined;
   readonly #developmentNpmCli: string | undefined;

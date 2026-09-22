@@ -3,6 +3,10 @@
 根规则始终适用。本目录只拥有各来源的请求、解析、稳定身份、fixture 和私有缓存；来源名称、版本、能力和
 artifact 模式以各自 `package.json.mgread` 为准，文件局部边界写入口源码头。
 
+- 所有来源构建必须输出单个 JS 并内联使用的全部第三方 npm 包，仅 Node.js 内置模块可外置。
+  `.mgplugin.js` 和 `.mgplugin` 压缩包共用此要求；后者只包装单个 JS、元数据与图标，不恢复 npm 依赖。
+  开发用 package/lock/node_modules 留在项目中，不进入 artifact 或 Runtime generation。
+  禁止新增依赖引用扫描、动态导入检查或自定义 loader；通过构建配置落实 bundle 和禁用 splitting。
 - 先读目标来源入口、最近的来源 `AGENTS.md`、公开类型和直接测试。需要数据源契约或 WebView 专项流程时，
   只加载 `mgread-source-development` 技能路由到的一个首选参考。
 - 普通来源修复只修改该来源目录；不联动 Runtime、Flutter 或模板，除非用户明确要求改变公开 Source 边界。

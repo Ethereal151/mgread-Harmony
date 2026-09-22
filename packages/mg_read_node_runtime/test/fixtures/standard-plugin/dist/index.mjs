@@ -1,17 +1,16 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
-import { formatFixtureTitle } from "local-helper";
+function formatFixtureTitle(prefix, query) {
+  return `${prefix}：${query}`;
+}
 
 let context;
 let prefix;
 
 export async function activate(nextContext) {
   context = nextContext;
-  const rules = JSON.parse(
-    await readFile(new URL("../assets/rules.json", import.meta.url), "utf8"),
-  );
-  prefix = rules.prefix;
+  prefix = "标准插件";
   await writeFile(
     join(context.dataDir, "activated.json"),
     JSON.stringify({ pluginApi: context.app.pluginApi }),

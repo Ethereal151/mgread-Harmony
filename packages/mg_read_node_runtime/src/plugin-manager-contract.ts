@@ -165,7 +165,7 @@ export interface PluginInstallationUsage extends JsonObject {
   readonly bytes: number;
   readonly fileCount: number;
   readonly pluginId: string;
-  readonly scope: "archive" | "data" | "npm";
+  readonly scope: "archive" | "data";
   readonly version: string;
 }
 

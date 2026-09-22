@@ -37,11 +37,16 @@
 
 ## Artifact 与开发生命周期
 
-- `single-file` 生成 Node 24 ESM `.mgplugin.js` 并内联实际使用的可打包依赖。
-- `archive` 生成 `.mgplugin`，保留 lock 和本地依赖恢复语义。两种模式独立，不互相回退。
-- 产物不得包含源码或 `node_modules`；descriptor、图标、大小、SHA-256 和包内容必须可复核。
+- 数据源代码强制构建为单个 Node 24 ESM JS。`single-file` 发布 `.mgplugin.js`；`archive` 发布 `.mgplugin`
+  压缩包，内部同样是单个 JS 入口及元数据、图标。压缩包没有 npm 依赖恢复语义。
+- 开发项目可用 npm 管理构建工具和源码依赖，但构建必须启用 bundle、禁用 splitting，并内联所有使用的
+  第三方包；仅 Node.js 内置模块可外置。不得用 external 或 packages: external 绕过打包。
+- 产物不得包含源码、lock、本地依赖目录或 `node_modules`；descriptor、图标、大小、SHA-256 和包内容必须可复核。
+- 不新增引用扫描、动态 import 检查、依赖白名单扫描或自定义 loader。打包要求由构建配置落实，
+  导入、安装、导出、同步、删除不下载、恢复、管理或统计 npm 依赖。
 - Windows 开发根只在静默窗口后执行来源声明的 `npm run build`，不加载 TypeScript、不启动 watch、也不自动
-  安装依赖。候选 build 与 activate 都成功后才替换 generation；失败保留旧版本。
+  安装依赖。generation 只加载打包后的单个 JS，不复制或链接项目依赖目录。候选 build 与 activate
+  都成功后才替换 generation；失败保留旧版本。
 - Runtime 启动优先建立已校验元数据快照，来源代码在首次能力调用或传输时单飞加载。诊断来源数量与启动性能时
   测量实际扫描、快照、加载事件和首次调用，不根据目录数猜测。
 

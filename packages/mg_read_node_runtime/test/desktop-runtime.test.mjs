@@ -508,26 +508,15 @@ test("desktop Runtime reports and clears private plugin caches without paths", a
       params: { pluginId: desktopFixture.plugin.id, scope: "data" },
     }),
   );
-  const npmUsage = await sendRequest(
-    socket,
-    makeRequest(ready, "c:installation-npm-usage", "plugins.installation.usage.v1", {
-      params: { pluginId: desktopFixture.plugin.id, scope: "npm" },
-    }),
-  );
   assert.equal(archiveUsage.type, "response");
   assert.equal(dataUsage.type, "response");
-  assert.equal(npmUsage.type, "response");
   assert.equal(archiveUsage.result.pluginId, desktopFixture.plugin.id);
   assert.equal(archiveUsage.result.scope, "archive");
   assert.equal(dataUsage.result.pluginId, desktopFixture.plugin.id);
   assert.equal(dataUsage.result.scope, "data");
-  assert.equal(npmUsage.result.scope, "npm");
   assert.ok(dataUsage.result.bytes > 0);
-  assert.ok(npmUsage.result.bytes > 0);
   assert.ok(dataUsage.result.fileCount > 0);
-  assert.ok(npmUsage.result.fileCount > 0);
   assert.equal(JSON.stringify(dataUsage.result).includes(dataRoot), false);
-  assert.equal(JSON.stringify(npmUsage.result).includes(dataRoot), false);
   assert.equal(JSON.stringify(archiveUsage.result).includes(dataRoot), false);
   await access(join(
     dataRoot,
@@ -674,7 +663,7 @@ test("embedded import inbox installs an archive before cold activation", async (
   // Android uses this same embedded DesktopRuntime behind Javet. Keep the
   // path-free size capability covered on that execution route as well as the
   // desktop WebSocket route above.
-  const [archiveUsage, dataUsage, npmUsage] = await Promise.all([
+  const [archiveUsage, dataUsage] = await Promise.all([
     runtime.invokeEmbedded("plugins.installation.usage.v1", {
       pluginId: desktopFixture.plugin.id,
       scope: "archive",
@@ -683,41 +672,25 @@ test("embedded import inbox installs an archive before cold activation", async (
       pluginId: desktopFixture.plugin.id,
       scope: "data",
     }),
-    runtime.invokeEmbedded("plugins.installation.usage.v1", {
-      pluginId: desktopFixture.plugin.id,
-      scope: "npm",
-    }),
   ]);
   assert.equal(archiveUsage.ok, true);
   assert.equal(dataUsage.ok, true);
-  assert.equal(npmUsage.ok, true);
   assert.equal(archiveUsage.result.pluginId, desktopFixture.plugin.id);
   assert.equal(archiveUsage.result.scope, "archive");
   assert.equal(dataUsage.result.pluginId, desktopFixture.plugin.id);
   assert.equal(dataUsage.result.scope, "data");
-  assert.equal(npmUsage.result.pluginId, desktopFixture.plugin.id);
-  assert.equal(npmUsage.result.scope, "npm");
   assert.ok(dataUsage.result.bytes > 0);
   assert.ok(dataUsage.result.fileCount > 0);
-  assert.ok(npmUsage.result.bytes > 0);
-  assert.ok(npmUsage.result.fileCount > 0);
   await assert.rejects(access(archive), (error) => error?.code === "ENOENT");
 });
 
 async function rewriteFixturePackage(root, { id, name, version }) {
   const packagePath = join(root, "package.json");
-  const lockPath = join(root, "package-lock.json");
   const packageJson = JSON.parse(await readFile(packagePath, "utf8"));
   packageJson.name = name;
   packageJson.version = version;
   packageJson.mgread.id = id;
-  const lock = JSON.parse(await readFile(lockPath, "utf8"));
-  lock.name = name;
-  lock.version = version;
-  lock.packages[""] .name = name;
-  lock.packages[""] .version = version;
   await writeFile(packagePath, `${JSON.stringify(packageJson, null, 2)}\n`);
-  await writeFile(lockPath, `${JSON.stringify(lock, null, 2)}\n`);
 }
 
 test("desktop Runtime multiplexes bounded concurrent control requests on one socket", async (t) => {

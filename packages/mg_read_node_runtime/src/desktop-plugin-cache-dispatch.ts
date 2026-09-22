@@ -72,7 +72,7 @@ async function dispatchPluginCacheUsage(
   }
 }
 
-/** Returns retained archive, source data and materialized npm byte totals. */
+/** Returns retained archive and source data byte totals. */
 async function dispatchPluginInstallationUsage(
   request: RuntimeRequest,
   manager: PluginManager | undefined,
@@ -83,7 +83,7 @@ async function dispatchPluginInstallationUsage(
   if (
     Object.keys(request.params).length !== 2 ||
     typeof pluginId !== "string" ||
-    (scope !== "archive" && scope !== "data" && scope !== "npm")
+    (scope !== "archive" && scope !== "data")
   ) {
     return {
       error: requestError(

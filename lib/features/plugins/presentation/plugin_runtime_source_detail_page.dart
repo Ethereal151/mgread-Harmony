@@ -80,7 +80,6 @@ class _DetailContent extends ConsumerWidget {
     final isDesktop = isWindows || Platform.isMacOS;
     final dataUsage = isDevelopment ? null : ref.watch(pluginRuntimeSourceDataSizeProvider(source.id));
     final archiveUsage = isDevelopment ? null : ref.watch(pluginRuntimeSourceArchiveSizeProvider(source.id));
-    final npmUsage = isDevelopment ? null : ref.watch(pluginRuntimeSourceNpmSizeProvider(source.id));
     final opening = ref.watch(pluginRuntimeSourceDirectoryProvider).contains(source.id);
     final packaging = ref.watch(pluginRuntimeDevelopmentPackageProvider).contains(source.id);
     final removing = ref.watch(pluginRuntimeSourceActionProvider).contains(source.id);
@@ -161,7 +160,7 @@ class _DetailContent extends ConsumerWidget {
           ),
         ),
         const SizedBox(height: AppSpacing.comfortable),
-        if (!isDevelopment) _InstallationSizeCard(archiveUsage: archiveUsage!, dataUsage: dataUsage!, npmUsage: npmUsage!),
+        if (!isDevelopment) _InstallationSizeCard(archiveUsage: archiveUsage!, dataUsage: dataUsage!),
         if (!isDevelopment) const SizedBox(height: AppSpacing.comfortable),
         _VerifySourceButton(
           onPressed: source.enabled && source.activeVersion != null && onVerificationRequested != null
@@ -297,11 +296,10 @@ class _RemoveSourceButton extends StatelessWidget {
 }
 
 class _InstallationSizeCard extends StatelessWidget {
-  const _InstallationSizeCard({required this.archiveUsage, required this.dataUsage, required this.npmUsage});
+  const _InstallationSizeCard({required this.archiveUsage, required this.dataUsage});
 
   final AsyncValue<PluginInstallationSize> archiveUsage;
   final AsyncValue<PluginInstallationSize> dataUsage;
-  final AsyncValue<PluginInstallationSize> npmUsage;
 
   @override
   Widget build(BuildContext context) {
@@ -310,10 +308,7 @@ class _InstallationSizeCard extends StatelessWidget {
         ? (archiveUsage as AsyncData<PluginInstallationSize>).value
         : null;
     final dataResult = dataUsage is AsyncData<PluginInstallationSize> ? (dataUsage as AsyncData<PluginInstallationSize>).value : null;
-    final npmResult = npmUsage is AsyncData<PluginInstallationSize> ? (npmUsage as AsyncData<PluginInstallationSize>).value : null;
-    final total = archiveResult == null || dataResult == null || npmResult == null
-        ? null
-        : archiveResult.bytes + dataResult.bytes + npmResult.bytes;
+    final total = archiveResult == null || dataResult == null ? null : archiveResult.bytes + dataResult.bytes;
     return DecoratedBox(
       key: const Key('data-source-installation-size-card'),
       decoration: BoxDecoration(
@@ -334,7 +329,6 @@ class _InstallationSizeCard extends StatelessWidget {
             ),
             _InstallationSizeRow(label: '原始安装包', usage: archiveUsage),
             _InstallationSizeRow(label: '数据文件', usage: dataUsage),
-            _InstallationSizeRow(label: 'npm 包', usage: npmUsage, slowHint: true),
           ],
         ),
       ),
@@ -343,11 +337,10 @@ class _InstallationSizeCard extends StatelessWidget {
 }
 
 class _InstallationSizeRow extends StatelessWidget {
-  const _InstallationSizeRow({required this.label, required this.usage, this.slowHint = false});
+  const _InstallationSizeRow({required this.label, required this.usage});
 
   final String label;
   final AsyncValue<PluginInstallationSize> usage;
-  final bool slowHint;
 
   @override
   Widget build(BuildContext context) {
@@ -355,7 +348,7 @@ class _InstallationSizeRow extends StatelessWidget {
     final value = usage.when(
       data: (PluginInstallationSize result) => '${_formatInstallationBytes(result.bytes)}（${result.fileCount} 个文件）',
       error: (Object _, StackTrace _) => '统计失败',
-      loading: () => slowHint ? '统计中（文件较多）…' : '统计中…',
+      loading: () => '统计中…',
     );
     return Padding(
       padding: const EdgeInsets.only(top: AppSpacing.regular),

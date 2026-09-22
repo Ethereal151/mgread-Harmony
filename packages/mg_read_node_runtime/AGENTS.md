@@ -13,6 +13,9 @@
 
 ## Package 所有权
 
+- 数据源执行输入仅为构建期已内联第三方包的单个 JS；archive 只是容器，不是 npm 项目分发机制。
+  Runtime 不解析来源 lock、不恢复或缓存 npm 依赖，也不复制/链接开发项目依赖树。
+  安装、导入、导出、同步和删除共用此约束，不新增依赖引用扫描或模块加载拦截。
 - 本 package 独立拥有 Node.js Runtime Core、desktop launcher、内部控制/数据面、Plugin API、安装、
   schema/fixture 和瞬时诊断；同级 `mgread_plugin_runtime` 拥有 Flutter Facade、Supervisor 与平台宿主。
 - 主应用只调用版本化 `PluginRuntime.invoke`；不得获得 executable、PID、端口、ready、bootId、内部 URL、

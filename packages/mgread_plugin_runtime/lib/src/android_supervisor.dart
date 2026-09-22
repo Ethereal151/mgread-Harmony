@@ -149,8 +149,7 @@ final class _AndroidRuntimeSupervisor implements _RuntimeSupervisor {
       );
     }
     // A size request can be the first Android Runtime call. Keep the normal
-    // cold-start allowance, but do not shorten a long-running capability such
-    // as the npm tree scan back to the 30-second startup timeout.
+    // cold-start allowance for long-running filesystem measurement.
     final timeout = _started
         ? invocation._timeout
         : invocation._timeout > _androidStartupTimeout
