@@ -99,7 +99,7 @@ hdc install build/ohos/hap/entry-default-signed.hap
 - 独立 HAP 启动复验：arm64 真机传输验收所用 `build/ohos/hap/entry-default-signed.hap` SHA-256 为 `A0B8C9D9F98610FCB68E029594BFDA4938B8D266B6F80CD083EBFAD558F1CF6C`；随后为跳过的 OHOS↔OHOS x64 虚拟器复验生成的本地签名产物 SHA-256 为 `3280A412A9F15A0467FD475FC306C45A0314B3D11D952038490E6E9802312B73`。本轮源码已在 `PLA-AL10` 真机多次通过 `hdc install -r` 和 Flutter 调试启动，Runtime/ArkWeb/媒体/阅读器集成测试均完成连接与断言。
 - 本轮当前源码的无签名 arm64 构建：`flutter build hap --debug --target-platform ohos-arm64 --no-pub --no-codesign` 成功；`build/ohos/hap/entry-default-unsigned.hap` SHA-256 为 `44DECC19BB910D7721372304CA0DE8DED463BCB46BEE8C43CC69CF61A84A1D54`，HAP 清单包含 `libs/arm64-v8a/libnode.so`、`libmgread_node_host.so`、`libflutter.so` 和 `libsqlite3.so`。无签名产物仅证明 ABI/资源打包，不能代替签名安装与真机回归。
 
-当前计划验收总状态：`partial`。代码适配和明确不支持能力的直接证据已完成，arm64 真机基础回归已补齐；仍缺系统代理实际切换与非 loopback `NO_PROXY` 的真机证据、外部系统音频中断恢复、视频全屏/系统中断专项证据。播放器会话代理和系统音量写入等已按公开 SDK 边界稳定降级，不能冒充支持；有效二维码业务路由、本地阅读迁移、来源代理、HLS、真实跨设备/HAP 传输均有分项证据。OHOS↔OHOS 按用户要求跳过；不上架的 HAP 市场跳转同样跳过，均不作为本轮阻塞项。
+当前计划验收总状态：`partial`。代码适配和明确不支持能力的直接证据已完成，arm64 真机基础回归已补齐；仍缺系统代理实际切换与非 loopback `NO_PROXY` 的真机证据、外部系统音频中断恢复和视频外部系统抢占专项证据。视频全屏/方向切换/窗口恢复已在真实视频 smoke 中通过；播放器会话代理和系统音量写入等已按公开 SDK 边界稳定降级，不能冒充支持；有效二维码业务路由、本地阅读迁移、来源代理、HLS、真实跨设备/HAP 传输均有分项证据。OHOS↔OHOS 按用户要求跳过；不上架的 HAP 市场跳转同样跳过，均不作为本轮阻塞项。
 
 跨设备同步补充尝试：曾启动 OHOS x64 Host 并准备使用在线 MI 8 Android peer。首次 Android 构建受 DevEco JBR 缺失 `jlink.exe` 和 Kotlin 增量缓存跨盘路径影响；切换到本机 Temurin 17 后 APK 已成功构建并安装，但 OHOS 虚拟器位于 `10.0.2.15` NAT，经本机 HDC 映射的 `192.168.3.26:36979` 对手机连接超时，未进入同步断言，状态仍为 `not-run`。
 - 随后通过 `adb reverse` + HDC `fport/rport` 回环映射完成两组真实 peer 同步：`ohos_paired_sync_host_test.dart` + `android_paired_sync_to_ohos_test.dart` 通过，`android_paired_sync_host_test.dart` + `ohos_paired_sync_cross_device_test.dart` 通过；两组均验证双向书架与插件计数。该证据使用 OHOS x64 虚拟器，不替代 arm64 真机回归；OHOS↔OHOS 按用户明确要求跳过。
@@ -128,7 +128,7 @@ hdc install build/ohos/hap/entry-default-signed.hap
 - 音频复验发现 OHOS `AVPlayer.play()` 返回早于 `playing` 状态的真实竞态，原生已改为等待 `playing` 再完成 play 命令，修复后的真机音频 smoke 通过；
 - HAP 使用 `flutter build hap --debug --target-platform ohos-arm64 --no-pub` 成功签名并通过 `hdc install -r` 安装启动。
 
-以下门禁仍需保留为未完成：播放器代理边界、系统代理实际切换与非 loopback `NO_PROXY`、外部系统音频抢占/恢复的真机证据，以及视频系统控制专项证据；反馈页面 UI、鸿蒙仓库 Issues 目标页面、有效二维码载荷路由、真实来源→书架→Reader 迁移、文件导入/导出选择器、文件分享分发、HTTPS 外链桥接、五个真实来源直连链路、HLS 样本和完整的相关跨设备/HAP 传输矩阵已通过，OHOS↔OHOS 与不上架的 HAP 市场跳转已按用户要求跳过。
+以下门禁仍需保留为未完成：播放器代理边界、系统代理实际切换与非 loopback `NO_PROXY`、外部系统音频抢占/恢复的真机证据；视频全屏/方向切换/窗口恢复已通过，系统音量写入按 OHOS SDK 边界记录为稳定不支持。反馈页面 UI、鸿蒙仓库 Issues 目标页面、有效二维码载荷路由、真实来源→书架→Reader 迁移、文件导入/导出选择器、文件分享分发、HTTPS 外链桥接、五个真实来源直连链路、HLS 样本和完整的相关跨设备/HAP 传输矩阵已通过，OHOS↔OHOS 与不上架的 HAP 市场跳转已按用户要求跳过。
 
 最近一次 VM 验证使用 `127.0.0.1:5555` API 26 x86_64 模拟器：
 

@@ -33,7 +33,7 @@
 | ArkWeb | `pass` | `ohos_browser_session_smoke_test.dart` 和 `ohos_stage2_runtime_arkweb_test.dart` 在 arm64 真机通过页面导航、HTML、5 个 fixture、资源代理、Cookie/JS 和 `interaction_required` 恢复 | 代理路由在来源网络和音视频边界分别验收，ArkWeb 本身无新增阻塞 |
 | 来源网络/代理 | `partial` | OHOS HTTP、系统/自定义来源代理单测；固定 Node `--jitless` 四项回归通过，包含原生直连、gzip、显式 HTTP/SOCKS5、环境 HTTP 代理、NO_PROXY 和 Runtime 配置切换；无 WebAssembly fallback 已补原生直连、HTTP 代理和 SOCKS5 代理通道并支持 gzip 解压；`ohos_real_source_smoke_test.dart` 在 `PLA-AL10` arm64 真机通过 35ge、德奇、番茄、米读、书库 365 五个真实来源的插件导入、发现、搜索、详情、目录和正文链路；`ohos_browser_proxy_smoke_test.dart` 在同一 arm64 真机通过本地 LAN HTTP 代理命中验证；`ohos_runtime_https_proxy_smoke_test.dart` 补充同一真机无 WASM Runtime 的 HTTPS CONNECT 实际代理链路 | 真实系统设置代理切换和非 loopback NO_PROXY 的 arm64 专项证据仍需单独验收；播放器代理继续按 OHOS SDK 不支持处理 |
 | 音频 | `partial` | arm64 真机 AVPlayer 普通资源播放/暂停/跳转/倍速 smoke 通过；同一 session 连续切换两首公开音频并再次播放/暂停通过；OHOS `play()` 状态竞态已修复；手动 Home 后 AVSession 后台位置推进通过；x64 复验也通过；API 26 AudioSession 官方路径已完成编译接入 | 代理资源（OHOS AVPlayer 会话代理不支持）、外部系统中断恢复的真机证据（当前 HDC 目标暂时离线） |
-| 视频 | `partial` | arm64 真机 Texture、首帧、进度、`CACHED_DURATION -> bufferedPosition`、窗口恢复和 Unified Streaming H.264 HLS 播放通过；x64 复验也通过；Apple BipBop HLS 返回 `open_failed / avplayer_state_error`，Mux x36xhzz HLS 可打开但 `play` 超时，Mux tears-of-steel HLS 返回 `open_failed / avplayer_state_error`，均保留为兼容性边界 | OHOS 播放器代理、全屏、系统中断和真实系统音量边界的播放证据；HLS 已有至少一条 arm64 成功样本，但外部流兼容性仍不统一 |
+| 视频 | `partial` | arm64 真机 Texture、首帧、进度、`CACHED_DURATION -> bufferedPosition`、OHOS 窗口全屏/方向切换/恢复和 Unified Streaming H.264 HLS 播放通过；x64 复验也通过；Apple BipBop HLS 返回 `open_failed / avplayer_state_error`，Mux x36xhzz HLS 可打开但 `play` 超时，Mux tears-of-steel HLS 返回 `open_failed / avplayer_state_error`，均保留为兼容性边界 | OHOS 播放器代理和外部系统中断的真机专项证据；全局系统音量已按官方 SDK 边界稳定 `unsupported`，不要求伪造系统音量写入证据；HLS 已有至少一条 arm64 成功样本，但外部流兼容性仍不统一 |
 | Reader/主应用 | `pass` | arm64 真机首次运行首页、书架启动阅读器、系统返回、退出前保存/书架刷新通过；五来源中首个真实来源已写入临时 `ContentLibrary`，经生产 `ContentLibrarySourceTextReader` 读取目录和首章段落；真实临时 `.mgread` 文件经 OHOS `ACTION_SEND_DATA` 分享分发通过；HTTPS 外链经 OHOS `ACTION_VIEW_DATA` 启动通过；`DocumentViewPicker` 文件导入/导出选择器闭环通过；反馈页真实 Flutter 页面、OHOS 鸿蒙仓库地址和目标 Issues 页面截图确认通过；音量键不支持公开 API 测试；OHOS 外链桥接成功/拒绝/异常 fake-platform 测试；既有扫码 UI 与有效二维码业务路由回归通过 | 无 |
 | 跨设备同步/HAP 传输 | `pass` | 协议、QR 载荷、恢复和容量单测；x64 OHOS 与 MI 8 Android 的正向、反向同步通过；`PLA-AL10` arm64 OHOS Host 与 MI 8 Android peer 的双向同步及 HAP 包传输/校验/用户确认边界通过；arm64 OHOS Host↔Windows Client 双向书架/插件同步均通过 | OHOS↔OHOS 按用户明确要求跳过，不作为本轮完成门禁；不上架，因此 HAP 市场跳转也按用户要求跳过 |
 | OHOS SDK 明确不支持能力 | `pass` | Capability flags、arm64 真机 9 项状态断言、UI 隐藏和公开 API 直接测试；官方 API 边界已记录 | 无；这些能力按 `unsupported` 管理，不冒充可用 |
@@ -242,7 +242,7 @@
 3. 处理权限、系统音量范围、后台/前台和设备无媒体音量 API 的回退。
 4. 若 HarmonyOS API 无法满足稳定语义，则隐藏播放器系统音量控制，只保留播放器内部音量。
 
-验收：真实设备上拖动播放器系统音量，系统音量和其他媒体应用观察到的值一致；退出播放器后音量设置仍符合系统行为。
+验收：若 OHOS 提供普通应用可写的系统媒体音量契约，则在真实设备上验证与其他媒体应用一致并验证退出恢复；若公开 SDK 不提供该契约，则能力标志、UI 隐藏和公开调用必须稳定报告 `unsupported`，并保留官方文档和直接 API 证据。
 
 ### 阶段 4：补齐主应用集成遗漏
 
@@ -296,7 +296,7 @@
 | ArkWeb | 隐藏/显示/关闭、导航、HTML、脚本、页面 fetch、HTTP transport、点击、输入、按键、等待文本和 Cookie 隔离。 |
 | 来源网络 | 直连、系统代理、自定义 HTTP/HTTPS/SOCKS5 代理、NO_PROXY、失败和恢复。 |
 | 音频 | 普通资源、代理资源、播放/暂停/跳转/倍速/切歌、后台 AVSession、中断恢复。 |
-| 视频 | 普通资源、Range、HLS、代理、首帧、进度、缓冲、全屏、系统音量和退出清理。 |
+| 视频 | 普通资源、Range、HLS、代理、首帧、进度、缓冲、全屏和退出清理；系统音量按“真实可写则真机验证，否则稳定 unsupported”处理。 |
 | Reader | 亮屏、沉浸式、视频窗口、音量键能力状态和外链。 |
 | 主应用 | 反馈、来源详情、插件帮助、扫码、文件导入/导出、分享和局域网同步。 |
 
@@ -341,8 +341,8 @@
 1. P0 项均有真实 OHOS arm64 设备证据；
 2. 未支持能力在 UI 和公开 API 上都能稳定表达，不存在静默空操作；
 3. WebView 的 HTTP、Profile、Cookie、取消和资源清理通过直接测试；
-4. 来源代理和播放器代理分别验证，不能用来源 HTTP 成功代替播放器验证；
-5. 视频首帧、播放进度、缓冲、系统音量和退出清理均有真实播放证据；
+4. 来源代理和播放器代理分别验证，不能用来源 HTTP 成功代替播放器验证；播放器若无公开 OHOS SDK 会话代理接口，必须有稳定 `unsupported` 能力、UI 和直接 API 证据；
+5. 视频首帧、播放进度、缓冲、全屏和退出清理均有真实播放证据；系统音量若无公开 OHOS SDK 写入契约，必须有稳定 `unsupported` 能力、UI 和直接 API 证据；
 6. 诊断中不包含 Cookie、令牌、签名 URL 和完整敏感请求参数；
 7. 快速检查、Flutter/package 测试、OHOS 构建和 OHOS 真机验收分组报告；任何未执行项只能标记为 `partial` 或 `not-run`。
 
