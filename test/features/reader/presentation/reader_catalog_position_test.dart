@@ -34,7 +34,6 @@ void main() {
     expect(dataSource.requestedPageSizes, <int>[100, ...List<int>.filled(10, 500)]);
     expect(dataSource.requestedOffsets, <int>[0, 100, 600, 1100, 1600, 2100, 2600, 3100, 3600, 4100, 4600]);
     expect(dataSource.loadedChapterIds, contains('chapter-4990'));
-    expect(find.byKey(const ValueKey<String>('reader-catalog-count-5000')), findsOneWidget);
     expect(find.text('加载更多章节'), findsNothing);
     final RawScrollbar catalogScrollbar = tester.widget<RawScrollbar>(find.byKey(const ValueKey<String>('reader-catalog-scrollbar')));
     expect(catalogScrollbar.thumbVisibility, isTrue);
@@ -44,15 +43,22 @@ void main() {
     final Finder catalogList = find.byType(ListView);
     expect(catalogList, findsOneWidget);
     expect(find.ancestor(of: catalogList, matching: find.bySubtype<RawScrollbar>()), findsOneWidget);
-    expect(find.text('已下载'), findsWidgets);
     expect(chapterStateCapability.queriedChapterIds, hasLength(5000));
     final int queryCountAfterFirstOpen = chapterStateCapability.requests.length;
     final Finder catalogScrollable = find.descendant(of: catalogList, matching: find.byType(Scrollable));
+    final ListView catalogListWidget = tester.widget<ListView>(catalogList);
+    expect(catalogListWidget.key, const PageStorageKey<String>('reader-catalog-scroll-catalog-position-book'));
+    expect(catalogListWidget.childrenDelegate.estimatedChildCount, 5000);
     final ScrollPosition catalogPosition = tester.state<ScrollableState>(catalogScrollable).position;
-    expect(catalogPosition.maxScrollExtent, greaterThan(300000));
-    expect(catalogPosition.pixels, greaterThan(300000));
+    final EdgeInsets catalogPadding = catalogListWidget.padding! as EdgeInsets;
+    final double itemExtent = catalogListWidget.itemExtent!;
+    final double expectedMaxScrollExtent = itemExtent * 5000 + catalogPadding.vertical - catalogPosition.viewportDimension;
+    expect(catalogPosition.maxScrollExtent, closeTo(expectedMaxScrollExtent, 0.01));
+    final double expectedCenteredOffset = catalogPadding.top + 4989 * itemExtent - (catalogPosition.viewportDimension - itemExtent) / 2;
+    expect(catalogPosition.pixels, closeTo(expectedCenteredOffset, 0.01));
     final Finder currentChapter = find.byKey(const ValueKey<String>('reader-catalog-chapter-chapter-4990'));
     expect(currentChapter, findsOneWidget);
+    expect(find.descendant(of: currentChapter, matching: find.byIcon(Icons.download_done_rounded)), findsOneWidget);
     expect(find.byType(ListTile).evaluate().length, lessThan(30));
 
     final Rect chapterRect = tester.getRect(currentChapter);
@@ -64,7 +70,7 @@ void main() {
     await tester.tap(find.text('目录'));
     await tester.pumpAndSettle();
 
-    expect(find.text('已下载'), findsWidgets);
+    expect(find.descendant(of: currentChapter, matching: find.byIcon(Icons.download_done_rounded)), findsOneWidget);
     expect(chapterStateCapability.requests, hasLength(queryCountAfterFirstOpen));
   });
 }

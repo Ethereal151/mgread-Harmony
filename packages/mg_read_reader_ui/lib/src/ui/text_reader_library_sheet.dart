@@ -719,11 +719,10 @@ extension _TextReaderLibrarySheet on _TextReaderViewState {
           mainAxisMargin: 8,
           crossAxisMargin: 2,
           thumbColor: _palette.secondaryText.withValues(alpha: .82),
-          // RawScrollbar paints over the scrollable instead of reserving a
-          // layout column. Keep only a small safety gutter so the trailing
-          // word count stays clear of the thumb while the title gets the
-          // remaining width.
+          // Reserve only enough gutter to keep trailing metadata off the thumb.
           child: ScrollConfiguration(
+            // Rebuild stale sliver geometry without changing book PageStorage.
+            key: ValueKey<(int, bool)>((_catalog.length, _catalogHasMore)),
             behavior: ScrollConfiguration.of(
               context,
             ).copyWith(scrollbars: false),
@@ -871,9 +870,7 @@ extension _TextReaderLibrarySheet on _TextReaderViewState {
                         ),
                       ],
                     ),
-                    // Keep the word count in a fixed trailing slot so it
-                    // stays aligned at the far right while chapter titles
-                    // of different lengths share the same rhythm.
+                    // Keep word counts aligned independently of title length.
                     trailing: SizedBox(
                       width: 54,
                       child: Text(
@@ -999,8 +996,7 @@ extension _TextReaderLibrarySheet on _TextReaderViewState {
                 position.viewportDimension)
             .clamp(0, double.infinity);
     if (position.maxScrollExtent + 1 < minimumVisibleOffset) {
-      // Catalog pages can finish in the same frame that still has the old
-      // sliver extent. The sheet rebuild will retry after layout catches up.
+      // Retry after layout catches up with the completed catalog.
       if (_catalogCenterRetryCount >= 3) return;
       _catalogCenterRetryCount++;
       WidgetsBinding.instance.addPostFrameCallback((_) {
