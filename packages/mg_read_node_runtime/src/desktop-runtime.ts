@@ -50,10 +50,8 @@ import { readDebugHttpEnabled } from "./debug-http-control.js";
 import { RuntimeDebugHttpSettings } from "./debug-http-settings.js";
 import { ConfigurablePluginHttpClient } from "./plugin-http-client.js";
 import { readPluginHttpProxyConfiguration } from "./plugin-http-proxy-control.js";
-import { decodeSourceResourceUrl } from "./source-resource-token.js";
 import type {
   InFlightRequestsBySession,
-  RuntimeDispatchFailure,
   RuntimeDispatchResult,
   RuntimeHealthResponse,
   RuntimeHelloResponse,
@@ -67,7 +65,6 @@ import {
   isPluginManagerError,
   PluginManager,
   PluginManagerError,
-  pluginManagerErrorDetail,
   type PluginManagerEvent,
 } from "./plugin-manager.js";
 import { pluginManagerErrorMessage } from "./plugin-manager-error-message.js";
@@ -88,17 +85,12 @@ import {
   dispatchPluginDevelopmentPackage,
   dispatchPluginTransferRequest,
 } from "./desktop-plugin-transfer-dispatch.js";
-import { emitRuntimeDiagnostic, observeRuntimeDiagnostics } from "./runtime-diagnostics.js";
+import { dispatchPluginStorageControl } from "./desktop-plugin-cache-dispatch.js";
 import {
-  parseChaptersParams,
-  parseContentParams,
-  parseDetailParams,
-  parseDiscoverParams,
-  parseSearchParams,
-  parseSearchSuggestionsParams,
-  PluginContentValidationError,
-  type PluginContentOperation,
-} from "./plugin-content.js";
+  dispatchSourceContent,
+  dispatchSourceResourceDecode,
+} from "./desktop-source-control-dispatch.js";
+import { emitRuntimeDiagnostic, observeRuntimeDiagnostics } from "./runtime-diagnostics.js";
 
 const LOOPBACK_HOST = "127.0.0.1";
 const MAX_INLINE_BYTES = maxWebSocketControlFrameBytes;
@@ -904,13 +896,33 @@ export class DesktopRuntime {
       case RUNTIME_CONTROL_METHOD.pluginsDevelopmentPackage:
         return dispatchPluginDevelopmentPackage(request, this.#pluginManager, this.#requestError.bind(this));
       case RUNTIME_CONTROL_METHOD.pluginsCacheUsage:
-        return this.#dispatchPluginCacheUsage(request);
+        return dispatchPluginStorageControl(
+          request,
+          this.#pluginManager,
+          this.#requestError.bind(this),
+          "cacheUsage",
+        );
       case RUNTIME_CONTROL_METHOD.pluginsInstallationUsage:
-        return this.#dispatchPluginInstallationUsage(request);
+        return dispatchPluginStorageControl(
+          request,
+          this.#pluginManager,
+          this.#requestError.bind(this),
+          "installationUsage",
+        );
       case RUNTIME_CONTROL_METHOD.pluginsCacheClear:
-        return this.#dispatchPluginCacheClear(request);
+        return dispatchPluginStorageControl(
+          request,
+          this.#pluginManager,
+          this.#requestError.bind(this),
+          "cacheClear",
+        );
       case RUNTIME_CONTROL_METHOD.pluginsCacheClearAll:
-        return this.#dispatchPluginCacheClearAll(request);
+        return dispatchPluginStorageControl(
+          request,
+          this.#pluginManager,
+          this.#requestError.bind(this),
+          "cacheClearAll",
+        );
       case RUNTIME_CONTROL_METHOD.pluginsSetEnabled:
         return dispatchPluginEnabled(request, this.#pluginManager, this.#requestError.bind(this));
       case RUNTIME_CONTROL_METHOD.pluginsUninstall:
@@ -937,55 +949,58 @@ export class DesktopRuntime {
       case RUNTIME_CONTROL_METHOD.pluginsTransferVerify:
         return dispatchPluginTransferRequest(request, this.#pluginManager, this.#requestError.bind(this));
       case RUNTIME_CONTROL_METHOD.sourceDiscover:
-        return this.#dispatchPluginContent(
+        return dispatchSourceContent(
           request,
+          this.#pluginManager,
+          this.#requestError.bind(this),
           cancellation,
           "discover",
         );
       case RUNTIME_CONTROL_METHOD.sourceSearch:
-        return this.#dispatchPluginContent(
+        return dispatchSourceContent(
           request,
+          this.#pluginManager,
+          this.#requestError.bind(this),
           cancellation,
           "search",
         );
       case RUNTIME_CONTROL_METHOD.sourceSearchSuggestions:
-        return this.#dispatchPluginContent(
+        return dispatchSourceContent(
           request,
+          this.#pluginManager,
+          this.#requestError.bind(this),
           cancellation,
           "searchSuggestions",
         );
       case RUNTIME_CONTROL_METHOD.sourceGetDetail:
-        return this.#dispatchPluginContent(
+        return dispatchSourceContent(
           request,
+          this.#pluginManager,
+          this.#requestError.bind(this),
           cancellation,
           "getDetail",
         );
       case RUNTIME_CONTROL_METHOD.sourceGetChapters:
-        return this.#dispatchPluginContent(
+        return dispatchSourceContent(
           request,
+          this.#pluginManager,
+          this.#requestError.bind(this),
           cancellation,
           "getChapters",
         );
       case RUNTIME_CONTROL_METHOD.sourceGetContent:
-        return this.#dispatchPluginContent(
+        return dispatchSourceContent(
           request,
+          this.#pluginManager,
+          this.#requestError.bind(this),
           cancellation,
           "getContent",
         );
-      case RUNTIME_CONTROL_METHOD.sourceResourceDecode: {
-        if (Object.keys(request.params).length !== 1 || typeof request.params.url !== "string" || request.params.url.length > 32 * 1024) {
-          return {
-            error: this.#requestError(request, "invalid_request", "The source-resource URL decode request is invalid."),
-          };
-        }
-        const decoded = decodeSourceResourceUrl(request.params.url);
-        if (decoded === undefined) {
-          return {
-            error: this.#requestError(request, "invalid_request", "The URL is not a valid Runtime source-resource URL."),
-          };
-        }
-        return { result: { pluginId: decoded.pluginId, request: decoded.request } };
-      }
+      case RUNTIME_CONTROL_METHOD.sourceResourceDecode:
+        return dispatchSourceResourceDecode(
+          request,
+          this.#requestError.bind(this),
+        );
       case RUNTIME_CONTROL_METHOD.shutdown:
         if (
           request.idempotencyKey === undefined ||
@@ -1109,241 +1124,9 @@ export class DesktopRuntime {
     }
   }
 
-  /** Returns only cache byte totals; cache paths remain Runtime-private. */
-  async #dispatchPluginCacheUsage(
-    request: RuntimeRequest,
-  ): Promise<RuntimeDispatchResult> {
-    if (Object.keys(request.params).length > 1 || (Object.keys(request.params).length === 1 && !("pluginId" in request.params)) || (request.params.pluginId !== undefined && typeof request.params.pluginId !== "string")) {
-      return this.#pluginCacheInvalidRequest(request);
-    }
-    try {
-      const manager = this.#pluginManager;
-      if (manager === undefined) throw new PluginManagerError("plugin_load_failed");
-      return { result: await manager.listCacheUsage(request.params.pluginId as string | undefined) };
-    } catch (error) {
-      return this.#pluginCacheFailure(request, error);
-    }
-  }
-
-  /** Returns retained archive, source data and materialized npm byte totals. */
-  async #dispatchPluginInstallationUsage(
-    request: RuntimeRequest,
-  ): Promise<RuntimeDispatchResult> {
-    const pluginId = request.params.pluginId;
-    const scope = request.params.scope;
-    if (
-      Object.keys(request.params).length !== 2 ||
-      typeof pluginId !== "string" ||
-      (scope !== "archive" && scope !== "data" && scope !== "npm")
-    ) {
-      return {
-        error: this.#requestError(
-          request,
-          "invalid_request",
-          "The installed source size request is invalid.",
-        ),
-      };
-    }
-    try {
-      const manager = this.#pluginManager;
-      if (manager === undefined) throw new PluginManagerError("plugin_load_failed");
-      return {
-        result: await manager.measureInstallationUsage(pluginId, scope),
-      };
-    } catch (error) {
-      return this.#pluginCacheFailure(request, error);
-    }
-  }
-
-  /** Clears one plugin cache and returns a terminal, path-free status. */
-  async #dispatchPluginCacheClear(
-    request: RuntimeRequest,
-  ): Promise<RuntimeDispatchResult> {
-    if (Object.keys(request.params).length !== 1 || typeof request.params.pluginId !== "string") {
-      return this.#pluginCacheInvalidRequest(request);
-    }
-    try {
-      const manager = this.#pluginManager;
-      if (manager === undefined) throw new PluginManagerError("plugin_load_failed");
-      return { result: await manager.clearPluginCache(request.params.pluginId) };
-    } catch (error) {
-      return this.#pluginCacheFailure(request, error);
-    }
-  }
-
-  /** Clears every installed plugin cache while retaining individual failures. */
-  async #dispatchPluginCacheClearAll(
-    request: RuntimeRequest,
-  ): Promise<RuntimeDispatchResult> {
-    if (Object.keys(request.params).length !== 0) {
-      return this.#pluginCacheInvalidRequest(request);
-    }
-    try {
-      const manager = this.#pluginManager;
-      if (manager === undefined) throw new PluginManagerError("plugin_load_failed");
-      return { result: await manager.clearAllPluginCaches() };
-    } catch (error) {
-      return this.#pluginCacheFailure(request, error);
-    }
-  }
-
-  #pluginCacheInvalidRequest(request: RuntimeRequest): RuntimeDispatchFailure {
-    return {
-      error: this.#requestError(
-        request,
-        "invalid_request",
-        "The plugin cache request is invalid.",
-      ),
-    };
-  }
-
-  #pluginCacheFailure(
-    request: RuntimeRequest,
-    error: unknown,
-  ): RuntimeDispatchFailure {
-    if (isPluginManagerError(error)) {
-      return {
-        error: this.#requestError(
-          request,
-          error.code,
-          pluginManagerErrorMessage(error.code),
-        ),
-      };
-    }
-    return {
-      error: this.#requestError(
-        request,
-        "internal",
-        "The plugin cache request could not be completed.",
-      ),
-    };
-  }
-
   /** Returns the versioned product capability list negotiated by the Facade. */
   get #runtimeControlCapabilities(): readonly string[] {
     return RUNTIME_CONTROL_CAPABILITIES;
-  }
-
-  /**
-   * Invokes one standard Node plugin named export through a bounded v1 schema.
-   */
-  async #dispatchPluginContent(
-    request: RuntimeRequest,
-    cancellation: AbortSignal,
-    operation: PluginContentOperation,
-  ): Promise<RuntimeDispatchResult> {
-    try {
-      const manager = this.#pluginManager;
-      if (manager === undefined) throw new PluginManagerError("plugin_load_failed");
-      let result: JsonObject;
-      switch (operation) {
-        case "discover": {
-          const parsed = parseDiscoverParams(request.params);
-          result = await manager.discover(
-            parsed.pluginId,
-            parsed.request,
-            cancellation,
-            request.deadlineUnixMs,
-          );
-          break;
-        }
-        case "search": {
-          const parsed = parseSearchParams(request.params);
-          result = await manager.search(
-            parsed.pluginId,
-            parsed.request,
-            cancellation,
-            request.deadlineUnixMs,
-          );
-          break;
-        }
-        case "searchSuggestions": {
-          const parsed = parseSearchSuggestionsParams(request.params);
-          result = await manager.searchSuggestions(
-            parsed.pluginId,
-            parsed.request,
-            cancellation,
-            request.deadlineUnixMs,
-          );
-          break;
-        }
-        case "getDetail": {
-          const parsed = parseDetailParams(request.params);
-          result = await manager.getDetail(
-            parsed.pluginId,
-            parsed.request,
-            cancellation,
-            request.deadlineUnixMs,
-          );
-          break;
-        }
-        case "getChapters": {
-          const parsed = parseChaptersParams(request.params);
-          result = await manager.getChapters(
-            parsed.pluginId,
-            parsed.request,
-            cancellation,
-            request.deadlineUnixMs,
-          );
-          break;
-        }
-        case "getContent": {
-          const parsed = parseContentParams(request.params);
-          result = await manager.getContent(
-            parsed.pluginId,
-            parsed.request,
-            cancellation,
-            request.deadlineUnixMs,
-          );
-          break;
-        }
-      }
-      return { result: result };
-    } catch (error) {
-      if (error instanceof PluginContentValidationError) {
-        return {
-          error: this.#requestError(
-            request,
-            "invalid_request",
-            "The source capability request is invalid.",
-          ),
-        };
-      }
-      if (isPluginManagerError(error)) {
-        return {
-          error: this.#requestError(
-            request,
-            error.code,
-            pluginManagerErrorMessage(error.code, pluginManagerErrorDetail(error)),
-          ),
-        };
-      }
-      if (cancellation.aborted) {
-        return {
-          error: this.#requestError(
-            request,
-            "cancelled",
-            "The plugin request was cancelled.",
-          ),
-        };
-      }
-      if (Number(request.deadlineUnixMs) <= Date.now()) {
-        return {
-          error: this.#requestError(
-            request,
-            "timeout",
-            "The plugin request deadline has elapsed.",
-          ),
-        };
-      }
-      return {
-        error: this.#requestError(
-          request,
-          "internal",
-          "The plugin request could not be completed.",
-        ),
-      };
-    }
   }
 
   /** Writes a minimal HTTP rejection before destroying an invalid upgrade. */

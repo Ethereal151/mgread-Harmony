@@ -4,10 +4,23 @@
  * This module keeps protocol response types out of the already large Runtime
  * lifecycle owner. It contains no IO and must not become a public API surface.
  */
-import type { JsonObject, JsonValue, RuntimeProtocolError } from "./protocol.js";
+import type {
+  JsonObject,
+  JsonValue,
+  RuntimeErrorCode,
+  RuntimeProtocolError,
+  RuntimeRequest,
+} from "./protocol.js";
 import type { ServerWebSocketSession } from "./websocket.js";
 
 export type RuntimeDispatchResult = RuntimeDispatchFailure | RuntimeDispatchSuccess;
+
+/** Builds a correlated protocol error after the outer envelope is validated. */
+export type RuntimeRequestErrorFactory = (
+  request: RuntimeRequest,
+  code: RuntimeErrorCode,
+  message: string,
+) => RuntimeProtocolError;
 
 export interface RuntimeDispatchFailure {
   readonly error: RuntimeProtocolError;
