@@ -810,6 +810,161 @@ void main() {
       expect(runtime.debugDesktopProcessStartCount, 2);
     },
   );
+
+  test(
+    'lifecycle restart drains an invocation and admits the next generation',
+    () async {
+      final runtimeDataRoot = await _stageInstalledStandardPlugin();
+      addTearDown(() => runtimeDataRoot.delete(recursive: true));
+      final runtime = PluginRuntime.desktopForTesting(
+        runtimeRepositoryRoot: nodeRuntimeRepositoryRoot,
+        runtimeDataRoot: runtimeDataRoot,
+      );
+      addTearDown(runtime.debugDispose);
+
+      await runtime.invoke(const InstalledPluginsInvocation());
+      final slow = runtime.invoke(
+        const SourceDiscoverInvocation(
+          pluginId: 'org.mgread.flutter.fixture',
+          target: 'slow-nested',
+        ),
+      );
+      final restart = runtime.configureNodeEnvironmentProxy(true);
+
+      await slow;
+      await restart;
+      await runtime.invoke(const RuntimePingInvocation());
+      expect(runtime.debugDesktopProcessStartCount, 2);
+    },
+    timeout: const Timeout(Duration(seconds: 20)),
+  );
+
+  test(
+    'lifecycle drain timeout fails an in-flight call and closes its child',
+    () async {
+      final runtimeDataRoot = await _stageInstalledStandardPlugin();
+      addTearDown(() => runtimeDataRoot.delete(recursive: true));
+      final runtime = PluginRuntime.desktopForTesting(
+        runtimeRepositoryRoot: nodeRuntimeRepositoryRoot,
+        runtimeDataRoot: runtimeDataRoot,
+      );
+      addTearDown(runtime.debugDispose);
+
+      await runtime.invoke(const InstalledPluginsInvocation());
+      final slow = runtime.invoke(
+        const SourceDiscoverInvocation(
+          pluginId: 'org.mgread.flutter.fixture',
+          target: 'slow-timeout',
+        ),
+      );
+      final restart = runtime.configureNodeEnvironmentProxy(true);
+
+      await expectLater(
+        slow,
+        throwsA(
+          isA<PluginRuntimeException>().having(
+            (error) => error.code,
+            'code',
+            'transport_disconnected',
+          ),
+        ),
+      );
+      await restart;
+      await runtime.invoke(const RuntimePingInvocation());
+      expect(runtime.debugDesktopProcessStartCount, 2);
+    },
+    timeout: const Timeout(Duration(seconds: 35)),
+  );
+
+  test(
+    'concurrent lifecycle restarts are serialized into one next generation',
+    () async {
+      final runtime = PluginRuntime.desktopForTesting(
+        runtimeRepositoryRoot: nodeRuntimeRepositoryRoot,
+      );
+      addTearDown(runtime.debugDispose);
+
+      await runtime.invoke(const RuntimePingInvocation());
+      await Future.wait(<Future<void>>[
+        runtime.configureNodeEnvironmentProxy(true),
+        runtime.configureNodeEnvironmentProxy(false),
+      ]);
+      await runtime.invoke(const RuntimePingInvocation());
+      expect(runtime.debugDesktopProcessStartCount, 2);
+
+      // The final false request was serialized after the true transition. A
+      // stale out-of-queue comparison would leave the child configured true
+      // and restart once more here.
+      await runtime.configureNodeEnvironmentProxy(false);
+      await runtime.invoke(const RuntimePingInvocation());
+      expect(runtime.debugDesktopProcessStartCount, 2);
+    },
+  );
+
+  test(
+    'dispose closes startup admission before a child can be published',
+    () async {
+      final runtimeDataRoot = await Directory.systemTemp.createTemp(
+        'mgread-runtime-startup-gate-',
+      );
+      final runtime = PluginRuntime.desktopForTesting(
+        runtimeRepositoryRoot: nodeRuntimeRepositoryRoot,
+        runtimeDataRoot: runtimeDataRoot,
+        entrypointOverride: File(
+          <String>[
+            pluginRuntimeRepositoryRoot.path,
+            'test',
+            'fixtures',
+            'hold-before-ready.mjs',
+          ].join(Platform.pathSeparator),
+        ),
+      );
+      addTearDown(() async {
+        await runtime.debugDispose();
+        await runtimeDataRoot.delete(recursive: true);
+      });
+
+      final pending = runtime.invoke(const RuntimePingInvocation());
+      final entered = File(
+        <String>[
+          runtimeDataRoot.path,
+          'startup-gate-entered',
+        ].join(Platform.pathSeparator),
+      );
+      await _waitForFile(entered);
+
+      final dispose = runtime.debugDispose();
+      await File(
+        <String>[
+          runtimeDataRoot.path,
+          'startup-gate-release',
+        ].join(Platform.pathSeparator),
+      ).writeAsString('release');
+      await expectLater(
+        pending,
+        throwsA(
+          isA<PluginRuntimeException>().having(
+            (error) => error.code,
+            'code',
+            anyOf('runtime_unavailable', 'runtime_exited_before_ready'),
+          ),
+        ),
+      );
+      await dispose;
+      expect(runtime.debugDesktopProcessStartCount, 1);
+    },
+  );
+
+  test('repeated dispose calls share one completed cleanup', () async {
+    final runtime = PluginRuntime.desktopForTesting(
+      runtimeRepositoryRoot: nodeRuntimeRepositoryRoot,
+    );
+    await Future.wait(<Future<void>>[
+      runtime.debugDispose(),
+      runtime.debugDispose(),
+    ]);
+    await runtime.debugDispose();
+  });
 }
 
 /// Captures the Facade's safe exception while failing tests that unexpectedly pass.
@@ -822,6 +977,15 @@ Future<PluginRuntimeException> _captureRuntimeFailure(
     return error;
   }
   fail('Expected the Runtime operation to fail.');
+}
+
+Future<void> _waitForFile(File file) async {
+  final deadline = DateTime.now().add(const Duration(seconds: 5));
+  while (DateTime.now().isBefore(deadline)) {
+    if (await file.exists()) return;
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+  }
+  fail('Timed out waiting for ${file.path}.');
 }
 
 /// Reads the checked-in cross-language desktop fixture through a typed JSON boundary.
@@ -960,6 +1124,9 @@ function summary(query) {
 export async function discover(request) {
   if (request.target === 'slow-nested' || (request.target === null && request.pageSize === 50)) {
     await new Promise((resolve) => setTimeout(resolve, 5500));
+  }
+  if (request.target === 'slow-timeout') {
+    await new Promise((resolve) => setTimeout(resolve, 15000));
   }
   return {
     kind: 'document',

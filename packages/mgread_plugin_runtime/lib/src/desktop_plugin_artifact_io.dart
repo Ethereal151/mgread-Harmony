@@ -1,6 +1,8 @@
 part of mgread_plugin_runtime;
 
-/// Owns desktop plugin-artifact picker handoff, development packaging and path-free transfer IO.
+/// Owns desktop plugin-artifact picker handoff, development packaging and
+/// path-free transfer IO. Import-triggered restarts are delegated to the
+/// supervisor so lifecycle admission stays centralized.
 final class _DesktopPluginArtifactIo {
   _DesktopPluginArtifactIo(this._supervisor);
 
@@ -165,7 +167,6 @@ final class _DesktopPluginArtifactIo {
       );
     }
     await inbox.create(recursive: true);
-    _supervisor._controlledRestarting = true;
     final temporaryFiles = <File>[];
     try {
       for (final item in artifacts) {
@@ -188,7 +189,6 @@ final class _DesktopPluginArtifactIo {
         timeout: const Duration(minutes: 2),
       );
       await _supervisor._restartForPluginImport();
-      await _supervisor._ensureStarted();
       return <PluginTransferImportResult>[
         for (final item in artifacts)
           PluginTransferImportResult(
@@ -198,7 +198,6 @@ final class _DesktopPluginArtifactIo {
           ),
       ];
     } finally {
-      _supervisor._controlledRestarting = false;
       for (final file in temporaryFiles) {
         try {
           if (await file.exists()) await file.delete();
@@ -232,7 +231,6 @@ final class _DesktopPluginArtifactIo {
       ]),
     );
     final temporary = File('${target.path}.part');
-    _supervisor._controlledRestarting = true;
     try {
       final totalBytes = await source.length();
       _supervisor._emitInitializationProgress(
@@ -253,7 +251,6 @@ final class _DesktopPluginArtifactIo {
         totalBytes: 0,
       );
       await _supervisor._restartForPluginImport();
-      await _supervisor._ensureStarted();
       _supervisor._emitInitializationProgress(
         completedBytes: 1,
         stage: 'ready',
@@ -267,8 +264,6 @@ final class _DesktopPluginArtifactIo {
         'disk_full',
         'The selected plugin artifact could not be imported.',
       );
-    } finally {
-      _supervisor._controlledRestarting = false;
     }
   }
 

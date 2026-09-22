@@ -87,12 +87,21 @@ final class _RuntimeChildMonitor {
     return _ready.future.whenComplete(timeout.cancel);
   }
 
-  /// Cancels both stream subscriptions; process ownership remains with supervisor.
+  /// Cancels both stream subscriptions; process ownership remains with
+  /// supervisor. Startup waiters are failed when disposal closes the gate.
   Future<void> dispose() async {
     if (_disposed) {
       return;
     }
     _disposed = true;
+    if (!_ready.isCompleted) {
+      _ready.completeError(
+        _startupFailure(
+          'runtime_unavailable',
+          'The desktop Runtime was closed during startup.',
+        ),
+      );
+    }
     await _stdoutSubscription.cancel();
     await _stderrSubscription.cancel();
   }

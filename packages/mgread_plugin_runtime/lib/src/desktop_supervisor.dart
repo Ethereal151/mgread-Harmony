@@ -94,6 +94,17 @@ final class _DesktopRuntimeSupervisor implements _RuntimeSupervisor {
   /// Memoized startup operation; concurrent invokes must await this one future.
   Future<_WireConnection>? _startup;
 
+  /// Memoized cleanup operation; repeated dispose calls await one transition.
+  Future<void>? _disposeFuture;
+
+  /// Admission queue for lifecycle transitions. Ordinary calls only hold an
+  /// invocation lease, so they remain concurrent inside one stable generation;
+  /// a transition waits for those leases before advancing the generation.
+  Future<void> _lifecycleAdmissionTail = Future<void>.value();
+  int _activeInvocationLeases = 0;
+  Completer<void>? _invocationsDrained;
+  int _generation = 0;
+
   /// Monotonic timestamp for bounded, pre-boot failure timing evidence.
   DateTime? _startupStartedAt;
 
@@ -116,12 +127,9 @@ final class _DesktopRuntimeSupervisor implements _RuntimeSupervisor {
         'The desktop Runtime has been closed.',
       );
     }
-    if (_useEnvironmentProxy == enabled) return;
-    _useEnvironmentProxy = enabled;
-    if (_process == null && _startup == null) return;
-
-    _controlledRestarting = true;
-    try {
+    await _runLifecycleTransition(() async {
+      _useEnvironmentProxy = enabled;
+      if (_process == null && _startup == null) return;
       final connection = _connection;
       if (connection != null) {
         try {
@@ -148,9 +156,7 @@ final class _DesktopRuntimeSupervisor implements _RuntimeSupervisor {
           message: 'The desktop Node environment proxy preference was rebound.',
         ),
       );
-    } finally {
-      _controlledRestarting = false;
-    }
+    }, shouldTransition: () => _useEnvironmentProxy != enabled);
   }
 
   @override
@@ -205,10 +211,15 @@ final class _DesktopRuntimeSupervisor implements _RuntimeSupervisor {
     }
 
     if (invocation is OpenPluginCodeDirectoryInvocation) {
-      return await _openPluginCodeDirectory(
-            invocation as OpenPluginCodeDirectoryInvocation,
-          )
-          as T;
+      final lease = await _acquireInvocationLease();
+      try {
+        return await _openPluginCodeDirectory(
+              invocation as OpenPluginCodeDirectoryInvocation,
+            )
+            as T;
+      } finally {
+        lease.release();
+      }
     }
 
     if (invocation is OpenRuntimePrivateDirectoryInvocation) {
@@ -216,6 +227,7 @@ final class _DesktopRuntimeSupervisor implements _RuntimeSupervisor {
       return null as T;
     }
 
+    final lease = await _acquireInvocationLease();
     try {
       final connection = await _awaitPluginInvocation(
         _ensureStarted(),
@@ -236,6 +248,8 @@ final class _DesktopRuntimeSupervisor implements _RuntimeSupervisor {
         _startup = null;
       }
       rethrow;
+    } finally {
+      lease.release();
     }
   }
 
@@ -364,6 +378,13 @@ final class _DesktopRuntimeSupervisor implements _RuntimeSupervisor {
   }
 
   Future<void> _restartForPluginImport() async {
+    await _runLifecycleTransition(() async {
+      await _restartForPluginImportCore();
+      await _ensureStarted();
+    });
+  }
+
+  Future<void> _restartForPluginImportCore() async {
     final connection = _connection;
     if (connection == null) return;
     try {
@@ -389,38 +410,42 @@ final class _DesktopRuntimeSupervisor implements _RuntimeSupervisor {
   ///
   /// A graceful acknowledgement is useful but never required for ownership
   /// cleanup: closing the Job Object is the authoritative Windows hard stop.
-  Future<void> dispose() async {
+  Future<void> dispose() => _disposeFuture ??= _disposeCore();
+
+  Future<void> _disposeCore() async {
     if (_disposed) {
       return;
     }
     _disposed = true;
-
-    final connection = _connection;
-    if (connection != null) {
-      try {
-        await connection
-            .request(
-              method: 'runtime.shutdown',
-              params: const <String, Object?>{},
-              idempotencyKey: 'facade-close',
-            )
-            .timeout(_startupTimeout);
-      } on Object {
-        _recordDiagnostic(
-          const RuntimeDiagnostic(
-            code: 'runtime_shutdown_request_failed',
-            level: RuntimeDiagnosticLevel.warning,
-            message:
-                'The Runtime did not acknowledge its graceful shutdown request.',
-          ),
-        );
+    _generation += 1;
+    await _runLifecycleTransition(() async {
+      final connection = _connection;
+      if (connection != null) {
+        try {
+          await connection
+              .request(
+                method: 'runtime.shutdown',
+                params: const <String, Object?>{},
+                idempotencyKey: 'facade-close',
+              )
+              .timeout(_controlTimeout);
+        } on Object {
+          _recordDiagnostic(
+            const RuntimeDiagnostic(
+              code: 'runtime_shutdown_request_failed',
+              level: RuntimeDiagnosticLevel.warning,
+              message:
+                  'The Runtime did not acknowledge its graceful shutdown request.',
+            ),
+          );
+        }
+        await connection.close();
+        _connection = null;
       }
-      await connection.close();
-      _connection = null;
-    }
 
-    await _terminateOwnedProcessTree();
-    await _disposeMonitor();
+      await _terminateOwnedProcessTree(force: true);
+      await _disposeMonitor();
+    }, allowDisposed: true);
     await _diagnosticController.close();
     await _initializationController.close();
     await _developmentChangeController.close();
@@ -468,9 +493,12 @@ final class _DesktopRuntimeSupervisor implements _RuntimeSupervisor {
   ///
   /// Every failure tears down partial state before exposing a safe error.
   Future<_WireConnection> _start() async {
+    final generation = _generation;
+    _WireConnection? candidateConnection;
     _startupStartedAt = DateTime.now();
     try {
       await _assertBundleAvailable();
+      _assertStartupGeneration(generation);
 
       // The Job handle remains owned by this supervisor for the entire Flutter
       // process lifetime. If Flutter exits without executing dispose(), Windows
@@ -508,6 +536,7 @@ final class _DesktopRuntimeSupervisor implements _RuntimeSupervisor {
       );
       _process = process;
       _processStartCount += 1;
+      _assertStartupGeneration(generation);
 
       // Windows development builds may spawn the pinned npm child. Assign the
       // Core first so every Windows descendant belongs to the same Job. macOS
@@ -525,15 +554,21 @@ final class _DesktopRuntimeSupervisor implements _RuntimeSupervisor {
       _monitor = monitor;
 
       final ready = await monitor.waitForReady();
+      _assertStartupGeneration(generation);
       await _probeHttpReady(ready);
+      _assertStartupGeneration(generation);
       final connection = await _WireConnection.connect(
         ready,
         dataRoot: _bundle.dataRoot,
         onDevelopmentChange: _recordDevelopmentChange,
       );
+      candidateConnection = connection;
       await connection.hello();
+      _assertStartupGeneration(generation);
       await _applyPluginHttpProxy(connection);
+      _assertStartupGeneration(generation);
       _connection = connection;
+      candidateConnection = null;
       return connection;
     } on PluginRuntimeException catch (error) {
       if (!_diagnostics.any(
@@ -542,12 +577,12 @@ final class _DesktopRuntimeSupervisor implements _RuntimeSupervisor {
         _recordFatal(error.code, error.message);
       }
       _recordPreBootFatal(error.code, 'startup');
-      await _stopFailedStart();
+      await _stopFailedStart(candidateConnection);
       _startup = null;
       throw _failure(error.code, error.message);
     } on WindowsJobObjectException catch (error) {
       _recordFatal(error.code, error.message);
-      await _stopFailedStart();
+      await _stopFailedStart(candidateConnection);
       _startup = null;
       _recordPreBootFatal(error.code, 'processOwnership');
       throw _failure(
@@ -558,12 +593,10 @@ final class _DesktopRuntimeSupervisor implements _RuntimeSupervisor {
       final osErrorCode = error.errorCode;
       _recordFatal(
         'runtime_process_launch_failed',
-        osErrorCode == null
-            ? 'The packaged desktop Runtime process could not be launched.'
-            : 'The packaged desktop Runtime process could not be launched '
-                  '(OS error $osErrorCode).',
+        'The packaged desktop Runtime process could not be launched '
+            '(OS error $osErrorCode).',
       );
-      await _stopFailedStart();
+      await _stopFailedStart(candidateConnection);
       _startup = null;
       _recordPreBootFatal('runtime_process_launch_failed', 'launch');
       throw _failure(
@@ -575,7 +608,7 @@ final class _DesktopRuntimeSupervisor implements _RuntimeSupervisor {
         'runtime_start_failed',
         'The desktop Runtime failed during startup.',
       );
-      await _stopFailedStart();
+      await _stopFailedStart(candidateConnection);
       _startup = null;
       _recordPreBootFatal('runtime_start_failed', 'startup');
       throw _failure(
@@ -765,7 +798,15 @@ final class _DesktopRuntimeSupervisor implements _RuntimeSupervisor {
   }
 
   /// Closes any partial transport and child tree after a failed startup phase.
-  Future<void> _stopFailedStart() async {
+  Future<void> _stopFailedStart([_WireConnection? candidateConnection]) async {
+    if (candidateConnection != null &&
+        !identical(candidateConnection, _connection)) {
+      try {
+        await candidateConnection.close();
+      } on Object {
+        // Process ownership cleanup below remains authoritative.
+      }
+    }
     final connection = _connection;
     if (connection != null) {
       await connection.close();
