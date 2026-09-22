@@ -66,6 +66,10 @@ void main() {
       ReaderBrightnessMode.system,
     );
     expect(
+      TextReaderPreferences.defaults.normalized(),
+      TextReaderPreferences.defaults,
+    );
+    expect(
       const TextReaderPreferences(
         brightness: .01,
         brightnessMode: ReaderBrightnessMode.manual,

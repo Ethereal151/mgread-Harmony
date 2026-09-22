@@ -490,6 +490,7 @@ class TextReaderPreferences {
         0,
         8,
         24,
+        32,
         40,
         64,
       ], fallback: fallback.bottomPadding),

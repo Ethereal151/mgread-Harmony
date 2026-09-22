@@ -150,7 +150,7 @@ extension _ReaderSettingsSubpageSections on _ReaderSettingsSheetState {
         ),
         _labeledChoice<double>(
           ReaderStrings.bottomMargin,
-          const <double>[0, 8, 24, 40, 64],
+          const <double>[0, 8, 24, 32, 40, 64],
           _preferences.bottomPadding,
           (double value) =>
               value == 0 ? ReaderStrings.none : value.round().toString(),
