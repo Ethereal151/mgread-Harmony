@@ -339,6 +339,8 @@ class _ContinueReadingAction extends StatelessWidget {
                               )
                             : Text(
                                 actionLabel,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                                 style: theme.textTheme.labelLarge?.copyWith(
                                   color: theme.colorScheme.onPrimary,
                                   fontSize: 16,
