@@ -2,15 +2,18 @@
 import type { RuntimeProtocolError, RuntimeRequest } from "./protocol.js";
 
 export type PluginHttpProxyConfiguration =
-  | { readonly proxyUrl: string | undefined }
+  | { readonly proxyUrl: string | undefined; readonly noProxy?: string }
   | { readonly error: RuntimeProtocolError };
 
 export function readPluginHttpProxyConfiguration(
   request: RuntimeRequest,
 ): PluginHttpProxyConfiguration {
-  if (Object.keys(request.params).length !== 1) return invalid(request);
+  const keys = Object.keys(request.params);
+  if (keys.some((key) => key !== "proxyUrl" && key !== "noProxy") || keys.length > 2 || !keys.includes("proxyUrl")) return invalid(request);
   const raw = request.params.proxyUrl;
-  if (raw === null) return { proxyUrl: undefined };
+  const noProxy = request.params.noProxy;
+  if (noProxy !== undefined && (typeof noProxy !== "string" || Buffer.byteLength(noProxy, "utf8") > 2048)) return invalid(request);
+  if (raw === null) return noProxy === undefined ? { proxyUrl: undefined } : { proxyUrl: undefined, noProxy };
   if (typeof raw !== "string" || Buffer.byteLength(raw, "utf8") > 2048) return invalid(request);
   try {
     const proxy = new URL(raw);
@@ -22,7 +25,7 @@ export function readPluginHttpProxyConfiguration(
       proxy.search !== "" ||
       proxy.hash !== ""
     ) return invalid(request);
-    return { proxyUrl: proxy.href };
+    return noProxy === undefined ? { proxyUrl: proxy.href } : { proxyUrl: proxy.href, noProxy };
   } catch {
     return invalid(request);
   }

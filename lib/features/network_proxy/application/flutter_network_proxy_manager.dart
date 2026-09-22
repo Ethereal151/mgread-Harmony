@@ -81,19 +81,33 @@ final class FlutterNetworkProxyManager {
     return uri;
   }
 
-  /// Returns the explicit Runtime source override, or the active mobile
-  /// system route. Windows Runtime inherits its full environment map at
-  /// process startup so per-scheme proxy and NO_PROXY behavior remain intact.
-  Future<Uri?> runtimeSourceProxyUri() async {
+  /// Returns the Runtime source route together with the platform exclusion list.
+  ///
+  /// OHOS exposes the system proxy as a URI plus `exclusionList`; keeping both
+  /// values until the Runtime boundary is required because an explicit proxy
+  /// dispatcher otherwise bypasses non-loopback `NO_PROXY` entries.
+  Future<({Uri? proxyUri, String? noProxy})> runtimeSourceProxyConfiguration() async {
     final custom = proxyUriFor(NetworkProxyTraffic.sourceHttp);
     if (_isOhos) {
       await _ohosProxyConfigurator(custom);
     }
-    if (custom != null) return custom;
+    if (custom != null) return (proxyUri: custom, noProxy: null);
     if (Platform.isAndroid || _isOhos) {
-      return systemProxyUriFor(Uri.parse('https://system-proxy.invalid'));
+      final environment = await _systemProxyEnvironmentLoader();
+      final target = Uri.parse('https://system-proxy.invalid');
+      final route = _systemProxyRoute(target, environment);
+      final endpoint = route.startsWith('PROXY ') ? route.substring('PROXY '.length).trim() : null;
+      final uri = endpoint == null ? null : Uri.tryParse(endpoint.contains('://') ? endpoint : 'http://$endpoint');
+      return (proxyUri: uri == null || uri.host.isEmpty || uri.userInfo.isNotEmpty ? null : uri, noProxy: environment['NO_PROXY']);
     }
-    return null;
+    return (proxyUri: null, noProxy: null);
+  }
+
+  /// Returns the explicit Runtime source override, or the active mobile
+  /// system route. Windows Runtime inherits its full environment map at
+  /// process startup so per-scheme proxy and NO_PROXY behavior remain intact.
+  Future<Uri?> runtimeSourceProxyUri() async {
+    return (await runtimeSourceProxyConfiguration()).proxyUri;
   }
 
   /// Creates an isolated Dart client using the custom route or system default.

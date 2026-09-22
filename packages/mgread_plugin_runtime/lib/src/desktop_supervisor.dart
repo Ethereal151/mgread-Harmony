@@ -154,7 +154,10 @@ final class _DesktopRuntimeSupervisor implements _RuntimeSupervisor {
   }
 
   @override
-  Future<void> configurePluginHttpProxy(Uri? proxyUri) async {
+  Future<void> configurePluginHttpProxy(
+    Uri? proxyUri, {
+    String? noProxy,
+  }) async {
     if (_pluginHttpProxy == proxyUri) return;
     _pluginHttpProxy = proxyUri;
     final connection = _connection;

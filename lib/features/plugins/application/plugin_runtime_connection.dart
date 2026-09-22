@@ -437,7 +437,8 @@ final pluginRuntimeConnectionProvider = FutureProvider<PluginRuntimeConnection>(
   final runtime = ref.watch(pluginRuntimeFacadeProvider);
   final proxyManager = ref.watch(configuredFlutterNetworkProxyManagerProvider);
   await runtime.configureNodeEnvironmentProxy(true);
-  await runtime.configurePluginHttpProxy(await proxyManager.runtimeSourceProxyUri());
+  final proxyConfiguration = await proxyManager.runtimeSourceProxyConfiguration();
+  await runtime.configurePluginHttpProxy(proxyConfiguration.proxyUri, noProxy: proxyConfiguration.noProxy);
   final diagnostics = ref.watch(diagnosticsManagerProvider);
   final span = diagnostics.startSpan(
     AppDiagnosticEvents.runtimeFacadeCall,

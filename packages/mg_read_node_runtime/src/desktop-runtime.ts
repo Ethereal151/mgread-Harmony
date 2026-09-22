@@ -828,7 +828,7 @@ export class DesktopRuntime {
       case RUNTIME_CONTROL_METHOD.pluginHttpProxyConfigure: {
         const configuration = readPluginHttpProxyConfiguration(request);
         if ("error" in configuration) return configuration;
-        this.#pluginHttp.configure(configuration.proxyUrl);
+        this.#pluginHttp.configure(configuration.proxyUrl, configuration.noProxy);
         return { result: { enabled: configuration.proxyUrl !== undefined } };
       }
       case RUNTIME_CONTROL_METHOD.debugHttpSetEnabled:

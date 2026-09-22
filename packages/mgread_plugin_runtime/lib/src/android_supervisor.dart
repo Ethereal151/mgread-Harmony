@@ -22,7 +22,10 @@ final class _AndroidRuntimeSupervisor implements _RuntimeSupervisor {
   }
 
   @override
-  Future<void> configurePluginHttpProxy(Uri? proxyUri) async {
+  Future<void> configurePluginHttpProxy(
+    Uri? proxyUri, {
+    String? noProxy,
+  }) async {
     if (_disposed) {
       throw const PluginRuntimeException(
         'runtime_unavailable',

@@ -299,7 +299,7 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
     // matching RESUME after a third-party player is paused or force-stopped.
     // An explicit user play is a safe focus reassertion and clears that stale
     // state without claiming that the system sent a recovery event.
-    if (!session.video && this.audioInterruptionActive) {
+    if (this.audioInterruptionActive) {
       this.audioInterruptionActive = false
       this.audioWasPlayingBeforeInterrupt = false
       this.emit(sessionId, 'interrupted', false)

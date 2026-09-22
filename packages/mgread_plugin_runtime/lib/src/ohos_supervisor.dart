@@ -11,9 +11,10 @@ const int _maxOhosDiagnosticEntries = 32;
 
 @immutable
 final class _OhosProxyInvocation extends PluginInvocation<_OhosProxyResult> {
-  const _OhosProxyInvocation(this.proxyUri);
+  const _OhosProxyInvocation(this.proxyUri, this.noProxy);
 
   final Uri? proxyUri;
+  final String? noProxy;
 
   @override
   String get _wireMethod => 'runtime.pluginHttpProxy.configure.v1';
@@ -21,6 +22,7 @@ final class _OhosProxyInvocation extends PluginInvocation<_OhosProxyResult> {
   @override
   Map<String, Object?> get _wireParams => <String, Object?>{
     'proxyUrl': proxyUri?.toString(),
+    if (noProxy != null) 'noProxy': noProxy,
   };
 
   @override
@@ -377,9 +379,12 @@ final class _OhosRuntimeSupervisor implements _RuntimeSupervisor {
   }
 
   @override
-  Future<void> configurePluginHttpProxy(Uri? proxyUri) async {
+  Future<void> configurePluginHttpProxy(
+    Uri? proxyUri, {
+    String? noProxy,
+  }) async {
     final result = await invoke<_OhosProxyResult>(
-      _OhosProxyInvocation(proxyUri),
+      _OhosProxyInvocation(proxyUri, noProxy),
     );
     if (result.enabled != (proxyUri != null)) {
       throw const PluginRuntimeException(

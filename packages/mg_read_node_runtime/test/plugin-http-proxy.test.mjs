@@ -64,18 +64,34 @@ test("plugin HTTP client switches future requests between system and explicit pr
   assert.equal(await (await client.fetch(target, {})).text(), "origin-2");
   assert.equal(proxyTunnels, 1);
 
-  assert.equal(await (await client.fetch(target, {}, undefined, "direct")).text(), "origin-3");
+  client.configure(`http://127.0.0.1:${proxyAddress.port}/`, "127.0.0.1");
+  assert.equal(await (await client.fetch(target, {})).text(), "origin-3");
   assert.equal(proxyTunnels, 1);
+
+  client.configure(`http://127.0.0.1:${proxyAddress.port}/`);
+  assert.equal(await (await client.fetch(target, {})).text(), "origin-4");
+  assert.equal(proxyTunnels, 2);
+
+  assert.equal(await (await client.fetch(target, {}, undefined, "direct")).text(), "origin-5");
+  assert.equal(proxyTunnels, 2);
 
   client.configure(undefined);
-  assert.equal(await (await client.fetch(target, {})).text(), "origin-4");
-  assert.equal(proxyTunnels, 1);
+  assert.equal(await (await client.fetch(target, {})).text(), "origin-6");
+  assert.equal(proxyTunnels, 2);
 
   client.configure(`socks5://127.0.0.1:${socksAddress.port}/`);
-  assert.equal(await (await client.fetch(target, { headers: { "User-Agent": "source-specific" } })).text(), "origin-5");
+  assert.equal(await (await client.fetch(target, { headers: { "User-Agent": "source-specific" } })).text(), "origin-7");
   assert.equal(socksTunnels, 1);
   assert.equal(defaultPluginUserAgent, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36");
-  assert.deepEqual(userAgents, [defaultPluginUserAgent, defaultPluginUserAgent, defaultPluginUserAgent, defaultPluginUserAgent, "source-specific"]);
+  assert.deepEqual(userAgents, [
+    defaultPluginUserAgent,
+    defaultPluginUserAgent,
+    defaultPluginUserAgent,
+    defaultPluginUserAgent,
+    defaultPluginUserAgent,
+    defaultPluginUserAgent,
+    "source-specific",
+  ]);
 });
 
 test("plugin HTTP client follows the environment proxy when no explicit override exists", async (t) => {

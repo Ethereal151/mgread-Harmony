@@ -60,6 +60,7 @@ export class ConfigurablePluginHttpClient implements PluginRuntimeHttpClient {
   readonly #environmentProxy: PluginHttpEnvironmentProxyOptions;
   #proxyAgent: Dispatcher | undefined;
   #proxyUrl: string | undefined;
+  #proxyNoProxy: string | undefined;
   readonly #retiring = new Set<Promise<void>>();
 
   constructor(environmentProxy: PluginHttpEnvironmentProxyOptions = {}) {
@@ -72,8 +73,8 @@ export class ConfigurablePluginHttpClient implements PluginRuntimeHttpClient {
     });
   }
 
-  configure(proxyUrl: string | undefined): void {
-    if (this.#proxyUrl === proxyUrl) return;
+  configure(proxyUrl: string | undefined, noProxy?: string): void {
+    if (this.#proxyUrl === proxyUrl && this.#proxyNoProxy === noProxy) return;
     const next = proxyUrl === undefined
       ? undefined
       : proxyUrl.startsWith("socks5:")
@@ -86,6 +87,7 @@ export class ConfigurablePluginHttpClient implements PluginRuntimeHttpClient {
     const previous = this.#proxyAgent;
     this.#proxyAgent = next;
     this.#proxyUrl = proxyUrl;
+    this.#proxyNoProxy = noProxy;
     if (previous !== undefined) this.#retire(previous);
   }
 
@@ -96,18 +98,20 @@ export class ConfigurablePluginHttpClient implements PluginRuntimeHttpClient {
     proxyMode?: PluginRuntimeHttpProxyMode,
   ): Promise<Response> {
     const requestInit = withDefaultUserAgent(init);
+    const url = new URL(input.toString());
+    const bypassExplicitProxy = this.#proxyUrl !== undefined && matchesNoProxy(url, this.#proxyNoProxy);
     // HarmonyOS runs the embedded Node host with --jitless because its W^X
     // policy rejects V8's executable JIT range. That build also omits the
     // WebAssembly global, while Undici's llhttp parser requires it. Keep the
     // public fetch contract alive with Node's native HTTP parser on that
     // platform; desktop and Android retain the negotiated Undici path.
     if ((globalThis as { readonly WebAssembly?: unknown }).WebAssembly === undefined) {
-      const fallbackProxy = proxyMode === "direct"
+      const fallbackProxy = proxyMode === "direct" || bypassExplicitProxy
         ? undefined
         : this.#proxyUrl ?? fallbackSystemProxy(new URL(input.toString()), this.#environmentProxy);
       return fetchWithoutWebAssembly(input, requestInit, 0, fallbackProxy);
     }
-    const dispatcher = proxyMode === "direct"
+    const dispatcher = proxyMode === "direct" || bypassExplicitProxy
       ? this.#directAgent
       : this.#proxyAgent ?? this.#systemProxyAgent;
     const proxiedInit = { ...requestInit, dispatcher } as RequestInit & { readonly dispatcher: Dispatcher };

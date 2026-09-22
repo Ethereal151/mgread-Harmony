@@ -12,7 +12,9 @@ import 'package:mgread_plugin_runtime/mgread_plugin_runtime.dart';
 
 const _pluginId = 'org.mgread.ohos.https-proxy-smoke';
 const _useSystemProxy = bool.fromEnvironment('OHOS_RUNTIME_SYSTEM_PROXY_MODE');
+const _systemProxyHost = String.fromEnvironment('OHOS_RUNTIME_SYSTEM_PROXY_HOST', defaultValue: '127.0.0.1');
 const _systemProxyPort = int.fromEnvironment('OHOS_RUNTIME_SYSTEM_PROXY_PORT', defaultValue: 35555);
+const _expectedSystemProxyNoProxy = String.fromEnvironment('OHOS_RUNTIME_EXPECT_NO_PROXY');
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -49,25 +51,30 @@ void main() {
     );
     expect(result.single.status, PluginTransferImportStatus.installed);
 
-    final proxyUri = _useSystemProxy ? await _readConfiguredSystemProxy() : Uri(scheme: 'http', host: '127.0.0.1', port: proxy.port);
+    ({Uri? proxyUri, String? noProxy})? systemProxy;
+    if (_useSystemProxy) {
+      final manager = FlutterNetworkProxyManager(operatingSystem: 'ohos', ohosProxyConfigurator: (_) async {});
+      final configuration = await manager.runtimeSourceProxyConfiguration();
+      systemProxy = configuration;
+      expect(configuration.proxyUri?.host, _systemProxyHost);
+      expect(configuration.proxyUri?.port, _systemProxyPort);
+      if (_expectedSystemProxyNoProxy.isNotEmpty) {
+        expect(configuration.noProxy, contains(_expectedSystemProxyNoProxy));
+      }
+    }
+    final proxyUri = systemProxy?.proxyUri ?? Uri(scheme: 'http', host: '127.0.0.1', port: proxy.port);
     expect(proxyUri, isNotNull);
-    await runtime.configurePluginHttpProxy(proxyUri!);
+    await runtime.configurePluginHttpProxy(proxyUri, noProxy: systemProxy?.noProxy);
     final search = await runtime.invoke(const SourceSearchInvocation(pluginId: _pluginId, query: 'https-connect'));
 
     expect(search.items, hasLength(1));
     expect(search.items.single.title, 'https:200:true');
-    expect(proxy.connectCount, greaterThan(0));
-    expect(proxy.targetHosts, contains('example.com'));
+    if (!_useSystemProxy) {
+      expect(proxy.connectCount, greaterThan(0));
+      expect(proxy.targetHosts, contains('example.com'));
+    }
     await tester.pump();
   }, timeout: const Timeout(Duration(minutes: 5)));
-}
-
-Future<Uri?> _readConfiguredSystemProxy() async {
-  final manager = FlutterNetworkProxyManager(operatingSystem: 'ohos', ohosProxyConfigurator: (_) async {});
-  final proxy = await manager.runtimeSourceProxyUri();
-  expect(proxy?.host, '127.0.0.1');
-  expect(proxy?.port, _systemProxyPort);
-  return proxy;
 }
 
 Uint8List _proxyFixtureBytes() {

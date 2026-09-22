@@ -176,7 +176,8 @@ final class _NetworkProxySettingsPageState extends ConsumerState<NetworkProxySet
         ref.read(playerLocalProxyPolicyControllerProvider).update(value);
         final runtime = ref.read(pluginRuntimeFacadeProvider);
         await runtime.configureNodeEnvironmentProxy(true);
-        await runtime.configurePluginHttpProxy(await proxyManager.runtimeSourceProxyUri());
+        final proxyConfiguration = await proxyManager.runtimeSourceProxyConfiguration();
+        await runtime.configurePluginHttpProxy(proxyConfiguration.proxyUri, noProxy: proxyConfiguration.noProxy);
       } on Object {
         applyWarning = '设置已保存；当前 Node Runtime 代理切换失败，Runtime 下次启动时会重新应用。';
       }
