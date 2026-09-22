@@ -17,6 +17,7 @@ import 'package:mg_read/features/profile/presentation/feedback_page.dart';
 import 'package:mg_read/features/profile/presentation/profile_page.dart';
 import 'package:mg_read/features/lan_sync/presentation/lan_sync_page.dart';
 import 'package:mg_read/features/notifications/presentation/notifications_page.dart';
+import 'package:mg_read/platform/platform_capabilities.dart';
 
 import '../../../app/mg_read_app_test_support.dart';
 
@@ -172,6 +173,11 @@ void main() {
     expect(find.text(githubFeedbackUrl), findsOneWidget);
     expect(find.byKey(const Key('feedback-open-github')), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  test('feedback repository uses the OHOS repository on OHOS', () {
+    expect(feedbackRepositoryUrl(capabilities: PlatformCapabilities.forOperatingSystem('ohos')), ohosGithubFeedbackUrl);
+    expect(feedbackRepositoryUrl(capabilities: PlatformCapabilities.forOperatingSystem('windows')), githubFeedbackUrl);
   });
 
   testWidgets('feedback GitHub action opens the issue page externally', (WidgetTester tester) async {

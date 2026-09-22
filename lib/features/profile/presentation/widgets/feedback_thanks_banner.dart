@@ -47,6 +47,7 @@ class FeedbackThanksBanner extends StatelessWidget {
               Expanded(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
                     Text(
@@ -54,17 +55,17 @@ class FeedbackThanksBanner extends StatelessWidget {
                       style: theme.textTheme.titleMedium?.copyWith(
                         color: theme.colorScheme.onSurface,
                         fontWeight: FontWeight.w600,
-                        height: 1.25,
+                        height: 1.15,
                         letterSpacing: 0,
                       ),
                     ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 2),
                     Text(
                       '您的每一条建议都对我们非常重要，\n将帮助我们持续改进产品体验。',
                       style: theme.textTheme.bodyMedium?.copyWith(
                         color: tokens.mutedText,
                         fontWeight: FontWeight.w400,
-                        height: 1.5,
+                        height: 1.3,
                         letterSpacing: 0,
                       ),
                     ),

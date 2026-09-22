@@ -16,9 +16,14 @@ import 'package:mg_read/features/profile/presentation/widgets/feedback_thanks_ba
 import 'package:mg_read/features/profile/presentation/widgets/profile_detail_chrome.dart';
 import 'package:mg_read/shared/presentation/app_navigation_destination.dart';
 import 'package:mg_read/shared/presentation/widgets/app_secondary_page_chrome.dart';
+import 'package:mg_read/platform/platform_capabilities.dart';
 import 'package:mg_read/platform/platform_system_actions.dart';
 
 const String githubFeedbackUrl = 'https://github.com/lingy-Mg/mg_read/issues';
+const String ohosGithubFeedbackUrl = 'https://github.com/Ethereal151/mgread-Harmony/issues';
+
+String feedbackRepositoryUrl({PlatformCapabilities? capabilities}) =>
+    (capabilities ?? platformCapabilities).isOhos ? ohosGithubFeedbackUrl : githubFeedbackUrl;
 
 class FeedbackPage extends StatelessWidget {
   const FeedbackPage({required this.onBackRequested, required this.onDestinationRequested, super.key});
@@ -70,6 +75,7 @@ class _GithubFeedbackCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
     final AppThemeTokens tokens = AppThemeTokens.of(context);
+    final String feedbackUrl = feedbackRepositoryUrl();
     return DecoratedBox(
       key: const Key('feedback-github-card'),
       decoration: BoxDecoration(
@@ -107,21 +113,21 @@ class _GithubFeedbackCard extends StatelessWidget {
             const SizedBox(height: 4),
             TextButton(
               key: const Key('feedback-github-link'),
-              onPressed: () => _openGithubIssues(context),
+              onPressed: () => _openGithubIssues(context, feedbackUrl),
               style: TextButton.styleFrom(
                 padding: EdgeInsets.zero,
                 alignment: Alignment.centerLeft,
                 minimumSize: const Size(0, 32),
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
-              child: const Text(githubFeedbackUrl),
+              child: Text(feedbackUrl),
             ),
             const SizedBox(height: 16),
             SizedBox(
               width: double.infinity,
               child: FilledButton.icon(
                 key: const Key('feedback-open-github'),
-                onPressed: () => _openGithubIssues(context),
+                onPressed: () => _openGithubIssues(context, feedbackUrl),
                 icon: const Icon(Icons.open_in_new_rounded, size: 19),
                 label: const Text('在外部浏览器打开'),
                 style: FilledButton.styleFrom(
@@ -139,9 +145,9 @@ class _GithubFeedbackCard extends StatelessWidget {
   }
 }
 
-Future<void> _openGithubIssues(BuildContext context) async {
+Future<void> _openGithubIssues(BuildContext context, String feedbackUrl) async {
   try {
-    final bool launched = await openExternalUri(Uri.parse(githubFeedbackUrl));
+    final bool launched = await openExternalUri(Uri.parse(feedbackUrl));
     if (!launched && context.mounted) _showLaunchFailure(context);
   } catch (_) {
     if (context.mounted) _showLaunchFailure(context);
