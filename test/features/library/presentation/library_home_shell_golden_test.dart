@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mg_read/app/app_theme.dart';
@@ -38,25 +39,27 @@ void main() {
 }
 
 Widget _host({required ThemeMode themeMode, LibraryHomeLayoutMode initialLayoutMode = LibraryHomeLayoutMode.list}) {
-  return MaterialApp(
-    debugShowCheckedModeBanner: false,
-    theme: AppTheme.light(),
-    darkTheme: AppTheme.dark(),
-    themeMode: themeMode,
-    builder: (BuildContext context, Widget? child) {
-      final MediaQueryData mediaQuery = MediaQuery.of(context);
-      return MediaQuery(
-        data: mediaQuery.copyWith(padding: const EdgeInsets.only(top: 24), viewPadding: const EdgeInsets.only(top: 24)),
-        child: child ?? const SizedBox.shrink(),
-      );
-    },
-    home: LibraryHomeShell(
-      data: LibraryHomeFixtures.preview,
-      initialLayoutMode: initialLayoutMode,
-      onLayoutModeChanged: (_) async {},
-      isRefreshing: false,
-      onRefresh: () async {},
-      onToggleTheme: () {},
+  return ProviderScope(
+    child: MaterialApp(
+      debugShowCheckedModeBanner: false,
+      theme: AppTheme.light(),
+      darkTheme: AppTheme.dark(),
+      themeMode: themeMode,
+      builder: (BuildContext context, Widget? child) {
+        final MediaQueryData mediaQuery = MediaQuery.of(context);
+        return MediaQuery(
+          data: mediaQuery.copyWith(padding: const EdgeInsets.only(top: 24), viewPadding: const EdgeInsets.only(top: 24)),
+          child: child ?? const SizedBox.shrink(),
+        );
+      },
+      home: LibraryHomeShell(
+        data: LibraryHomeFixtures.preview,
+        initialLayoutMode: initialLayoutMode,
+        onLayoutModeChanged: (_) async {},
+        isRefreshing: false,
+        onRefresh: () async {},
+        onToggleTheme: () {},
+      ),
     ),
   );
 }
