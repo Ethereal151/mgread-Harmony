@@ -25,11 +25,29 @@ void main() {
       artist: 'MgRead',
     );
     expect(result.sessionId, sessionId);
-    expect(result.duration, isNotNull);
+    final firstDuration = result.duration;
+    expect(firstDuration, isNotNull);
 
     addTearDown(() => client.command('dispose', sessionId));
     await client.command('setRate', sessionId, arguments: const <String, Object?>{'rate': 1.25});
     await client.command('seek', sessionId, arguments: const <String, Object?>{'positionMs': 0});
+    await client.command('play', sessionId);
+    await tester.pump(Duration(milliseconds: _mediaSmokeHoldMs < 0 ? 0 : _mediaSmokeHoldMs));
+    await client.command('pause', sessionId);
+
+    final switched = await client.openAudio(
+      sessionId: sessionId,
+      uri: Uri.parse('https://samplelib.com/lib/preview/mp3/sample-6s.mp3'),
+      headers: const <String, String>{},
+      initialPosition: Duration.zero,
+      play: false,
+      trackId: 'smoke-track-switched',
+      title: 'MgRead OHOS switched track',
+      artist: 'MgRead',
+    );
+    expect(switched.sessionId, sessionId);
+    expect(switched.duration, isNotNull);
+    expect(switched.duration, greaterThan(firstDuration!));
     await client.command('play', sessionId);
     await tester.pump(Duration(milliseconds: _mediaSmokeHoldMs < 0 ? 0 : _mediaSmokeHoldMs));
     await client.command('pause', sessionId);
