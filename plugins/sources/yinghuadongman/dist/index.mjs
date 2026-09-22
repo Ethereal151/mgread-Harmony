@@ -38,13 +38,21 @@ export async function search(request) {
     if (query === '')
         return frozen({ items: [], nextCursor: null, totalCount: 0 });
     const page = searchPage(request.cursor);
+    const pageSize = clamp(request.pageSize);
     const path = page === 1
         ? `/vch/${encodeURIComponent(query)}.html`
         : `/vch/${encodeURIComponent(query)}/page/${page}.html`;
-    const items = parseListing(await fetchText(`${base}${path}`)).slice(0, clamp(request.pageSize));
+    const primary = parseListing(await fetchText(`${base}${path}`));
+    let values = primary;
+    if (page === 1 && !primary.some((item) => sameSearchTitle(item.title, query))) {
+        const currentMatches = parseListing(await fetchText(`${base}/label/new.html`))
+            .filter((item) => sameSearchTitle(item.title, query));
+        values = uniqueById([...currentMatches, ...primary]);
+    }
+    const items = values.slice(0, pageSize);
     return frozen({
         items,
-        nextCursor: items.length >= clamp(request.pageSize) && page < 50 ? `search:${page + 1}` : null,
+        nextCursor: primary.length >= pageSize && page < 50 ? `search:${page + 1}` : null,
         totalCount: null,
     });
 }
@@ -207,6 +215,15 @@ function parseListing(html) {
         unique.set(id, summary(id, title, cover, latest || null));
     }
     return [...unique.values()];
+}
+function sameSearchTitle(title, query) {
+    return normalizeSearchTitle(title) === normalizeSearchTitle(query);
+}
+function normalizeSearchTitle(value) {
+    return decode(value).normalize('NFKC').replace(/[\s《》「」『』【】（）()]/gu, '').toLocaleLowerCase('zh-CN');
+}
+function uniqueById(items) {
+    return [...new Map(items.map((item) => [item.id, item])).values()];
 }
 function parseDetail(html, id) {
     const title = cleanTitle(firstText(html, /<h1\b[^>]*>([\s\S]*?)<\/h1>/iu)) || `视频 ${id}`;
