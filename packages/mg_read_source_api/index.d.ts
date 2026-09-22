@@ -106,12 +106,20 @@ export interface PluginHttpRequestInit extends RequestInit {
   readonly proxyMode?: "direct";
 }
 
+/** Runtime-owned resource transforms that never expose upstream bytes to plugins. */
+export type PluginResourceTransform =
+  | "sniff-image-content-type-v1"
+  | "aes-cbc-prefixed-iv-image-v1"
+  | "aes-cbc-encrypt-then-split-image-v1"
+  | "aes-cbc-split-image-v1";
+
 /**
  * A Runtime resource-proxy descriptor. `proxyMode` applies when Runtime
  * retrieves the upstream media bytes, including HLS playlists and segments.
  */
 export type PluginResourceProxyRequest = PluginJsonObject & {
   readonly proxyMode?: "direct";
+  readonly resourceTransform?: PluginResourceTransform;
 };
 
 export interface MgReadPluginContext {

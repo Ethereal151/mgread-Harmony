@@ -3,7 +3,7 @@
  *
  * 职责：直接请求 18md.me 的 MacCMS 页面并解析视频、分组与 player_data。
  * 生命周期：activate 注入宿主能力；模块只保留当前插件上下文，不持久化页面状态。
- * IO：所有站点请求走 ctx.http，封面与播放资源只通过 ctx.resource.proxy 交给 Runtime。
+ * IO：所有站点请求走 ctx.http；封面由 Runtime 流式校正上游错误 MIME，播放资源同样只走 ctx.resource.proxy。
  * 稳定标识：使用站点数字 vod ID 及 sid/nid，不暴露 URL 作为内容或章节 ID。
  */
 import type { MgReadPluginContext } from '@mgread/source-api';
@@ -97,7 +97,7 @@ function parseChapterId(id: string, content: string) { const match = new RegExp(
 function cursorPage(cursor: string | null, target: string) { if (cursor === null) return 1; const value = Number(new RegExp(`^${escape(target)}:(\\d+)$`, 'u').exec(cursor)?.[1]); if (!Number.isSafeInteger(value) || value < 2 || value > 50) throw new Error('Discovery cursor is invalid.'); return value; }
 function safeMediaUrl(value: string) { try { const url = new URL(value); return (url.protocol === 'https:' || url.protocol === 'http:') && url.username === '' && url.password === ''; } catch { return false; } }
 function absolute(value: string | null) { if (value === null || value === '') return null; try { return new URL(value.replaceAll('\\/', '/'), base).toString(); } catch { return null; } }
-function proxyImage(value: string | null) { const url = absolute(value); return url === null ? null : requireContext().resource.proxy({ kind: 'image', url, headers: { Referer: `${base}/`, 'User-Agent': headers['User-Agent'] } }); }
+function proxyImage(value: string | null) { const url = absolute(value); return url === null ? null : requireContext().resource.proxy({ kind: 'image', url, resourceTransform: 'sniff-image-content-type-v1', headers: { Referer: `${base}/`, 'User-Agent': headers['User-Agent'] } }); }
 function attribute(text: string, name: string) { return new RegExp(`${escape(name)}=["']([^"']+)["']`, 'iu').exec(text)?.[1] ?? ''; }
 function firstAttribute(html: string, pattern: RegExp, name: string) { const match = pattern.exec(html); return match === null ? '' : attribute(match[0], name); }
 function firstText(html: string, pattern: RegExp) { return strip(pattern.exec(html)?.[1] ?? ''); }

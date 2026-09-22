@@ -175,7 +175,7 @@ function absolute(value) { if (value === null || value === '')
 catch {
     return null;
 } }
-function proxyImage(value) { const url = absolute(value); return url === null ? null : requireContext().resource.proxy({ kind: 'image', url, headers: { Referer: `${base}/`, 'User-Agent': headers['User-Agent'] } }); }
+function proxyImage(value) { const url = absolute(value); return url === null ? null : requireContext().resource.proxy({ kind: 'image', url, resourceTransform: 'sniff-image-content-type-v1', headers: { Referer: `${base}/`, 'User-Agent': headers['User-Agent'] } }); }
 function attribute(text, name) { return new RegExp(`${escape(name)}=["']([^"']+)["']`, 'iu').exec(text)?.[1] ?? ''; }
 function firstAttribute(html, pattern, name) { const match = pattern.exec(html); return match === null ? '' : attribute(match[0], name); }
 function firstText(html, pattern) { return strip(pattern.exec(html)?.[1] ?? ''); }

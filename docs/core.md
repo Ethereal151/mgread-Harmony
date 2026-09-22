@@ -109,7 +109,9 @@ plugins/sources/                    真实数据源及其他能力参考实现
 - 目录完整、有序且 ID 唯一。小说正文使用 `text`；漫画 `pages`、封面及音视频只登记由数据源校验过的
   `kind + url + headers` Runtime proxy 请求。loopback URL 以明文可逆 Base64URL JSON 自包含该请求，不依赖
   进程内 token 映射；此编码不提供加密或认证。Runtime 持有上游 HTTP 请求、取消和正文流，数据源不得导出
-  `resource` 字节能力或缓冲媒体正文；大资源不进入插件返回值或控制面。
+  `resource` 字节能力或缓冲媒体正文；大资源不进入插件返回值或控制面。若上游图片响应头与有效字节签名不符，
+  来源可显式登记 `sniff-image-content-type-v1`，Runtime 必须复用同一次响应的首块流式纠正 MIME，不得重新请求或
+  整体缓冲图片。
 - fixture 只保留选择器、分页、null/0/空集合和错误分支需要的最小结构。
 - 开发期由纯 Node.js `mg_read_source_testkit` 直接检查插件公开契约和 live 链路；正式 Windows App 内置自检
   经生产 `SourceContentGateway -> Runtime Facade -> Runtime -> 已启用插件` 验证发现、搜索、详情、完整目录、

@@ -15,6 +15,12 @@ export async function exercisePublicSourceApi(
   };
   void accessError;
   const page: PluginWebViewPage = await context.webview.open({ visible: false });
+  context.resource.proxy({
+    kind: 'image',
+    url: 'https://example.com/cover.png',
+    headers: {},
+    resourceTransform: 'sniff-image-content-type-v1',
+  });
   await page.navigate('https://example.com');
   await page.executeJavaScript<string>('document.title');
   await page.cdp<PluginJsonObject>('Runtime.evaluate', {

@@ -67,6 +67,25 @@ export async function probeReachableResource({
 }
 
 async function fetchRegisteredResource(request, runtimeFetch) {
+  if (request.resourceTransform === 'sniff-image-content-type-v1') {
+    const response = await runtimeFetch(request.url, { headers: request.headers, redirect: 'follow' });
+    if (!response.ok || response.body === null) return response;
+    const reader = response.body.getReader();
+    const first = await reader.read();
+    const contentType = first.done ? null : detectedImageContentType(Buffer.from(first.value));
+    if (contentType === null) {
+      await reader.cancel().catch(() => {});
+      throw new Error('invalid transformed resource image');
+    }
+    await reader.cancel().catch(() => {});
+    const headers = new Headers(response.headers);
+    headers.set('content-type', contentType);
+    return new Response(first.value, {
+      status: response.status,
+      statusText: response.statusText,
+      headers,
+    });
+  }
   if (request.resourceTransform === 'aes-cbc-prefixed-iv-image-v1') {
     const key = aes256Key(request.resourceTransformKey);
     if (key === null) throw new Error('invalid transformed resource key');

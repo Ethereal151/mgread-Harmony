@@ -31,7 +31,9 @@ test('18MD fixtures retain native routes, groups and HLS proxy metadata', async 
   assert.equal(catalog.items.length, 4); assert.equal(catalog.groups[1].title, 'Group Beta');
   const content = await plugin.getContent({ id: 'video:101', chapterId: catalog.groups[1].episodes[1].id });
   assert.equal(content.media.resourceType, 'hls'); assert.equal(content.media.resourcePolicy, 'sessionOnly');
+  const imageResource = resources.find((resource) => resource.kind === 'image');
   const mediaResource = resources.find((resource) => resource.kind === 'hls');
+  assert.equal(imageResource.resourceTransform, 'sniff-image-content-type-v1');
   assert.equal(content.media.url.startsWith('http://127.0.0.1:'), true); assert.ok(mediaResource);
   assert.equal(mediaResource.headers.Range, undefined); assert.equal(mediaResource.headers.Referer.includes('/sid/2/nid/2'), true);
 });
