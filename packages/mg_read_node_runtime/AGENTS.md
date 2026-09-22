@@ -21,6 +21,8 @@
   与 development 项目先建立元数据快照，首次能力调用或传输时单飞加载。development 构建变化仍须先激活
   候选 generation，成功后才替换并回收旧 generation。
 - Runtime 私有数据不得承载书架、目录、正文、进度、书签或主应用设置权威。
+- `PluginManager` 组合安装与 generation 生命周期；`PluginContentDispatcher` 独占来源能力调用、租约和结果关联校验，
+  `PluginManagerStorage` 独占路径解析、占用测量与缓存清理。新增能力不得把这些职责重新堆回 Manager。
 - Runtime-only 任务不修改主应用 UI、Reader、模板或真实数据源，除非用户把对应公开边界纳入同一任务。
 
 ## 固定工具链与验证

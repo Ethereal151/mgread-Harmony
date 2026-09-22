@@ -217,6 +217,36 @@ test("mgplugin archive restores npm packages and manager cold-activates named ex
   assert.equal(chapters.items[0].order, 0);
   assert.equal(content.text, "标准插件正文。");
 
+  const codeDirectory = await manager.resolveCodeDirectory("org.mgread.runtime.fixture");
+  assert.deepEqual(codeDirectory, {
+    directory: join(pluginRoot, "versions", "1.0.0"),
+    kind: "installed",
+  });
+  const cacheRoot = join(dataRoot, "plugin-cache", "org.mgread.runtime.fixture");
+  await mkdir(join(cacheRoot, "nested"), { recursive: true });
+  await writeFile(join(cacheRoot, "nested", "entry.bin"), "cache-bytes");
+  assert.deepEqual(await manager.listCacheUsage("org.mgread.runtime.fixture"), [{
+    bytes: 11,
+    pluginId: "org.mgread.runtime.fixture",
+  }]);
+  const dataUsage = await manager.measureInstallationUsage(
+    "org.mgread.runtime.fixture",
+    "data",
+  );
+  assert.equal(dataUsage.pluginId, "org.mgread.runtime.fixture");
+  assert.equal(dataUsage.scope, "data");
+  assert.equal(dataUsage.version, "1.0.0");
+  assert.ok(dataUsage.bytes > 0);
+  assert.ok(dataUsage.fileCount > 0);
+  assert.deepEqual(await manager.clearAllPluginCaches(), {
+    items: [{
+      bytesBefore: 11,
+      bytesRemaining: 0,
+      pluginId: "org.mgread.runtime.fixture",
+      status: "cleared",
+    }],
+  });
+
   const disabled = await manager.setEnabled(
     "org.mgread.runtime.fixture",
     false,
