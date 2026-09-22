@@ -16,8 +16,10 @@ try {
     const detail = source.status === 'passed'
       ? `chapters=${source.summary.chapterItems} samples=${source.summary.contentSamples} ${formatResourceGroups(source.summary.resourceGroups)}`
       : source.status === 'partial'
-        ? `chapters=${source.summary.chapterItems} samples=${source.summary.contentSamples} ${formatResourceGroups(source.summary.resourceGroups)}`
-      : `${source.failure.stage} ${source.failure.code}${source.summary?.resourceGroups ? ` ${formatResourceGroups(source.summary.resourceGroups)}` : ''}`;
+        ? source.limitation === undefined
+          ? `chapters=${source.summary.chapterItems} samples=${source.summary.contentSamples} ${formatResourceGroups(source.summary.resourceGroups)}`
+          : `${source.limitation.stage} ${source.limitation.code} capability=${source.limitation.capability}`
+        : `${source.failure.stage} ${source.failure.code}${source.summary?.resourceGroups ? ` ${formatResourceGroups(source.summary.resourceGroups)}` : ''}`;
     process.stdout.write(`${status} ${source.source} ${detail} ${source.durationMs}ms\n`);
   }
   if (options.reportPath !== null) {

@@ -1,7 +1,9 @@
 /** 数据源测试库自身的离线行为测试；不访问任何真实来源。 */
 import assert from 'node:assert/strict';
 import { createCipheriv } from 'node:crypto';
-import { access } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import test from 'node:test';
 
 import {
@@ -15,6 +17,7 @@ import {
   probeReachableResource,
   probeResourceGroups,
   runReadingSourceFlow,
+  runSourceProjects,
 } from '../index.js';
 import { createRuntimeLikeFetch } from '../src/http.js';
 
@@ -103,12 +106,75 @@ test('creates an isolated host and records bounded resource metadata', async (t)
   assert.equal(fetchHeaders[1].get('user-agent'), 'source-specific');
   assert.deepEqual(harness.summary(), { resources: 1, logs: 1 });
   const webview = await activatedContext.webview.open();
-  await assert.rejects(
-    webview.show(),
-    (error) => error instanceof SourceTestFailure && error.code === 'source_webview_interaction_required',
-  );
+  const boundaries = [
+    [() => webview.executeJavaScript('return document.title;'), 'source_webview_script_unsupported', 'webview.evaluate'],
+    [() => webview.cdp('Page.enable'), 'source_webview_cdp_unsupported', 'webview.cdp'],
+    [() => webview.click({ x: 1, y: 1 }), 'source_webview_interaction_required', 'webview.click'],
+    [() => webview.inputText('fixture'), 'source_webview_interaction_required', 'webview.inputText'],
+    [() => webview.key({ key: 'Enter' }), 'source_webview_interaction_required', 'webview.key'],
+    [() => webview.waitForText({ text: 'ready', timeoutMs: 1_000 }), 'source_webview_wait_unsupported', 'webview.waitText'],
+    [() => webview.show(), 'source_webview_interaction_required', 'webview.show'],
+  ];
+  for (const [operation, code, stage] of boundaries) {
+    await assert.rejects(
+      operation,
+      (error) => error instanceof SourceTestFailure && error.code === code && error.stage === stage,
+    );
+  }
   await harness.cleanup();
   await assert.rejects(access(harness.root));
+});
+
+test('reports a temporary WebView capability boundary as partial', async (t) => {
+  const repositoryRoot = await mkdtemp(join(tmpdir(), 'mgread-source-report-'));
+  t.after(() => rm(repositoryRoot, { force: true, recursive: true }));
+  const projectRoot = join(repositoryRoot, 'plugins', 'sources', 'fixture-webview');
+  await mkdir(join(projectRoot, 'dist'), { recursive: true });
+  await writeFile(join(projectRoot, 'package.json'), JSON.stringify({
+    name: '@fixture/webview',
+    version: '1.0.0',
+    type: 'module',
+    main: 'dist/index.mjs',
+    mgread: {
+      id: 'org.mgread.fixture-webview',
+      displayName: 'Fixture WebView',
+      pluginApi: 1,
+      packageMode: 'single-file',
+      icon: 'assets/icon.png',
+      contentKinds: ['video'],
+    },
+  }), 'utf8');
+  await writeFile(join(projectRoot, 'dist', 'index.mjs'), `
+    let context;
+    export async function activate(value) { context = value; }
+    export async function discover() {
+      const page = await context.webview.open();
+      await page.executeJavaScript('return document.title;');
+    }
+    export async function search() { return { items: [] }; }
+    export async function getDetail() { return {}; }
+    export async function getChapters() { return { items: [] }; }
+    export async function getContent() { return {}; }
+  `, 'utf8');
+
+  const report = await runSourceProjects({
+    all: false,
+    source: 'fixture-webview',
+    repositoryRoot,
+    reportPath: null,
+    skipBuild: true,
+  });
+  assert.equal(report.status, 'failed');
+  assert.deepEqual(report.totals, { sources: 1, passed: 0, partial: 1, failed: 0 });
+  assert.equal(report.sources[0].status, 'partial');
+  assert.deepEqual(report.sources[0].limitation, {
+    kind: 'testkitWebViewCapability',
+    capability: 'javascriptEvaluation',
+    code: 'source_webview_script_unsupported',
+    stage: 'webview.evaluate',
+    summary: {},
+  });
+  assert.equal('failure' in report.sources[0], false);
 });
 
 test('runtime-like fetch routes direct requests outside the configured fetch', async () => {

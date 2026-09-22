@@ -226,8 +226,17 @@ function createTestWebView(runtimeFetch) {
       }
       throw new SourceTestFailure('source_webview_script_unsupported', 'webview.evaluate', {});
     },
+    async cdp() {
+      throw new SourceTestFailure('source_webview_cdp_unsupported', 'webview.cdp', {});
+    },
     async click() {
       throw new SourceTestFailure('source_webview_interaction_required', 'webview.click', {});
+    },
+    async inputText() {
+      throw new SourceTestFailure('source_webview_interaction_required', 'webview.inputText', {});
+    },
+    async key() {
+      throw new SourceTestFailure('source_webview_interaction_required', 'webview.key', {});
     },
     async waitForText() {
       throw new SourceTestFailure('source_webview_wait_unsupported', 'webview.waitText', {});

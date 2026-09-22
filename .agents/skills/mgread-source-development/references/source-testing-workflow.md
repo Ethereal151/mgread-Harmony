@@ -107,10 +107,11 @@ MediaKit 静音打开样本；只有取得首帧、进入 playing 且 position �
 - 快速/实际同阶段失败：优先检查来源解析、网络或公开返回值。
 - 快速过、实际为 `invalid_format`：检查 Runtime/Facade 公开校验。
 - 快速过、实际在资源失败：检查 proxy 描述、headers 与 Runtime 数据面。
-- Node 报 `source_webview_script_unsupported` 而 EXE 报 `plugin_damaged/source_not_found/source_list_empty`：分别记录
-  临时宿主能力和安装/启用状态，不合并为来源失败。
-- WebView/人工交互受限：记录 `interactionRequired`，不归为普通解析缺陷；浏览器页面可访问也不能替代 App
-  可见 WebView 交互。
+- Node 临时宿主无法执行任意脚本、CDP、动态等待或可见交互时，来源结果记为 `partial`，并在
+  `limitation.kind=testkitWebViewCapability` 下保留能力、阶段和稳定错误码；不得记为普通来源代码失败。
+  EXE 的 `plugin_damaged/source_not_found/source_list_empty` 仍分别记录为安装/启用状态，不能与 Node 能力边界合并。
+- WebView/人工交互受限：记录 `source_webview_interaction_required`，不归为普通解析缺陷；浏览器页面可访问也不能
+  替代 App 可见 WebView 交互。
 - 单次 live 失败：保留首次报告，只有界复跑一次，不无限重试到绿。
 
 全源必须遇错继续、保留每源首错和中间报告。最终将快速检查、实际检查、各封面表面、正文、漫画页图、
