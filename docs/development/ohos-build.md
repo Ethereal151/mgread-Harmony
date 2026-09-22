@@ -112,15 +112,15 @@ hdc install build/ohos/hap/entry-default-signed.hap
 - `integration_test/ohos_browser_session_smoke_test.dart`：ArkWeb 页面打开、导航和 HTML 获取通过；
 - `integration_test/ohos_stage2_runtime_arkweb_test.dart`：5 个本地 fixture 的安装、发现、搜索、详情、目录、正文、资源代理、Cookie/JS、`interaction_required` 恢复、受控长耗时调用取消后的 `cancelled`/后续调用恢复和卸载后列表确认通过；这不是 5 个真实外部数据源的替代证据；
 - `integration_test/ohos_browser_proxy_smoke_test.dart`：在 `PLA-AL10` arm64 真机启动本地 origin 与 HTTP proxy，先验证 ArkWeb 页面挂载，再通过 `ProxyController` 配置自定义代理，页面导航成功且 HTML 命中 `custom-proxy-hit`；证明 OHOS ArkWeb 自定义 HTTP 代理路由真实生效。系统代理、非 loopback NO_PROXY 与 HTTPS CONNECT 仍单独保留为未完成证据；
-- `integration_test/ohos_real_source_smoke_test.dart`：在 `PLA-AL10` arm64 真机导入并验证 `35ge-info`、`deqi-novel`、`fanqie-novel`、`midu-novel`、`shukuge-365` 五个真实来源的发现、搜索、详情、目录和正文；OHOS 的 `--jitless` Node host 在 WebAssembly 不可用时走原生 HTTP/HTTPS parser，并通过 gzip 响应解压单测和真实来源链路验证；同一 fallback 的直连、显式 HTTP/SOCKS5、环境 HTTP 代理、NO_PROXY 和 Runtime 配置切换四项 Node 回归均通过，OHOS runtime marker 已更新并重新在 arm64 真机 ping/五来源链路通过；HTTPS CONNECT 仍未宣称有 arm64 专项证据；
-- `integration_test/ohos_media_smoke_test.dart`、`integration_test/ohos_video_smoke_test.dart`：音频控制、视频 Texture/首帧/窗口恢复通过；
+- `integration_test/ohos_real_source_smoke_test.dart`：在当前 `PLA-AL10` arm64 真机导入并验证 `35ge-info`、`deqi-novel`、`fanqie-novel`、`midu-novel`、`shukuge-365` 五个真实来源的发现、搜索、详情、目录和正文；首个真实来源进一步写入临时 `ContentLibrary`，经生产 `ContentLibrarySourceTextReader` 读取目录和首章段落并输出 `OHOS_READER_SOURCE_PASS=org.mgread.35ge-info`；OHOS 的 `--jitless` Node host 在 WebAssembly 不可用时走原生 HTTP/HTTPS parser，并通过 gzip 响应解压单测和真实来源链路验证；同一 fallback 的直连、显式 HTTP/SOCKS5、环境 HTTP 代理、NO_PROXY 和 Runtime 配置切换四项 Node 回归均通过；
+- `integration_test/ohos_media_smoke_test.dart`、`integration_test/ohos_video_smoke_test.dart`：音频播放/暂停/跳转/倍速和同一 session 切歌、视频 Texture/首帧/窗口恢复通过；
 - 使用 Apple BipBop 示例 HLS 地址对 `ohos_video_smoke_test.dart` 做了 arm64 真机专项尝试；按华为媒体 FAQ 的 `AVPlayer.url` 入口补齐后，该地址仍在 `open` 阶段返回 `avplayer_state_error`。随后以 Unified Streaming 的 H.264 `tears-of-steel.ism/.m3u8` 在同一 `PLA-AL10` 真机通过打开、首帧、缓冲、播放和暂停，证明 HLS 路由本身已可用；Mux `x36xhzz` 地址可打开但 `play` 超时，Mux `tos_ismc` 地址在 `open` 阶段返回 `avplayer_state_error`，这些保留为外部流兼容性边界，不能用单一流替代所有 HLS 兼容性；普通 MP4 也复验通过；
 - `integration_test/library_first_run_test.dart`：首次启动首页和空书架通过；
 - `integration_test/library_reader_start_test.dart`：书架启动阅读器、系统返回、退出前保存与书架刷新时序通过；
 - 音频复验发现 OHOS `AVPlayer.play()` 返回早于 `playing` 状态的真实竞态，原生已改为等待 `playing` 再完成 play 命令，修复后的真机音频 smoke 通过；
 - HAP 使用 `flutter build hap --debug --target-platform ohos-arm64 --no-pub` 成功签名并通过 `hdc install -r` 安装启动。
 
-以下门禁仍需保留为未完成：播放器代理边界、锁屏/蓝牙/焦点与中断恢复、有效二维码载荷路由和本地阅读完整迁移回归；五个真实来源直连链路、HLS 样本和完整的相关跨设备/HAP 传输矩阵已通过，OHOS↔OHOS 与不上架的 HAP 市场跳转已按用户要求跳过。
+以下门禁仍需保留为未完成：播放器代理边界、锁屏/蓝牙/焦点与中断恢复、文件导入/导出/分享/反馈的真机 UI 闭环；有效二维码载荷路由、真实来源→书架→Reader 迁移、五个真实来源直连链路、HLS 样本和完整的相关跨设备/HAP 传输矩阵已通过，OHOS↔OHOS 与不上架的 HAP 市场跳转已按用户要求跳过。
 
 最近一次 VM 验证使用 `127.0.0.1:5555` API 26 x86_64 模拟器：
 

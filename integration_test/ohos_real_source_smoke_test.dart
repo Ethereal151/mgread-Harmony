@@ -4,6 +4,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:mgread_plugin_runtime/mgread_plugin_runtime.dart';
 
+import 'package:mg_read/core/content_library/content_library.dart';
+import 'package:mg_read/features/discovery/application/source_content_gateway.dart';
+import 'package:mg_read/features/reader/data/content_library_source_text_reader.dart';
+
 /// Real arm64 OHOS source-chain evidence. The host-side runner serves the
 /// built artifacts through an HDC TCP forward; no source code or network
 /// response is embedded in the HAP.
@@ -54,6 +58,13 @@ void main() {
       if (Platform.operatingSystem != 'ohos') return;
 
       final runtime = PluginRuntime();
+      final dataRoot = await Directory.systemTemp.createTemp('mg-read-ohos-reader-source-');
+      final library = await ContentLibrary.open(dataRoot: dataRoot);
+      addTearDown(() async {
+        await library.close();
+        await dataRoot.delete(recursive: true);
+      });
+      var readerEvidenceRecorded = false;
       final installed = await runtime.invoke(const InstalledPluginsInvocation());
       for (final source in _sources) {
         final current = installed.where((plugin) => plugin.id == source.pluginId);
@@ -118,11 +129,73 @@ void main() {
           ),
         );
         expect(content.text?.trim(), isNotEmpty, reason: source.pluginId);
+        // ignore: avoid_print
         print('OHOS_REAL_SOURCE_PASS=${source.pluginId}');
+
+        if (!readerEvidenceRecorded && content.contentKind == PluginContentKind.novel) {
+          final shelfItem = await library.addLibraryItem(
+            BookshelfAddRequest(
+              title: detail.summary.title,
+              author: detail.summary.author,
+              kind: ContentKind.novel,
+              pluginId: source.pluginId,
+              pluginVersion: source.version,
+              remoteContentId: detail.summary.id,
+            ),
+          );
+          final reader = ContentLibrarySourceTextReader(library, _RuntimeSourceGateway(runtime));
+          final launch = await reader.launch(shelfItem.id.value);
+          final firstChapter = await launch.dataSource.loadChapterAtIndex(launch.bookId, 0);
+          final firstContent = await launch.dataSource.loadChapterContent(launch.bookId, firstChapter.id);
+          expect(await library.listAllCatalog(shelfItem.id), isNotEmpty);
+          expect(firstContent.paragraphs, isNotEmpty);
+          expect(firstContent.paragraphs.any((paragraph) => paragraph.text.trim().isNotEmpty), isTrue);
+          // ignore: avoid_print
+          print('OHOS_READER_SOURCE_PASS=${source.pluginId}');
+          readerEvidenceRecorded = true;
+        }
       }
     },
     timeout: const Timeout(Duration(minutes: 15)),
   );
+}
+
+final class _RuntimeSourceGateway implements SourceContentGateway {
+  const _RuntimeSourceGateway(this._runtime);
+
+  final PluginRuntime _runtime;
+
+  @override
+  Future<PluginContentDetail> getDetail({required String pluginId, required String id}) =>
+      _runtime.invoke(SourceDetailInvocation(pluginId: pluginId, id: id));
+
+  @override
+  Future<PluginChaptersResult> getChapters({required String pluginId, required String id}) =>
+      _runtime.invoke(SourceChaptersInvocation(pluginId: pluginId, id: id));
+
+  @override
+  Future<PluginChapterContent> getContent({required String pluginId, required String id, required String chapterId}) =>
+      _runtime.invoke(SourceContentInvocation(pluginId: pluginId, id: id, chapterId: chapterId));
+
+  @override
+  Future<List<PluginSourceDescriptor>> listSources() => throw UnsupportedError('Not used by the OHOS reader flow.');
+
+  @override
+  Future<PluginDiscoverResult> discover({
+    required String pluginId,
+    String? target,
+    String? cursor,
+    String? collectionId,
+    int pageSize = 20,
+  }) => throw UnsupportedError('Not used by the OHOS reader flow.');
+
+  @override
+  Future<PluginSearchResult> search({required String pluginId, required String query, String? cursor, int pageSize = 20}) =>
+      throw UnsupportedError('Not used by the OHOS reader flow.');
+
+  @override
+  Future<PluginSearchSuggestionsResult> searchSuggestions({required String pluginId, String? cursor, int pageSize = 20}) =>
+      throw UnsupportedError('Not used by the OHOS reader flow.');
 }
 
 Future<T> _invokeWithFrames<T>(WidgetTester tester, Future<T> invocation) async {
