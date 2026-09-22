@@ -7,19 +7,21 @@ import 'package:mg_read/core/diagnostics/diagnostics.dart';
 import 'package:mg_read/features/diagnostics/application/diagnostics_capture_preference_store.dart';
 import 'package:mg_read/features/diagnostics/application/diagnostics_viewer_gateway.dart';
 import 'package:mg_read/features/diagnostics/presentation/diagnostics_viewer_page.dart';
+import 'package:mg_read/features/plugins/application/plugin_runtime_connection.dart';
 
+import '../../../app/mg_read_app_test_support.dart';
 import '../../../core/diagnostics/persistent_diagnostics_testkit.dart';
 
 void main() {
-  testWidgets('defaults diagnostics off, lists file metadata, and reads no events', (WidgetTester tester) async {
+  testWidgets('defaults file logging off and opens the newest log immediately', (WidgetTester tester) async {
     final gateway = _FakeDiagnosticsViewerGateway();
     final preferences = _FakeDiagnosticsCapturePreferenceStore(diagnosticsEnabled: false);
     await tester.pumpWidget(_host(gateway, preferences));
     await tester.pumpAndSettle();
 
-    expect(find.text('默认关闭，不创建日志文件；开启后立即记录本次启动后续事件'), findsOneWidget);
+    expect(find.textContaining('实时内存日志始终可看'), findsOneWidget);
     expect(gateway.fileListReads, 1);
-    expect(gateway.eventReads, 0);
+    expect(gateway.eventReads, 1);
     await tester.tap(find.text('实时详情'));
     await tester.pumpAndSettle();
     expect(gateway.startedModes, isEmpty);
@@ -33,8 +35,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(gateway.startedModes, isEmpty);
-    expect(find.text('仅关键日志'), findsOneWidget);
-    expect(gateway.eventReads, 0);
+    expect(find.text('标准日志'), findsNWidgets(2));
+    expect(gateway.eventReads, 1);
 
     await tester.tap(find.byKey(const Key('diagnostics-log-log_file_current')));
     await tester.pumpAndSettle();
@@ -81,8 +83,6 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Runtime'), findsNothing);
-    await tester.tap(find.byKey(const Key('diagnostics-log-log_file_current')));
-    await tester.pumpAndSettle();
     expect(find.text('app.bootstrap.success'), findsOneWidget);
     expect(gateway.requestedSources, contains(DiagnosticsViewerSource.app));
     expect(gateway.startedSources, isEmpty);
@@ -111,10 +111,10 @@ void main() {
     expect(reopenedGateway.startedModes, <DiagnosticsDetailMode>[DiagnosticsDetailMode.memoryOnly]);
     expect(find.text('实时详情 · 仅内存'), findsOneWidget);
 
-    await tester.tap(find.text('仅关键'));
+    await tester.tap(find.widgetWithText(ChoiceChip, '标准日志'));
     await tester.pumpAndSettle();
     expect(preferences.realtimeDetailsEnabled, isFalse);
-    expect(find.text('仅关键日志'), findsOneWidget);
+    expect(find.text('标准日志'), findsNWidgets(2));
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump();
@@ -124,7 +124,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(keyLogsGateway.startedModes, isEmpty);
-    expect(find.text('仅关键日志'), findsOneWidget);
+    expect(find.text('标准日志'), findsNWidgets(2));
   });
 
   test('starts an App capture without requiring the Runtime Facade', () async {
@@ -136,6 +136,29 @@ void main() {
 
     expect(capture.appSessionId, isNotNull);
     await gateway.stopCapture(capture);
+  });
+
+  test('projects the bounded current-process buffer as the default live log', () async {
+    final buffer = LiveDiagnosticsBuffer();
+    final manager = DiagnosticsManager(sink: buffer, registry: AppDiagnosticEvents.registry, source: DiagnosticSource.app);
+    addTearDown(manager.close);
+    manager.emit(
+      AppDiagnosticEvents.routeChanged,
+      attributes: () => DiagnosticObjectValue(<String, DiagnosticValue>{
+        'fromRoute': DiagnosticValue.nullValue,
+        'toRoute': DiagnosticValue.string('profile.diagnostics'),
+        'navigationType': DiagnosticValue.string('test'),
+      }),
+    );
+    final gateway = DefaultDiagnosticsViewerGateway(null, null, manager, null, buffer);
+
+    final files = await gateway.listLogFiles();
+    final events = await gateway.listEvents(source: DiagnosticsViewerSource.app, logFileId: files.single.fileId);
+    final details = await gateway.loadEventDetails(events.items.single);
+
+    expect(files.single.isLive, isTrue);
+    expect(events.items.single.eventName, 'app.route.changed');
+    expect(details.attributesText, contains('profile.diagnostics'));
   });
 }
 
@@ -154,6 +177,7 @@ Widget _host(DiagnosticsViewerGateway gateway, DiagnosticsCapturePreferenceStore
     overrides: [
       diagnosticsViewerGatewayProvider.overrideWithValue(gateway),
       diagnosticsCapturePreferenceStoreProvider.overrideWithValue(preferences),
+      pluginRuntimeGatewayProvider.overrideWithValue(const TestReadyPluginRuntimeGateway()),
     ],
     child: MaterialApp(
       theme: AppTheme.light(),
@@ -194,6 +218,9 @@ final class _FakeDiagnosticsViewerGateway implements DiagnosticsViewerGateway {
   var previewReads = 0;
   var eventReads = 0;
   var fileListReads = 0;
+
+  @override
+  Stream<void> watchLiveEvents() => const Stream<void>.empty();
 
   @override
   Future<List<DiagnosticsViewerLogFile>> listLogFiles() async {

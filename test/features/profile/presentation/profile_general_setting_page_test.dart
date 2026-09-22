@@ -1,4 +1,4 @@
-/// 阅读、外观和隐私通用设置页测试。
+/// 阅读和外观通用设置页测试。
 ///
 /// 只验证页面展示与现有设置持久化，不替代阅读器或平台权限测试。
 library;
@@ -9,7 +9,6 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:mg_read/app/app_theme.dart';
 import 'package:mg_read/core/settings/settings.dart';
-import 'package:mg_read/features/profile/presentation/about_document_page.dart';
 import 'package:mg_read/features/profile/presentation/profile_general_setting_page.dart';
 
 import '../../../core/settings/settings_testkit.dart';
@@ -115,21 +114,6 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(settings.get(AppSettingKeys.themeMode), 'dark');
-  });
-
-  testWidgets('privacy settings controls diagnostics and opens the policy', (WidgetTester tester) async {
-    final AppSettingsManager settings = await _settings();
-    addTearDown(settings.close);
-    await tester.pumpWidget(_host(settings, settingId: 'privacy-permissions'));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byType(Switch));
-    await tester.pumpAndSettle();
-    expect(settings.get(AppSettingKeys.diagnosticsEnabled), isTrue);
-
-    await tester.tap(find.byKey(const Key('privacy-policy-action')));
-    await tester.pumpAndSettle();
-    expect(find.byType(AboutDocumentPage), findsOneWidget);
   });
 }
 

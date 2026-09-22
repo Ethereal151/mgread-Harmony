@@ -104,10 +104,12 @@ Future<void> bootstrapMgReadApp({
   // application-support lookup or first-run database open.
   Future<Directory>? dataRootFuture;
   Future<Directory> resolveDataRoot() => dataRootFuture ??= dataRootResolver();
+  final debugConsole = kReleaseMode ? null : _DebugConsoleEventSink();
+  final liveDiagnostics = LiveDiagnosticsBuffer(onEvent: debugConsole?.add);
   final deferredDiagnostics = DeferredDiagnosticEventSink(
     minimumSeverity: kReleaseMode ? DiagnosticSeverity.warn : DiagnosticSeverity.debug,
     bufferBeforeAttach: false,
-    mirrorSink: kReleaseMode ? null : _DebugConsoleEventSink(),
+    mirrorSink: liveDiagnostics,
   );
   final diagnostics =
       diagnosticsManager ??
@@ -249,6 +251,7 @@ Future<void> bootstrapMgReadApp({
         diagnosticsCaptureProvider.overrideWithValue(diagnosticsService ?? diagnosticsPorts),
         diagnosticsMaintenanceProvider.overrideWithValue(diagnosticsService ?? diagnosticsPorts),
         diagnosticsLogArchiveProvider.overrideWithValue(diagnosticsService ?? diagnosticsPorts),
+        diagnosticsLiveBufferProvider.overrideWithValue(liveDiagnostics),
         diagnosticsActivationProvider.overrideWithValue(diagnosticsActivation),
         if (contentLibrary != null || contentLibraryFactory != null)
           libraryOverviewLoaderProvider.overrideWithValue(DeferredLibraryOverviewLoader(startup)),
@@ -389,10 +392,7 @@ Future<Directory> _defaultSettingsDataRoot() async {
 Future<AppDiagnosticsService> _openDefaultDiagnostics(Directory dataRoot, {DiagnosticsManager? existingManager}) =>
     AppDiagnosticsService.open(
       dataRoot: dataRoot,
-      configuration: PersistentDiagnosticsConfiguration(
-        minimumSeverity: kReleaseMode ? DiagnosticSeverity.warn : DiagnosticSeverity.debug,
-        eventMirror: kReleaseMode ? null : _DebugConsoleEventMirror().add,
-      ),
+      configuration: const PersistentDiagnosticsConfiguration(minimumSeverity: DiagnosticSeverity.debug),
       buildMode: kReleaseMode
           ? 'release'
           : kProfileMode

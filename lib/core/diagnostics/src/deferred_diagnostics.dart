@@ -135,7 +135,8 @@ final class DeferredDiagnosticEventSink implements DiagnosticEventSink {
 
   bool _forwardToMirror(DiagnosticEvent event) {
     final mirror = mirrorSink;
-    if (mirror == null || !_isMirrorEnabled(mirror, component: event.component, severity: event.severity, payloadKind: DiagnosticPayloadKind.metadataOnly)) {
+    if (mirror == null ||
+        !_isMirrorEnabled(mirror, component: event.component, severity: event.severity, payloadKind: DiagnosticPayloadKind.metadataOnly)) {
       return false;
     }
     return _forward(mirror, event);
@@ -188,10 +189,17 @@ final class DeferredDiagnosticEventSink implements DiagnosticEventSink {
       } catch (_) {}
     }
     final sink = _attachedSink ?? (!_enabled ? _fallbackSink : null);
-    if (sink == null) return;
-    try {
-      await sink.flush(timeout: timeout);
-    } catch (_) {}
+    if (sink != null) {
+      try {
+        await sink.flush(timeout: timeout);
+      } catch (_) {}
+    }
+    final mirror = mirrorSink;
+    if (mirror != null && !identical(mirror, sink)) {
+      try {
+        await mirror.flush(timeout: timeout);
+      } catch (_) {}
+    }
   }
 
   @override
@@ -209,12 +217,17 @@ final class DeferredDiagnosticEventSink implements DiagnosticEventSink {
     if (sink == null) {
       _events.clear();
       _bufferedBytes = 0;
-      _closed = true;
-      return;
+    } else {
+      try {
+        await sink.close(timeout: timeout);
+      } catch (_) {}
     }
-    try {
-      await sink.close(timeout: timeout);
-    } catch (_) {}
+    final mirror = mirrorSink;
+    if (mirror != null && !identical(mirror, sink)) {
+      try {
+        await mirror.close(timeout: timeout);
+      } catch (_) {}
+    }
     _events.clear();
     _bufferedBytes = 0;
     _closed = true;

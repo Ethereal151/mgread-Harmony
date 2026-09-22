@@ -36,7 +36,8 @@ void main() {
     expect(find.text('下载与缓存'), findsNothing);
     expect(find.text('清理缓存'), findsNothing);
     expect(find.text('关于与其他'), findsOneWidget);
-    expect(find.text('调试日志'), findsOneWidget);
+    expect(find.text('隐私与权限'), findsNothing);
+    expect(find.text('调试中心'), findsOneWidget);
     expect(find.byType(AppBottomNavigation), findsOneWidget);
 
     final Rect card = tester.getRect(find.byType(ProfileOverviewCard));

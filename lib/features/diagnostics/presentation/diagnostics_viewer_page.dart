@@ -1,9 +1,10 @@
 /// 调试日志查看页面。
 ///
 /// 职责：
-/// - 先列出 App 历史/当前日志文件，再按用户选择分页读取原始事件。
+/// - 默认展示当前进程的有界实时事件，并允许切换历史日志文件。
 /// - 管理当前来源的有界详情捕获和按需附件读取。
-/// - 恢复并保存“仅关键 / 实时详情”偏好。
+/// - 集中提供数据源 Runtime 检查页开关与访问地址。
+/// - 恢复并保存“标准日志 / 实时详情”偏好。
 ///
 /// 注意：
 /// - 文件列表不得加载事件；单文件损坏不能影响其他文件。
@@ -22,8 +23,11 @@ import 'package:mg_read/features/diagnostics/application/diagnostics_capture_pre
 import 'package:mg_read/shared/presentation/widgets/app_secondary_page_chrome.dart';
 import 'package:mg_read/features/diagnostics/application/diagnostics_viewer_gateway.dart';
 import 'package:mg_read/features/diagnostics/presentation/widgets/diagnostics_viewer_controls.dart';
+import 'package:mg_read/features/diagnostics/presentation/widgets/runtime_debug_panel.dart';
 import 'package:mg_read/features/profile/presentation/widgets/profile_detail_chrome.dart';
 import 'package:mg_read/shared/presentation/app_navigation_destination.dart';
+
+part 'widgets/diagnostics_viewer_log_widgets.dart';
 
 /// Dedicated, bounded viewer for app and Runtime diagnostic TXT records.
 class DiagnosticsViewerPage extends ConsumerStatefulWidget {
@@ -63,6 +67,8 @@ class _DiagnosticsViewerPageState extends ConsumerState<DiagnosticsViewerPage> {
   var _diagnosticsEnabled = false;
   var _activationBusy = false;
   var _generation = 0;
+  StreamSubscription<void>? _liveSubscription;
+  Timer? _liveRefreshDebounce;
 
   @override
   void initState() {
@@ -70,6 +76,7 @@ class _DiagnosticsViewerPageState extends ConsumerState<DiagnosticsViewerPage> {
     _gateway = ref.read(diagnosticsViewerGatewayProvider);
     _capturePreferenceStore = ref.read(diagnosticsCapturePreferenceStoreProvider);
     _activation = ref.read(diagnosticsActivationProvider);
+    _liveSubscription = _gateway.watchLiveEvents().listen(_onLiveEvent);
     scheduleMicrotask(() {
       unawaited(_loadLifecycle());
     });
@@ -78,6 +85,8 @@ class _DiagnosticsViewerPageState extends ConsumerState<DiagnosticsViewerPage> {
   @override
   void dispose() {
     _generation += 1;
+    _liveRefreshDebounce?.cancel();
+    unawaited(_liveSubscription?.cancel());
     final capture = _capture;
     if (capture != null) {
       unawaited(_gateway.stopCapture(capture).catchError((_) {}));
@@ -94,10 +103,10 @@ class _DiagnosticsViewerPageState extends ConsumerState<DiagnosticsViewerPage> {
         child: AppSecondaryPageContent(
           child: Column(
             children: <Widget>[
-              ProfileDetailTopBar(title: '调试日志', onBack: widget.onBackRequested),
+              ProfileDetailTopBar(title: '调试中心', onBack: widget.onBackRequested),
               Expanded(
                 child: RefreshIndicator(
-                  onRefresh: () => _loadEvents(reset: true),
+                  onRefresh: _loadLogFiles,
                   child: CustomScrollView(
                     key: const Key('diagnostics-viewer-content'),
                     slivers: <Widget>[
@@ -143,7 +152,7 @@ class _DiagnosticsViewerPageState extends ConsumerState<DiagnosticsViewerPage> {
                             else if (_selectedLogFile == null)
                               const _SelectLogFile()
                             else if (_events.isEmpty)
-                              const _EmptyEvents()
+                              _EmptyEvents(isLive: _selectedLogFile?.isLive ?? false)
                             else
                               ..._events.map(_buildEventCard),
                             if (!_loading && _nextCursor != null)
@@ -158,6 +167,8 @@ class _DiagnosticsViewerPageState extends ConsumerState<DiagnosticsViewerPage> {
                                   label: Text(_loadingMore ? '正在读取…' : '读取更早日志'),
                                 ),
                               ),
+                            const SizedBox(height: AppSpacing.regular),
+                            const RuntimeDebugPanel(),
                           ],
                         ),
                       ),
@@ -242,13 +253,23 @@ class _DiagnosticsViewerPageState extends ConsumerState<DiagnosticsViewerPage> {
   Future<void> _loadLogFiles() async {
     final files = await _gateway.listLogFiles();
     if (!mounted) return;
+    final previousFileId = _selectedLogFile?.fileId;
+    DiagnosticsViewerLogFile? selected;
+    for (final file in files) {
+      if (file.fileId == previousFileId) {
+        selected = file;
+        break;
+      }
+    }
+    selected ??= files.isEmpty ? null : files.first;
     setState(() {
       _logFiles = files;
-      _selectedLogFile = null;
+      _selectedLogFile = selected;
       _events = const <DiagnosticsViewerEvent>[];
       _nextCursor = null;
       _loading = false;
     });
+    if (selected != null) await _loadEvents(reset: true);
   }
 
   Future<void> _selectLogFile(DiagnosticsViewerLogFile file) async {
@@ -300,7 +321,7 @@ class _DiagnosticsViewerPageState extends ConsumerState<DiagnosticsViewerPage> {
     );
   }
 
-  Future<void> _loadEvents({required bool reset}) async {
+  Future<void> _loadEvents({required bool reset, bool passive = false}) async {
     if (!mounted) return;
     final selected = _selectedLogFile;
     if (selected == null) return;
@@ -309,14 +330,16 @@ class _DiagnosticsViewerPageState extends ConsumerState<DiagnosticsViewerPage> {
     final source = _source;
     setState(() {
       if (reset) {
-        _loading = true;
+        _loading = !passive;
         _loadError = null;
-        _events = const <DiagnosticsViewerEvent>[];
+        if (!passive) _events = const <DiagnosticsViewerEvent>[];
         _nextCursor = null;
-        _expandedEvent = null;
-        _details.clear();
-        _detailErrors.clear();
-        _previews.clear();
+        if (!passive) {
+          _expandedEvent = null;
+          _details.clear();
+          _detailErrors.clear();
+          _previews.clear();
+        }
       } else {
         _loadingMore = true;
       }
@@ -339,6 +362,15 @@ class _DiagnosticsViewerPageState extends ConsumerState<DiagnosticsViewerPage> {
         _loadingMore = false;
       });
     }
+  }
+
+  void _onLiveEvent(void _) {
+    if (!mounted || _selectedLogFile?.isLive != true) return;
+    _liveRefreshDebounce?.cancel();
+    _liveRefreshDebounce = Timer(const Duration(milliseconds: 250), () {
+      if (!mounted || _selectedLogFile?.isLive != true || _loading || _loadingMore) return;
+      unawaited(_loadEvents(reset: true, passive: true));
+    });
   }
 
   Future<void> _restoreCaptureMode() async {
@@ -484,413 +516,4 @@ class _DiagnosticsViewerPageState extends ConsumerState<DiagnosticsViewerPage> {
       });
     }
   }
-}
-
-class _DiagnosticsLifecyclePanel extends StatelessWidget {
-  const _DiagnosticsLifecyclePanel({
-    required this.enabledPreference,
-    required this.enabledForCurrentRun,
-    required this.busy,
-    required this.onChanged,
-  });
-
-  final bool enabledPreference;
-  final bool enabledForCurrentRun;
-  final bool busy;
-  final ValueChanged<bool> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final detail = enabledForCurrentRun
-        ? enabledPreference
-              ? '本次启动已启用；后续启动会继续启用'
-              : '本次启动仍在安全写入；关闭将在下次启动生效'
-        : '默认关闭，不创建日志文件；开启后立即记录本次启动后续事件';
-    return Card(
-      child: SwitchListTile(
-        key: const Key('diagnostics-master-switch'),
-        value: enabledPreference,
-        onChanged: busy ? null : onChanged,
-        title: const Text('应用诊断'),
-        subtitle: Text(detail),
-      ),
-    );
-  }
-}
-
-class _LogFilePicker extends StatelessWidget {
-  const _LogFilePicker({
-    required this.files,
-    required this.selectedFileId,
-    required this.onSelected,
-    required this.onDelete,
-    required this.onExport,
-  });
-
-  final List<DiagnosticsViewerLogFile> files;
-  final String? selectedFileId;
-  final ValueChanged<DiagnosticsViewerLogFile> onSelected;
-  final VoidCallback onDelete;
-  final VoidCallback onExport;
-
-  @override
-  Widget build(BuildContext context) {
-    DiagnosticsViewerLogFile? selected;
-    for (final file in files) {
-      if (file.fileId == selectedFileId) {
-        selected = file;
-        break;
-      }
-    }
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.regular),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            const Text('日志文件', style: TextStyle(fontWeight: FontWeight.w600)),
-            const SizedBox(height: AppSpacing.compact),
-            if (files.isEmpty)
-              const Text('当前没有诊断日志文件')
-            else
-              Wrap(
-                spacing: AppSpacing.compact,
-                runSpacing: AppSpacing.compact,
-                children: <Widget>[
-                  for (final file in files)
-                    ChoiceChip(
-                      key: Key('diagnostics-log-${file.fileId}'),
-                      selected: selectedFileId == file.fileId,
-                      onSelected: (_) => onSelected(file),
-                      label: Text(
-                        file.isCurrent
-                            ? '当前 · ${_formatTimestamp(file.startedAtUtcMicros)}'
-                            : '${_formatTimestamp(file.startedAtUtcMicros)} · ${_formatBytes(file.storedBytes)}',
-                      ),
-                    ),
-                ],
-              ),
-            if (selected != null) ...<Widget>[
-              const SizedBox(height: AppSpacing.compact),
-              Wrap(
-                spacing: AppSpacing.compact,
-                children: <Widget>[
-                  OutlinedButton.icon(onPressed: onExport, icon: const Icon(Icons.ios_share_rounded), label: const Text('导出')),
-                  OutlinedButton.icon(
-                    onPressed: selected.isCurrent ? null : onDelete,
-                    icon: const Icon(Icons.delete_outline_rounded),
-                    label: Text(selected.isCurrent ? '当前日志不可删除' : '删除'),
-                  ),
-                ],
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _SelectLogFile extends StatelessWidget {
-  const _SelectLogFile();
-
-  @override
-  Widget build(BuildContext context) => const Padding(
-    padding: EdgeInsets.all(AppSpacing.page),
-    child: Center(child: Text('请选择一个日志文件后按需读取')),
-  );
-}
-
-class _EventCard extends StatelessWidget {
-  const _EventCard({
-    required this.event,
-    required this.expanded,
-    required this.loadingDetails,
-    required this.previews,
-    required this.loadingPreviews,
-    required this.onToggle,
-    required this.onPreview,
-    this.details,
-    this.detailError,
-  });
-
-  final String? detailError;
-  final DiagnosticsViewerEventDetails? details;
-  final DiagnosticsViewerEvent event;
-  final bool expanded;
-  final bool loadingDetails;
-  final Set<String> loadingPreviews;
-  final ValueChanged<DiagnosticsViewerAttachment> onPreview;
-  final VoidCallback onToggle;
-  final Map<String, String> previews;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final tokens = AppThemeTokens.of(context);
-    final severityColor = _severityColor(context, event.severity);
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: tokens.surface,
-        borderRadius: AppRadii.detailCard,
-        border: Border.all(color: tokens.divider),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
-          InkWell(
-            key: ValueKey<String>('diagnostic-event-${event.identity}'),
-            borderRadius: AppRadii.detailCard,
-            onTap: onToggle,
-            child: Padding(
-              padding: const EdgeInsets.all(AppSpacing.regular),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Row(
-                    children: <Widget>[
-                      DecoratedBox(
-                        decoration: BoxDecoration(color: severityColor.withValues(alpha: 0.12), borderRadius: AppRadii.pill),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.compact, vertical: AppSpacing.unit),
-                          child: Text(
-                            event.severity.toUpperCase(),
-                            style: theme.textTheme.labelSmall?.copyWith(color: severityColor, fontWeight: FontWeight.w700),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: AppSpacing.compact),
-                      Expanded(
-                        child: Text(
-                          event.eventName,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
-                        ),
-                      ),
-                      Text(
-                        _formatTimestamp(event.occurredAtUtcMicros),
-                        style: theme.textTheme.bodySmall?.copyWith(color: tokens.mutedText),
-                      ),
-                      Icon(expanded ? Icons.expand_less_rounded : Icons.expand_more_rounded, color: tokens.mutedText),
-                    ],
-                  ),
-                  const SizedBox(height: AppSpacing.compact),
-                  Text(event.summary, style: theme.textTheme.bodyMedium),
-                  const SizedBox(height: AppSpacing.unit),
-                  Text(
-                    '${event.component} · ${event.phase}'
-                    '${event.outcome == null ? '' : ' · ${event.outcome}'}'
-                    '${event.durationMicros == null ? '' : ' · ${_formatDuration(event.durationMicros!)}'}'
-                    '${event.attachmentCount == 0 ? '' : ' · ${event.attachmentCount} 个详情'}',
-                    style: theme.textTheme.bodySmall?.copyWith(color: tokens.mutedText),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          if (expanded) ...<Widget>[
-            Divider(height: 1, color: tokens.divider),
-            Padding(
-              padding: const EdgeInsets.all(AppSpacing.regular),
-              child: _EventDetails(
-                details: details,
-                loading: loadingDetails,
-                errorCode: detailError,
-                previews: previews,
-                loadingPreviews: loadingPreviews,
-                onPreview: onPreview,
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _EventDetails extends StatelessWidget {
-  const _EventDetails({
-    required this.loading,
-    required this.previews,
-    required this.loadingPreviews,
-    required this.onPreview,
-    this.details,
-    this.errorCode,
-  });
-
-  final DiagnosticsViewerEventDetails? details;
-  final String? errorCode;
-  final bool loading;
-  final Set<String> loadingPreviews;
-  final ValueChanged<DiagnosticsViewerAttachment> onPreview;
-  final Map<String, String> previews;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final tokens = AppThemeTokens.of(context);
-    if (loading) {
-      return const Center(child: CircularProgressIndicator(strokeWidth: 2));
-    }
-    if (errorCode != null) return Text('详情读取失败：$errorCode');
-    final value = details;
-    if (value == null) return const SizedBox.shrink();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        Text('结构化字段', style: theme.textTheme.titleSmall),
-        const SizedBox(height: AppSpacing.compact),
-        _PlainTextPreview(text: value.attributesText),
-        if (value.attachments.isNotEmpty) ...<Widget>[
-          const SizedBox(height: AppSpacing.regular),
-          Text('详情附件', style: theme.textTheme.titleSmall),
-          const SizedBox(height: AppSpacing.compact),
-          ...value.attachments.map((attachment) {
-            final preview = previews[attachment.identity];
-            final loadingPreview = loadingPreviews.contains(attachment.identity);
-            return Padding(
-              padding: const EdgeInsets.only(bottom: AppSpacing.compact),
-              child: DecoratedBox(
-                decoration: BoxDecoration(color: tokens.mutedSurface, borderRadius: AppRadii.control),
-                child: Padding(
-                  padding: const EdgeInsets.all(AppSpacing.compact),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Row(
-                        children: <Widget>[
-                          Expanded(child: Text('${attachment.kind} · ${attachment.mediaType}', style: theme.textTheme.labelLarge)),
-                          Text(
-                            _formatBytes(attachment.storedByteLength),
-                            style: theme.textTheme.bodySmall?.copyWith(color: tokens.mutedText),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: AppSpacing.unit),
-                      Text(
-                        '状态 ${attachment.captureState}'
-                        '${attachment.truncationReason == null ? '' : ' · ${attachment.truncationReason}'}',
-                        style: theme.textTheme.bodySmall?.copyWith(color: tokens.mutedText),
-                      ),
-                      const SizedBox(height: AppSpacing.compact),
-                      OutlinedButton.icon(
-                        onPressed: loadingPreview || attachment.storedByteLength == 0 ? null : () => onPreview(attachment),
-                        icon: loadingPreview
-                            ? const SizedBox.square(dimension: 14, child: CircularProgressIndicator(strokeWidth: 2))
-                            : const Icon(Icons.visibility_outlined),
-                        label: const Text('纯文本预览前 32 KiB'),
-                      ),
-                      if (preview != null) ...<Widget>[const SizedBox(height: AppSpacing.compact), _PlainTextPreview(text: preview)],
-                    ],
-                  ),
-                ),
-              ),
-            );
-          }),
-        ],
-      ],
-    );
-  }
-}
-
-class _PlainTextPreview extends StatelessWidget {
-  const _PlainTextPreview({required this.text});
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = AppThemeTokens.of(context);
-    return Container(
-      constraints: const BoxConstraints(maxHeight: 320),
-      width: double.infinity,
-      padding: const EdgeInsets.all(AppSpacing.compact),
-      decoration: BoxDecoration(
-        color: tokens.mutedSurface,
-        borderRadius: AppRadii.control,
-        border: Border.all(color: tokens.divider),
-      ),
-      child: SingleChildScrollView(
-        child: SelectableText(text, style: Theme.of(context).textTheme.bodySmall?.copyWith(fontFamily: 'monospace')),
-      ),
-    );
-  }
-}
-
-class _LoadFailure extends StatelessWidget {
-  const _LoadFailure({required this.errorCode, required this.onRetry});
-
-  final String errorCode;
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(AppSpacing.page),
-      child: Column(
-        children: <Widget>[
-          const Icon(Icons.error_outline_rounded, size: 40),
-          const SizedBox(height: AppSpacing.compact),
-          Text('日志读取失败：$errorCode'),
-          const SizedBox(height: AppSpacing.compact),
-          FilledButton(onPressed: onRetry, child: const Text('重试')),
-        ],
-      ),
-    );
-  }
-}
-
-class _EmptyEvents extends StatelessWidget {
-  const _EmptyEvents();
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = AppThemeTokens.of(context);
-    return Padding(
-      padding: const EdgeInsets.all(AppSpacing.page),
-      child: Text(
-        '暂无可显示的关键日志。',
-        key: const Key('diagnostics-viewer-empty'),
-        textAlign: TextAlign.center,
-        style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: tokens.mutedText),
-      ),
-    );
-  }
-}
-
-Color _severityColor(BuildContext context, String severity) {
-  final tokens = AppThemeTokens.of(context);
-  return switch (severity) {
-    'fatal' || 'error' => Theme.of(context).colorScheme.error,
-    'warn' => tokens.warning,
-    'info' => tokens.success,
-    _ => tokens.mutedText,
-  };
-}
-
-String _formatTimestamp(int micros) {
-  final value = DateTime.fromMicrosecondsSinceEpoch(micros, isUtc: true).toLocal();
-  String two(int number) => number.toString().padLeft(2, '0');
-  String three(int number) => number.toString().padLeft(3, '0');
-  return '${two(value.hour)}:${two(value.minute)}:${two(value.second)}.'
-      '${three(value.millisecond)}';
-}
-
-String _formatDuration(int micros) {
-  if (micros < 1000) return '$micros µs';
-  if (micros < 1000 * 1000) return '${(micros / 1000).toStringAsFixed(1)} ms';
-  return '${(micros / (1000 * 1000)).toStringAsFixed(2)} s';
-}
-
-String _formatBytes(int bytes) {
-  if (bytes < 1024) return '$bytes B';
-  if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KiB';
-  return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MiB';
-}
-
-String _viewerErrorCode(Object error) {
-  if (error is DiagnosticsViewerException) return error.code;
-  if (error is StateError) return 'invalid_state';
-  if (error is TimeoutException) return 'timeout';
-  return 'operation_failed';
 }
