@@ -36,6 +36,12 @@ napi_value ResolveBrowserSession(napi_env env, napi_callback_info) {
   return result;
 }
 
+napi_value CancelBrowserSession(napi_env env, napi_callback_info) {
+  napi_value result;
+  napi_get_undefined(env, &result);
+  return result;
+}
+
 napi_value ClearBrowserSessionCallback(napi_env env, napi_callback_info) {
   napi_value result;
   napi_get_undefined(env, &result);
@@ -81,6 +87,8 @@ napi_value Init(napi_env env, napi_value exports) {
       {"setBrowserSessionCallback", nullptr, SetBrowserSessionCallback, nullptr,
        nullptr, nullptr, napi_default, nullptr},
       {"resolveBrowserSession", nullptr, ResolveBrowserSession, nullptr,
+       nullptr, nullptr, napi_default, nullptr},
+      {"cancelBrowserSession", nullptr, CancelBrowserSession, nullptr,
        nullptr, nullptr, napi_default, nullptr},
       {"clearBrowserSessionCallback", nullptr, ClearBrowserSessionCallback, nullptr,
        nullptr, nullptr, napi_default, nullptr},

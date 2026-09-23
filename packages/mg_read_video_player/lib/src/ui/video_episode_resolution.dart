@@ -62,6 +62,7 @@ Future<VideoEpisodeResolution> resolveVideoEpisode({
         uri: resolved.uri,
         httpHeaders: resolved.httpHeaders,
         durationHint: resolved.durationHint ?? episode.durationHint,
+        resourceType: resolved.resourceType,
       ),
       failure: null,
     );

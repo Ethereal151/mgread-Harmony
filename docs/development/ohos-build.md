@@ -87,10 +87,11 @@ hdc install build/ohos/hap/entry-default-signed.hap
 - OHOS 系统代理桥接读取 `connection.getDefaultHttpProxy()` 后只填补缺失的 `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY`，不覆盖进程环境或显式代理配置；系统代理读取失败和空值仍稳定直连回退。
 - Runtime 配置会把系统代理的 `NO_PROXY` 传入 OHOS 无 WASM HTTP 客户端；显式代理命中排除项时直连，否则建立 CONNECT 隧道。`PLA-AL10` arm64 真机以 WLAN 代理 `192.168.1.3:35555` 和 `example.com` 排除项实测通过，且测试结束后代理已恢复为“无”。
 - 根据 HarmonyOS Media API 的 `BufferingInfoType.CACHED_DURATION`，OHOS AVPlayer 现在向 Flutter 发出毫秒级 `buffered` 事件，视频后端将其作为时间缓冲位置使用；`videoEnhancement` 和 `systemVolume` 继续保持明确不支持，UI 不显示对应控制。
-- `readerVolumeKeys` 现在不仅由 OHOS capabilities 隐藏，公开 `MethodChannelReaderPlatform` 调用也返回稳定 `UnsupportedError`；对应 package 测试已通过，避免绕过 UI 后静默成功。
+- `readerVolumeKeys` 已使用 HarmonyOS API 16 `multimodalInput.inputConsumer` 原生前台按键消费实现；OHOS capabilities、公开 `MethodChannelReaderPlatform` 和 package 测试均已同步，关闭时调用 `off` 恢复系统音量键行为。
 - `openExternalUri` 支持注入 OHOS fake capabilities；直接测试覆盖原生打开成功、原生拒绝和 `PlatformException`，反馈、来源详情与插件帮助共用同一外链桥接边界。
 - `_OhosRuntimeSupervisor` 通过测试专用构造入口直接覆盖 invoke started/completed、rejected、bridge_failed 诊断，并验证 `latestDiagnostics` 是有界不可变快照。
-- `OhosBrowserSessionHost.cancel()` 已有 MethodChannel 直接测试，确认活动 job 会向 ArkWeb 宿主发送 `cancel`，不是只在 Dart 侧丢弃迟到结果。
+- `OhosBrowserSessionHost.cancel()` 已有 MethodChannel 直接测试；Runtime 原生 Node host 也通过浏览器请求 ID、AbortSignal 和 ArkWeb `jobId` 映射调用 `cancel`，活动 job 会停止 ArkWeb 页面任务，不是只在 Dart 侧丢弃迟到结果。
+- OHOS 视频资源类型由公共 `VideoEpisodeResourceType` 显式传入 AVPlayer；HLS 不再依赖代理 URL 的 `.m3u8` 后缀。ArkWeb evaluate 支持异步/多语句脚本，Runtime 资源写入使用截断模式，避免旧文件尾部残留。
 - `ohos_video_smoke_test.dart` 现在直接等待并校验 OHOS AVPlayer 的 `buffered` 事件为非负毫秒值；模拟器实测通过，覆盖 `CACHED_DURATION -> bufferedPosition` 链路。
 - 本地能力/代理/Profile/Runtime 宿主单测：通过；签名 arm64 HAP：通过；`hdc install -r`：通过。2026-09-21 设备 `192.168.3.48:45975` 重新在线后，当前源码已在 `PLA-AL10` arm64 真机完成 Runtime、ArkWeb、Stage 2 fixture、音频、视频、首次运行首页和阅读器启动/系统返回保存时序验收。
 - AudioSession 增量适配：`MgReadOhosMediaPlugin.ets` 已设置媒体场景、激活 `CONCURRENCY_DEFAULT`、监听 PAUSE/STOP/TIME_OUT_STOP/RESUME，并将音频和视频 AVPlayer 设为 `SHARE_MODE`；视频使用 `AVSessionType='video'`，音频使用 `audio`；`openAudio/openVideo(loop: true)` 仅用于长时验收探针，默认播放行为不变。API 26 arm64 HAP 构建、慢速安装和局域网端点 `192.168.1.8:45975`（`PLA-AL10`/`aarch64`）启动通过；系统 QQ 音乐抢占音频时捕获 `OHOS_AUDIO_INTERRUPT_EVENT=interrupted:true` 及 AudioService 的 `DeactivateAudioSessionInFakeFocusMode` 回调；设备不发送第三方播放器释放后的自动 `RESUME`，但用户主动播放兜底已捕获音频 `interrupted:false`、`state:playing`、`playing:true`。视频专项进一步捕获 `interrupted:true`→`interrupted:false`→`state:playing`→`playing:true`，音视频恢复路径均有真机证据。

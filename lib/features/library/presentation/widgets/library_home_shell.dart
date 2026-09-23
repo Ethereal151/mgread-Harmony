@@ -99,7 +99,7 @@ class _LibraryHomeShellState extends State<LibraryHomeShell> {
   late LibraryHomeLayoutMode _layoutMode;
   late LibraryHomeCoverMetadataMode _coverMetadataMode;
   bool _layoutModeChangePending = false;
-  bool _coverMetadataModeChangePending = false;
+  final bool _coverMetadataModeChangePending = false;
   bool _privacyRevealActive = false;
   bool _continueReadingTapPending = false;
 

@@ -342,7 +342,7 @@ extension _VideoPlayerViewActions on _VideoPlayerViewState {
 
   void _actionLifecycle(AppLifecycleState state) {
     _lifecycleState = state;
-    if (pausesVideoForLifecycle(state)) {
+    if (pausesVideoForLifecycle(state, platform: defaultTargetPlatform)) {
       unawaited(_actionPauseForBackground());
       return;
     }
@@ -357,7 +357,10 @@ extension _VideoPlayerViewActions on _VideoPlayerViewState {
 
   bool get _lifecycleAllowsPlayback =>
       _lifecycleState == null ||
-      allowsVideoPlaybackForLifecycle(_lifecycleState!);
+      allowsVideoPlaybackForLifecycle(
+        _lifecycleState!,
+        platform: defaultTargetPlatform,
+      );
 
   Future<void> _actionResumeForForeground() async {
     if (!_playbackDesired || !_lifecycleAllowsPlayback) return;
