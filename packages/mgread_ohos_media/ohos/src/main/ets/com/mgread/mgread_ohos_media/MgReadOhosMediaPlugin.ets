@@ -155,15 +155,17 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
       const session: MediaSession = {player, texture, video}
       this.sessions.set(sessionId, session)
       this.bind(sessionId, session)
-      // HarmonyOS documents network HLS playback through the AVPlayer.url
-      // property. Keep ordinary files/HTTP resources on the header-aware
-      // AVMediaSource path, but do not force .m3u8 manifests through it.
+      // Windows MediaKit opens every resource with its request headers. Keep
+      // the same invariant on OHOS: Runtime media URLs are loopback URLs and
+      // intentionally do not retain the upstream .m3u8 suffix, so AVPlayer.url
+      // cannot reliably infer HLS and would also discard the source headers.
+      // MediaSource supports network HLS; its explicit MIME type makes the
+      // extensionless Runtime resource unambiguous to AVPlayer.
+      const source = media.createMediaSourceWithUrl(url, headers)
       if (this.isHlsUrl(url, this.stringValue(args, 'resourceType'))) {
-        player.url = url
-      } else {
-        const source = media.createMediaSourceWithUrl(url, headers)
-        await player.setMediaSource(source)
+        source.setMimeType(media.AVMimeTypes.APPLICATION_M3U8)
       }
+      await player.setMediaSource(source)
       await this.waitForState(player, 'initialized')
       if (texture !== undefined) player.surfaceId = String(texture.getSurfaceId())
       await player.prepare()
@@ -175,7 +177,7 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
       // track, including video, so another app's focus change is observable.
       player.audioInterruptMode = audio.InterruptMode.SHARE_MODE
       await this.prepareAudioSession(sessionId, args, player.duration, video ? 'video' : 'audio')
-      if (this.booleanValue(args, 'play')) await player.play()
+      if (this.booleanValue(args, 'play')) await this.playSession(sessionId, session)
       result.success({
         sessionId,
         textureId: texture?.getTextureId(),
