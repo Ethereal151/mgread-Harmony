@@ -24,6 +24,8 @@ import 'package:mg_read/shared/presentation/app_navigation_destination.dart';
 import 'package:mg_read/shared/presentation/widgets/async_book_cover_loader.dart';
 import 'package:mg_read/shared/presentation/widgets/app_bottom_navigation.dart';
 
+part 'library_home_shell_test_helpers.dart';
+
 void main() {
   testWidgets('extends the home artwork behind the system inset while keeping the header below it', (WidgetTester tester) async {
     await tester.pumpWidget(_host(topInset: 24));
@@ -1063,20 +1065,6 @@ Widget _host({
     ),
   );
 }
-
-LibraryHomeViewData _largeLibraryHomeData(int count) => LibraryHomeViewData(
-  isPresentationFixture: true,
-  continueReading: null,
-  books: List<LibraryBookListItemViewData>.generate(
-    count,
-    (int index) => LibraryBookListItemViewData(
-      id: 'performance-book-$index',
-      title: '性能测试书 $index',
-      coverVariant: LibraryCoverVariant.values[index % LibraryCoverVariant.values.length],
-      status: LibraryBookStatus.local,
-    ),
-  ),
-);
 
 Future<void> _setViewport(WidgetTester tester, Size size) async {
   tester.view.physicalSize = size;

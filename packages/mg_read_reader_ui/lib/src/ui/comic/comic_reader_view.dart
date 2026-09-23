@@ -43,6 +43,7 @@ part 'comic_reader_session.dart';
 part 'comic_reader_preferences.dart';
 part 'comic_reader_catalog.dart';
 part 'comic_reader_chrome.dart';
+part 'comic_reader_sheets.dart';
 
 const Color _comicReaderChromeColor = Color(0xFF17191B);
 

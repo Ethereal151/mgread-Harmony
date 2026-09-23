@@ -76,3 +76,16 @@ export interface RuntimeStatusResponse extends JsonObject {
 export interface RuntimeShutdownResponse extends JsonObject {
   readonly accepted: boolean;
 }
+
+/** One stdout-only startup record emitted after the loopback server is usable. */
+export interface DesktopRuntimeReady {
+  readonly bootId: string;
+  readonly host: "127.0.0.1";
+  readonly nodeVersion: string;
+  readonly pid: number;
+  readonly port: number;
+  readonly protocolVersion: string;
+  readonly runtimeVersion: string;
+  readonly startedAt: string;
+  readonly type: "ready";
+}

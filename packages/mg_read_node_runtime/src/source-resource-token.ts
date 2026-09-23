@@ -16,6 +16,17 @@ export interface SourceResourceTokenPayload {
   readonly request: JsonObject;
 }
 
+export function decodeSourceResourceRequest(
+  params: JsonObject,
+): SourceResourceTokenPayload | "invalid_request" | undefined {
+  if (
+    Object.keys(params).length !== 1 ||
+    typeof params.url !== "string" ||
+    params.url.length > 32 * 1024
+  ) return "invalid_request";
+  return decodeSourceResourceUrl(params.url);
+}
+
 /** Decodes a Runtime-generated source-resource URL into its public payload. */
 export function decodeSourceResourceUrl(
   value: string,

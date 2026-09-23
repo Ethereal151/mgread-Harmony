@@ -20,7 +20,6 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { createRequire } from "node:module";
 import {
   access,
-  lstat,
   mkdir,
   readFile,
   readdir,
@@ -59,8 +58,29 @@ import {
 } from "./plugin-catalog.js";
 import { PluginIconResources } from "./plugin-icon-resources.js";
 import { measureInstallationTree, retainedArtifactPath } from "./plugin-installation-usage.js";
-import { createDevelopmentPackageArtifactResource, listExportablePluginArtifacts, listPluginTransferOffers, prepareActiveDevelopmentArtifact, toDevelopmentTransferProject } from "./plugin-manager-artifact-transfer.js";
+import { prepareActiveDevelopmentArtifact } from "./plugin-manager-artifact-transfer.js";
 import { PluginArtifactTransferManager, type PluginTransferArtifact, type PluginTransferOffer, type PluginTransferPlanItem, type PluginTransferResource } from "./plugin-artifact-transfer.js";
+import { cacheBytes, clearPluginCache as clearPluginCacheItem } from "./plugin-manager-cache.js";
+import {
+  clearAllPluginCaches,
+  clearPluginCache,
+  consumePluginIconResource,
+  consumePluginTransferResource,
+  createDevelopmentPackageResource,
+  createPluginTransferResource,
+  listCacheUsage,
+  listExportableArtifacts,
+  listPluginTransferOffers,
+  measureInstallationUsage,
+  planPluginTransfer,
+  planPluginTransferOffers,
+  resolveCodeDirectory,
+  setEnabled,
+  uninstall,
+  uninstallAll,
+  verifyPluginTransferInbox,
+  type PluginManagerMaintenanceContext,
+} from "./plugin-manager-maintenance.js";
 import {
   type PluginChapterContent,
   type PluginChaptersRequest,
@@ -86,7 +106,6 @@ import { invokeLoadedPluginContent } from "./plugin-content-invocation.js";
 
 import {
   PluginManagerError,
-  type PluginCacheClearItem,
   type PluginCacheClearResult,
   type PluginCacheUsage,
   type PluginCodeDirectory,
@@ -108,7 +127,6 @@ import {
 
 import {
   exists,
-  isMissingPath,
   isPluginId,
   normalizePluginModule,
   readVersionPointer,
@@ -159,6 +177,7 @@ export class PluginManager {
   readonly #installedLoadPromises = new Map<string, Promise<LoadedPlugin>>();
   readonly #pluginOperations: PluginOperationCoordinator;
   readonly #pluginTransfer: PluginArtifactTransferManager;
+  readonly #maintenance: PluginManagerMaintenanceContext;
   readonly #cacheClearTimeoutMs: number;
   readonly #pluginActivationTimeoutMs: number;
   #initializePromise: Promise<void> | undefined;
@@ -230,6 +249,41 @@ export class PluginManager {
         ? {}
         : { npmCli: options.developmentNpmCli }),
     });
+    this.#maintenance = {
+      dataRoot: this.#dataRoot,
+      embedded: this.#embedded,
+      development: this.#development,
+      events: this.#events,
+      catalog: this.#catalog,
+      installer: this.#installer,
+      pluginIcons: this.#pluginIcons,
+      resourceOrigin: () => this.#resourceOrigin,
+      pluginOperations: this.#pluginOperations,
+      pluginTransfer: this.#pluginTransfer,
+      cacheClearTimeoutMs: this.#cacheClearTimeoutMs,
+      initialize: () => this.initialize(),
+      snapshots: () => this.#installedSnapshots,
+      combinedSnapshots: () => this.#combinedSnapshots(),
+      setSnapshots: (snapshots) => { this.#installedSnapshots = snapshots; },
+      installedLoaded: this.#installedLoaded,
+      installedLoadPromises: this.#installedLoadPromises,
+      cacheBytes: (pluginId) => cacheBytes(this.#dataRoot, pluginId),
+      clearCache: (pluginId, signal, deadline) => clearPluginCacheItem(
+        this.#dataRoot,
+        this.#pluginOperations,
+        pluginId,
+        signal,
+        deadline,
+      ),
+      reportUninstallProgress: (code, snapshot, itemCount, totalItemCount) => this.#events({
+        code,
+        itemCount,
+        outcome: code === "plugin_uninstall_started" ? "started" : "success",
+        pluginId: snapshot.id,
+        pluginName: snapshot.displayName,
+        totalItemCount,
+      }),
+    };
   }
 
   /** Builds metadata snapshots and validates pending versions exactly once before readiness. */
@@ -273,20 +327,12 @@ export class PluginManager {
 
   /** Lists retained artifacts plus explicit development exports, loading those projects on demand. */
   async listExportableArtifacts(): Promise<readonly PluginTransferArtifact[]> {
-    await this.initialize();
-    await this.#development.ensureAllLoaded();
-    return listExportablePluginArtifacts(this.#pluginTransfer, this.#installedSnapshots, this.#development.loadedValues());
+    return listExportableArtifacts(this.#maintenance);
   }
 
   /** Lists transferable versions after lazily fingerprinting development projects. */
   async listPluginTransferOffers(): Promise<readonly PluginTransferOffer[]> {
-    await this.initialize();
-    await this.#development.ensureAllLoaded();
-    return listPluginTransferOffers(
-      this.#pluginTransfer,
-      this.#installedSnapshots,
-      this.#development.loadedValues(),
-    );
+    return listPluginTransferOffers(this.#maintenance);
   }
 
   async close(): Promise<void> {
@@ -297,49 +343,33 @@ export class PluginManager {
 
   /** Compares sender SemVer against this Runtime's installed versions. */
   async planPluginTransfer(incoming: readonly PluginTransferArtifact[], forceUpgradeIds: ReadonlySet<string> = new Set()): Promise<readonly PluginTransferPlanItem[]> {
-    await this.initialize();
-    await this.#development.ensureAllLoaded();
-    const development = [...this.#development.loadedValues()].map((plugin) => ({ fingerprint: plugin.fingerprint, id: plugin.loaded.descriptor.id, syncRevision: plugin.syncRevision }));
-    return this.#pluginTransfer.plan(incoming, this.#combinedSnapshots(), development, forceUpgradeIds);
+    return planPluginTransfer(this.#maintenance, incoming, forceUpgradeIds);
   }
 
   async planPluginTransferOffers(incoming: readonly PluginTransferOffer[], forceUpgradeIds: ReadonlySet<string> = new Set()): Promise<readonly PluginTransferPlanItem[]> {
-    await this.initialize();
-    await this.#development.ensureAllLoaded();
-    const development = [...this.#development.loadedValues()].map((plugin) => ({ fingerprint: plugin.fingerprint, id: plugin.loaded.descriptor.id, syncRevision: plugin.syncRevision }));
-    return this.#pluginTransfer.planOffers(incoming, this.#combinedSnapshots(), development, forceUpgradeIds);
+    return planPluginTransferOffers(this.#maintenance, incoming, forceUpgradeIds);
   }
 
   /** Creates a one-shot Runtime-private resource for bounded artifact streaming. */
   async createPluginTransferResource(id: string, version: string): Promise<{ readonly token: string; readonly artifact: PluginTransferArtifact }> {
-    await this.initialize();
-    const development = await this.#development.ensureLoaded(id);
-    return this.#pluginTransfer.createResource(
-      id,
-      version,
-      development === undefined ? undefined : toDevelopmentTransferProject(development),
-    );
+    return createPluginTransferResource(this.#maintenance, id, version);
   }
 
   /** Lazily loads and packages one Windows Debug development source without exposing its path. */
   async createDevelopmentPackageResource(pluginId: string): Promise<{ readonly artifact: PluginTransferArtifact; readonly fileName: string; readonly token: string }> {
-    await this.initialize();
-    if (!isPluginId(pluginId)) throw new PluginManagerError("invalid_request");
-    const development = await this.#development.ensureLoaded(pluginId);
-    if (development === undefined) throw new PluginManagerError("plugin_not_found");
-    return createDevelopmentPackageArtifactResource(this.#pluginTransfer, development);
+    return createDevelopmentPackageResource(this.#maintenance, pluginId);
   }
 
   async verifyPluginTransferInbox(incoming: readonly PluginTransferArtifact[]): Promise<void> {
-    return this.#pluginTransfer.verifyInbox(incoming);
+    return verifyPluginTransferInbox(this.#maintenance, incoming);
   }
 
   consumePluginTransferResource(token: string): PluginTransferResource | undefined {
-    return this.#pluginTransfer.consumeResource(token);
+    return consumePluginTransferResource(this.#maintenance, token);
   }
 
   async consumePluginIconResource(token: string): Promise<PluginIconResource | undefined> {
-    return this.#pluginIcons.consume(token);
+    return consumePluginIconResource(this.#maintenance, token);
   }
 
   /**
@@ -347,42 +377,12 @@ export class PluginManager {
    * action. This absolute path must never cross the Flutter Facade.
    */
   async resolveCodeDirectory(pluginId: string): Promise<PluginCodeDirectory> {
-    await this.initialize();
-    if (!isPluginId(pluginId)) throw new PluginManagerError("invalid_request");
-    const development = this.#development.project(pluginId);
-    if (development !== undefined) {
-      return Object.freeze({
-        directory: development.projectRoot,
-        kind: "development",
-      } satisfies PluginCodeDirectory);
-    }
-    const snapshot = this.#installedSnapshots.find((item) => item.id === pluginId);
-    if (snapshot === undefined) throw new PluginManagerError("plugin_not_found");
-    const version = snapshot.activeVersion ?? snapshot.pendingVersion;
-    if (version === null) {
-      throw new PluginManagerError("plugin_load_failed");
-    }
-    const directory = resolve(
-      this.#dataRoot,
-      "plugins",
-      pluginId,
-      "versions",
-      version,
-    );
-    if (!await exists(directory)) throw new PluginManagerError("plugin_load_failed");
-    return Object.freeze({ directory, kind: "installed" } satisfies PluginCodeDirectory);
+    return resolveCodeDirectory(this.#maintenance, pluginId);
   }
 
   /** Reports byte usage for installed plugins without exposing cache paths. */
   async listCacheUsage(pluginId?: string): Promise<readonly PluginCacheUsage[]> {
-    await this.initialize();
-    const selected = this.#combinedSnapshots().filter((snapshot) => pluginId === undefined || snapshot.id === pluginId);
-    return Object.freeze(await Promise.all(selected.map(async (snapshot) =>
-      Object.freeze({
-        bytes: await this.#cacheBytes(snapshot.id),
-        pluginId: snapshot.id,
-      } satisfies PluginCacheUsage)
-    )));
+    return listCacheUsage(this.#maintenance, pluginId);
   }
 
   /**
@@ -396,37 +396,7 @@ export class PluginManager {
     pluginId: string,
     scope: "archive" | "data" | "npm",
   ): Promise<PluginInstallationUsage> {
-    await this.initialize();
-    if (
-      !isPluginId(pluginId) ||
-      (scope !== "archive" && scope !== "data" && scope !== "npm")
-    ) {
-      throw new PluginManagerError("invalid_request");
-    }
-    const snapshot = this.#installedSnapshots.find((item) => item.id === pluginId);
-    if (snapshot === undefined) throw new PluginManagerError("plugin_not_found");
-    const version = snapshot.activeVersion ?? snapshot.pendingVersion;
-    if (version === null) throw new PluginManagerError("plugin_load_failed");
-    const versionRoot = resolve(
-      this.#dataRoot,
-      "plugins",
-      pluginId,
-      "versions",
-      version,
-    );
-    const root = scope === "archive"
-      ? await retainedArtifactPath(this.#dataRoot, pluginId, version)
-      : scope === "npm"
-        ? resolve(versionRoot, "node_modules")
-        : versionRoot;
-    const result = await measureInstallationTree(root, scope);
-    return Object.freeze({
-      bytes: result.bytes,
-      fileCount: result.fileCount,
-      pluginId,
-      scope,
-      version,
-    } satisfies PluginInstallationUsage);
+    return measureInstallationUsage(this.#maintenance, pluginId, scope);
   }
 
   /** Clears one installed plugin's private cache and returns a stable outcome. */
@@ -435,16 +405,7 @@ export class PluginManager {
     signal?: AbortSignal,
     deadlineUnixMs?: string,
   ): Promise<PluginCacheClearResult> {
-    await this.initialize();
-    if (!isPluginId(pluginId)) throw new PluginManagerError("invalid_request");
-    if (!this.#combinedSnapshots().some((item) => item.id === pluginId)) {
-      throw new PluginManagerError("plugin_not_found");
-    }
-    const cancellation = signal ?? new AbortController().signal;
-    const deadline = deadlineUnixMs ?? String(Date.now() + this.#cacheClearTimeoutMs);
-    return Object.freeze({
-      items: Object.freeze([await this.#clearCache(pluginId, cancellation, deadline)]),
-    } satisfies PluginCacheClearResult);
+    return clearPluginCache(this.#maintenance, pluginId, signal, deadlineUnixMs);
   }
 
   /** Clears every currently installed plugin cache, preserving per-plugin status. */
@@ -452,15 +413,7 @@ export class PluginManager {
     signal?: AbortSignal,
     deadlineUnixMs?: string,
   ): Promise<PluginCacheClearResult> {
-    await this.initialize();
-    const pluginIds = this.#combinedSnapshots().map((item) => item.id);
-    const cancellation = signal ?? new AbortController().signal;
-    const deadline = deadlineUnixMs ?? String(Date.now() + this.#cacheClearTimeoutMs);
-    return Object.freeze({
-      items: Object.freeze(await Promise.all(pluginIds.map((pluginId) =>
-        this.#clearCache(pluginId, cancellation, deadline)
-      ))),
-    } satisfies PluginCacheClearResult);
+    return clearAllPluginCaches(this.#maintenance, signal, deadlineUnixMs);
   }
 
   /**
@@ -468,28 +421,7 @@ export class PluginManager {
    * Runtime process without unloading or recreating the shared Node VM.
    */
   async setEnabled(pluginId: string, enabled: boolean): Promise<InstalledPluginSnapshot> {
-    await this.initialize();
-    if (!isPluginId(pluginId)) throw new PluginManagerError("invalid_request");
-    if (this.#development.has(pluginId)) {
-      throw new PluginManagerError("invalid_request");
-    }
-    const index = this.#installedSnapshots.findIndex((item) => item.id === pluginId);
-    if (index < 0) throw new PluginManagerError("plugin_not_found");
-
-    const record = await this.#catalog.setEnabled(pluginId, enabled);
-    if (record === undefined) throw new PluginManagerError("plugin_not_found");
-    const updated = record.snapshot;
-    this.#installedSnapshots = Object.freeze([
-      ...this.#installedSnapshots.slice(0, index),
-      updated,
-      ...this.#installedSnapshots.slice(index + 1),
-    ]);
-    this.#events({
-      code: enabled ? "plugin_enabled" : "plugin_disabled",
-      outcome: "success",
-      pluginId,
-    });
-    return this.#pluginIcons.project(updated, this.#development.projects(), this.#resourceOrigin);
+    return setEnabled(this.#maintenance, pluginId, enabled);
   }
 
   /** Removes one installed source after current source calls have released their lease. */
@@ -498,19 +430,7 @@ export class PluginManager {
     signal?: AbortSignal,
     deadlineUnixMs?: string,
   ): Promise<PluginUninstallResult> {
-    await this.initialize();
-    if (!isPluginId(pluginId)) throw new PluginManagerError("invalid_request");
-    if (this.#development.has(pluginId)) {
-      throw new PluginManagerError("invalid_request");
-    }
-    const snapshot = this.#installedSnapshots.find((item) => item.id === pluginId);
-    if (snapshot === undefined) {
-      throw new PluginManagerError("plugin_not_found");
-    }
-    this.#reportUninstallProgress("plugin_uninstall_started", snapshot, 0, 1);
-    await this.#uninstallInstalled(pluginId, signal, deadlineUnixMs);
-    this.#reportUninstallProgress("plugin_uninstall_completed", snapshot, 1, 1);
-    return Object.freeze({ pluginId, removed: true } satisfies PluginUninstallResult);
+    return uninstall(this.#maintenance, pluginId, signal, deadlineUnixMs);
   }
 
   /** Removes every installed source, preserving workspace development projects. */
@@ -518,59 +438,7 @@ export class PluginManager {
     signal?: AbortSignal,
     deadlineUnixMs?: string,
   ): Promise<PluginUninstallAllResult> {
-    await this.initialize();
-    const snapshots = this.#installedSnapshots;
-    let completedCount = 0;
-    await mapWithConcurrency(
-      snapshots,
-      this.#embedded ? EMBEDDED_UNINSTALL_CONCURRENCY : DEFAULT_UNINSTALL_CONCURRENCY,
-      async (snapshot) => {
-        this.#reportUninstallProgress("plugin_uninstall_started", snapshot, completedCount, snapshots.length);
-        await this.#uninstallInstalled(snapshot.id, signal, deadlineUnixMs, false);
-        completedCount += 1;
-        this.#reportUninstallProgress("plugin_uninstall_completed", snapshot, completedCount, snapshots.length);
-      },
-    );
-    await this.#installer.collectUnusedDependencies();
-    return Object.freeze({ removedCount: snapshots.length } satisfies PluginUninstallAllResult);
-  }
-
-  async #uninstallInstalled(
-    pluginId: string,
-    signal?: AbortSignal,
-    deadlineUnixMs?: string,
-    collectUnusedDependencies = true,
-  ): Promise<void> {
-    const cancellation = signal ?? new AbortController().signal;
-    const deadline = deadlineUnixMs ?? String(Date.now() + this.#cacheClearTimeoutMs);
-    const release = await this.#pluginOperations.acquireCacheClear(pluginId, cancellation, deadline);
-    try {
-      await this.#catalog.remove(pluginId);
-      if (collectUnusedDependencies) await this.#installer.collectUnusedDependencies();
-      this.#installedLoaded.delete(pluginId);
-      this.#installedLoadPromises.delete(pluginId);
-      this.#installedSnapshots = Object.freeze(
-        this.#installedSnapshots.filter((item) => item.id !== pluginId),
-      );
-    } finally {
-      release();
-    }
-  }
-
-  #reportUninstallProgress(
-    code: "plugin_uninstall_started" | "plugin_uninstall_completed",
-    snapshot: InstalledPluginSnapshot,
-    itemCount: number,
-    totalItemCount: number,
-  ): void {
-    this.#events({
-      code,
-      itemCount,
-      outcome: code === "plugin_uninstall_started" ? "started" : "success",
-      pluginId: snapshot.id,
-      pluginName: snapshot.displayName,
-      totalItemCount,
-    });
+    return uninstallAll(this.#maintenance, signal, deadlineUnixMs);
   }
 
   async discover(
@@ -885,84 +753,6 @@ export class PluginManager {
     return Object.freeze(
       [...combined.values()].sort((left, right) => left.id.localeCompare(right.id)),
     );
-  }
-
-  /** Clears cache only after current source/resource calls have released shared leases. */
-  async #clearCache(
-    pluginId: string,
-    signal: AbortSignal,
-    deadlineUnixMs: string,
-  ): Promise<PluginCacheClearItem> {
-    let release: (() => void) | undefined;
-    let bytesBefore = 0;
-    try {
-      release = await this.#pluginOperations.acquireCacheClear(
-        pluginId,
-        signal,
-        deadlineUnixMs,
-      );
-      bytesBefore = await this.#cacheBytes(pluginId);
-      const cacheDir = this.#cacheDirectory(pluginId);
-      let entries: string[];
-      try {
-        entries = await readdir(cacheDir);
-      } catch (error) {
-        if (!isMissingPath(error)) throw error;
-        entries = [];
-      }
-      await Promise.all(
-        entries.map((entry) =>
-          rm(resolve(cacheDir, entry), { force: true, recursive: true }),
-        ),
-      );
-      return Object.freeze({
-        bytesBefore,
-        bytesRemaining: await this.#cacheBytes(pluginId),
-        pluginId,
-        status: "cleared",
-      } satisfies PluginCacheClearItem);
-    } catch {
-      let bytesRemaining = bytesBefore;
-      try {
-        bytesRemaining = await this.#cacheBytes(pluginId);
-      } catch {
-        // The terminal status remains useful even if the failed directory cannot be read.
-      }
-      return Object.freeze({
-        bytesBefore,
-        bytesRemaining,
-        pluginId,
-        status: "failed",
-      } satisfies PluginCacheClearItem);
-    } finally {
-      release?.();
-    }
-  }
-
-  async #cacheBytes(pluginId: string): Promise<number> {
-    const root = this.#cacheDirectory(pluginId);
-    try {
-      return await this.#cacheBytesAt(root);
-    } catch (error) {
-      if (isMissingPath(error)) return 0;
-      throw error;
-    }
-  }
-
-  async #cacheBytesAt(path: string): Promise<number> {
-    const metadata = await lstat(path);
-    if (!metadata.isDirectory()) return metadata.size;
-    const entries = await readdir(path, { withFileTypes: true });
-    let total = 0;
-    for (const entry of entries) {
-      total += await this.#cacheBytesAt(resolve(path, entry.name));
-      if (!Number.isSafeInteger(total)) throw new PluginManagerError("plugin_load_failed");
-    }
-    return total;
-  }
-
-  #cacheDirectory(pluginId: string): string {
-    return resolve(this.#dataRoot, "plugin-cache", pluginId);
   }
 
   async #inspectInstalledPlugin(

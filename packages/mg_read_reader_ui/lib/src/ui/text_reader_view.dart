@@ -66,6 +66,7 @@ part 'text_reader_vertical_content_widgets.dart';
 part 'text_reader_chrome_widgets.dart';
 part 'text_reader_cache_dialog.dart';
 part 'text_reader_library_sheet.dart';
+part 'text_reader_library_detail_sheet.dart';
 part 'text_reader_status_widgets.dart';
 
 /// A complete, embeddable text reading surface.

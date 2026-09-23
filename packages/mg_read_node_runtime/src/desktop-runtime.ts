@@ -50,7 +50,7 @@ import { readDebugHttpEnabled } from "./debug-http-control.js";
 import { RuntimeDebugHttpSettings } from "./debug-http-settings.js";
 import { ConfigurablePluginHttpClient } from "./plugin-http-client.js";
 import { readPluginHttpProxyConfiguration } from "./plugin-http-proxy-control.js";
-import { decodeSourceResourceUrl } from "./source-resource-token.js";
+import { decodeSourceResourceRequest } from "./source-resource-token.js";
 import type {
   InFlightRequestsBySession,
   RuntimeDispatchFailure,
@@ -59,9 +59,11 @@ import type {
   RuntimeHelloResponse,
   RuntimeInFlightRequest,
   RuntimePingResponse,
+  DesktopRuntimeReady,
   RuntimeShutdownResponse,
   RuntimeStatusResponse,
 } from "./desktop-runtime-types.js";
+export type { DesktopRuntimeReady } from "./desktop-runtime-types.js";
 import { servePluginIconResource, servePluginTransferResource, serveSourceResource } from "./loopback-resources.js";
 import {
   isPluginManagerError,
@@ -90,6 +92,7 @@ import {
 } from "./desktop-plugin-transfer-dispatch.js";
 import { emitRuntimeDiagnostic, observeRuntimeDiagnostics } from "./runtime-diagnostics.js";
 import { materializeTransferEmbedded } from "./embedded-transfer-materializer.js";
+import { createEmbeddedBrowserSession } from "./desktop-runtime-embedded.js";
 import {
   parseChaptersParams,
   parseContentParams,
@@ -173,31 +176,6 @@ const RUNTIME_CONTROL_CAPABILITIES = Object.freeze([
 const RUNTIME_RPC_PATH = "/v1/rpc";
 const WEBSOCKET_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
-/**
- * One stdout-only startup record emitted after the loopback server is usable.
- * It is consumed by the Runtime-owned Flutter supervisor, never by app code.
- */
-export interface DesktopRuntimeReady {
-  /** Fresh identity that binds HTTP, WebSocket, and Flutter startup together. */
-  readonly bootId: string;
-  /** Fixed loopback-only host; this Runtime never listens on LAN interfaces. */
-  readonly host: typeof LOOPBACK_HOST;
-  /** Exact Node binary version that started the Core. */
-  readonly nodeVersion: string;
-  /** Runtime child process identifier, used only for lifecycle diagnostics. */
-  readonly pid: number;
-  /** Ephemeral loopback port selected by Node or supplied by a test. */
-  readonly port: number;
-  /** Wire-protocol version that the Flutter connection must validate. */
-  readonly protocolVersion: string;
-  /** Runtime implementation version for compatibility and diagnostics. */
-  readonly runtimeVersion: string;
-  /** ISO-8601 timestamp captured once when this Core instance is created. */
-  readonly startedAt: string;
-  /** Distinguishes this stdout record from structured diagnostic records. */
-  readonly type: "ready";
-}
-
 /** Result returned by the Runtime-owned Android Javet adapter. */
 export type EmbeddedRuntimeResult =
   | { readonly ok: true; readonly result: JsonValue }
@@ -261,16 +239,7 @@ export class DesktopRuntime {
     this.#debugHttpAllowed = options.debugHttpAllowed ?? false;
     this.#debugHttpSettings = new RuntimeDebugHttpSettings(this.#dataRoot);
     this.#onProgress = options.onProgress ?? (() => {});
-    const embeddedBrowserRequest = (globalThis as {
-      readonly __mgreadBrowserRequestJson?: (payload: string) => Promise<string>;
-    }).__mgreadBrowserRequestJson;
-    const embeddedBrowserSession = embeddedBrowserRequest === undefined
-      ? undefined
-      : {
-          request: async (request: unknown): Promise<unknown> =>
-            JSON.parse(await embeddedBrowserRequest(JSON.stringify(request))),
-        };
-    this.#browserSession = options.browserSession ?? embeddedBrowserSession ??
+    this.#browserSession = options.browserSession ?? createEmbeddedBrowserSession() ??
       (this.#embedded ? undefined : new DesktopBrowserSessionBroker(this.#bootId));
     this.#removeDebugDiagnosticObserver = observeRuntimeDiagnostics((record) => {
       if (!this.#debugHttp?.status().enabled) return;
@@ -986,17 +955,13 @@ export class DesktopRuntime {
           "getContent",
         );
       case RUNTIME_CONTROL_METHOD.sourceResourceDecode: {
-        if (Object.keys(request.params).length !== 1 || typeof request.params.url !== "string" || request.params.url.length > 32 * 1024) {
-          return {
-            error: this.#requestError(request, "invalid_request", "The source-resource URL decode request is invalid."),
-          };
-        }
-        const decoded = decodeSourceResourceUrl(request.params.url);
-        if (decoded === undefined) {
-          return {
-            error: this.#requestError(request, "invalid_request", "The URL is not a valid Runtime source-resource URL."),
-          };
-        }
+        const decoded = decodeSourceResourceRequest(request.params);
+        if (decoded === "invalid_request") return {
+          error: this.#requestError(request, "invalid_request", "The source-resource URL decode request is invalid."),
+        };
+        if (decoded === undefined) return {
+          error: this.#requestError(request, "invalid_request", "The URL is not a valid Runtime source-resource URL."),
+        };
         return { result: { pluginId: decoded.pluginId, request: decoded.request } };
       }
       case RUNTIME_CONTROL_METHOD.shutdown:
