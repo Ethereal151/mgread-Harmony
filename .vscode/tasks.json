@@ -256,6 +256,52 @@
         "clear": false
       },
       "problemMatcher": []
+    },
+    {
+      "label": "构建：OHOS Release HAP（arm64 瘦身）",
+      "type": "process",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/tools/build_ohos_release.ps1",
+        "-BuildMode",
+        "release",
+        "-Architecture",
+        "arm64"
+      ],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "showReuseMessage": false,
+        "clear": true
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "构建：OHOS Debug HAP（arm64 瘦身）",
+      "type": "process",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/tools/build_ohos_release.ps1",
+        "-BuildMode",
+        "debug",
+        "-Architecture",
+        "arm64"
+      ],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "showReuseMessage": false,
+        "clear": true
+      },
+      "problemMatcher": []
     }
   ]
 }

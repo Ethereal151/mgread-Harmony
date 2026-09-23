@@ -79,6 +79,26 @@ hdc install build/ohos/hap/entry-default-signed.hap
 
 随后在模拟器上验证启动、退出、切后台和恢复。HAP、签名文件和本机配置不应提交到 Git。
 
+## 瘦身 HAP 构建
+
+OHOS 的 Runtime 构建使用仓库脚本，构建期间会临时移除 Android、Windows、macOS
+Runtime 资源和未选择的原生架构，完成后自动恢复源配置：
+
+```powershell
+# arm64 真机 Release；默认保留签名流程
+.\tools\build_ohos_release.ps1 -BuildMode release -Architecture arm64
+
+# arm64 真机 Debug
+.\tools\build_ohos_release.ps1 -BuildMode debug -Architecture arm64
+
+# x64 模拟器按需单独构建
+.\tools\build_ohos_release.ps1 -BuildMode debug -Architecture x64
+```
+
+不要直接使用不带 `--target-platform` 的 `flutter build hap` 作为发布包构建命令，
+否则会把模拟器架构一起放入 HAP。脚本还会在构建结束后检查 HAP 中没有非 OHOS
+Runtime 和未选择的架构。
+
 ## 当前验证结果
 
 ### 2026-09-21 增量适配验证
