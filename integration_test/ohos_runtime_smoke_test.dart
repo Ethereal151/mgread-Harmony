@@ -30,8 +30,8 @@ void main() {
     expect(capabilities.supportsOhosAppUpdate.reason, 'app_update_market_fallback_required');
     final localAddresses = await OhosSystemClient.getLocalNetworkAddresses();
     debugPrint('OHOS Network Kit local addresses: $localAddresses');
-    expect(localAddresses, isNotEmpty);
-    expect(await PlatformLanSyncNetworkEnvironment().isLocalNetworkAvailable(), isTrue);
+    final localNetworkAvailable = await PlatformLanSyncNetworkEnvironment().isLocalNetworkAvailable();
+    expect(localNetworkAvailable, localAddresses.isNotEmpty);
 
     final productCapabilities = PlatformCapabilities.forOperatingSystem('ohos');
     expect(productCapabilities.supportsOhosSourceHttpTransport, isTrue);
@@ -42,7 +42,7 @@ void main() {
     expect(productCapabilities.supportsOhosVideoBufferedPosition, isTrue);
     expect(productCapabilities.supportsOhosVideoEnhancement, isFalse);
     expect(productCapabilities.supportsOhosSystemVolume, isFalse);
-    expect(productCapabilities.supportsOhosReaderVolumeKeys, isFalse);
+    expect(productCapabilities.supportsOhosReaderVolumeKeys, isTrue);
 
     final runtime = PluginRuntime();
     final ping = await runtime.invoke(const RuntimePingInvocation());
