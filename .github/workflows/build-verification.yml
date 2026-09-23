@@ -79,7 +79,7 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: "3.47.4"
+          flutter-version: "3.47.5"
           channel: stable
           cache: true
           pub-cache: true
@@ -139,13 +139,16 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: "3.47.4"
+          flutter-version: "3.47.5"
           channel: stable
           cache: true
           pub-cache: true
 
       - name: Flutter dependencies
         run: flutter pub get
+
+      - name: Enable Windows desktop
+        run: flutter config --enable-windows-desktop
 
       - name: Build Windows
         run: flutter build windows --release --no-pub
@@ -202,13 +205,16 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: "3.47.4"
+          flutter-version: "3.47.5"
           channel: stable
           cache: true
           pub-cache: true
 
       - name: Flutter dependencies
         run: flutter pub get
+
+      - name: Enable macOS desktop
+        run: flutter config --enable-macos-desktop
 
       - name: Build macOS
         run: flutter build macos --release --no-pub
