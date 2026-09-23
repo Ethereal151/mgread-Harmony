@@ -74,13 +74,19 @@ final class OhosVideoPlaybackBackend implements VideoPlaybackBackend {
         .where((event) => event.sessionId == sessionId)
         .listen((event) => _handleEvent(event, generation));
     try {
+      // AVPlayer can prepare a native surface before Flutter has rebuilt the
+      // Texture widget. Starting here makes API 26 devices occasionally
+      // deliver the first frame to an unconsumed surface; the engine then
+      // reports SurfaceFrame::Submit failed and no firstFrame event arrives.
+      // Keep open paused until the texture is mounted below, then start it
+      // through the normal command path.
       final result = await _client.openVideo(
         sessionId: sessionId,
         uri: Uri.parse(uri),
         headers: episode.httpHeaders,
         resourceType: episode.resourceType.name,
         initialPosition: initialPosition,
-        play: play,
+        play: false,
       );
       if (!_isCurrent(generation)) return;
       _textureId = result.textureId;
@@ -91,6 +97,13 @@ final class OhosVideoPlaybackBackend implements VideoPlaybackBackend {
           clearError: true,
         ),
       );
+      if (play) {
+        // Wait for the state emission above to rebuild Texture before AVPlayer
+        // is allowed to produce the first frame.
+        await WidgetsBinding.instance.endOfFrame;
+        if (!_isCurrent(generation)) return;
+        await _client.command('play', sessionId);
+      }
     } on Object catch (error) {
       if (_isCurrent(generation)) {
         _emit(
