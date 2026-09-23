@@ -131,7 +131,10 @@ final class PlatformCapabilities {
       // HarmonyOS application APIs can read but cannot directly adjust the
       // global system media volume for a normal third-party application.
       OhosPlatformCapability.systemVolume => false,
-      OhosPlatformCapability.readerVolumeKeys => false,
+      // inputConsumer.keyPressed is available from API 16 and is scoped to
+      // the foreground application. The reader bridge restores the system
+      // handler when the route is inactive.
+      OhosPlatformCapability.readerVolumeKeys => true,
     };
   }
 

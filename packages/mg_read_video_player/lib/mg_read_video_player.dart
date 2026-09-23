@@ -25,6 +25,7 @@ export 'src/api/models.dart'
     show
         VideoContent,
         VideoEpisode,
+        VideoEpisodeResourceType,
         VideoEpisodeGroup,
         VideoEnhancementMode,
         VideoFitMode,

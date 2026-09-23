@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:novel_reader_ui/src/api/models.dart';
 import 'package:novel_reader_ui/src/core/auto_reading_coordinator.dart';
@@ -10,17 +11,29 @@ import 'package:novel_reader_ui/src/ui/settings/reader_settings_font_size_contro
 import 'package:novel_reader_ui/src/ui/settings/reader_settings_sheet.dart';
 
 void main() {
-  test('OHOS volume-key page turning is an explicit unsupported operation', () {
+  test('OHOS volume-key page turning uses the native reader bridge', () async {
     final platform = MethodChannelReaderPlatform(operatingSystem: 'ohos');
+    final calls = <MethodCall>[];
+    const channel = MethodChannel('novel_reader_ui/system');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+          calls.add(call);
+          return null;
+        });
+    addTearDown(
+      () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null),
+    );
 
-    expect(
-      platform.setVolumeKeyPageTurningEnabled(true),
-      throwsA(isA<UnsupportedError>()),
-    );
-    expect(
-      platform.setVolumeKeyPageTurningEnabled(false),
-      throwsA(isA<UnsupportedError>()),
-    );
+    await platform.setVolumeKeyPageTurningEnabled(true);
+    await platform.setVolumeKeyPageTurningEnabled(false);
+
+    expect(calls.map((call) => call.method), [
+      'setVolumeKeyPageTurningEnabled',
+      'setVolumeKeyPageTurningEnabled',
+    ]);
+    expect(calls.first.arguments, {'enabled': true});
+    expect(calls.last.arguments, {'enabled': false});
   });
 
   testWidgets('font controls share one adaptive row with a section label', (

@@ -215,11 +215,17 @@ export default class OhosArkWebHost implements MethodCallHandler {
     }
   }
 
-  async requestJson(payload: string): Promise<Any> {
+  async requestJson(payload: string, browserRequestId: string = ''): Promise<Any> {
     const decoded: Any = JSON.parse(payload)
     const value: Any = this.fromJsonValue(decoded)
     if (!(value instanceof Map)) throw new OhosArkWebError('plugin_execution_failed')
-    return await this.request(value as Map<string, Any>)
+    const request: Map<string, Any> = value as Map<string, Any>
+    if (this.stringValue(request, 'operation') === 'cancel') {
+      this.cancel(request)
+      throw new OhosArkWebError('cancelled')
+    }
+    if (browserRequestId.length > 0 && !request.has('jobId')) request.set('jobId', browserRequestId)
+    return await this.request(request)
   }
 
   private async pageFor(pluginId: string, pluginName: string, jobId: string, deadline: number): Promise<OhosArkWebPlatformView> {
@@ -631,13 +637,18 @@ export class OhosArkWebPlatformView extends PlatformView {
 
   async evaluate(source: string): Promise<Any> {
     try {
-      const trimmed = source.trim()
-      const expression = !trimmed.includes(';') && !trimmed.includes('\\n')
-        ? `JSON.stringify({value:(${source})})`
-        : `(()=>{eval(${JSON.stringify(source)});return JSON.stringify({value:null});})()`
+      // ArkWeb's runJavaScript returns a Promise. Evaluate through an async
+      // function so source snippets with await and multi-statement snippets
+      // have the same completion-value semantics as the desktop host.
+      const expression = `(async()=>{try{return JSON.stringify({value:await eval(${JSON.stringify(source)})})}catch(_){return JSON.stringify({error:'plugin_execution_failed'})}})()`
       const value = await this.script(expression)
       const decoded: Any = this.parseScriptResult(value)
-      return decoded !== null && typeof decoded === 'object' ? decoded : {value: decoded}
+      if (decoded !== null && typeof decoded === 'object') {
+        const error = (decoded as Record<string, string>)['error']
+        if (error === 'plugin_execution_failed') throw new OhosArkWebError('plugin_execution_failed')
+        return decoded
+      }
+      return {value: decoded}
     } catch (error) {
       throw new OhosArkWebError(`plugin_execution_failed:${String(error)}`)
     }

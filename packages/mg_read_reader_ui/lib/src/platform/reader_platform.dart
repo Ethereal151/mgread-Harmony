@@ -180,10 +180,9 @@ class MethodChannelReaderPlatform extends ReaderPlatform {
   @override
   Future<void> setVolumeKeyPageTurningEnabled(bool enabled) {
     if (_isOhos) {
-      return Future<void>.error(
-        UnsupportedError(
-          'OHOS does not expose a supported volume-key page-turn bridge.',
-        ),
+      return _channel.invokeMethod<void>(
+        'setVolumeKeyPageTurningEnabled',
+        <String, bool>{'enabled': enabled},
       );
     }
     if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) {

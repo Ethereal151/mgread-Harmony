@@ -7,6 +7,12 @@ import { gzipSync } from "node:zlib";
 import { ConfigurablePluginHttpClient } from "../dist/plugin-http-client.js";
 
 test("native HTTP fallback serves direct requests when WebAssembly is unavailable", async (t) => {
+  const originalWebAssembly = globalThis.WebAssembly;
+  Object.defineProperty(globalThis, "WebAssembly", { configurable: true, value: undefined });
+  t.after(() => Object.defineProperty(globalThis, "WebAssembly", {
+    configurable: true,
+    value: originalWebAssembly,
+  }));
   const server = http.createServer((request, response) => {
     if (request.url === "/redirect") {
       response.writeHead(302, { location: "/content" });

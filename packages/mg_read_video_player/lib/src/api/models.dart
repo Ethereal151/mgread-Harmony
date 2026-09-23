@@ -148,6 +148,14 @@ final class VideoStartupSession {
 }
 
 /// One playable episode resolved by the host.
+enum VideoEpisodeResourceType {
+  /// A regular progressive video resource.
+  video,
+
+  /// An HLS playlist resource.
+  hls,
+}
+
 @immutable
 final class VideoEpisode {
   /// Creates an immutable episode.
@@ -161,6 +169,7 @@ final class VideoEpisode {
     this.uri,
     Map<String, String> httpHeaders = const <String, String>{},
     this.durationHint,
+    this.resourceType = VideoEpisodeResourceType.video,
   }) : assert(id != ''),
        assert(title != ''),
        assert(uri == null || uri != ''),
@@ -185,6 +194,11 @@ final class VideoEpisode {
 
   /// Optional duration shown before the backend reports authoritative metadata.
   final Duration? durationHint;
+
+  /// Resource kind supplied by the source Runtime. This is explicit because
+  /// Runtime proxy URLs intentionally do not retain the upstream `.m3u8`
+  /// suffix.
+  final VideoEpisodeResourceType resourceType;
 
   /// Whether this instance can be passed to a playback backend.
   bool get hasPlaybackResource => uri != null;

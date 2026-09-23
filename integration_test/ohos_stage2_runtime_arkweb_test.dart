@@ -28,10 +28,10 @@ void main() {
     final runtime = PluginRuntime();
     final artifacts = _decodeArtifacts();
     final installed = await runtime.invoke(const InstalledPluginsInvocation());
-    print(
+    debugPrint(
       'STAGE2_INSTALLED=${jsonEncode(installed.map((plugin) => <String, Object?>{'id': plugin.id, 'activeVersion': plugin.activeVersion, 'pendingVersion': plugin.pendingVersion, 'status': plugin.status}).toList())}',
     );
-    print('STAGE2_TRANSFER=${jsonEncode(_fixtureIds.map((id) => artifacts[id]!.artifact.toJson()).toList())}');
+    debugPrint('STAGE2_TRANSFER=${jsonEncode(_fixtureIds.map((id) => artifacts[id]!.artifact.toJson()).toList())}');
     final missing = <({PluginTransferArtifact artifact, Stream<List<int>> bytes})>[];
     for (final id in _fixtureIds) {
       final fixture = artifacts[id];
@@ -49,7 +49,7 @@ void main() {
             forceUpgradePluginIds: <String>{item.artifact.pluginId},
           ),
         );
-        print(
+        debugPrint(
           'STAGE2_PLAN=${jsonEncode(plan.map((entry) => <String, Object?>{'id': entry.pluginId, 'action': entry.action.name, 'receiverVersion': entry.receiverVersion, 'version': entry.version}).toList())}',
         );
         // A previous interrupted device run may have left the same version in
@@ -132,9 +132,7 @@ void main() {
     // Keep the device fixture set bounded and prove the destructive Runtime
     // lifecycle boundary on the same arm64 host. The next run reinstalls the
     // fixture through the normal import path when it is absent.
-    await runtime.invoke(
-      const UninstallPluginInvocation(pluginId: 'org.mgread.ohos.stage2.source-one'),
-    );
+    await runtime.invoke(const UninstallPluginInvocation(pluginId: 'org.mgread.ohos.stage2.source-one'));
     final afterUninstall = await runtime.invoke(const InstalledPluginsInvocation());
     expect(afterUninstall.any((plugin) => plugin.id == 'org.mgread.ohos.stage2.source-one'), isFalse);
   }, timeout: const Timeout(Duration(minutes: 8)));

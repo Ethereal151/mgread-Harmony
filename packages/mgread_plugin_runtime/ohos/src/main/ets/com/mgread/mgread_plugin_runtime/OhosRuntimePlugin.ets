@@ -144,7 +144,7 @@ export default class OhosRuntimePlugin implements FlutterPlugin, MethodCallHandl
       mgreadNodeHost.resolveBrowserSession(requestId, JSON.stringify({__mgreadBrowserSessionError: 'unsupported'}))
       return
     }
-    host.requestJson(payload)
+    host.requestJson(payload, requestId)
       .then((response: Any): void => {
         mgreadNodeHost.resolveBrowserSession(requestId, JSON.stringify(this.toJsonValue(response)))
       })
@@ -295,7 +295,7 @@ export default class OhosRuntimePlugin implements FlutterPlugin, MethodCallHandl
         const content = this.context?.resourceManager.getRawFileContentSync(source)
         if (content === undefined) continue
         this.makeDirectory(destination.substring(0, destination.lastIndexOf('/')))
-        const file = fs.openSync(destination, fs.OpenMode.READ_WRITE | fs.OpenMode.CREATE)
+        const file = fs.openSync(destination, fs.OpenMode.READ_WRITE | fs.OpenMode.CREATE | fs.OpenMode.TRUNC)
         fs.writeSync(file.fd, content.buffer)
         fs.closeSync(file.fd)
       } catch (_) {

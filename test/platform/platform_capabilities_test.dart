@@ -26,7 +26,7 @@ void main() {
     expect(capabilities.supportsOhosVideoBufferedPosition, isTrue);
     expect(capabilities.supportsOhosVideoEnhancement, isFalse);
     expect(capabilities.supportsOhosSystemVolume, isFalse);
-    expect(capabilities.supportsOhosReaderVolumeKeys, isFalse);
+    expect(capabilities.supportsOhosReaderVolumeKeys, isTrue);
   });
 
   test('desktop capabilities retain their existing responsibilities', () {

@@ -9,6 +9,7 @@ declare const mgreadNodeHost: {
   setProgressCallback(callback: (payload: string) => void): void;
   setBrowserSessionCallback(callback: (requestId: string, payload: string) => void): void;
   resolveBrowserSession(requestId: string, response: string): void;
+  cancelBrowserSession(requestId: string): void;
   clearBrowserSessionCallback(): void;
   dispose(): void;
   runtimeVersion(): string;

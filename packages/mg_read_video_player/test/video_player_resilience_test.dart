@@ -121,7 +121,9 @@ void main() {
       ]) {
         debugDefaultTargetPlatformOverride = platform;
         final backend = _OrderedBackend();
-        await tester.pumpWidget(_app(backend: backend));
+        await tester.pumpWidget(
+          _app(backend: backend, playerKey: ValueKey<TargetPlatform>(platform)),
+        );
         await tester.pumpAndSettle();
         final pauseCount = backend.events
             .where((event) => event == 'pause')

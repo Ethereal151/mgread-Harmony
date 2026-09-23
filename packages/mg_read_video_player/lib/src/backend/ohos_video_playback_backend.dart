@@ -78,6 +78,7 @@ final class OhosVideoPlaybackBackend implements VideoPlaybackBackend {
         sessionId: sessionId,
         uri: Uri.parse(uri),
         headers: episode.httpHeaders,
+        resourceType: episode.resourceType.name,
         initialPosition: initialPosition,
         play: play,
       );
