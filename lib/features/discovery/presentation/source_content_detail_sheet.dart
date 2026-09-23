@@ -664,6 +664,7 @@ class _SourceDetailBody extends StatelessWidget {
     final tokens = AppThemeTokens.of(context);
     final theme = Theme.of(context);
     final firstChapter = bundle.chapters.items.isEmpty ? null : bundle.chapters.items.first;
+    final isVideo = content.contentKind == PluginContentKind.video;
     final canStartReading =
         !isRefreshing &&
         firstChapter != null &&
@@ -672,6 +673,25 @@ class _SourceDetailBody extends StatelessWidget {
           PluginContentKind.video => onVideoEpisodeRequested != null,
           _ => true,
         };
+    final VoidCallback? coverAction = isVideo
+        ? canStartReading
+              ? () => unawaited(
+                  _openTextChapter(
+                    context,
+                    gateway: gateway,
+                    detail: detail,
+                    firstCatalogPage: bundle.chapters,
+                    chapter: firstChapter,
+                    onTextChapterRequested: onTextChapterRequested,
+                    onComicChapterRequested: onComicChapterRequested,
+                    onAudioChapterRequested: onAudioChapterRequested,
+                    onVideoEpisodeRequested: onVideoEpisodeRequested,
+                  ),
+                )
+              : null
+        : content.coverUrl == null
+        ? null
+        : () => unawaited(_openUrl(context, content.coverUrl));
     final canChangeShelf = shelfState != SourceDetailShelfState.canAdd
         ? onRemoveFromShelf != null && !isRemovingFromShelf
         : onAddToShelf != null && !isSavingToShelf;
@@ -688,11 +708,7 @@ class _SourceDetailBody extends StatelessWidget {
         AppSpacing.page,
       ),
       children: <Widget>[
-        _DetailSummaryHeader(
-          content: content,
-          labels: labels,
-          onCoverTap: content.coverUrl == null ? null : () => unawaited(_openUrl(context, content.coverUrl)),
-        ),
+        _DetailSummaryHeader(content: content, labels: labels, onCoverTap: coverAction),
         if (sourceVariants.length > 1 && onSourceVariantRequested != null) ...<Widget>[
           const SizedBox(height: AppSpacing.compact),
           OutlinedButton.icon(

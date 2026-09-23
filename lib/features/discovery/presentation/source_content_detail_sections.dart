@@ -132,7 +132,7 @@ class _DetailCoverLink extends StatelessWidget {
     return Semantics(
       button: enabled,
       enabled: enabled,
-      label: '打开封面链接',
+      label: content.contentKind == PluginContentKind.video ? '播放首集' : '打开封面链接',
       child: Opacity(
         opacity: enabled ? 1 : .56,
         child: InkWell(

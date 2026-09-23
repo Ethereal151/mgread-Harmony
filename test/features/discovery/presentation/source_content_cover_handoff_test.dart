@@ -64,6 +64,68 @@ void main() {
 
     expect(receivedCoverBytes, _onePixelPng);
   });
+
+  testWidgets('video cover starts the first episode instead of opening its cover URL', (tester) async {
+    var playbackCount = 0;
+    Uri? openedUrl;
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          theme: AppTheme.light(),
+          home: _VideoCoverEntryHost(
+            onPlayback: () => playbackCount++,
+            onExternalUrlRequested: (url) async {
+              openedUrl = url;
+              return true;
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('source-detail-open-cover-url')));
+    await tester.pumpAndSettle();
+
+    expect(playbackCount, 1);
+    expect(openedUrl, isNull);
+  });
+}
+
+class _VideoCoverEntryHost extends StatefulWidget {
+  const _VideoCoverEntryHost({required this.onPlayback, required this.onExternalUrlRequested});
+
+  final VoidCallback onPlayback;
+  final SourceExternalUrlLauncher onExternalUrlRequested;
+
+  @override
+  State<_VideoCoverEntryHost> createState() => _VideoCoverEntryHostState();
+}
+
+class _VideoCoverEntryHostState extends State<_VideoCoverEntryHost> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      unawaited(
+        showSourceContentDetailSheet(
+          context,
+          gateway: const _CoverDroppingGateway(PluginContentKind.video),
+          pluginId: _pluginId,
+          id: _contentId,
+          initialContent: _summary(PluginContentKind.video, coverBytes: _onePixelPng, coverUrl: _coverUrl),
+          onVideoEpisodeRequested: ({required detail, required firstCatalogPage, required chapter}) async {
+            widget.onPlayback();
+          },
+          onExternalUrlRequested: widget.onExternalUrlRequested,
+        ),
+      );
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => const Scaffold();
 }
 
 class _DetailEntryHost extends StatefulWidget {
