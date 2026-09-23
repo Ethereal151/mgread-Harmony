@@ -109,6 +109,7 @@ final class _SourceVideoPlayerDestinationState extends State<_SourceVideoPlayerD
   late final SourceVideoPlaybackPlatformController _playbackPlatformController;
   late final SourceVideoAudioSessionController _audioSessionController;
   late final VideoPlayerController _playerController;
+  late final Future<void> _windowModeReady;
   _VideoPlayerSetup? _setup;
   Object? _setupFailure;
   bool _firstFramePresented = false;
@@ -121,7 +122,12 @@ final class _SourceVideoPlayerDestinationState extends State<_SourceVideoPlayerD
     _playbackPlatformController = SourceVideoPlaybackPlatformController();
     _playerController = VideoPlayerController();
     _audioSessionController = SourceVideoAudioSessionController(onPauseRequested: _pauseForSystemInterruption);
-    unawaited(_fullscreenController.activate());
+    // OHOS may recreate the Flutter window surface while applying the
+    // portrait video window mode. Do not create/register an AVPlayer texture
+    // until that transition has completed; otherwise the texture can be bound
+    // to the old producer surface and the engine keeps failing SurfaceFrame
+    // submission for the rest of the route lifetime.
+    _windowModeReady = _fullscreenController.activate();
     _recordStartupEvent(
       widget.diagnostics,
       widget.startupSession.mark(VideoStartupPhase.routePresented, state: VideoStartupState.completed),
@@ -137,6 +143,7 @@ final class _SourceVideoPlayerDestinationState extends State<_SourceVideoPlayerD
       _firstFramePresented = false;
     });
     try {
+      await _windowModeReady;
       final libraryFuture = widget.libraryItemId == null ? null : widget.container.read(appStartupControllerProvider).contentLibrary;
       final itemId = widget.libraryItemId == null ? null : LibraryItemId(widget.libraryItemId!);
       final proxyUri = widget.container.read(configuredFlutterNetworkProxyManagerProvider).playerProxyUriFor(NetworkProxyTraffic.video);

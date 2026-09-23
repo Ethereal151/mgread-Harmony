@@ -9,6 +9,7 @@ import {
   MethodResult,
   AbilityAware,
   AbilityPluginBinding,
+  Log,
 } from '@ohos/flutter_ohos'
 import common from '@ohos.app.ability.common'
 import media from '@ohos.multimedia.media'
@@ -32,6 +33,12 @@ interface OhosMediaEventPayload {
 
 /** Native AVPlayer owner for OHOS audio and video sessions. */
 export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallHandler, AbilityAware {
+  private static readonly TAG = 'MgReadOhosMedia'
+  // A positive bootstrap size is required by the OHOS Flutter external
+  // texture before AVPlayer reports the stream's real dimensions. The actual
+  // size is applied again after prepared/videoSizeChange.
+  private static readonly BOOTSTRAP_VIDEO_WIDTH = 640
+  private static readonly BOOTSTRAP_VIDEO_HEIGHT = 360
   private methodChannel?: MethodChannel
   private eventChannel?: EventChannel
   private readonly events = new OhosMediaEventStreamHandler()
@@ -171,13 +178,17 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
       await player.setMediaSource(source)
       await this.waitForState(player, 'initialized')
       if (texture !== undefined) {
+        this.setVideoTextureSize(texture, MgReadOhosMediaPlugin.BOOTSTRAP_VIDEO_WIDTH, MgReadOhosMediaPlugin.BOOTSTRAP_VIDEO_HEIGHT)
         const surfaceId = texture.getSurfaceId()
         player.surfaceId = String(surfaceId)
-        console.info(`[MgReadOhosMedia] surface_bound session=${sessionId} textureId=${texture.getTextureId()} surfaceId=${surfaceId}`)
+        this.log(`surface_bound session=${sessionId} textureId=${texture.getTextureId()} surfaceId=${surfaceId}`)
       }
       await player.prepare()
       await this.waitForState(player, 'prepared')
-      console.info(`[MgReadOhosMedia] prepared session=${sessionId} durationMs=${player.duration}`)
+      if (texture !== undefined) {
+        this.setVideoTextureSize(texture, player.width, player.height)
+      }
+      this.log(`prepared session=${sessionId} durationMs=${player.duration} videoSize=${player.width}x${player.height}`)
       const initialPosition = this.number(args, 'initialPositionMs')
       if (initialPosition > 0) player.seek(initialPosition)
       if (this.booleanValue(args, 'loop')) player.loop = true
@@ -203,10 +214,19 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
     return this.textures.registerTexture(textureId)
   }
 
+  private setVideoTextureSize(texture: SurfaceTextureEntry, width: number, height: number): void {
+    if (width <= 0 || height <= 0) {
+      this.log(`video_size_unavailable textureId=${texture.getTextureId()} size=${width}x${height}`)
+      return
+    }
+    this.textures?.setTextureBufferSize(texture.getTextureId(), width, height)
+    this.log(`texture_size textureId=${texture.getTextureId()} size=${width}x${height}`)
+  }
+
   private bind(sessionId: string, session: MediaSession): void {
     const player = session.player
     player.on('stateChange', (state: media.AVPlayerState, reason: media.StateChangeReason) => {
-      console.info(`[MgReadOhosMedia] state session=${sessionId} state=${state} reason=${reason}`)
+      this.log(`state session=${sessionId} state=${state} reason=${reason}`)
       this.emit(sessionId, 'state', state)
       if (state === 'playing') this.emit(sessionId, 'playing', true)
       if (state === 'paused' || state === 'completed' || state === 'stopped') this.emit(sessionId, 'playing', false)
@@ -239,13 +259,13 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
       }
     })
     player.on('videoSizeChange', (width: number, height: number) => {
-      console.info(`[MgReadOhosMedia] video_size session=${sessionId} width=${width} height=${height}`)
+      this.log(`video_size session=${sessionId} width=${width} height=${height}`)
       if (session.texture !== undefined && width > 0 && height > 0) {
-        this.textures?.setTextureBufferSize(session.texture.getTextureId(), width, height)
+        this.setVideoTextureSize(session.texture, width, height)
       }
     })
     player.on('startRenderFrame', () => {
-      console.info(`[MgReadOhosMedia] first_frame session=${sessionId}`)
+      this.log(`first_frame session=${sessionId}`)
       this.emit(sessionId, 'firstFrame', true)
     })
     player.on('endOfStream', () => this.emit(sessionId, 'completed', true))
@@ -259,7 +279,7 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
     })
     player.on('error', (error: Error) => {
       const message = this.errorMessage(error)
-      console.error(`[MgReadOhosMedia] player_error session=${sessionId} message=${message}`)
+      Log.e(MgReadOhosMediaPlugin.TAG, `player_error session=${sessionId} message=`, message)
       this.emit(sessionId, 'error', null, message)
     })
     player.on('audioInterrupt', (event: audio.InterruptEvent) => {
@@ -329,12 +349,19 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
       this.emit(sessionId, 'interrupted', false)
     }
     await session.player.play()
-    console.info(`[MgReadOhosMedia] play_requested session=${sessionId}`)
+    this.log(`play_requested session=${sessionId}`)
     // HarmonyOS resolves AVPlayer.play() before the asynchronous state change
     // is observable. Do not let Dart issue pause/seek-after-play while the
     // player is still in `prepared`, because OHOS rejects pause in that state.
     await this.waitForState(session.player, 'playing')
-    console.info(`[MgReadOhosMedia] playing session=${sessionId}`)
+    this.log(`playing session=${sessionId}`)
+  }
+
+  private log(message: string): void {
+    // console.info is not present in the selected HiLog stream on API 26.
+    // Flutter's Log bridge is routed through HiLog and remains observable in
+    // both debug and release HAPs.
+    Log.w(MgReadOhosMediaPlugin.TAG, message)
   }
 
   private emit(sessionId: string, kind: string, value?: Any, message?: string): void {
