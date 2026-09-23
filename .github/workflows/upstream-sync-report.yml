@@ -15,10 +15,10 @@ permissions:
 
 jobs:
   report:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Check out Harmony branch
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -80,7 +80,7 @@ jobs:
               if (-not $groups.ContainsKey($category)) { continue }
               "### $category" | Add-Content -Path $reportPath -Encoding utf8
               "" | Add-Content -Path $reportPath -Encoding utf8
-              $groups[$category] | Sort-Object | ForEach-Object { "- `$_`" } | Add-Content -Path $reportPath -Encoding utf8
+              $groups[$category] | Sort-Object | ForEach-Object { '- `{0}`' -f $_ } | Add-Content -Path $reportPath -Encoding utf8
               "" | Add-Content -Path $reportPath -Encoding utf8
             }
           }
