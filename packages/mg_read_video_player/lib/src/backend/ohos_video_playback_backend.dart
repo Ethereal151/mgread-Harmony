@@ -43,7 +43,10 @@ final class OhosVideoPlaybackBackend implements VideoPlaybackBackend {
     final textureId = _textureId;
     return textureId == null
         ? SizedBox.expand(key: key)
-        : Texture(key: key, textureId: textureId);
+        : KeyedSubtree(
+            key: key,
+            child: Texture(key: ValueKey<int>(textureId), textureId: textureId),
+          );
   }
 
   @override
