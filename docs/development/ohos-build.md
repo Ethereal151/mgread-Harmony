@@ -99,6 +99,13 @@ Runtime 资源和未选择的原生架构，完成后自动恢复源配置：
 否则会把模拟器架构一起放入 HAP。脚本还会在构建结束后检查 HAP 中没有非 OHOS
 Runtime 和未选择的架构。
 
+DevEco Studio 直接构建也由 `ohos/hvigorfile.ts` 固定为 arm64 单架构，并在 Flutter
+任务完成后清理增量目录中残留的 Android、Windows、macOS Runtime。直接构建后的未签名
+产物位于 `ohos/entry/build/default/outputs/default/entry-default-unsigned.hap`；本机验证
+Release 包约为 175 MiB。旧的 `build/ohos/hap/entry-default-signed.hap` 可能是历史增量
+产物，不要用它判断当前包大小；如果 DevEco 仍显示旧结果，先执行一次 Clean Project
+并重新构建。
+
 ## 当前验证结果
 
 ### 2026-09-21 增量适配验证

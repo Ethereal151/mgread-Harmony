@@ -13,7 +13,6 @@
   "overrides": {
     "@ohos/flutter_ohos": "file:D:\\f\\bin\\cache\\artifacts\\engine\\ohos-arm64\\flutter_embedding_debug.har",
     "flutter_native_arm64_v8a": "file:D:\\f\\bin\\cache\\artifacts\\engine\\ohos-arm64\\arm64_v8a_debug.har",
-    "flutter_native_x86_64": "file:D:\\f\\bin\\cache\\artifacts\\engine\\ohos-x64\\x86_64_debug.har",
     "integration_test": "file:D:\\f\\packages\\integration_test\\ohos",
     "screen_brightness_ohos": "file:plugins/.flutter_ohos_plugins/screen_brightness_ohos/ohos"
   }
