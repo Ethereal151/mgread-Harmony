@@ -77,8 +77,9 @@ final class _RuntimeChildMonitor {
   bool _readyReceived = false;
 
   /// Waits for ready until the shared startup deadline or a safe failure.
-  Future<_RuntimeReady> waitForReady() {
-    final timeout = Timer(_startupTimeout, () {
+  Future<_RuntimeReady> waitForReady(DateTime deadline) {
+    final remaining = deadline.difference(DateTime.now());
+    final timeout = Timer(remaining.isNegative ? Duration.zero : remaining, () {
       _failStartup(
         'runtime_ready_timeout',
         'The desktop Runtime did not become ready in time.',

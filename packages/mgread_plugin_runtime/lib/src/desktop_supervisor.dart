@@ -553,9 +553,10 @@ final class _DesktopRuntimeSupervisor implements _RuntimeSupervisor {
       );
       _monitor = monitor;
 
-      final ready = await monitor.waitForReady();
+      final startupDeadline = _startupStartedAt!.add(_startupTimeout);
+      final ready = await monitor.waitForReady(startupDeadline);
       _assertStartupGeneration(generation);
-      await _probeHttpReady(ready);
+      await _probeHttpReady(ready, deadline: startupDeadline);
       _assertStartupGeneration(generation);
       final connection = await _WireConnection.connect(
         ready,
@@ -739,62 +740,6 @@ final class _DesktopRuntimeSupervisor implements _RuntimeSupervisor {
     } on Object {
       // The fallback channel is strictly best effort and must not recurse.
     }
-  }
-
-  ///
-  /// Confirms that stdout-ready, HTTP, and version identity all belong to one
-  /// Runtime Core before the WebSocket is trusted.
-  ///
-  /// The short retry exists solely for the child-internal race between writing
-  /// stdout and accepting loopback HTTP. It does not retry a failed launch.
-  Future<void> _probeHttpReady(_RuntimeReady ready) async {
-    final client = HttpClient();
-    final deadline = DateTime.now().add(_startupTimeout);
-    try {
-      while (DateTime.now().isBefore(deadline)) {
-        try {
-          final request = await client.getUrl(
-            Uri(
-              scheme: 'http',
-              host: ready.host,
-              port: ready.port,
-              path: '/health/ready',
-            ),
-          );
-          final response = await request.close();
-          final body = await utf8.decoder.bind(response).join();
-          if (response.statusCode == HttpStatus.ok) {
-            final decoded = _jsonObject(
-              jsonDecode(body),
-              'Runtime health response',
-            );
-            if (decoded['status'] == 'ready' &&
-                decoded['bootId'] == ready.bootId &&
-                decoded['nodeVersion'] == _expectedNodeVersion &&
-                decoded['protocolVersion'] == _protocolVersion) {
-              return;
-            }
-          }
-        } on Object {
-          // The ready signal and HTTP server race only inside the owned Runtime.
-        }
-        await Future<void>.delayed(const Duration(milliseconds: 25));
-      }
-    } finally {
-      client.close(force: true);
-    }
-
-    _recordDiagnostic(
-      const RuntimeDiagnostic(
-        code: 'runtime_http_readiness_failed',
-        level: RuntimeDiagnosticLevel.error,
-        message: 'The desktop Runtime did not pass its HTTP readiness check.',
-      ),
-    );
-    throw _failure(
-      'runtime_not_ready',
-      'The desktop Runtime did not pass its readiness check.',
-    );
   }
 
   /// Closes any partial transport and child tree after a failed startup phase.

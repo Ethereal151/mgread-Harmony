@@ -784,6 +784,45 @@ void main() {
   );
 
   test(
+    'HTTP readiness body timeout fails once and cleans up the child',
+    () async {
+      final runtime = PluginRuntime.desktopForTesting(
+        runtimeRepositoryRoot: nodeRuntimeRepositoryRoot,
+        entrypointOverride: File(
+          <String>[
+            pluginRuntimeRepositoryRoot.path,
+            'test',
+            'fixtures',
+            'ready-http-body-hang.mjs',
+          ].join(Platform.pathSeparator),
+        ),
+      );
+      addTearDown(() async {
+        await runtime.debugDispose();
+        await runtime.debugDispose();
+      });
+
+      final stopwatch = Stopwatch()..start();
+      final error = await _captureRuntimeFailure(
+        runtime.invoke(const RuntimePingInvocation()),
+      );
+      stopwatch.stop();
+
+      expect(error.code, 'runtime_not_ready');
+      expect(
+        error.diagnostics.map((diagnostic) => diagnostic.code),
+        contains('runtime_http_readiness_failed'),
+      );
+      expect(stopwatch.elapsed, lessThan(const Duration(seconds: 25)));
+      expect(runtime.debugDesktopProcessStartCount, 1);
+
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      expect(runtime.debugDesktopProcessStartCount, 1);
+    },
+    timeout: const Timeout(Duration(seconds: 35)),
+  );
+
+  test(
     'a post-ready child exit emits a fatal diagnostic and only restarts on the next invocation',
     () async {
       final runtime = PluginRuntime.desktopForTesting(
