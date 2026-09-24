@@ -16,6 +16,7 @@ library;
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -138,7 +139,12 @@ final class VideoPlayerStage extends StatelessWidget {
             autofocus: true,
             onKeyEvent: onKeyEvent,
             child: Listener(
-              onPointerHover: (_) {
+              // OHOS touch input can report transient hover events while a
+              // finger is landing. Treat hover as a desktop-mouse affordance
+              // only; otherwise one touch can repeatedly show and reschedule
+              // the controls, producing a visible flash.
+              onPointerHover: (event) {
+                if (event.kind != PointerDeviceKind.mouse) return;
                 onInteractionStart();
                 onInteractionEnd();
               },

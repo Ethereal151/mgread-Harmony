@@ -290,8 +290,6 @@ final class _VideoPlayerGestureLayerState
 
   void _handleTap() {
     widget.onToggleControls();
-    if (widget.locked) return;
-    widget.onInteractionEnd();
   }
 
   @override
