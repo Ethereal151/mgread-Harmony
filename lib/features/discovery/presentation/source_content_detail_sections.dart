@@ -133,24 +133,21 @@ class _DetailCoverLink extends StatelessWidget {
       button: enabled,
       enabled: enabled,
       label: content.contentKind == PluginContentKind.video ? '播放首集' : '打开封面链接',
-      child: Opacity(
-        opacity: enabled ? 1 : .56,
-        child: InkWell(
-          key: const Key('source-detail-open-cover-url'),
-          onTap: onTap,
-          borderRadius: presentation == DiscoveryCoverPresentation.landscape ? BorderRadius.circular(10) : AppRadii.discoveryCover,
-          child: DiscoveryBookCover(
-            key: const Key('source-detail-cover'),
-            title: content.title,
-            contentKind: content.contentKind,
-            coverBytes: content.coverBytes,
-            remoteContentId: content.id,
-            coverUrl: content.coverUrl,
-            variant: _coverVariant(content.id),
-            width: width,
-            height: height,
-            presentation: presentation,
-          ),
+      child: InkWell(
+        key: const Key('source-detail-open-cover-url'),
+        onTap: onTap,
+        borderRadius: presentation == DiscoveryCoverPresentation.landscape ? BorderRadius.circular(10) : AppRadii.discoveryCover,
+        child: DiscoveryBookCover(
+          key: const Key('source-detail-cover'),
+          title: content.title,
+          contentKind: content.contentKind,
+          coverBytes: content.coverBytes,
+          remoteContentId: content.id,
+          coverUrl: content.coverUrl,
+          variant: _coverVariant(content.id),
+          width: width,
+          height: height,
+          presentation: presentation,
         ),
       ),
     );
@@ -252,6 +249,7 @@ class _ShelfActionBar extends StatefulWidget {
     required this.shelfState,
     required this.onAction,
     required this.onStartReading,
+    required this.canStartReading,
     this.isCoverBlurred = false,
   });
 
@@ -259,6 +257,7 @@ class _ShelfActionBar extends StatefulWidget {
   final SourceDetailShelfState shelfState;
   final SourceShelfActionRequested onAction;
   final SourceStartReadingRequested onStartReading;
+  final bool canStartReading;
   final bool isCoverBlurred;
 
   @override
@@ -352,7 +351,7 @@ class _ShelfActionBarState extends State<_ShelfActionBar> {
               width: actionWidth,
               child: OutlinedButton.icon(
                 key: const Key('source-detail-start-reading'),
-                onPressed: _isRunning ? null : _startReading,
+                onPressed: _isRunning || !widget.canStartReading ? null : _startReading,
                 icon: const Icon(Icons.menu_book_rounded),
                 label: const Text('开始阅读'),
                 style: style(tokens.accent, tokens.accent),
@@ -365,7 +364,7 @@ class _ShelfActionBarState extends State<_ShelfActionBar> {
   }
 
   Future<void> _startReading() async {
-    if (_isRunning) return;
+    if (_isRunning || !widget.canStartReading) return;
     Navigator.of(context).pop();
     await widget.onStartReading();
   }
@@ -875,14 +874,14 @@ class _DetailFailure extends StatelessWidget {
     final detail = error.detail?.trim();
     final originalReason = detail == null || detail.isEmpty ? null : '原始原因：$detail';
     final diagnosticPayloadParts = <String>[
-      'MgRead 详情诊断信息',
+      'MgRead 详情加载失败诊断信息',
       '操作：加载详情或目录',
       if (sourceName case final value?) '数据源名称：$value',
       if (pluginId case final value?) '插件 ID：$value',
       if (pluginVersion case final value?) '插件版本：$value',
       if (contentId case final value?) '内容 ID：$value',
       if (chapterId case final value?) '章节 ID：$value',
-      '失败能力：$capability',
+      '失败阶段：$capability',
       '错误码：${error.code.wireValue}',
       '错误分类：${error.category.name}',
       '可重试：${error.retryable ? '允许' : '不建议'}',

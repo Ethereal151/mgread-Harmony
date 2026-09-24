@@ -215,7 +215,7 @@ void main() {
     expect(find.byKey(const Key('app-operation-error-copy')), findsOneWidget);
   });
 
-  testWidgets('manga detail starts the comic reader callback instead of a URL list', (tester) async {
+  testWidgets('manga detail starts the comic reader callback and keeps detail as the return route', (tester) async {
     var comicChapterCount = 0;
     List<int>? forwardedCoverBytes;
     BookCoverMemoryCache.write(
@@ -243,7 +243,7 @@ void main() {
 
     expect(comicChapterCount, 1);
     expect(forwardedCoverBytes, _mangaCoverBytes);
-    expect(find.byKey(const Key('source-detail-start-reading')), findsNothing);
+    expect(find.byKey(const Key('source-detail-start-reading')), findsOneWidget);
     expect(find.byKey(const Key('source-chapter-content-sheet')), findsNothing);
   });
 
@@ -297,7 +297,8 @@ void main() {
     final landscapeSize = tester.getSize(find.byKey(const Key('source-detail-cover')));
     expect(landscapeSize.height, closeTo(landscapeSize.width * 9 / 16, 0.01));
     expect(find.byIcon(Icons.play_arrow_rounded), findsNothing);
-    expect(find.text('视频'), findsNothing);
+    expect(find.byKey(const ValueKey<String>('default-cover-label-video')), findsOneWidget);
+    expect(find.text('视频'), findsOneWidget);
   });
 
   testWidgets('detail renders the resolved metadata while its catalog is still loading', (tester) async {
@@ -350,6 +351,7 @@ void main() {
     expect(find.byKey(const Key('source-detail-privacy-action')), findsOneWidget);
     expect(find.byKey(const Key('source-detail-delete-action')), findsOneWidget);
     expect(find.byKey(const Key('source-detail-start-reading')), findsOneWidget);
+    expect(tester.widget<OutlinedButton>(find.byKey(const Key('source-detail-start-reading'))).onPressed, isNull);
 
     seed.complete(
       SourceContentDetailSeed(
@@ -361,6 +363,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    expect(tester.widget<OutlinedButton>(find.byKey(const Key('source-detail-start-reading'))).onPressed, isNotNull);
   });
 }
 

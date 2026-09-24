@@ -99,6 +99,32 @@ test('fixture flow covers discovery, search, detail, neutral groups and both pla
   );
 });
 
+test('search supplements an exact current item when the upstream search index lags', async () => {
+  const list = await readFile(new URL('./fixtures/list.html', import.meta.url), 'utf8');
+  const staleSearch = list
+    .replaceAll('/v/101.html', '/v/201.html')
+    .replaceAll('Fixture Animation One', 'Archived Animation');
+  const requests = [];
+  await plugin.activate({
+    log: { info() {}, warn() {} },
+    resource: { proxy(value) { return value.url; } },
+    http: {
+      async fetch(input) {
+        const url = new URL(input);
+        requests.push(url.pathname);
+        return new Response(url.pathname.startsWith('/vch/') ? staleSearch : list);
+      },
+    },
+  });
+
+  const result = await plugin.search({ query: 'Ｆｉｘｔｕｒｅ Animation One', cursor: null, pageSize: 8 });
+
+  assert.equal(result.items[0].id, 'video:101');
+  assert.equal(result.items[0].title, 'Fixture Animation One');
+  assert.equal(result.nextCursor, null);
+  assert.deepEqual(requests, ['/vch/%EF%BC%A6%EF%BD%89%EF%BD%98%EF%BD%94%EF%BD%95%EF%BD%92%EF%BD%85%20Animation%20One.html', '/label/new.html']);
+});
+
 test('MCUE retries one recoverable response inside one bounded timeout', async () => {
   const [tokenPlayer, mcueTemplate] = await Promise.all([
     'player-token.html', 'mcue-player.html',

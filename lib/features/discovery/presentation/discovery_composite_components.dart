@@ -370,23 +370,41 @@ class DiscoveryComponentChip extends StatelessWidget {
           : Align(
               widthFactor: 1,
               alignment: Alignment.center,
-              child: SizedBox(
-                height: AppSpacing.discoveryChipVisualHeight,
-                child: ChoiceChip(
-                  showCheckmark: false,
-                  selected: selected,
-                  onSelected: (_) => onPressed(),
-                  avatar: icon == null ? null : Icon(icon, size: 17, color: tokens.accent),
-                  label: Text(label),
-                  labelStyle: labelStyle,
-                  labelPadding: const EdgeInsets.symmetric(horizontal: AppSpacing.unit),
-                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.compact),
-                  visualDensity: VisualDensity.compact,
-                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  backgroundColor: tokens.surface,
-                  selectedColor: tokens.accentSoft,
-                  side: BorderSide(color: selected ? tokens.accent : tokens.divider),
-                  shape: RoundedRectangleBorder(borderRadius: AppRadii.discoveryTile),
+              child: Semantics(
+                container: true,
+                button: true,
+                selected: selected,
+                label: label,
+                onTap: onPressed,
+                child: ExcludeSemantics(
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: onPressed,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        vertical: (AppSpacing.minimumTouchTarget - AppSpacing.discoveryChipVisualHeight) / 2,
+                      ),
+                      child: SizedBox(
+                        height: AppSpacing.discoveryChipVisualHeight,
+                        child: ChoiceChip(
+                          showCheckmark: false,
+                          selected: selected,
+                          onSelected: (_) => onPressed(),
+                          avatar: icon == null ? null : Icon(icon, size: 17, color: tokens.accent),
+                          label: Text(label),
+                          labelStyle: labelStyle,
+                          labelPadding: const EdgeInsets.symmetric(horizontal: AppSpacing.unit),
+                          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.compact),
+                          visualDensity: VisualDensity.compact,
+                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          backgroundColor: tokens.surface,
+                          selectedColor: tokens.accentSoft,
+                          side: BorderSide(color: selected ? tokens.accent : tokens.divider),
+                          shape: RoundedRectangleBorder(borderRadius: AppRadii.discoveryTile),
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ),

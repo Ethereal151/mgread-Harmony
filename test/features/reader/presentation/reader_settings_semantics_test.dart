@@ -115,6 +115,13 @@ void main() {
     try {
       await tester.pumpWidget(
         MaterialApp(
+          builder: (BuildContext context, Widget? child) {
+            final MediaQueryData mediaQuery = MediaQuery.of(context);
+            return MediaQuery(
+              data: mediaQuery.copyWith(padding: const EdgeInsets.only(bottom: 20), viewPadding: const EdgeInsets.only(bottom: 20)),
+              child: child ?? const SizedBox.shrink(),
+            );
+          },
           home: Scaffold(
             body: TextReaderView(
               bookId: 'settings-semantics-book',
@@ -132,32 +139,62 @@ void main() {
       final Finder settings = find.byKey(const Key('reader-toolbar-settings'));
       expect(settings, findsOneWidget);
 
+      double? expectedSheetTop;
+      double? expectedBrightnessOffset;
       for (int cycle = 0; cycle < 4; cycle += 1) {
         await tester.tap(settings);
         await tester.pumpAndSettle();
         expect(find.text('亮度'), findsOneWidget);
 
+        final Finder settingsSheet = find.byWidgetPredicate((Widget widget) => widget.runtimeType.toString() == 'ReaderSettingsSheet');
+        final double sheetTop = tester.getTopLeft(settingsSheet).dy;
+        final double brightnessOffset = tester.getTopLeft(find.text('亮度')).dy - sheetTop;
+        expectedSheetTop ??= sheetTop;
+        expectedBrightnessOffset ??= brightnessOffset;
+        expect(sheetTop, closeTo(expectedSheetTop, 0.01), reason: 'sheet cycle $cycle');
+        expect(brightnessOffset, closeTo(expectedBrightnessOffset, 0.01), reason: 'main page cycle $cycle');
+
+        final Finder bottomNavigation = find.byWidgetPredicate(
+          (Widget widget) => widget.runtimeType.toString() == 'ReaderSettingsBottomNavigation',
+        );
+        final double viewHeight = tester.view.physicalSize.height / tester.view.devicePixelRatio;
+        expect(tester.getBottomRight(bottomNavigation).dy, closeTo(viewHeight - 20, 0.01));
+
         if (cycle == 0) {
           await tester.tap(find.text('更多'));
           await tester.pumpAndSettle();
           expect(find.text('自动阅读速度'), findsOneWidget);
-          final Finder settingsSheet = find.byWidgetPredicate((Widget widget) => widget.runtimeType.toString() == 'ReaderSettingsSheet');
+          final Finder subpageHeader = find.byWidgetPredicate(
+            (Widget widget) => widget.runtimeType.toString() == 'ReaderSettingsSubpageHeader',
+          );
+          final Finder autoReadingTile = find.ancestor(of: find.text('自动阅读'), matching: find.byType(SwitchListTile));
           final Offset moreTitle = tester.getTopLeft(find.text('更多').last);
           final Offset autoTitle = tester.getTopLeft(find.text('自动阅读速度'));
-          // Keep the subpage content attached to the top of the sheet.
+          final Rect headerRect = tester.getRect(subpageHeader);
+          final Rect autoReadingRect = tester.getRect(autoReadingTile);
+          // Keep the subpage anchored to the sheet while preserving the full
+          // 48dp switch touch target and placing the following row directly
+          // after it. This detects real route drift without assuming the old
+          // compressed SwitchListTile geometry.
           expect(settingsSheet, findsOneWidget);
-          final double sheetTop = tester.getTopLeft(settingsSheet).dy;
           expect(moreTitle.dy - sheetTop, lessThan(72));
-          expect(autoTitle.dy - moreTitle.dy, lessThan(100));
+          expect(headerRect.top - sheetTop, closeTo(6, 0.01));
+          expect(autoReadingRect.top - headerRect.bottom, closeTo(4, 0.01));
+          expect(autoReadingRect.height, closeTo(48, 0.01));
+          expect(autoTitle.dy, greaterThanOrEqualTo(autoReadingRect.bottom));
+          expect(autoTitle.dy - autoReadingRect.bottom, lessThan(48));
           expect(find.text('单手模式'), findsOneWidget);
           expect(tester.takeException(), isNull);
           await tester.binding.handlePopRoute();
           await tester.pumpAndSettle();
+          expect(find.text('自动阅读速度'), findsNothing);
         }
 
         await tester.binding.handlePopRoute();
         await tester.pumpAndSettle();
         expect(settings, findsOneWidget);
+        expect(settingsSheet, findsNothing);
+        expect(find.text('亮度'), findsNothing);
         expect(tester.takeException(), isNull, reason: 'cycle $cycle');
       }
     } finally {

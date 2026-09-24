@@ -30,7 +30,6 @@ export {
   PluginArchiveError,
 } from "./plugin-archive.js";
 export {
-  dependencyObjectName,
   pluginApiVersion,
   pluginPackageSchemaVersion,
   PluginPackageError,
@@ -38,7 +37,6 @@ export {
   readPluginProject,
 } from "./plugin-package.js";
 export type {
-  LockedPluginDependency,
   PluginPackageDescriptor,
   PluginPackageMode,
   ValidatedPluginProject,
@@ -61,11 +59,6 @@ export type {
   SingleFilePluginEnvelope,
   SingleFilePluginIcon,
 } from "./plugin-single-file.js";
-export {
-  DependencyStore,
-  DependencyStoreError,
-} from "./dependency-store.js";
-export type { DependencyMaterializationResult } from "./dependency-store.js";
 export { PluginInstaller } from "./plugin-installer.js";
 export type {
   PluginInstallerEvent,

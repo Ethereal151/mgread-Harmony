@@ -63,6 +63,7 @@ final class DiagnosticsViewerLogFile {
     required this.modifiedAtUtcMicros,
     required this.storedBytes,
     required this.isCurrent,
+    this.isLive = false,
   });
 
   final String fileId;
@@ -70,6 +71,7 @@ final class DiagnosticsViewerLogFile {
   final int modifiedAtUtcMicros;
   final int storedBytes;
   final bool isCurrent;
+  final bool isLive;
 }
 
 @immutable
@@ -133,6 +135,8 @@ final class DiagnosticsViewerCapture {
 }
 
 abstract interface class DiagnosticsViewerGateway {
+  Stream<void> watchLiveEvents();
+
   Future<List<DiagnosticsViewerLogFile>> listLogFiles();
 
   Future<DiagnosticsViewerEventPage> listEvents({required DiagnosticsViewerSource source, required String logFileId, String? cursor});
@@ -156,14 +160,22 @@ final diagnosticsViewerGatewayProvider = Provider<DiagnosticsViewerGateway>(
     ref.watch(diagnosticsCaptureProvider),
     ref.watch(diagnosticsManagerProvider),
     ref.watch(diagnosticsLogArchiveProvider),
+    ref.watch(diagnosticsLiveBufferProvider),
   ),
 );
 
 final class DefaultDiagnosticsViewerGateway implements DiagnosticsViewerGateway {
-  DefaultDiagnosticsViewerGateway(DiagnosticsQuery? appQuery, this._appCapture, this._diagnostics, [DiagnosticsLogArchive? appArchive])
-    : _appArchive = appArchive ?? (appQuery is DiagnosticsLogArchive ? appQuery as DiagnosticsLogArchive : null);
+  DefaultDiagnosticsViewerGateway(
+    DiagnosticsQuery? appQuery,
+    this._appCapture,
+    this._diagnostics, [
+    DiagnosticsLogArchive? appArchive,
+    this._liveBuffer,
+  ]) : _appArchive = appArchive ?? (appQuery is DiagnosticsLogArchive ? appQuery as DiagnosticsLogArchive : null);
 
   static const int _previewBytes = 32 * 1024;
+  static const String _liveFileId = 'live-current';
+  static const int _livePageSize = 50;
   static const Duration _captureDuration = Duration(minutes: 15);
   static const Set<String> _appDetailComponents = <String>{
     'app.diagnostics',
@@ -176,14 +188,27 @@ final class DefaultDiagnosticsViewerGateway implements DiagnosticsViewerGateway 
   final DiagnosticsCapture? _appCapture;
   final DiagnosticsManager _diagnostics;
   final DiagnosticsLogArchive? _appArchive;
+  final LiveDiagnosticsBuffer? _liveBuffer;
+
+  @override
+  Stream<void> watchLiveEvents() => _liveBuffer?.changes ?? const Stream<void>.empty();
 
   @override
   Future<List<DiagnosticsViewerLogFile>> listLogFiles() async {
     final archive = _appArchive;
-    if (archive == null) return const <DiagnosticsViewerLogFile>[];
-    final files = await archive.listLogFiles();
-    return List<DiagnosticsViewerLogFile>.unmodifiable(
-      files.map(
+    final files = archive == null ? const <DiagnosticLogFile>[] : await archive.listLogFiles();
+    final live = _liveBuffer;
+    return List<DiagnosticsViewerLogFile>.unmodifiable(<DiagnosticsViewerLogFile>[
+      if (live != null)
+        DiagnosticsViewerLogFile(
+          fileId: _liveFileId,
+          startedAtUtcMicros: live.startedAtUtcMicros,
+          modifiedAtUtcMicros: live.modifiedAtUtcMicros,
+          storedBytes: live.storedBytes,
+          isCurrent: true,
+          isLive: true,
+        ),
+      ...files.map(
         (file) => DiagnosticsViewerLogFile(
           fileId: file.fileId,
           startedAtUtcMicros: file.startedAtUtcMicros,
@@ -192,7 +217,7 @@ final class DefaultDiagnosticsViewerGateway implements DiagnosticsViewerGateway 
           isCurrent: file.isCurrent,
         ),
       ),
-    );
+    ]);
   }
 
   @override
@@ -201,6 +226,7 @@ final class DefaultDiagnosticsViewerGateway implements DiagnosticsViewerGateway 
     required String logFileId,
     String? cursor,
   }) async {
+    if (logFileId == _liveFileId) return _listLiveEvents(source: source, cursor: cursor);
     final span = _diagnostics.startSpan(
       AppDiagnosticEvents.viewerOperation,
       attributes: () => DiagnosticObjectValue(<String, DiagnosticValue>{
@@ -248,6 +274,11 @@ final class DefaultDiagnosticsViewerGateway implements DiagnosticsViewerGateway 
 
   @override
   Future<DiagnosticsViewerEventDetails> loadEventDetails(DiagnosticsViewerEvent event) async {
+    if (event.logFileId == _liveFileId) {
+      final liveEvent = _liveBuffer?.findEvent(event.eventId);
+      if (liveEvent == null) throw const DiagnosticsViewerException('diagnostic_event_expired');
+      return DiagnosticsViewerEventDetails(attributesText: _prettyJson(liveEvent.attributes.toWireValue()), attachments: const []);
+    }
     final span = _diagnostics.startSpan(
       AppDiagnosticEvents.viewerOperation,
       attributes: () => DiagnosticObjectValue(<String, DiagnosticValue>{
@@ -397,6 +428,7 @@ final class DefaultDiagnosticsViewerGateway implements DiagnosticsViewerGateway 
 
   @override
   Future<void> deleteLogFile(String logFileId) async {
+    if (logFileId == _liveFileId) throw const DiagnosticsViewerException('live_log_not_deletable');
     final archive = _appArchive;
     if (archive == null) throw const DiagnosticsViewerException('app_diagnostics_unavailable');
     await archive.deleteLogFile(logFileId);
@@ -404,10 +436,31 @@ final class DefaultDiagnosticsViewerGateway implements DiagnosticsViewerGateway 
 
   @override
   Future<DiagnosticExportResult> exportLogFile(String logFileId) async {
+    if (logFileId == _liveFileId) throw const DiagnosticsViewerException('live_log_not_exportable');
     final archive = _appArchive;
     if (archive == null) throw const DiagnosticsViewerException('app_diagnostics_unavailable');
     return archive.exportLogFile(logFileId);
   }
+
+  DiagnosticsViewerEventPage _listLiveEvents({required DiagnosticsViewerSource source, String? cursor}) {
+    final live = _liveBuffer;
+    if (live == null) return const DiagnosticsViewerEventPage(items: <DiagnosticsViewerEvent>[]);
+    final beforeSequence = cursor == null ? null : _decodeLiveCursor(cursor);
+    final events = live.snapshot(beforeSourceSequence: beforeSequence, limit: _livePageSize + 1);
+    final hasMore = events.length > _livePageSize;
+    final visible = hasMore ? events.take(_livePageSize).toList(growable: false) : events;
+    return DiagnosticsViewerEventPage(
+      items: List<DiagnosticsViewerEvent>.unmodifiable(visible.map((event) => _mapAppEvent(event, _liveFileId))),
+      nextCursor: hasMore ? _encodeLiveCursor(visible.last.sourceSequence) : null,
+    );
+  }
+}
+
+String _encodeLiveCursor(int sourceSequence) => 'live_${sourceSequence.toRadixString(16).padLeft(16, '0')}';
+
+int _decodeLiveCursor(String cursor) {
+  if (!RegExp(r'^live_[a-f0-9]{16}$').hasMatch(cursor)) throw const DiagnosticsViewerException('invalid_cursor');
+  return int.parse(cursor.substring(5), radix: 16);
 }
 
 DiagnosticsViewerEvent _mapAppEvent(DiagnosticEvent event, String logFileId) => DiagnosticsViewerEvent(

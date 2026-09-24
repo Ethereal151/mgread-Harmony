@@ -3,22 +3,24 @@
  *
  * 职责：迁移旧书源中可落到公开 Source API 的搜索、分类、详情、目录、正文、封面和官方书架 ID 读取。
  * 生命周期：activate 只保存 Runtime 上下文；不注册设备、不保存登录凭据、不创建后台任务。
- * IO：公开 HTTP 接口统一经 ctx.http；封面经 ctx.resource.proxy 交给 Runtime 数据面；登录书架只经可见 WebView。
+ * IO：公开 HTTP 接口统一经 ctx.http；封面经 ctx.resource.proxy 交给 Runtime 数据面；登录由可见 WebView 完成，登录态检查和书架读取使用同一宿主浏览器 Profile 的隐藏 HTTP 会话。
  * 稳定标识：作品使用 book_id，章节使用 item_id，均不会用标题或数组位置替代。
  * 边界：旧版 legado 设置页、设备签名、段评回调没有对应公开 Source API，因此不在本插件伪造。
  */
-import type { MgReadPluginContext, PluginJsonValue, PluginWebViewPage } from '@mgread/source-api';
+import type { MgReadPluginContext, PluginJsonValue } from '@mgread/source-api';
 
 type Context = MgReadPluginContext;
 type Json = Record<string, unknown>;
 type Channel = readonly [id: string, title: string, gender: number];
 type LoginState = 'loggedIn' | 'loggedOut' | 'unknown';
-type BookshelfSnapshot = { readonly status: LoginState; readonly bookIds: readonly string[]; readonly url: string };
+type BookshelfSnapshot = { readonly status: LoginState; readonly bookIds: readonly string[] };
 
 const NOVEL_HOST = 'https://novel.snssdk.com';
 const WEB_HOST = 'https://fanqienovel.com';
 const LOGIN_URL = `${WEB_HOST}/`;
-const BOOKSHELF_URL = `${WEB_HOST}/bookshelf?enter_from=menu`;
+const USER_INFO_URL = `${WEB_HOST}/api/user/info/v2`;
+const BOOKSHELF_URL = `${WEB_HOST}/reading/bookapi/bookshelf/info/v:version/?aid=1967&iid=0&version_code=57700&update_version_code=57700`;
+const BROWSER_SESSION_KEY = 'fanqie-webview';
 const BOOK_HOST = 'https://fq-book.netsite.cc';
 const CONTENT_HOSTS = ['https://gofq.52dns.cc', 'https://pyfq.52dns.cc', BOOK_HOST] as const;
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36';
@@ -31,39 +33,11 @@ const WEB_HEADERS = {
   Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
   'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
 } as const;
-const BOOKSHELF_PROBE = String.raw`(async()=>{
-  const collectBookIds=()=>{
-    const ids=new Set();
-    const nodes=document.querySelectorAll('a[href],[data-book-id],[data-bookid],[book-id]');
-    for(const node of nodes){
-      const href=node.getAttribute('href')||'';
-      for(const match of href.matchAll(/(?:^|\/)page\/(\d+)(?:[/?#]|$)/gu))ids.add(match[1]);
-      for(const name of ['data-book-id','data-bookid','book-id']){
-        const value=node.getAttribute(name)||'';
-        if(/^\d+$/u.test(value))ids.add(value);
-      }
-    }
-    return [...ids];
-  };
-  const readState=()=>{
-    const title=document.title||'';
-    const body=(document.body?.innerText||'').slice(0,12000);
-    const marker=title+' '+body;
-    const bookIds=collectBookIds();
-    const common=window.__INITIAL_STATE__?.common||{};
-    const hasLogout=!!document.querySelector('[data-testid*="logout" i],[class*="logout" i]')||/退出登录|退出账号/u.test(marker);
-    const hasAccount=!!document.querySelector('[data-testid*="avatar" i],[class*="avatar" i],[class*="user-info" i]')||/个人中心|我的账号|账号设置/u.test(marker)||!!common.id||!!common.name||!!common.avatar||common.hasRegistered===true;
-    const needsLogin=/登录后查看|请先登录|立即登录|扫码登录|手机号登录|账号登录|未登录/u.test(marker);
-    const status=hasLogout||hasAccount||(bookIds.length>0&&!needsLogin)?'loggedIn':needsLogin?'loggedOut':'unknown';
-    return {bookIds,status,url:location.href};
-  };
-  for(let attempt=0;attempt<40;attempt+=1){
-    const state=readState();
-    if(state.bookIds.length>0||state.status!=='unknown'||attempt===39)return state;
-    await new Promise(resolve=>setTimeout(resolve,250));
-  }
-  return readState();
-})()`;
+const COVER_HEADERS = {
+  Accept: 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+  Referer: `${WEB_HOST}/`,
+  'User-Agent': USER_AGENT,
+} as const;
 const CHANNELS: readonly Channel[] = [
   ['1', '都市', 1], ['2', '都市生活', 1], ['7', '玄幻', 1], ['8', '科幻', 1],
   ['10', '悬疑', 1], ['11', '乡村', 1], ['12', '仙侠', 1], ['13', '历史', 1],
@@ -180,20 +154,20 @@ async function openLogin() {
 }
 
 async function checkLoginStatus() {
-  const snapshot = await withPage(readBookshelfSnapshot);
-  if (snapshot.status === 'loggedIn') {
-    return statusDocument('番茄已登录', `已检测到当前 WebView 登录态；书架发现到 ${snapshot.bookIds.length} 本书。`);
+  const snapshot = await readUserSnapshot();
+  if (snapshot === 'loggedIn') {
+    return statusDocument('番茄已登录', '已使用当前浏览器 Profile 的完整登录 Cookie 确认当前用户。');
   }
-  if (snapshot.status === 'loggedOut') {
+  if (snapshot === 'loggedOut') {
     return statusDocument('番茄未登录', '请先使用“登录番茄小说”在官方 WebView 中完成登录。');
   }
-  return statusDocument('登录状态无法确认', '页面没有返回明确的登录状态，请在官方 WebView 中完成登录后重试。');
+  return statusDocument('登录状态无法确认', '番茄用户接口没有返回明确的登录状态，请在官方 WebView 中完成登录后重试。');
 }
 
 async function openBookshelf(request: { cursor: string | null; collectionId: string | null; pageSize: number }) {
-  const snapshot = await withPage(readBookshelfSnapshot);
+  const snapshot = await readBookshelfSnapshot();
   if (snapshot.status === 'loggedOut') return statusDocument('番茄未登录', '请先使用“登录番茄小说”在官方 WebView 中完成登录。');
-  if (snapshot.status !== 'loggedIn') return statusDocument('登录状态无法确认', '请先在官方 WebView 中完成登录，然后重新读取书架。');
+  if (snapshot.status !== 'loggedIn') return statusDocument('登录状态无法确认', '番茄书架接口没有返回明确的登录状态，请先在官方 WebView 中完成登录，然后重试。');
   const offset = bookshelfOffset(request.cursor);
   const pageSize = clamp(request.pageSize);
   const ids = snapshot.bookIds.slice(offset, offset + pageSize);
@@ -225,20 +199,57 @@ async function openBookshelf(request: { cursor: string | null; collectionId: str
   });
 }
 
-async function readBookshelfSnapshot(page: PluginWebViewPage): Promise<BookshelfSnapshot> {
-  await page.navigate(BOOKSHELF_URL, { timeoutMs: 45_000 });
-  await page.show({ timeoutMs: 15_000 });
-  const raw = await page.executeJavaScript<PluginJsonValue>(BOOKSHELF_PROBE, { timeoutMs: 20_000 });
-  return parseBookshelfSnapshot(raw);
+async function readUserSnapshot(): Promise<LoginState> {
+  const response = await requestBrowserJson(USER_INFO_URL);
+  return loginState(response.code);
 }
 
-function parseBookshelfSnapshot(value: PluginJsonValue): BookshelfSnapshot {
-  const raw = isObject(value) ? value : {};
-  const status = text(raw.status);
-  const bookIds = Array.isArray(raw.bookIds)
-    ? [...new Set(raw.bookIds.filter((bookId): bookId is string => typeof bookId === 'string' && /^\d+$/u.test(bookId)))]
-    : [];
-  return { status: status === 'loggedIn' || status === 'loggedOut' ? status : 'unknown', bookIds, url: text(raw.url) };
+async function readBookshelfSnapshot(): Promise<BookshelfSnapshot> {
+  const response = await requestBrowserJson(BOOKSHELF_URL);
+  if (response.code !== 0) return { status: loginState(response.code), bookIds: [] };
+  const data = isObject(response.data) ? response.data : {};
+  const shelf = Array.isArray(data.book_shelf_info) ? data.book_shelf_info : [];
+  const bookIds = [...new Set(shelf.flatMap((entry) => {
+    if (!isObject(entry)) return [];
+    const bookId = text(entry.book_id);
+    return /^\d+$/u.test(bookId) ? [bookId] : [];
+  }))];
+  return { status: 'loggedIn', bookIds };
+}
+
+function loginState(code: number | null): LoginState {
+  if (code === 0) return 'loggedIn';
+  if (code === -1 || code === 101119) return 'loggedOut';
+  return 'unknown';
+}
+
+type BrowserJsonResponse = { readonly code: number | null; readonly data: Json | null };
+
+async function requestBrowserJson(url: string): Promise<BrowserJsonResponse> {
+  const raw = await requireContext().browser.sessionV1.request({
+    version: 1,
+    sessionKey: BROWSER_SESSION_KEY,
+    url,
+    method: 'GET',
+    headers: { Accept: 'application/json, text/plain, */*' },
+    body: null,
+    interaction: 'silent',
+    presentation: 'hidden',
+    transport: 'http',
+    timeoutMs: 30_000,
+    maxResponseBytes: 2 * 1024 * 1024,
+  }) as PluginJsonValue;
+  if (!isObject(raw) || typeof raw.status !== 'number' || raw.status < 200 || raw.status >= 400 || typeof raw.body !== 'string') {
+    return { code: null, data: null };
+  }
+  try {
+    const value = JSON.parse(raw.body) as unknown;
+    if (!isObject(value)) return { code: null, data: null };
+    const code = typeof value.code === 'number' ? value.code : typeof value.code === 'string' ? Number(value.code) : null;
+    return { code: Number.isSafeInteger(code) ? code : null, data: isObject(value.data) ? value.data : null };
+  } catch {
+    return { code: null, data: null };
+  }
 }
 
 function statusDocument(title: string, subtitle: string) {
@@ -369,7 +380,7 @@ function summary(value: Json): Json | null {
   const status = statusCode === 1 ? 'completed' : statusCode === 4 ? 'hiatus' : 'ongoing';
   return frozen({
     id: `novel:${id}`, title, contentKind: 'novel', coverOrientation: 'portrait', author: clean(text(value.author)) || null,
-    url: `${WEB_HOST}/page/${id}`, coverUrl: cover ? requireContext().resource.proxy({ kind: 'image', url: cover, headers: { Referer: `${WEB_HOST}/` } }) : null,
+    url: `${WEB_HOST}/page/${id}`, coverUrl: cover ? requireContext().resource.proxy({ kind: 'image', url: cover, headers: COVER_HEADERS }) : null,
     description: clean(text(value.abstract || value.book_abstract_v2 || value.intro)) || null, language: 'zh-CN', status, access: 'free',
     wordCount: number(value.word_number) || null, chapterCount: number(value.chapter_number) || null, publishedAt: null,
     updatedAt: timestamp(value.last_update_time || value.update_time), latestChapter: null,
@@ -379,14 +390,31 @@ function summary(value: Json): Json | null {
 
 function findBook(root: Json): Json {
   const queue: Json[] = [root]; const seen = new Set<Json>();
+  let selected: Json | undefined;
   while (queue.length > 0) {
     const current = queue.shift()!;
     if (seen.has(current)) continue;
     seen.add(current);
-    if (text(current.book_name || current.name)) return current;
+    if (selected === undefined && text(current.book_name || current.name)) selected = current;
     for (const value of Object.values(current)) if (isObject(value)) queue.push(value);
   }
-  return {};
+  if (selected === undefined) return {};
+  if (text(selected.thumb_url || selected.cover || selected.cover_url)) return selected;
+  const cover = findCover(root);
+  return cover === null ? selected : { ...selected, thumb_url: cover };
+}
+
+function findCover(root: Json): string | null {
+  const queue: Json[] = [root]; const seen = new Set<Json>();
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    if (seen.has(current)) continue;
+    seen.add(current);
+    const cover = text(current.thumb_url || current.cover || current.cover_url);
+    if (cover !== '') return cover;
+    for (const value of Object.values(current)) if (isObject(value)) queue.push(value);
+  }
+  return null;
 }
 
 function latestChapter(value: Json, bookId: string) {

@@ -29,6 +29,9 @@ export async function openSourceProxyResource(
   if (typeof entry.request.kind !== "string" || typeof rawUrl !== "string" || !isHttpUrl(rawUrl)) return undefined;
   const forwarded = sourceHeaders(entry.request);
   if (forwarded === undefined) return undefined;
+  if (entry.request.resourceTransform === "sniff-image-content-type-v1") {
+    return openSniffedImage(entry, forwarded, signal);
+  }
   if (entry.request.resourceTransform === "aes-cbc-prefixed-iv-image-v1") {
     return openAesCbcPrefixedIvImage(entry, forwarded, signal);
   }
@@ -48,6 +51,63 @@ export async function openSourceProxyResource(
   const proxyMode = entry.request.proxyMode === "direct" ? "direct" : undefined;
   const response = await entry.fetch(rawUrl, { headers: forwarded, method: "GET", redirect: "follow", signal }, undefined, proxyMode);
   return Object.freeze({ proxy: entry.proxy, request: entry.request, response, responseUrl: response.url });
+}
+
+async function openSniffedImage(
+  entry: SourceProxyEntry,
+  headers: Readonly<Record<string, string>>,
+  signal: AbortSignal,
+): Promise<SourceProxyResource | undefined> {
+  const rawUrl = entry.request.url;
+  if (entry.request.kind !== "image" || typeof rawUrl !== "string") return undefined;
+  const proxyMode = entry.request.proxyMode === "direct" ? "direct" : undefined;
+  const upstream = await entry.fetch(
+    rawUrl,
+    { headers, method: "GET", redirect: "follow", signal },
+    undefined,
+    proxyMode,
+  );
+  if (!upstream.ok || upstream.body === null) {
+    return Object.freeze({ proxy: entry.proxy, request: entry.request, response: upstream, responseUrl: upstream.url });
+  }
+  const reader = upstream.body.getReader();
+  const first = await reader.read();
+  if (first.done) {
+    await reader.cancel().catch(() => {});
+    throw new Error("source image format is invalid");
+  }
+  const contentType = detectImageContentType(Buffer.from(first.value));
+  if (contentType === undefined) {
+    await reader.cancel().catch(() => {});
+    throw new Error("source image format is invalid");
+  }
+  const responseHeaders = new Headers(upstream.headers);
+  responseHeaders.set("content-type", contentType);
+  const response = new Response(streamWithFirstChunk(reader, first.value), {
+    status: upstream.status,
+    statusText: upstream.statusText,
+    headers: responseHeaders,
+  });
+  return Object.freeze({ proxy: entry.proxy, request: entry.request, response, responseUrl: upstream.url || rawUrl });
+}
+
+function streamWithFirstChunk(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  first: Uint8Array,
+): ReadableStream<Uint8Array> {
+  return new ReadableStream<Uint8Array>({
+    start(controller) { controller.enqueue(first); },
+    async pull(controller) {
+      try {
+        const next = await reader.read();
+        if (next.done) controller.close();
+        else controller.enqueue(next.value);
+      } catch (error) {
+        controller.error(error);
+      }
+    },
+    async cancel(reason) { await reader.cancel(reason).catch(() => {}); },
+  });
 }
 
 async function openAesCbcPrefixedIvImage(

@@ -2,22 +2,21 @@
  * Runtime-private development generation staging.
  *
  * A unique filesystem root gives Node a fresh ESM/CJS identity after a
- * successful project build. It copies only runtime inputs and links the
- * existing dependency tree; it never creates a distributable artifact.
+ * successful project build. It copies only the bundled entry and declared icon;
+ * it never copies a dependency tree or creates a distributable artifact.
  */
 import { randomUUID } from "node:crypto";
-import { copyFile, cp, mkdir, rm, symlink } from "node:fs/promises";
-import { resolve } from "node:path";
+import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
 
 import { readPluginProject, type PluginPackageDescriptor } from "./plugin-package.js";
-import { exists } from "./plugin-manager-files.js";
 
 export interface StagedDevelopmentGeneration {
   readonly descriptor: PluginPackageDescriptor;
   readonly generationRoot: string;
 }
 
-/** Copies one already-built project into a unique Runtime-private root. */
+/** Materializes one already-built, bundled artifact into a unique Runtime-private root. */
 export async function stageDevelopmentGeneration(
   dataRoot: string,
   projectRoot: string,
@@ -31,26 +30,15 @@ export async function stageDevelopmentGeneration(
   );
   await mkdir(generationRoot, { recursive: true });
   try {
-    await copyFile(resolve(projectRoot, "package.json"), resolve(generationRoot, "package.json"));
-    if (await exists(resolve(projectRoot, "package-lock.json"))) {
-      await copyFile(
-        resolve(projectRoot, "package-lock.json"),
-        resolve(generationRoot, "package-lock.json"),
-      );
-    }
-    for (const directory of ["dist", "assets", "packages"]) {
-      const source = resolve(projectRoot, directory);
-      if (await exists(source)) {
-        await cp(source, resolve(generationRoot, directory), { recursive: true });
-      }
-    }
-    const nodeModules = resolve(projectRoot, "node_modules");
-    if (await exists(nodeModules)) {
-      await symlink(
-        nodeModules,
-        resolve(generationRoot, "node_modules"),
-        process.platform === "win32" ? "junction" : "dir",
-      );
+    const packageJson = JSON.parse(await readFile(resolve(projectRoot, "package.json"), "utf8")) as Record<string, unknown>;
+    for (const key of ["dependencies", "devDependencies", "optionalDependencies", "peerDependencies", "bundledDependencies", "bundleDependencies", "packageManager"]) delete packageJson[key];
+    await writeFile(resolve(generationRoot, "package.json"), `${JSON.stringify(packageJson, null, 2)}\n`, { flag: "wx", mode: 0o444 });
+    const entry = expectedDescriptor.entry;
+    await mkdir(dirname(resolve(generationRoot, entry)), { recursive: true });
+    await copyFile(resolve(projectRoot, entry), resolve(generationRoot, entry));
+    if (expectedDescriptor.icon !== undefined) {
+      await mkdir(dirname(resolve(generationRoot, expectedDescriptor.icon)), { recursive: true });
+      await copyFile(resolve(projectRoot, expectedDescriptor.icon), resolve(generationRoot, expectedDescriptor.icon));
     }
     const staged = await readPluginProject(generationRoot);
     if (

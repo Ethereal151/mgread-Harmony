@@ -42,8 +42,9 @@ import 'package:mg_read/shared/presentation/widgets/async_book_cover_loader.dart
 part 'source_content_detail_sections.dart';
 part 'source_content_detail_catalog.dart';
 part 'source_content_detail_loading.dart';
+part 'source_content_detail_primitives.dart';
+part 'source_content_detail_body.dart';
 part 'source_content_detail_deferred.dart';
-part 'source_content_detail_view.dart';
 
 typedef SourceTextChapterRequested =
     Future<void> Function({
@@ -221,62 +222,6 @@ final class _SourceDetailBundle {
   const _SourceDetailBundle({required this.detail, required this.chapters});
   final PluginContentDetail detail;
   final PluginChaptersResult chapters;
-}
-
-class _AdaptiveSingleLineText extends StatelessWidget {
-  const _AdaptiveSingleLineText({
-    required this.text,
-    required this.style,
-    required this.minFontSize,
-    this.textAlign,
-    this.maxLines = 1,
-    this.overflow = TextOverflow.ellipsis,
-  });
-
-  final String text;
-  final TextStyle style;
-  final double minFontSize;
-  final TextAlign? textAlign;
-  final int maxLines;
-  final TextOverflow overflow;
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final baseFontSize = style.fontSize ?? 16;
-        final minScale = minFontSize / baseFontSize;
-        if (constraints.maxWidth <= 0) {
-          return Text(
-            text,
-            style: style.copyWith(fontSize: baseFontSize * minScale),
-            maxLines: maxLines,
-            overflow: overflow,
-            softWrap: false,
-            textAlign: textAlign,
-          );
-        }
-
-        final painter = TextPainter(
-          text: TextSpan(text: text, style: style),
-          maxLines: maxLines,
-          textDirection: Directionality.of(context),
-          textScaler: MediaQuery.textScalerOf(context),
-        )..layout(maxWidth: double.infinity);
-
-        final neededScale = painter.width <= 0 ? 1 : constraints.maxWidth / painter.width;
-        final effectiveScale = neededScale.clamp(minScale, 1.0);
-        return Text(
-          text,
-          textAlign: textAlign,
-          maxLines: maxLines,
-          overflow: overflow,
-          softWrap: false,
-          style: style.copyWith(fontSize: baseFontSize * effectiveScale),
-        );
-      },
-    );
-  }
 }
 
 PluginContentDetail _previewDetail({required String pluginId, required PluginContentSummary content, required String? sourceName}) =>
@@ -477,6 +422,7 @@ class _SourceDetailScreenState extends State<_SourceDetailScreen> {
                             sourceVariants: widget.sourceVariants,
                             onSourceVariantRequested: widget.onSourceVariantRequested,
                             isRefreshing: true,
+                            hasLoadFailure: false,
                             onTextChapterRequested: widget.onTextChapterRequested,
                             onComicChapterRequested: widget.onComicChapterRequested,
                             onAudioChapterRequested: widget.onAudioChapterRequested,
@@ -538,6 +484,7 @@ class _SourceDetailScreenState extends State<_SourceDetailScreen> {
                                 sourceVariants: widget.sourceVariants,
                                 onSourceVariantRequested: widget.onSourceVariantRequested,
                                 isRefreshing: false,
+                                hasLoadFailure: true,
                                 onTextChapterRequested: widget.onTextChapterRequested,
                                 onComicChapterRequested: widget.onComicChapterRequested,
                                 onAudioChapterRequested: widget.onAudioChapterRequested,
@@ -578,6 +525,7 @@ class _SourceDetailScreenState extends State<_SourceDetailScreen> {
                         sourceVariants: widget.sourceVariants,
                         onSourceVariantRequested: widget.onSourceVariantRequested,
                         isRefreshing: false,
+                        hasLoadFailure: false,
                         onTextChapterRequested: widget.onTextChapterRequested,
                         onComicChapterRequested: widget.onComicChapterRequested,
                         onAudioChapterRequested: widget.onAudioChapterRequested,
@@ -604,14 +552,15 @@ class _SourceDetailScreenState extends State<_SourceDetailScreen> {
   }
 }
 
-class _SourceDetailBody extends StatelessWidget {
-  const _SourceDetailBody({
+class _SourceDetailView extends StatefulWidget {
+  const _SourceDetailView({
     required this.bundle,
     required this.gateway,
     required this.relatedContents,
     required this.sourceVariants,
     required this.onSourceVariantRequested,
     required this.isRefreshing,
+    required this.hasLoadFailure,
     required this.onTextChapterRequested,
     required this.onComicChapterRequested,
     required this.onAudioChapterRequested,
@@ -622,22 +571,17 @@ class _SourceDetailBody extends StatelessWidget {
     required this.onShelfAction,
     required this.onStartReading,
     required this.onRecommendationRequested,
-    required this.isSavingToShelf,
-    required this.isRemovingFromShelf,
-    required this.onSaveToShelf,
-    required this.onRemoveFromShelfRequested,
     required this.onExternalUrlRequested,
     this.isCoverBlurred = false,
-    required this.visibleChapterCount,
-    required this.onLoadMore,
+    super.key,
   });
-
   final _SourceDetailBundle bundle;
   final SourceContentGateway gateway;
   final Iterable<PluginContentSummary> relatedContents;
   final List<SourceSearchHit> sourceVariants;
   final SourceSearchVariantRequested? onSourceVariantRequested;
   final bool isRefreshing;
+  final bool hasLoadFailure;
   final SourceTextChapterRequested? onTextChapterRequested;
   final SourceComicChapterRequested? onComicChapterRequested;
   final SourceAudioChapterRequested? onAudioChapterRequested;
@@ -649,266 +593,120 @@ class _SourceDetailBody extends StatelessWidget {
   final SourceStartReadingRequested? onStartReading;
   final SourceRecommendationRequested? onRecommendationRequested;
   final bool isCoverBlurred;
-  final bool isSavingToShelf;
-  final bool isRemovingFromShelf;
-  final ValueChanged<PluginContentDetail> onSaveToShelf;
-  final ValueChanged<PluginContentSummary> onRemoveFromShelfRequested;
   final SourceExternalUrlLauncher onExternalUrlRequested;
-  final int visibleChapterCount;
-  final VoidCallback? onLoadMore;
 
   @override
-  Widget build(BuildContext context) {
-    final detail = bundle.detail;
-    final content = detail.summary;
-    final tokens = AppThemeTokens.of(context);
-    final theme = Theme.of(context);
-    final firstChapter = bundle.chapters.items.isEmpty ? null : bundle.chapters.items.first;
-    final isVideo = content.contentKind == PluginContentKind.video;
-    final canStartReading =
-        !isRefreshing &&
-        firstChapter != null &&
-        switch (content.contentKind) {
-          PluginContentKind.audio => onAudioChapterRequested != null,
-          PluginContentKind.video => onVideoEpisodeRequested != null,
-          _ => true,
-        };
-    final VoidCallback? coverAction = isVideo
-        ? canStartReading
-              ? () => unawaited(
-                  _openTextChapter(
-                    context,
-                    gateway: gateway,
-                    detail: detail,
-                    firstCatalogPage: bundle.chapters,
-                    chapter: firstChapter,
-                    onTextChapterRequested: onTextChapterRequested,
-                    onComicChapterRequested: onComicChapterRequested,
-                    onAudioChapterRequested: onAudioChapterRequested,
-                    onVideoEpisodeRequested: onVideoEpisodeRequested,
-                  ),
-                )
-              : null
-        : content.coverUrl == null
-        ? null
-        : () => unawaited(_openUrl(context, content.coverUrl));
-    final canChangeShelf = shelfState != SourceDetailShelfState.canAdd
-        ? onRemoveFromShelf != null && !isRemovingFromShelf
-        : onAddToShelf != null && !isSavingToShelf;
-    final labels = <String>{...content.categories, ...content.tags}.take(3).toList(growable: false);
-    final attributes = _displayAttributes(content.attributes).toList(growable: false);
-    final chapterTotal = _chapterTotal(detailTotal: content.chapterCount, loadedCount: bundle.chapters.items.length);
-    final recommendationCandidates = _recommendationCandidates(relatedContents, excludedId: content.id);
-    return ListView(
-      key: const Key('source-content-detail-sheet'),
-      padding: const EdgeInsets.fromLTRB(
-        AppSpacing.discoveryPagePadding,
-        AppSpacing.regular,
-        AppSpacing.discoveryPagePadding,
-        AppSpacing.page,
-      ),
-      children: <Widget>[
-        _DetailSummaryHeader(content: content, labels: labels, onCoverTap: coverAction),
-        if (sourceVariants.length > 1 && onSourceVariantRequested != null) ...<Widget>[
-          const SizedBox(height: AppSpacing.compact),
-          OutlinedButton.icon(
-            key: const Key('source-detail-source-variants'),
-            onPressed: () => showSourceContentVariantPicker(
-              context,
-              variants: sourceVariants,
-              selectedPluginId: bundle.detail.pluginId,
-              selectedContentId: bundle.detail.summary.id,
-              onSelected: onSourceVariantRequested!,
-            ),
-            icon: const Icon(Icons.layers_outlined),
-            label: Text('来源版本（${sourceVariants.length}）'),
-          ),
-        ],
-        const SizedBox(height: AppSpacing.section),
-        if (shelfState != SourceDetailShelfState.canAdd &&
-            onShelfAction != null &&
-            onStartReading != null &&
-            (content.contentKind == PluginContentKind.novel || content.contentKind == PluginContentKind.manga))
-          _ShelfActionBar(
-            title: content.title,
-            shelfState: shelfState,
-            isCoverBlurred: isCoverBlurred,
-            onAction: onShelfAction!,
-            onStartReading: onStartReading!,
-          )
-        else
-          Row(
-            children: <Widget>[
-              Expanded(
-                child: OutlinedButton.icon(
-                  key: const Key('source-detail-add-shelf'),
-                  onPressed: !canChangeShelf
-                      ? null
-                      : shelfState != SourceDetailShelfState.canAdd
-                      ? () => onRemoveFromShelfRequested(content)
-                      : () => onSaveToShelf(detail),
-                  icon: Icon(
-                    shelfState != SourceDetailShelfState.canAdd
-                        ? isRemovingFromShelf
-                              ? Icons.hourglass_top_rounded
-                              : Icons.bookmark_remove_outlined
-                        : isSavingToShelf
-                        ? Icons.hourglass_top_rounded
-                        : Icons.library_add_outlined,
-                  ),
-                  label: Text(
-                    shelfState != SourceDetailShelfState.canAdd
-                        ? isRemovingFromShelf
-                              ? '正在移出…'
-                              : '已在书架 · 移出'
-                        : isSavingToShelf
-                        ? '正在加入…'
-                        : '加入书架',
-                  ),
-                  style: OutlinedButton.styleFrom(
-                    minimumSize: const Size.fromHeight(54),
-                    foregroundColor: canChangeShelf ? tokens.accent : tokens.mutedText,
-                    side: BorderSide(color: canChangeShelf ? tokens.accent : tokens.divider),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                  ),
-                ),
-              ),
-              const SizedBox(width: AppSpacing.regular),
-              Expanded(
-                child: FilledButton(
-                  key: const Key('source-detail-start-reading'),
-                  onPressed: !canStartReading
-                      ? null
-                      : () => unawaited(
-                          _openTextChapter(
-                            context,
-                            gateway: gateway,
-                            detail: detail,
-                            firstCatalogPage: bundle.chapters,
-                            chapter: firstChapter,
-                            onTextChapterRequested: onTextChapterRequested,
-                            onComicChapterRequested: onComicChapterRequested,
-                            onAudioChapterRequested: onAudioChapterRequested,
-                            onVideoEpisodeRequested: onVideoEpisodeRequested,
-                          ),
-                        ),
-                  style: FilledButton.styleFrom(
-                    minimumSize: const Size.fromHeight(54),
-                    backgroundColor: canStartReading ? tokens.accent : tokens.mutedSurface,
-                    disabledBackgroundColor: tokens.mutedSurface,
-                    disabledForegroundColor: tokens.mutedText,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                  ),
-                  child: isRefreshing
-                      ? const _DetailLoadingButtonLabel()
-                      : Text(switch (content.contentKind) {
-                          PluginContentKind.audio || PluginContentKind.video => '开始播放',
-                          _ => '开始阅读',
-                        }),
-                ),
-              ),
-            ],
-          ),
-        const SizedBox(height: AppSpacing.section),
-        Divider(color: tokens.divider, height: 1),
-        const SizedBox(height: AppSpacing.comfortable),
-        Text('简介', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
-        const SizedBox(height: AppSpacing.compact),
-        if (isRefreshing && content.description == null)
-          const _DetailShimmerBlock(height: 68)
-        else
-          Text(
-            content.description ?? '暂无作品简介',
-            maxLines: 3,
-            overflow: TextOverflow.ellipsis,
-            style: theme.textTheme.bodyLarge?.copyWith(color: tokens.mutedText, height: 1.65),
-          ),
-        if (attributes.isNotEmpty) ...<Widget>[
-          const SizedBox(height: 14),
-          Wrap(spacing: 10, runSpacing: 6, children: attributes.map((value) => _DetailTag(label: value.value)).toList(growable: false)),
-        ],
-        const SizedBox(height: AppSpacing.section),
-        Divider(color: tokens.divider, height: 1),
-        if (content.latestChapter != null)
-          _ExternalRow(
-            key: const Key('source-detail-latest-chapter-url'),
-            title: '最新章节',
-            label: content.latestChapter!.title,
-            subtitle:
-                _attributeValue(content.attributes, 'discoveryUpdatedLabel') ??
-                (content.latestChapter!.updatedAt == null ? null : _formatDateTime(content.latestChapter!.updatedAt!)),
-            url: content.latestChapter!.url,
-            onOpenUrl: _openUrl,
-          ),
-        _ExternalRow(
-          key: const Key('source-detail-catalog-url'),
-          title: '阅读来源',
-          label: '当前来源：${detail.sourceName}',
-          url: detail.catalogUrl ?? content.url,
-          onOpenUrl: _openUrl,
-        ),
-        if (recommendationCandidates.isNotEmpty) ...<Widget>[
-          const SizedBox(height: AppSpacing.section),
-          Divider(color: tokens.divider, height: 1),
-          const SizedBox(height: AppSpacing.comfortable),
-          _RecommendationsSection(candidates: recommendationCandidates, onRecommendationRequested: onRecommendationRequested),
-          const SizedBox(height: AppSpacing.regular),
-          Material(
-            color: tokens.mutedSurface,
-            borderRadius: BorderRadius.circular(14),
-            child: Semantics(
-              enabled: false,
-              label: '查看书友评论，暂不可用',
-              child: InkWell(
-                borderRadius: BorderRadius.circular(14),
-                onTap: null,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                  child: Row(
-                    children: <Widget>[
-                      Expanded(
-                        child: Text('查看书友评论', style: theme.textTheme.bodyLarge?.copyWith(color: tokens.mutedText)),
-                      ),
-                      Text('4.2万条评论', style: theme.textTheme.bodyMedium?.copyWith(color: tokens.mutedText.withValues(alpha: .68))),
-                      const SizedBox(width: 6),
-                      Icon(Icons.chevron_right_rounded, color: tokens.mutedText.withValues(alpha: .5)),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-        _DetailCatalogSection(
-          catalog: bundle.chapters,
-          contentKind: content.contentKind,
-          isRefreshing: isRefreshing,
-          chapterTotal: chapterTotal,
-          visibleChapterCount: visibleChapterCount,
-          onLoadMore: onLoadMore,
-          onChapterSelected: (chapter) => unawaited(
-            _openTextChapter(
-              context,
-              gateway: gateway,
-              detail: detail,
-              firstCatalogPage: bundle.chapters,
-              chapter: chapter,
-              onTextChapterRequested: onTextChapterRequested,
-              onComicChapterRequested: onComicChapterRequested,
-              onAudioChapterRequested: onAudioChapterRequested,
-              onVideoEpisodeRequested: onVideoEpisodeRequested,
-            ),
-          ),
-          onOpenUrl: _openUrl,
-        ),
-      ],
-    );
+  State<_SourceDetailView> createState() => _SourceDetailViewState();
+}
+
+class _SourceDetailViewState extends State<_SourceDetailView> {
+  late final List<PluginChapterSummary> _chapters;
+  late SourceDetailShelfState _shelfState;
+  var _visibleChapterCount = 20;
+  bool _isSavingToShelf = false;
+  bool _isRemovingFromShelf = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _chapters = List<PluginChapterSummary>.of(widget.bundle.chapters.items);
+    _shelfState = widget.shelfState;
   }
 
-  Future<void> _openUrl(BuildContext context, Uri? url) async {
-    if (url == null || (url.scheme != 'http' && url.scheme != 'https')) return;
-    final launched = await onExternalUrlRequested(url);
-    if (!context.mounted || launched) return;
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('无法调用系统浏览器打开该链接。')));
+  @override
+  void didUpdateWidget(covariant _SourceDetailView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!_isSavingToShelf &&
+        !_isRemovingFromShelf &&
+        oldWidget.shelfState != widget.shelfState &&
+        widget.shelfState != SourceDetailShelfState.canAdd) {
+      _shelfState = widget.shelfState;
+    }
   }
+
+  Future<void> _saveToShelf(PluginContentDetail detail) async {
+    final save = widget.onAddToShelf;
+    if (save == null || _isSavingToShelf || _shelfState != SourceDetailShelfState.canAdd) {
+      return;
+    }
+    setState(() => _isSavingToShelf = true);
+    try {
+      await save(detail, widget.bundle.chapters);
+      if (!mounted) return;
+      setState(() {
+        _isSavingToShelf = false;
+        _shelfState = SourceDetailShelfState.alreadyAdded;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已加入书架。')));
+    } on Object catch (error) {
+      if (!mounted) return;
+      setState(() => _isSavingToShelf = false);
+      final message = error is BookshelfCapacityExceededException ? '书架已满，请先清理书籍。' : '暂时无法加入书架，请稍后重试。';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    }
+  }
+
+  Future<void> _removeFromShelf(PluginContentSummary content) async {
+    final remove = widget.onRemoveFromShelf;
+    if (remove == null || _isSavingToShelf || _isRemovingFromShelf || _shelfState == SourceDetailShelfState.canAdd) return;
+    final confirmed = await showBookshelfRemovalConfirmation(context, title: content.title);
+    if (!mounted || !confirmed) return;
+    setState(() => _isRemovingFromShelf = true);
+    try {
+      await remove();
+      if (!mounted) return;
+      setState(() {
+        _isRemovingFromShelf = false;
+        _shelfState = SourceDetailShelfState.canAdd;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已从书架移出《${content.title}》')));
+    } on Object {
+      if (!mounted) return;
+      setState(() => _isRemovingFromShelf = false);
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('移出书架失败，请稍后重试。')));
+    }
+  }
+
+  void _loadMore() {
+    setState(() {
+      _visibleChapterCount = math.min(_visibleChapterCount + 20, _chapters.length);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => _SourceDetailBody(
+    bundle: _SourceDetailBundle(
+      detail: widget.bundle.detail,
+      chapters: PluginChaptersResult(
+        pluginId: widget.bundle.chapters.pluginId,
+        sourceName: widget.bundle.chapters.sourceName,
+        items: _chapters,
+        groups: widget.bundle.chapters.groups,
+      ),
+    ),
+    gateway: widget.gateway,
+    relatedContents: widget.relatedContents,
+    sourceVariants: widget.sourceVariants,
+    onSourceVariantRequested: widget.onSourceVariantRequested,
+    isRefreshing: widget.isRefreshing,
+    hasLoadFailure: widget.hasLoadFailure,
+    onTextChapterRequested: widget.onTextChapterRequested,
+    onComicChapterRequested: widget.onComicChapterRequested,
+    onAudioChapterRequested: widget.onAudioChapterRequested,
+    onVideoEpisodeRequested: widget.onVideoEpisodeRequested,
+    onAddToShelf: widget.onAddToShelf,
+    onRemoveFromShelf: widget.onRemoveFromShelf,
+    shelfState: _shelfState,
+    onShelfAction: widget.onShelfAction,
+    onStartReading: widget.onStartReading,
+    isCoverBlurred: widget.isCoverBlurred,
+    onRecommendationRequested: widget.onRecommendationRequested,
+    isSavingToShelf: _isSavingToShelf,
+    isRemovingFromShelf: _isRemovingFromShelf,
+    onSaveToShelf: _saveToShelf,
+    onRemoveFromShelfRequested: _removeFromShelf,
+    onExternalUrlRequested: widget.onExternalUrlRequested,
+    visibleChapterCount: _visibleChapterCount,
+    onLoadMore: _visibleChapterCount < _chapters.length ? _loadMore : null,
+  );
 }

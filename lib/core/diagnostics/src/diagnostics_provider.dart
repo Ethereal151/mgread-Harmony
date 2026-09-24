@@ -6,6 +6,7 @@ import 'diagnostic_event.dart';
 import 'diagnostic_ports.dart';
 import 'diagnostic_registry.dart';
 import 'diagnostics_manager.dart';
+import 'live_diagnostics.dart';
 
 /// Process-scoped diagnostics manager. The production composition root
 /// overrides this with the persistent app manager.
@@ -25,3 +26,7 @@ final diagnosticsQueryProvider = Provider<DiagnosticsQuery?>((Ref ref) => null);
 final diagnosticsCaptureProvider = Provider<DiagnosticsCapture?>((Ref ref) => null);
 final diagnosticsMaintenanceProvider = Provider<DiagnosticsMaintenance?>((Ref ref) => null);
 final diagnosticsLogArchiveProvider = Provider<DiagnosticsLogArchive?>((Ref ref) => null);
+
+/// Bounded current-process events for the in-app viewer. Production bootstrap
+/// overrides this independently from optional file persistence.
+final diagnosticsLiveBufferProvider = Provider<LiveDiagnosticsBuffer?>((Ref ref) => null);

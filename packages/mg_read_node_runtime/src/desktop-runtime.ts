@@ -48,28 +48,22 @@ import { DesktopBrowserSessionBroker } from "./desktop-browser-session.js";
 import { requestPluginWebViewDebug, type PluginWebViewDebugRequest } from "./plugin-browser-session.js";
 import { readDebugHttpEnabled } from "./debug-http-control.js";
 import { RuntimeDebugHttpSettings } from "./debug-http-settings.js";
-import { ConfigurablePluginHttpClient } from "./plugin-http-client.js";
-import { readPluginHttpProxyConfiguration } from "./plugin-http-proxy-control.js";
-import { decodeSourceResourceRequest } from "./source-resource-token.js";
+import { ConfigurablePluginHttpClient } from "./plugin-http-client.js"; import { readPluginHttpProxyConfiguration } from "./plugin-http-proxy-control.js"; import { createEmbeddedBrowserSession, materializeTransferEmbedded } from "./desktop-runtime-embedded.js";
 import type {
   InFlightRequestsBySession,
-  RuntimeDispatchFailure,
   RuntimeDispatchResult,
   RuntimeHealthResponse,
   RuntimeHelloResponse,
   RuntimeInFlightRequest,
   RuntimePingResponse,
-  DesktopRuntimeReady,
   RuntimeShutdownResponse,
   RuntimeStatusResponse,
 } from "./desktop-runtime-types.js";
-export type { DesktopRuntimeReady } from "./desktop-runtime-types.js";
 import { servePluginIconResource, servePluginTransferResource, serveSourceResource } from "./loopback-resources.js";
 import {
   isPluginManagerError,
   PluginManager,
   PluginManagerError,
-  pluginManagerErrorDetail,
   type PluginManagerEvent,
 } from "./plugin-manager.js";
 import { pluginManagerErrorMessage } from "./plugin-manager-error-message.js";
@@ -90,19 +84,12 @@ import {
   dispatchPluginDevelopmentPackage,
   dispatchPluginTransferRequest,
 } from "./desktop-plugin-transfer-dispatch.js";
-import { emitRuntimeDiagnostic, observeRuntimeDiagnostics } from "./runtime-diagnostics.js";
-import { materializeTransferEmbedded } from "./embedded-transfer-materializer.js";
-import { createEmbeddedBrowserSession } from "./desktop-runtime-embedded.js";
+import { dispatchPluginStorageControl } from "./desktop-plugin-cache-dispatch.js";
 import {
-  parseChaptersParams,
-  parseContentParams,
-  parseDetailParams,
-  parseDiscoverParams,
-  parseSearchParams,
-  parseSearchSuggestionsParams,
-  PluginContentValidationError,
-  type PluginContentOperation,
-} from "./plugin-content.js";
+  dispatchSourceContent,
+  dispatchSourceResourceDecode,
+} from "./desktop-source-control-dispatch.js";
+import { emitRuntimeDiagnostic, observeRuntimeDiagnostics } from "./runtime-diagnostics.js";
 
 const LOOPBACK_HOST = "127.0.0.1";
 const MAX_INLINE_BYTES = maxWebSocketControlFrameBytes;
@@ -176,6 +163,31 @@ const RUNTIME_CONTROL_CAPABILITIES = Object.freeze([
 const RUNTIME_RPC_PATH = "/v1/rpc";
 const WEBSOCKET_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
+/**
+ * One stdout-only startup record emitted after the loopback server is usable.
+ * It is consumed by the Runtime-owned Flutter supervisor, never by app code.
+ */
+export interface DesktopRuntimeReady {
+  /** Fresh identity that binds HTTP, WebSocket, and Flutter startup together. */
+  readonly bootId: string;
+  /** Fixed loopback-only host; this Runtime never listens on LAN interfaces. */
+  readonly host: typeof LOOPBACK_HOST;
+  /** Exact Node binary version that started the Core. */
+  readonly nodeVersion: string;
+  /** Runtime child process identifier, used only for lifecycle diagnostics. */
+  readonly pid: number;
+  /** Ephemeral loopback port selected by Node or supplied by a test. */
+  readonly port: number;
+  /** Wire-protocol version that the Flutter connection must validate. */
+  readonly protocolVersion: string;
+  /** Runtime implementation version for compatibility and diagnostics. */
+  readonly runtimeVersion: string;
+  /** ISO-8601 timestamp captured once when this Core instance is created. */
+  readonly startedAt: string;
+  /** Distinguishes this stdout record from structured diagnostic records. */
+  readonly type: "ready";
+}
+
 /** Result returned by the Runtime-owned Android Javet adapter. */
 export type EmbeddedRuntimeResult =
   | { readonly ok: true; readonly result: JsonValue }
@@ -195,7 +207,7 @@ export class DesktopRuntime {
   /** Requested port captured at construction to avoid mutable launch options. */
   readonly #port: number;
 
-  /** Runtime-owned plugin/dependency/data root, never exposed through Facade. */
+  /** Runtime-owned plugin/data root, never exposed through Facade. */
   readonly #dataRoot: string;
   readonly #developmentPluginRoot: string | undefined;
   readonly #developmentNpmCli: string | undefined;
@@ -239,8 +251,7 @@ export class DesktopRuntime {
     this.#debugHttpAllowed = options.debugHttpAllowed ?? false;
     this.#debugHttpSettings = new RuntimeDebugHttpSettings(this.#dataRoot);
     this.#onProgress = options.onProgress ?? (() => {});
-    this.#browserSession = options.browserSession ?? createEmbeddedBrowserSession() ??
-      (this.#embedded ? undefined : new DesktopBrowserSessionBroker(this.#bootId));
+    this.#browserSession = options.browserSession ?? createEmbeddedBrowserSession() ?? (this.#embedded ? undefined : new DesktopBrowserSessionBroker(this.#bootId));
     this.#removeDebugDiagnosticObserver = observeRuntimeDiagnostics((record) => {
       if (!this.#debugHttp?.status().enabled) return;
       this.#debugLogs.append({
@@ -298,10 +309,12 @@ export class DesktopRuntime {
       : { ok: true, result: dispatched.result };
   }
 
-  /** Materializes a transfer token for the embedded host. */
   async materializeTransferEmbedded(token: string, destination: string): Promise<EmbeddedRuntimeResult> { return materializeTransferEmbedded(this.#pluginManager, token, destination); }
 
-  /** Stops all sessions, aborts pending handlers, and closes the listener once. */
+  /**
+   * Stops all sessions, aborts pending handlers, and closes the listener once.
+   * Concurrent stop requests share one cleanup operation.
+   */
   stop(): Promise<void> {
     if (this.#stopPromise === undefined) {
       this.#stopPromise = this.#stop();
@@ -334,9 +347,7 @@ export class DesktopRuntime {
       debugLogEnabled: () => this.#debugHttp?.status().enabled === true,
       http: this.#pluginHttp,
       onProgress: this.#onProgress,
-      ...(this.#pluginImportInboxRoot === undefined
-        ? {}
-        : { pluginImportInboxRoot: this.#pluginImportInboxRoot }),
+      pluginImportInboxRoot: this.#pluginImportInboxRoot,
     });
     this.#pluginManager = pluginManager;
     const serviceStartedAt = performance.now();
@@ -886,13 +897,33 @@ export class DesktopRuntime {
       case RUNTIME_CONTROL_METHOD.pluginsDevelopmentPackage:
         return dispatchPluginDevelopmentPackage(request, this.#pluginManager, this.#requestError.bind(this));
       case RUNTIME_CONTROL_METHOD.pluginsCacheUsage:
-        return this.#dispatchPluginCacheUsage(request);
+        return dispatchPluginStorageControl(
+          request,
+          this.#pluginManager,
+          this.#requestError.bind(this),
+          "cacheUsage",
+        );
       case RUNTIME_CONTROL_METHOD.pluginsInstallationUsage:
-        return this.#dispatchPluginInstallationUsage(request);
+        return dispatchPluginStorageControl(
+          request,
+          this.#pluginManager,
+          this.#requestError.bind(this),
+          "installationUsage",
+        );
       case RUNTIME_CONTROL_METHOD.pluginsCacheClear:
-        return this.#dispatchPluginCacheClear(request);
+        return dispatchPluginStorageControl(
+          request,
+          this.#pluginManager,
+          this.#requestError.bind(this),
+          "cacheClear",
+        );
       case RUNTIME_CONTROL_METHOD.pluginsCacheClearAll:
-        return this.#dispatchPluginCacheClearAll(request);
+        return dispatchPluginStorageControl(
+          request,
+          this.#pluginManager,
+          this.#requestError.bind(this),
+          "cacheClearAll",
+        );
       case RUNTIME_CONTROL_METHOD.pluginsSetEnabled:
         return dispatchPluginEnabled(request, this.#pluginManager, this.#requestError.bind(this));
       case RUNTIME_CONTROL_METHOD.pluginsUninstall:
@@ -919,51 +950,58 @@ export class DesktopRuntime {
       case RUNTIME_CONTROL_METHOD.pluginsTransferVerify:
         return dispatchPluginTransferRequest(request, this.#pluginManager, this.#requestError.bind(this));
       case RUNTIME_CONTROL_METHOD.sourceDiscover:
-        return this.#dispatchPluginContent(
+        return dispatchSourceContent(
           request,
+          this.#pluginManager,
+          this.#requestError.bind(this),
           cancellation,
           "discover",
         );
       case RUNTIME_CONTROL_METHOD.sourceSearch:
-        return this.#dispatchPluginContent(
+        return dispatchSourceContent(
           request,
+          this.#pluginManager,
+          this.#requestError.bind(this),
           cancellation,
           "search",
         );
       case RUNTIME_CONTROL_METHOD.sourceSearchSuggestions:
-        return this.#dispatchPluginContent(
+        return dispatchSourceContent(
           request,
+          this.#pluginManager,
+          this.#requestError.bind(this),
           cancellation,
           "searchSuggestions",
         );
       case RUNTIME_CONTROL_METHOD.sourceGetDetail:
-        return this.#dispatchPluginContent(
+        return dispatchSourceContent(
           request,
+          this.#pluginManager,
+          this.#requestError.bind(this),
           cancellation,
           "getDetail",
         );
       case RUNTIME_CONTROL_METHOD.sourceGetChapters:
-        return this.#dispatchPluginContent(
+        return dispatchSourceContent(
           request,
+          this.#pluginManager,
+          this.#requestError.bind(this),
           cancellation,
           "getChapters",
         );
       case RUNTIME_CONTROL_METHOD.sourceGetContent:
-        return this.#dispatchPluginContent(
+        return dispatchSourceContent(
           request,
+          this.#pluginManager,
+          this.#requestError.bind(this),
           cancellation,
           "getContent",
         );
-      case RUNTIME_CONTROL_METHOD.sourceResourceDecode: {
-        const decoded = decodeSourceResourceRequest(request.params);
-        if (decoded === "invalid_request") return {
-          error: this.#requestError(request, "invalid_request", "The source-resource URL decode request is invalid."),
-        };
-        if (decoded === undefined) return {
-          error: this.#requestError(request, "invalid_request", "The URL is not a valid Runtime source-resource URL."),
-        };
-        return { result: { pluginId: decoded.pluginId, request: decoded.request } };
-      }
+      case RUNTIME_CONTROL_METHOD.sourceResourceDecode:
+        return dispatchSourceResourceDecode(
+          request,
+          this.#requestError.bind(this),
+        );
       case RUNTIME_CONTROL_METHOD.shutdown:
         if (
           request.idempotencyKey === undefined ||
@@ -1087,241 +1125,9 @@ export class DesktopRuntime {
     }
   }
 
-  /** Returns only cache byte totals; cache paths remain Runtime-private. */
-  async #dispatchPluginCacheUsage(
-    request: RuntimeRequest,
-  ): Promise<RuntimeDispatchResult> {
-    if (Object.keys(request.params).length > 1 || (Object.keys(request.params).length === 1 && !("pluginId" in request.params)) || (request.params.pluginId !== undefined && typeof request.params.pluginId !== "string")) {
-      return this.#pluginCacheInvalidRequest(request);
-    }
-    try {
-      const manager = this.#pluginManager;
-      if (manager === undefined) throw new PluginManagerError("plugin_load_failed");
-      return { result: await manager.listCacheUsage(request.params.pluginId as string | undefined) };
-    } catch (error) {
-      return this.#pluginCacheFailure(request, error);
-    }
-  }
-
-  /** Returns retained archive, source data and materialized npm byte totals. */
-  async #dispatchPluginInstallationUsage(
-    request: RuntimeRequest,
-  ): Promise<RuntimeDispatchResult> {
-    const pluginId = request.params.pluginId;
-    const scope = request.params.scope;
-    if (
-      Object.keys(request.params).length !== 2 ||
-      typeof pluginId !== "string" ||
-      (scope !== "archive" && scope !== "data" && scope !== "npm")
-    ) {
-      return {
-        error: this.#requestError(
-          request,
-          "invalid_request",
-          "The installed source size request is invalid.",
-        ),
-      };
-    }
-    try {
-      const manager = this.#pluginManager;
-      if (manager === undefined) throw new PluginManagerError("plugin_load_failed");
-      return {
-        result: await manager.measureInstallationUsage(pluginId, scope),
-      };
-    } catch (error) {
-      return this.#pluginCacheFailure(request, error);
-    }
-  }
-
-  /** Clears one plugin cache and returns a terminal, path-free status. */
-  async #dispatchPluginCacheClear(
-    request: RuntimeRequest,
-  ): Promise<RuntimeDispatchResult> {
-    if (Object.keys(request.params).length !== 1 || typeof request.params.pluginId !== "string") {
-      return this.#pluginCacheInvalidRequest(request);
-    }
-    try {
-      const manager = this.#pluginManager;
-      if (manager === undefined) throw new PluginManagerError("plugin_load_failed");
-      return { result: await manager.clearPluginCache(request.params.pluginId) };
-    } catch (error) {
-      return this.#pluginCacheFailure(request, error);
-    }
-  }
-
-  /** Clears every installed plugin cache while retaining individual failures. */
-  async #dispatchPluginCacheClearAll(
-    request: RuntimeRequest,
-  ): Promise<RuntimeDispatchResult> {
-    if (Object.keys(request.params).length !== 0) {
-      return this.#pluginCacheInvalidRequest(request);
-    }
-    try {
-      const manager = this.#pluginManager;
-      if (manager === undefined) throw new PluginManagerError("plugin_load_failed");
-      return { result: await manager.clearAllPluginCaches() };
-    } catch (error) {
-      return this.#pluginCacheFailure(request, error);
-    }
-  }
-
-  #pluginCacheInvalidRequest(request: RuntimeRequest): RuntimeDispatchFailure {
-    return {
-      error: this.#requestError(
-        request,
-        "invalid_request",
-        "The plugin cache request is invalid.",
-      ),
-    };
-  }
-
-  #pluginCacheFailure(
-    request: RuntimeRequest,
-    error: unknown,
-  ): RuntimeDispatchFailure {
-    if (isPluginManagerError(error)) {
-      return {
-        error: this.#requestError(
-          request,
-          error.code,
-          pluginManagerErrorMessage(error.code),
-        ),
-      };
-    }
-    return {
-      error: this.#requestError(
-        request,
-        "internal",
-        "The plugin cache request could not be completed.",
-      ),
-    };
-  }
-
   /** Returns the versioned product capability list negotiated by the Facade. */
   get #runtimeControlCapabilities(): readonly string[] {
     return RUNTIME_CONTROL_CAPABILITIES;
-  }
-
-  /**
-   * Invokes one standard Node plugin named export through a bounded v1 schema.
-   */
-  async #dispatchPluginContent(
-    request: RuntimeRequest,
-    cancellation: AbortSignal,
-    operation: PluginContentOperation,
-  ): Promise<RuntimeDispatchResult> {
-    try {
-      const manager = this.#pluginManager;
-      if (manager === undefined) throw new PluginManagerError("plugin_load_failed");
-      let result: JsonObject;
-      switch (operation) {
-        case "discover": {
-          const parsed = parseDiscoverParams(request.params);
-          result = await manager.discover(
-            parsed.pluginId,
-            parsed.request,
-            cancellation,
-            request.deadlineUnixMs,
-          );
-          break;
-        }
-        case "search": {
-          const parsed = parseSearchParams(request.params);
-          result = await manager.search(
-            parsed.pluginId,
-            parsed.request,
-            cancellation,
-            request.deadlineUnixMs,
-          );
-          break;
-        }
-        case "searchSuggestions": {
-          const parsed = parseSearchSuggestionsParams(request.params);
-          result = await manager.searchSuggestions(
-            parsed.pluginId,
-            parsed.request,
-            cancellation,
-            request.deadlineUnixMs,
-          );
-          break;
-        }
-        case "getDetail": {
-          const parsed = parseDetailParams(request.params);
-          result = await manager.getDetail(
-            parsed.pluginId,
-            parsed.request,
-            cancellation,
-            request.deadlineUnixMs,
-          );
-          break;
-        }
-        case "getChapters": {
-          const parsed = parseChaptersParams(request.params);
-          result = await manager.getChapters(
-            parsed.pluginId,
-            parsed.request,
-            cancellation,
-            request.deadlineUnixMs,
-          );
-          break;
-        }
-        case "getContent": {
-          const parsed = parseContentParams(request.params);
-          result = await manager.getContent(
-            parsed.pluginId,
-            parsed.request,
-            cancellation,
-            request.deadlineUnixMs,
-          );
-          break;
-        }
-      }
-      return { result: result };
-    } catch (error) {
-      if (error instanceof PluginContentValidationError) {
-        return {
-          error: this.#requestError(
-            request,
-            "invalid_request",
-            "The source capability request is invalid.",
-          ),
-        };
-      }
-      if (isPluginManagerError(error)) {
-        return {
-          error: this.#requestError(
-            request,
-            error.code,
-            pluginManagerErrorMessage(error.code, pluginManagerErrorDetail(error)),
-          ),
-        };
-      }
-      if (cancellation.aborted) {
-        return {
-          error: this.#requestError(
-            request,
-            "cancelled",
-            "The plugin request was cancelled.",
-          ),
-        };
-      }
-      if (Number(request.deadlineUnixMs) <= Date.now()) {
-        return {
-          error: this.#requestError(
-            request,
-            "timeout",
-            "The plugin request deadline has elapsed.",
-          ),
-        };
-      }
-      return {
-        error: this.#requestError(
-          request,
-          "internal",
-          "The plugin request could not be completed.",
-        ),
-      };
-    }
   }
 
   /** Writes a minimal HTTP rejection before destroying an invalid upgrade. */

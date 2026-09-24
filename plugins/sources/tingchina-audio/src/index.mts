@@ -17,6 +17,11 @@ type Context = MgReadPluginContext;
 const base = 'https://app.365ting.com';
 const api = `${base}/listen/Apitzg2025/`;
 const appHeaders = { Accept: 'application/json,text/html,*/*', 'User-Agent': 'TingShiJie/1.8.8 (m.i275.com)' };
+const coverHeaders = {
+  Accept: 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+  Referer: base + '/',
+  'User-Agent': appHeaders['User-Agent'],
+};
 const audioHeaders = { Accept: '*/*', 'User-Agent': 'okhttp/4.9.3' };
 const playKey = 'J9gSpfUlzYxE8Hn5IXiGaD2jVMrwAm0K';
 const categories = Object.freeze([['popular', '热门', null], ['6', '玄幻', '6'], ['7', '奇幻', '7'], ['8', '武侠', '8'], ['13', '历史', '13'], ['14', '恐怖', '14'], ['31', '评书', '31'], ['50', '儿童', '50']] as const);
@@ -242,7 +247,9 @@ async function rootDocument(pageSize: number) {
 function section(id: string, title: string, items: readonly unknown[], continuation: unknown, layout = 'coverGrid', icon = 'audio', subtitle: string | null = null) { return { type: 'section', id: `${id}:section`, title, subtitle, icon, children: [{ type: 'contentCollection', id, layout, items, continuation }] }; }
 function summary(value: Json, idOverride?: string) {
   const id = idOverride ?? (text(value.id) || text(value.bookId)); if (id === '') throw new Error('Source item has no ID.');
-  const count = number(value.count); return frozen({ id: `audio:${id}`, title: text(value.bookTitle) || text(value.title) || '未命名音频', contentKind: 'audio', author: nullable(value.bookAnchor) ?? nullable(value.anchor), url: `${base}/book/${id}`, coverUrl: nullable(value.bookImage) ?? nullable(value.image), description: nullable(value.bookDesc) ?? nullable(value.desc), language: 'zh-CN', status: status(value.bookUpdateStatus), access: 'mixed', wordCount: null, chapterCount: count || null, publishedAt: null, updatedAt: null, latestChapter: count > 0 ? { id: null, title: `共${count}集`, url: null, updatedAt: null } : null, categories: nullable(value.categoryName) === null ? [] : [nullable(value.categoryName) as string], tags: [], attributes: [] });
+  const count = number(value.count);
+  const cover = imageUrl(nullable(value.bookImage) ?? nullable(value.image));
+  return frozen({ id: `audio:${id}`, title: text(value.bookTitle) || text(value.title) || '未命名音频', contentKind: 'audio', author: nullable(value.bookAnchor) ?? nullable(value.anchor), url: `${base}/book/${id}`, coverUrl: cover === null ? null : requireContext().resource.proxy({ kind: 'image', url: cover, headers: coverHeaders }), description: nullable(value.bookDesc) ?? nullable(value.desc), language: 'zh-CN', status: status(value.bookUpdateStatus), access: 'mixed', wordCount: null, chapterCount: count || null, publishedAt: null, updatedAt: null, latestChapter: count > 0 ? { id: null, title: `共${count}集`, url: null, updatedAt: null } : null, categories: nullable(value.categoryName) === null ? [] : [nullable(value.categoryName) as string], tags: [], attributes: [] });
 }
 function detail(item: ReturnType<typeof summary>) { return frozen({ ...item, aliases: [], catalogUrl: item.url }); }
 function chapter(bookId: string, value: Json, order: number) { const id = text(value.chapterId) || text(value.id) || text(value.url); if (id === '') throw new Error('Source chapter has no ID.'); const price = number(value.price) || number(value.chapterPrice); return frozen({ id: `audio:${bookId}:${id}`, title: text(value.title) || `第${order + 1}集`, order, url: `${base}/book/${encodeURIComponent(bookId)}/${encodeURIComponent(id)}`, volumeTitle: null, wordCount: null, updatedAt: null, isLocked: price > 0, attributes: price > 0 ? [{ key: 'price', label: '听币', value: String(price) }] : [] }); }
@@ -251,6 +258,7 @@ function contentId(id: string) { const match = /^audio:([^:]+)$/u.exec(id); if (
 function chapterIdFrom(id: string, bookId: string) { const match = new RegExp(`^audio:${escape(bookId)}:([^:]+)$`, 'u').exec(id); if (match?.[1] === undefined) throw new Error('Chapter ID is invalid.'); return match[1]; }
 function pageFromCursor(cursor: string | null, target: string) { if (cursor === null) return 1; const value = Number(new RegExp(`^${escape(target)}:(\\d+)$`, 'u').exec(cursor)?.[1]); if (!Number.isSafeInteger(value) || value < 2 || value > 50) throw new Error('Discovery cursor is invalid.'); return value; }
 function trustedAudio(value: string) { try { const host = new URL(value).hostname.toLowerCase(); return ['xmcdn.com', 'tingshijie.com', '365ting.com', 'tingchina.com', 'stream.tencentmusic.com'].some((suffix) => host === suffix || host.endsWith(`.${suffix}`)); } catch { return false; } }
+function imageUrl(value: string | null) { if (value === null) return null; try { const url = new URL(value, base); return ['http:', 'https:'].includes(url.protocol) ? url.toString() : null; } catch { return null; } }
 function mime(url: string) { return /\.m4a(?:$|\?)/iu.test(url) ? 'audio/mp4' : /\.aac(?:$|\?)/iu.test(url) ? 'audio/aac' : 'audio/mpeg'; }
 function md5(value: string) { return createHash('md5').update(value).digest('hex'); }
 function clamp(value: number) { return Math.max(1, Math.min(100, Math.floor(value))); }

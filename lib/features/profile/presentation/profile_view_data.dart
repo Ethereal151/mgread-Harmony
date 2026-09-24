@@ -129,19 +129,7 @@ final class ProfileSettingsItemViewData {
 }
 
 /// Symbol choices that keep the profile fixture independent from Material UI.
-enum ProfileSettingsIcon {
-  reading,
-  sources,
-  networkProxy,
-  download,
-  appearance,
-  privacy,
-  importExport,
-  backup,
-  diagnostics,
-  about,
-  feedback,
-}
+enum ProfileSettingsIcon { reading, sources, networkProxy, download, appearance, importExport, backup, diagnostics, about, feedback }
 
 /// Clearly disclosed fixture data used while account and sync capabilities are
 /// intentionally outside the current application milestone.
@@ -172,12 +160,11 @@ abstract final class ProfileFixtures {
         description: '应用主题色；阅读器主题独立管理',
         icon: ProfileSettingsIcon.appearance,
       ),
-      ProfileSettingsItemViewData(id: 'privacy-permissions', title: '隐私与权限', description: '权限管理与隐私设置', icon: ProfileSettingsIcon.privacy),
       ProfileSettingsItemViewData(id: 'import-export', title: '导入导出', description: '选择数据源、书架与阅读进度', icon: ProfileSettingsIcon.importExport),
       ProfileSettingsItemViewData(id: 'data-backup', title: '局域网同步', description: '同一网络传输数据源、书架与进度', icon: ProfileSettingsIcon.backup),
     ],
     about: <ProfileSettingsItemViewData>[
-      ProfileSettingsItemViewData(id: 'diagnostics', title: '调试日志', description: '查看应用与数据源运行日志', icon: ProfileSettingsIcon.diagnostics),
+      ProfileSettingsItemViewData(id: 'diagnostics', title: '调试中心', description: '实时日志、详情捕获与历史文件', icon: ProfileSettingsIcon.diagnostics),
       ProfileSettingsItemViewData(id: 'about', title: '关于我们', description: '版本 --', icon: ProfileSettingsIcon.about),
       ProfileSettingsItemViewData(id: 'feedback', title: '意见反馈', description: '告诉我们您的想法', icon: ProfileSettingsIcon.feedback),
     ],

@@ -136,6 +136,53 @@ test('rejects cross-book chapters before emitting image requests', async () => {
   );
 });
 
+test('re-registers cached image descriptors after Runtime reactivation', async (t) => {
+  const cacheDir = await mkdtemp(join(tmpdir(), 'p5hanman-reactivation-'));
+  t.after(() => rm(cacheDir, { recursive: true, force: true }));
+  const listing = await readFile(
+    new URL('./fixtures/listing.html', import.meta.url),
+    'utf8',
+  );
+  const proxies = [[], []];
+  const activateWith = async (slot) => plugin.activate({
+    dataDir: cacheDir,
+    cacheDir,
+    app: {},
+    plugin: {},
+    log: { debug() {}, info() {}, warn() {}, error() {} },
+    resource: {
+      proxy(request) {
+        proxies[slot].push(request);
+        return `http://127.0.0.1/runtime-${slot}/${proxies[slot].length}`;
+      },
+    },
+    http: {
+      async fetch() {
+        return new Response(listing, { status: 200 });
+      },
+    },
+  });
+
+  await activateWith(0);
+  const first = await plugin.discover({
+    target: 'category:latest',
+    cursor: null,
+    collectionId: null,
+    pageSize: 1,
+  });
+  assert.match(first.document.components[0].children[0].items[0].content.coverUrl, /runtime-0/u);
+
+  await activateWith(1);
+  const second = await plugin.discover({
+    target: 'category:latest',
+    cursor: null,
+    collectionId: null,
+    pageSize: 1,
+  });
+  assert.match(second.document.components[0].children[0].items[0].content.coverUrl, /runtime-1/u);
+  assert.ok(proxies[1].some((request) => request.purpose === 'cover'));
+});
+
 function html(body) {
   return new Response(body, {
     status: 200,

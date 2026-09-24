@@ -1,4 +1,4 @@
-/** HSCK video source: MacCMS lists, neutral episode groups, and player-data decoding. */
+/** HSCK video source: MacCMS lists, neutral episode groups, player decoding, and Runtime-side cover MIME sniffing. */
 import type { MgReadPluginContext } from '@mgread/source-api';
 
 type Json = Record<string, unknown>;
@@ -101,7 +101,7 @@ function parseChapterId(id: string, content: string) { const match = new RegExp(
 function cursorPage(cursor: string | null, target: string) { if (cursor === null) return 1; const value = Number(new RegExp(`^${escape(target)}:(\\d+)$`, 'u').exec(cursor)?.[1]); if (!Number.isSafeInteger(value) || value < 2 || value > 50) throw new Error('Discovery cursor is invalid.'); return value; }
 function safeMediaUrl(value: string) { try { const url = new URL(value); return (url.protocol === 'https:' || url.protocol === 'http:') && url.username === '' && url.password === ''; } catch { return false; } }
 function absolute(value: string | null) { if (value === null || value === '') return null; try { return new URL(value.replaceAll('\\/', '/'), base).toString(); } catch { return null; } }
-function proxyImage(value: string | null) { const url = absolute(value); return url === null ? null : requireContext().resource.proxy({ kind: 'image', url, headers: { Referer: `${base}/`, 'User-Agent': headers['User-Agent'] } }); }
+function proxyImage(value: string | null) { const url = absolute(value); return url === null ? null : requireContext().resource.proxy({ kind: 'image', url, resourceTransform: 'sniff-image-content-type-v1', headers: { Referer: `${base}/`, 'User-Agent': headers['User-Agent'] } }); }
 function attribute(text: string, name: string) { return new RegExp(`${escape(name)}=["']([^"']+)["']`, 'iu').exec(text)?.[1] ?? ''; }
 function firstAttribute(html: string, pattern: RegExp, name: string) { const match = pattern.exec(html); return match === null ? '' : attribute(match[0], name); }
 function firstText(html: string, pattern: RegExp) { return strip(pattern.exec(html)?.[1] ?? ''); }

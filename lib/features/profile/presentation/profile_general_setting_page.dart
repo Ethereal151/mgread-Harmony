@@ -1,9 +1,9 @@
 /// “我的”中尚未单独拆分路由的通用设置页面。
 ///
 /// 职责：
-/// - 以真实能力说明阅读、外观与隐私设置，不展示“功能建设中”占位。
-/// - 直接持久化小说预加载、音频退出、书架布局和诊断日志设置。
-/// - 将阅读器内设置和系统按需授权边界解释清楚，不伪造平台状态。
+/// - 以真实能力提供阅读和外观设置，不展示“功能建设中”占位。
+/// - 直接持久化小说预加载、音频退出和书架布局设置。
+/// - 将阅读器内设置与应用级设置边界解释清楚。
 library;
 
 import 'package:flutter/material.dart';
@@ -11,7 +11,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:mg_read/app/app_theme.dart';
 import 'package:mg_read/core/settings/settings.dart';
-import 'package:mg_read/features/profile/presentation/about_document_page.dart';
 import 'package:mg_read/shared/presentation/widgets/app_secondary_page_chrome.dart';
 
 part 'profile_appearance_theme_controls.dart';
@@ -55,7 +54,6 @@ class ProfileGeneralSettingPage extends ConsumerWidget {
                     ...switch (settingId) {
                       'reading-settings' => _readingSections(context, settings),
                       'theme-appearance' => _appearanceSections(context, settings),
-                      'privacy-permissions' => _privacySections(context, settings),
                       _ => _fallbackSections(context),
                     },
                   ],
@@ -153,49 +151,6 @@ class ProfileGeneralSettingPage extends ConsumerWidget {
     ];
   }
 
-  List<Widget> _privacySections(BuildContext context, AppSettingsManager settings) {
-    final bool diagnosticsEnabled = settings.get(AppSettingKeys.diagnosticsEnabled);
-    return <Widget>[
-      const _SectionHeading(title: '按需权限', description: '只在你使用对应功能时请求系统授权'),
-      const SizedBox(height: AppSpacing.regular),
-      const _SettingsCard(
-        children: <Widget>[
-          _InfoRow(icon: Icons.folder_open_outlined, title: '文件访问', description: '导入导出时由系统文件选择器授权', trailing: '按需'),
-          _InfoRow(icon: Icons.camera_alt_outlined, title: '相机', description: '扫描局域网同步二维码时请求', trailing: '按需'),
-          _InfoRow(icon: Icons.wifi_rounded, title: '网络', description: '用于数据源访问、媒体加载和局域网同步', trailing: '核心能力'),
-        ],
-      ),
-      const SizedBox(height: AppSpacing.section),
-      const _SectionHeading(title: '诊断与隐私', description: '由你决定是否保留本机诊断日志'),
-      const SizedBox(height: AppSpacing.regular),
-      _SettingsCard(
-        children: <Widget>[
-          _SwitchInfoRow(
-            icon: Icons.analytics_outlined,
-            title: '诊断日志',
-            description: '仅保存在本机，用于排查应用与数据源问题',
-            value: diagnosticsEnabled,
-            onChanged: (bool value) async {
-              await settings.set(AppSettingKeys.diagnosticsEnabled, value);
-            },
-          ),
-          _ActionInfoRow(
-            icon: Icons.policy_outlined,
-            title: '隐私政策',
-            description: '查看数据处理与权限使用说明',
-            onTap: () => Navigator.of(context).push<void>(
-              MaterialPageRoute<void>(
-                builder: (_) => AboutDocumentPage(kind: AboutDocumentKind.privacy, onBackRequested: () => Navigator.of(context).pop()),
-              ),
-            ),
-          ),
-        ],
-      ),
-      const SizedBox(height: AppSpacing.comfortable),
-      const _InlineNotice(icon: Icons.lock_outline_rounded, message: '普通设置按应用功能保存；导入导出和局域网同步按对应功能处理。'),
-    ];
-  }
-
   List<Widget> _fallbackSections(BuildContext context) => const <Widget>[
     _InlineNotice(icon: Icons.info_outline_rounded, message: '当前页面没有可配置项目。'),
   ];
@@ -272,130 +227,6 @@ class _SectionHeading extends StatelessWidget {
         const SizedBox(height: AppSpacing.unit),
         Text(description, style: theme.textTheme.bodySmall?.copyWith(color: tokens.mutedText)),
       ],
-    );
-  }
-}
-
-class _SettingsCard extends StatelessWidget {
-  const _SettingsCard({required this.children});
-  final List<Widget> children;
-
-  @override
-  Widget build(BuildContext context) {
-    final AppThemeTokens tokens = AppThemeTokens.of(context);
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: tokens.surface,
-        borderRadius: AppRadii.detailCard,
-        border: Border.all(color: tokens.divider),
-        boxShadow: <BoxShadow>[BoxShadow(color: tokens.shadow.withValues(alpha: 0.07), blurRadius: 14, offset: const Offset(0, 4))],
-      ),
-      child: ClipRRect(
-        borderRadius: AppRadii.detailCard,
-        child: Column(
-          children: <Widget>[
-            for (int index = 0; index < children.length; index++) ...<Widget>[
-              children[index],
-              if (index < children.length - 1)
-                Padding(
-                  padding: const EdgeInsets.only(left: 64),
-                  child: Divider(height: 1, color: tokens.divider),
-                ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _InfoRow extends StatelessWidget {
-  const _InfoRow({required this.icon, required this.title, required this.description, this.trailing});
-  final IconData icon;
-  final String title;
-  final String description;
-  final String? trailing;
-
-  @override
-  Widget build(BuildContext context) => _SettingsRowShell(
-    icon: icon,
-    title: title,
-    description: description,
-    trailing: trailing == null ? null : _StatusPill(label: trailing!),
-  );
-}
-
-class _SwitchInfoRow extends StatelessWidget {
-  const _SwitchInfoRow({required this.icon, required this.title, required this.description, required this.value, required this.onChanged});
-  final IconData icon;
-  final String title;
-  final String description;
-  final bool value;
-  final ValueChanged<bool> onChanged;
-
-  @override
-  Widget build(BuildContext context) => _SettingsRowShell(
-    icon: icon,
-    title: title,
-    description: description,
-    trailing: Switch(value: value, onChanged: onChanged),
-  );
-}
-
-class _ActionInfoRow extends StatelessWidget {
-  const _ActionInfoRow({required this.icon, required this.title, required this.description, required this.onTap});
-  final IconData icon;
-  final String title;
-  final String description;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) => Material(
-    color: Colors.transparent,
-    child: InkWell(
-      key: const Key('privacy-policy-action'),
-      onTap: onTap,
-      child: _SettingsRowShell(icon: icon, title: title, description: description, trailing: const Icon(Icons.chevron_right_rounded)),
-    ),
-  );
-}
-
-class _SettingsRowShell extends StatelessWidget {
-  const _SettingsRowShell({required this.icon, required this.title, required this.description, this.trailing});
-  final IconData icon;
-  final String title;
-  final String description;
-  final Widget? trailing;
-
-  @override
-  Widget build(BuildContext context) {
-    final ThemeData theme = Theme.of(context);
-    final AppThemeTokens tokens = AppThemeTokens.of(context);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(AppSpacing.regular, AppSpacing.regular, AppSpacing.compact, AppSpacing.regular),
-      child: Row(
-        children: <Widget>[
-          SizedBox.square(
-            dimension: 36,
-            child: DecoratedBox(
-              decoration: BoxDecoration(color: tokens.accentSoft, borderRadius: AppRadii.discoveryTile),
-              child: Icon(icon, size: 19, color: tokens.accent),
-            ),
-          ),
-          const SizedBox(width: AppSpacing.regular),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Text(title, style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600)),
-                const SizedBox(height: 2),
-                Text(description, style: theme.textTheme.bodySmall?.copyWith(color: tokens.mutedText)),
-              ],
-            ),
-          ),
-          if (trailing != null) ...<Widget>[const SizedBox(width: AppSpacing.compact), trailing!],
-        ],
-      ),
     );
   }
 }
@@ -563,23 +394,6 @@ class _CoverMetadataModeCardState extends State<_CoverMetadataModeCard> {
   }
 }
 
-class _StatusPill extends StatelessWidget {
-  const _StatusPill({required this.label});
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    final AppThemeTokens tokens = AppThemeTokens.of(context);
-    return DecoratedBox(
-      decoration: BoxDecoration(color: tokens.mutedSurface, borderRadius: AppRadii.pill),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.compact, vertical: AppSpacing.unit),
-        child: Text(label, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: tokens.mutedText)),
-      ),
-    );
-  }
-}
-
 class _InlineNotice extends StatelessWidget {
   const _InlineNotice({required this.icon, required this.message});
   final IconData icon;
@@ -636,13 +450,6 @@ _GeneralSettingSpec _specFor(String settingId) => switch (settingId) {
     description: '统一、克制的浅色界面，保持各页面观感一致',
     badge: '当前主题',
     icon: Icons.palette_outlined,
-  ),
-  'privacy-permissions' => const _GeneralSettingSpec(
-    title: '隐私与权限',
-    heroTitle: '本地优先',
-    description: '权限按需申请，诊断和敏感数据由你掌控',
-    badge: '透明可控',
-    icon: Icons.shield_outlined,
   ),
   _ => const _GeneralSettingSpec(title: '设置', heroTitle: '设置', description: '当前没有可配置项目', badge: 'MgRead', icon: Icons.settings_outlined),
 };

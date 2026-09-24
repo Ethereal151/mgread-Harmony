@@ -6,15 +6,72 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mgread_plugin_runtime/mgread_plugin_runtime.dart';
 
 import 'package:mg_read/app/app_theme.dart';
+import 'package:mg_read/features/discovery/application/batch_search.dart';
 import 'package:mg_read/features/discovery/application/discovery_bookshelf_saver.dart';
 import 'package:mg_read/features/discovery/application/bookshelf_membership.dart';
 import 'package:mg_read/features/discovery/application/discovery_source_selection_store.dart';
 import 'package:mg_read/features/discovery/application/search_history_store.dart';
 import 'package:mg_read/features/discovery/application/source_content_gateway.dart';
 import 'package:mg_read/features/discovery/presentation/search_page.dart';
+import 'package:mg_read/features/discovery/presentation/widgets/search_page_sections.dart';
+import 'package:mg_read/features/discovery/application/search_page_state.dart';
 import 'package:mg_read/features/plugins/application/plugin_runtime_connection.dart';
 
 void main() {
+  testWidgets('wraps the source progress line at compact width with enlarged text', (tester) async {
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.binding.setSurfaceSize(const Size(260, 600));
+    final result = AggregatedSearchResult(
+      query: '长搜索词',
+      items: const <AggregatedSearchItem>[],
+      sourceStates: List<BatchSearchSourceState>.generate(
+        999,
+        (index) => BatchSearchSourceState(
+          source: _source('source.$index', '一个很长的数据源名称 $index'),
+          status: BatchSearchSourceStatus.success,
+          hits: const <SourceSearchHit>[],
+          nextCursor: null,
+          totalCount: 0,
+        ),
+      ),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light(),
+        builder: (BuildContext context, Widget? child) {
+          final MediaQueryData mediaQuery = MediaQuery.of(context);
+          return MediaQuery(
+            data: mediaQuery.copyWith(textScaler: const TextScaler.linear(1.3)),
+            child: child ?? const SizedBox.shrink(),
+          );
+        },
+        home: Scaffold(
+          body: SingleChildScrollView(
+            padding: const EdgeInsets.all(AppSpacing.compact),
+            child: SearchResultsSection(
+              result: result,
+              status: SearchPageStatus.loaded,
+              query: result.query,
+              error: null,
+              sortOrder: SearchResultSortOrder.relevance,
+              onSortOrderChanged: (_) {},
+              onContentPressed: (_) {},
+              onRetry: () {},
+              onLoadMore: () {},
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('搜索结果'), findsOneWidget);
+    expect(find.text('（已聚合 0 条）'), findsOneWidget);
+    expect(find.text('已完成 999/999 个来源'), findsOneWidget);
+  });
+
   testWidgets('does not search until the user selects a history keyword', (tester) async {
     final gateway = _SearchGateway();
     await tester.pumpWidget(

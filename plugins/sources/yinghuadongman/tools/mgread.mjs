@@ -16,7 +16,16 @@ export function buildPluginArtifact(options = {}) {
   return buildPluginArtifactForProject(projectRoot, options);
 }
 
+
+
 if (resolve(process.argv[1] ?? '') === fileURLToPath(import.meta.url)) {
+  if (process.argv[2] === 'build' && process.argv.length === 3) {
+    const { buildBundledEntryForProject } = await import('../../aisishuwu/tools/mgread.mjs');
+    await buildBundledEntryForProject(projectRoot, projectRoot);
+    process.stdout.write('dist/index.mjs\n');
+    process.exit(0);
+  }
+
   if (process.argv[2] !== 'pack' || process.argv.length !== 3) throw new Error('Usage: mgread pack');
   const artifact = await buildPluginArtifact();
   const artifactsRoot = resolve(projectRoot, 'artifacts');

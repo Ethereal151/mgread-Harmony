@@ -15,7 +15,6 @@ void main() {
   registerDesktopRuntimeFacadeTestsPartTwo();
 }
 
-/// Captures the Facade's safe exception while failing tests that unexpectedly pass.
 Future<PluginRuntimeException> _captureRuntimeFailure(
   Future<Object?> future,
 ) async {
@@ -25,6 +24,15 @@ Future<PluginRuntimeException> _captureRuntimeFailure(
     return error;
   }
   fail('Expected the Runtime operation to fail.');
+}
+
+Future<void> _waitForFile(File file) async {
+  final deadline = DateTime.now().add(const Duration(seconds: 5));
+  while (DateTime.now().isBefore(deadline)) {
+    if (await file.exists()) return;
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+  }
+  fail('Timed out waiting for ${file.path}.');
 }
 
 /// Reads the checked-in cross-language desktop fixture through a typed JSON boundary.
@@ -163,6 +171,9 @@ function summary(query) {
 export async function discover(request) {
   if (request.target === 'slow-nested' || (request.target === null && request.pageSize === 50)) {
     await new Promise((resolve) => setTimeout(resolve, 5500));
+  }
+  if (request.target === 'slow-timeout') {
+    await new Promise((resolve) => setTimeout(resolve, 15000));
   }
   return {
     kind: 'document',

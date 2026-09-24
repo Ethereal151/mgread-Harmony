@@ -2,8 +2,8 @@
  * Runtime 插件管理器。
  *
  * 职责：
- * - 在唯一 Node VM 中管理待升级插件冷激活、稳定插件懒加载、开发刷新与内容调用。
- * - 维护受限插件上下文、资源代理、共享调用/独占清缓存协调和传输队列。
+ * - 在唯一 Node VM 中管理待升级插件冷激活、稳定插件懒加载与开发刷新。
+ * - 组合受限插件上下文、来源调用、存储控制、资源代理和传输队列。
  *
  * 注意：
  * - 不暴露路径、端口、PID 或 raw transport 给 Flutter。
@@ -18,32 +18,21 @@
 import { createHash } from "node:crypto";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createRequire } from "node:module";
-import {
-  access,
-  mkdir,
-  readFile,
-  readdir,
-  rename,
-  rm,
-  writeFile,
-} from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { mkdir, readdir, rm } from "node:fs/promises";
+import { resolve } from "node:path";
 
 import type { JsonObject } from "./protocol.js";
 import { activatePlugin, defaultPluginActivationTimeoutMs } from "./plugin-activation.js";
 import type { PluginBrowserSessionProvider } from "./plugin-browser-session.js";
 import { DevelopmentPluginRegistry } from "./development-plugin-registry.js";
 import { loadDevelopmentPlugin } from "./development-plugin-runtime.js";
+import { PluginContentDispatcher } from "./plugin-content-dispatcher.js";
 import { createPluginContext } from "./plugin-manager-context.js";
 import {
   PluginOperationCoordinator,
   type PluginOperationCoordinatorOptions,
 } from "./plugin-operation-coordinator.js";
-import {
-  positiveMilliseconds,
-  settlePluginOperation,
-  waitForPluginOperation,
-} from "./plugin-operation-wait.js";
+import { positiveMilliseconds } from "./plugin-operation-wait.js";
 import { SourceResourceCoordinator } from "./source-resource-coordinator.js";
 import { encodeSourceResourceToken } from "./source-resource-token.js";
 import {
@@ -57,36 +46,14 @@ import {
   type InstalledPluginCatalogRecord,
 } from "./plugin-catalog.js";
 import { PluginIconResources } from "./plugin-icon-resources.js";
-import { measureInstallationTree, retainedArtifactPath } from "./plugin-installation-usage.js";
-import { prepareActiveDevelopmentArtifact } from "./plugin-manager-artifact-transfer.js";
+import { createDevelopmentPackageArtifactResource, listExportablePluginArtifacts, listPluginTransferOffers, prepareActiveDevelopmentArtifact, toDevelopmentTransferProject } from "./plugin-manager-artifact-transfer.js";
+import { PluginManagerStorage } from "./plugin-manager-storage.js";
 import { PluginArtifactTransferManager, type PluginTransferArtifact, type PluginTransferOffer, type PluginTransferPlanItem, type PluginTransferResource } from "./plugin-artifact-transfer.js";
-import { cacheBytes, clearPluginCache as clearPluginCacheItem } from "./plugin-manager-cache.js";
-import {
-  clearAllPluginCaches,
-  clearPluginCache,
-  consumePluginIconResource,
-  consumePluginTransferResource,
-  createDevelopmentPackageResource,
-  createPluginTransferResource,
-  listCacheUsage,
-  listExportableArtifacts,
-  listPluginTransferOffers,
-  measureInstallationUsage,
-  planPluginTransfer,
-  planPluginTransferOffers,
-  resolveCodeDirectory,
-  setEnabled,
-  uninstall,
-  uninstallAll,
-  verifyPluginTransferInbox,
-  type PluginManagerMaintenanceContext,
-} from "./plugin-manager-maintenance.js";
 import {
   type PluginChapterContent,
   type PluginChaptersRequest,
   type PluginChaptersResult,
   type PluginContentDetail,
-  type PluginContentOperation,
   type PluginContentReferenceRequest,
   type PluginContentRequest,
   type PluginDiscoverRequest,
@@ -95,14 +62,7 @@ import {
   type PluginSearchResult,
   type PluginSearchSuggestionsRequest,
   type PluginSearchSuggestionsResult,
-  validateChaptersResult,
-  validateContentResult,
-  validateDetailResult,
-  validateDiscoverResult,
-  validateSearchResult,
-  validateSearchSuggestionsResult,
 } from "./plugin-content.js";
-import { invokeLoadedPluginContent } from "./plugin-content-invocation.js";
 
 import {
   PluginManagerError,
@@ -177,7 +137,8 @@ export class PluginManager {
   readonly #installedLoadPromises = new Map<string, Promise<LoadedPlugin>>();
   readonly #pluginOperations: PluginOperationCoordinator;
   readonly #pluginTransfer: PluginArtifactTransferManager;
-  readonly #maintenance: PluginManagerMaintenanceContext;
+  readonly #content: PluginContentDispatcher;
+  readonly #storage: PluginManagerStorage;
   readonly #cacheClearTimeoutMs: number;
   readonly #pluginActivationTimeoutMs: number;
   #initializePromise: Promise<void> | undefined;
@@ -194,13 +155,13 @@ export class PluginManager {
       readonly http?: PluginRuntimeHttpClient;
       readonly browserSession?: PluginBrowserSessionProvider;
       readonly debugLogEnabled?: () => boolean;
-      /** Platform-owned artifact inbox; desktop defaults to dataRoot/import-inbox. */
-      readonly pluginImportInboxRoot?: string;
       readonly cacheClearTimeoutMs?: number;
       readonly maxActiveInvocationsPerPlugin?: number;
       readonly maxQueuedOperationsPerPlugin?: number;
       readonly pluginActivationTimeoutMs?: number;
       readonly catalog?: InstalledPluginCatalog;
+      /** Platform-owned artifact inbox; desktop defaults to dataRoot/import-inbox. */
+      readonly pluginImportInboxRoot?: string | undefined;
     } = {},
   ) {
     this.#dataRoot = resolve(runtimeDataRoot);
@@ -249,41 +210,25 @@ export class PluginManager {
         ? {}
         : { npmCli: options.developmentNpmCli }),
     });
-    this.#maintenance = {
-      dataRoot: this.#dataRoot,
-      embedded: this.#embedded,
+    this.#content = new PluginContentDispatcher({
+      debugLogEnabled: this.#debugLogEnabled,
       development: this.#development,
+      ensureInstalledLoaded: (pluginId) => this.#ensureInstalledLoaded(pluginId),
       events: this.#events,
-      catalog: this.#catalog,
-      installer: this.#installer,
-      pluginIcons: this.#pluginIcons,
-      resourceOrigin: () => this.#resourceOrigin,
-      pluginOperations: this.#pluginOperations,
-      pluginTransfer: this.#pluginTransfer,
-      cacheClearTimeoutMs: this.#cacheClearTimeoutMs,
       initialize: () => this.initialize(),
-      snapshots: () => this.#installedSnapshots,
-      combinedSnapshots: () => this.#combinedSnapshots(),
-      setSnapshots: (snapshots) => { this.#installedSnapshots = snapshots; },
-      installedLoaded: this.#installedLoaded,
-      installedLoadPromises: this.#installedLoadPromises,
-      cacheBytes: (pluginId) => cacheBytes(this.#dataRoot, pluginId),
-      clearCache: (pluginId, signal, deadline) => clearPluginCacheItem(
-        this.#dataRoot,
-        this.#pluginOperations,
-        pluginId,
-        signal,
-        deadline,
-      ),
-      reportUninstallProgress: (code, snapshot, itemCount, totalItemCount) => this.#events({
-        code,
-        itemCount,
-        outcome: code === "plugin_uninstall_started" ? "started" : "success",
-        pluginId: snapshot.id,
-        pluginName: snapshot.displayName,
-        totalItemCount,
-      }),
-    };
+      invocationScope: this.#invocationScope,
+      operations: this.#pluginOperations,
+      snapshots: () => this.#combinedSnapshots(),
+    });
+    this.#storage = new PluginManagerStorage({
+      cacheClearTimeoutMs: this.#cacheClearTimeoutMs,
+      dataRoot: this.#dataRoot,
+      developmentProjectRoot: (pluginId) => this.#development.project(pluginId)?.projectRoot,
+      initialize: () => this.initialize(),
+      installedSnapshots: () => this.#installedSnapshots,
+      operations: this.#pluginOperations,
+      snapshots: () => this.#combinedSnapshots(),
+    });
   }
 
   /** Builds metadata snapshots and validates pending versions exactly once before readiness. */
@@ -327,12 +272,20 @@ export class PluginManager {
 
   /** Lists retained artifacts plus explicit development exports, loading those projects on demand. */
   async listExportableArtifacts(): Promise<readonly PluginTransferArtifact[]> {
-    return listExportableArtifacts(this.#maintenance);
+    await this.initialize();
+    await this.#development.ensureAllLoaded();
+    return listExportablePluginArtifacts(this.#pluginTransfer, this.#installedSnapshots, this.#development.loadedValues());
   }
 
   /** Lists transferable versions after lazily fingerprinting development projects. */
   async listPluginTransferOffers(): Promise<readonly PluginTransferOffer[]> {
-    return listPluginTransferOffers(this.#maintenance);
+    await this.initialize();
+    await this.#development.ensureAllLoaded();
+    return listPluginTransferOffers(
+      this.#pluginTransfer,
+      this.#installedSnapshots,
+      this.#development.loadedValues(),
+    );
   }
 
   async close(): Promise<void> {
@@ -343,33 +296,49 @@ export class PluginManager {
 
   /** Compares sender SemVer against this Runtime's installed versions. */
   async planPluginTransfer(incoming: readonly PluginTransferArtifact[], forceUpgradeIds: ReadonlySet<string> = new Set()): Promise<readonly PluginTransferPlanItem[]> {
-    return planPluginTransfer(this.#maintenance, incoming, forceUpgradeIds);
+    await this.initialize();
+    await this.#development.ensureAllLoaded();
+    const development = [...this.#development.loadedValues()].map((plugin) => ({ fingerprint: plugin.fingerprint, id: plugin.loaded.descriptor.id, syncRevision: plugin.syncRevision }));
+    return this.#pluginTransfer.plan(incoming, this.#combinedSnapshots(), development, forceUpgradeIds);
   }
 
   async planPluginTransferOffers(incoming: readonly PluginTransferOffer[], forceUpgradeIds: ReadonlySet<string> = new Set()): Promise<readonly PluginTransferPlanItem[]> {
-    return planPluginTransferOffers(this.#maintenance, incoming, forceUpgradeIds);
+    await this.initialize();
+    await this.#development.ensureAllLoaded();
+    const development = [...this.#development.loadedValues()].map((plugin) => ({ fingerprint: plugin.fingerprint, id: plugin.loaded.descriptor.id, syncRevision: plugin.syncRevision }));
+    return this.#pluginTransfer.planOffers(incoming, this.#combinedSnapshots(), development, forceUpgradeIds);
   }
 
   /** Creates a one-shot Runtime-private resource for bounded artifact streaming. */
   async createPluginTransferResource(id: string, version: string): Promise<{ readonly token: string; readonly artifact: PluginTransferArtifact }> {
-    return createPluginTransferResource(this.#maintenance, id, version);
+    await this.initialize();
+    const development = await this.#development.ensureLoaded(id);
+    return this.#pluginTransfer.createResource(
+      id,
+      version,
+      development === undefined ? undefined : toDevelopmentTransferProject(development),
+    );
   }
 
   /** Lazily loads and packages one Windows Debug development source without exposing its path. */
   async createDevelopmentPackageResource(pluginId: string): Promise<{ readonly artifact: PluginTransferArtifact; readonly fileName: string; readonly token: string }> {
-    return createDevelopmentPackageResource(this.#maintenance, pluginId);
+    await this.initialize();
+    if (!isPluginId(pluginId)) throw new PluginManagerError("invalid_request");
+    const development = await this.#development.ensureLoaded(pluginId);
+    if (development === undefined) throw new PluginManagerError("plugin_not_found");
+    return createDevelopmentPackageArtifactResource(this.#pluginTransfer, development);
   }
 
   async verifyPluginTransferInbox(incoming: readonly PluginTransferArtifact[]): Promise<void> {
-    return verifyPluginTransferInbox(this.#maintenance, incoming);
+    return this.#pluginTransfer.verifyInbox(incoming);
   }
 
   consumePluginTransferResource(token: string): PluginTransferResource | undefined {
-    return consumePluginTransferResource(this.#maintenance, token);
+    return this.#pluginTransfer.consumeResource(token);
   }
 
   async consumePluginIconResource(token: string): Promise<PluginIconResource | undefined> {
-    return consumePluginIconResource(this.#maintenance, token);
+    return this.#pluginIcons.consume(token);
   }
 
   /**
@@ -377,26 +346,25 @@ export class PluginManager {
    * action. This absolute path must never cross the Flutter Facade.
    */
   async resolveCodeDirectory(pluginId: string): Promise<PluginCodeDirectory> {
-    return resolveCodeDirectory(this.#maintenance, pluginId);
+    return this.#storage.resolveCodeDirectory(pluginId);
   }
 
   /** Reports byte usage for installed plugins without exposing cache paths. */
   async listCacheUsage(pluginId?: string): Promise<readonly PluginCacheUsage[]> {
-    return listCacheUsage(this.#maintenance, pluginId);
+    return this.#storage.listCacheUsage(pluginId);
   }
 
   /**
    * Measures one installed source subtree asynchronously.
    *
-   * Data excludes every `node_modules` directory; npm includes the complete
-   * materialized dependency tree; archive reports the retained original
-   * `.mgplugin.js` or `.mgplugin`. Only totals cross the Facade.
+   * Data reports the installed source tree; archive reports the retained
+   * original `.mgplugin.js` or `.mgplugin`. Only totals cross the Facade.
    */
   async measureInstallationUsage(
     pluginId: string,
-    scope: "archive" | "data" | "npm",
+    scope: "archive" | "data",
   ): Promise<PluginInstallationUsage> {
-    return measureInstallationUsage(this.#maintenance, pluginId, scope);
+    return this.#storage.measureInstallationUsage(pluginId, scope);
   }
 
   /** Clears one installed plugin's private cache and returns a stable outcome. */
@@ -405,7 +373,7 @@ export class PluginManager {
     signal?: AbortSignal,
     deadlineUnixMs?: string,
   ): Promise<PluginCacheClearResult> {
-    return clearPluginCache(this.#maintenance, pluginId, signal, deadlineUnixMs);
+    return this.#storage.clearPluginCache(pluginId, signal, deadlineUnixMs);
   }
 
   /** Clears every currently installed plugin cache, preserving per-plugin status. */
@@ -413,7 +381,7 @@ export class PluginManager {
     signal?: AbortSignal,
     deadlineUnixMs?: string,
   ): Promise<PluginCacheClearResult> {
-    return clearAllPluginCaches(this.#maintenance, signal, deadlineUnixMs);
+    return this.#storage.clearAllPluginCaches(signal, deadlineUnixMs);
   }
 
   /**
@@ -421,7 +389,28 @@ export class PluginManager {
    * Runtime process without unloading or recreating the shared Node VM.
    */
   async setEnabled(pluginId: string, enabled: boolean): Promise<InstalledPluginSnapshot> {
-    return setEnabled(this.#maintenance, pluginId, enabled);
+    await this.initialize();
+    if (!isPluginId(pluginId)) throw new PluginManagerError("invalid_request");
+    if (this.#development.has(pluginId)) {
+      throw new PluginManagerError("invalid_request");
+    }
+    const index = this.#installedSnapshots.findIndex((item) => item.id === pluginId);
+    if (index < 0) throw new PluginManagerError("plugin_not_found");
+
+    const record = await this.#catalog.setEnabled(pluginId, enabled);
+    if (record === undefined) throw new PluginManagerError("plugin_not_found");
+    const updated = record.snapshot;
+    this.#installedSnapshots = Object.freeze([
+      ...this.#installedSnapshots.slice(0, index),
+      updated,
+      ...this.#installedSnapshots.slice(index + 1),
+    ]);
+    this.#events({
+      code: enabled ? "plugin_enabled" : "plugin_disabled",
+      outcome: "success",
+      pluginId,
+    });
+    return this.#pluginIcons.project(updated, this.#development.projects(), this.#resourceOrigin);
   }
 
   /** Removes one installed source after current source calls have released their lease. */
@@ -430,7 +419,19 @@ export class PluginManager {
     signal?: AbortSignal,
     deadlineUnixMs?: string,
   ): Promise<PluginUninstallResult> {
-    return uninstall(this.#maintenance, pluginId, signal, deadlineUnixMs);
+    await this.initialize();
+    if (!isPluginId(pluginId)) throw new PluginManagerError("invalid_request");
+    if (this.#development.has(pluginId)) {
+      throw new PluginManagerError("invalid_request");
+    }
+    const snapshot = this.#installedSnapshots.find((item) => item.id === pluginId);
+    if (snapshot === undefined) {
+      throw new PluginManagerError("plugin_not_found");
+    }
+    this.#reportUninstallProgress("plugin_uninstall_started", snapshot, 0, 1);
+    await this.#uninstallInstalled(pluginId, signal, deadlineUnixMs);
+    this.#reportUninstallProgress("plugin_uninstall_completed", snapshot, 1, 1);
+    return Object.freeze({ pluginId, removed: true } satisfies PluginUninstallResult);
   }
 
   /** Removes every installed source, preserving workspace development projects. */
@@ -438,7 +439,56 @@ export class PluginManager {
     signal?: AbortSignal,
     deadlineUnixMs?: string,
   ): Promise<PluginUninstallAllResult> {
-    return uninstallAll(this.#maintenance, signal, deadlineUnixMs);
+    await this.initialize();
+    const snapshots = this.#installedSnapshots;
+    let completedCount = 0;
+    await mapWithConcurrency(
+      snapshots,
+      this.#embedded ? EMBEDDED_UNINSTALL_CONCURRENCY : DEFAULT_UNINSTALL_CONCURRENCY,
+      async (snapshot) => {
+        this.#reportUninstallProgress("plugin_uninstall_started", snapshot, completedCount, snapshots.length);
+        await this.#uninstallInstalled(snapshot.id, signal, deadlineUnixMs);
+        completedCount += 1;
+        this.#reportUninstallProgress("plugin_uninstall_completed", snapshot, completedCount, snapshots.length);
+      },
+    );
+    return Object.freeze({ removedCount: snapshots.length } satisfies PluginUninstallAllResult);
+  }
+
+  async #uninstallInstalled(
+    pluginId: string,
+    signal?: AbortSignal,
+    deadlineUnixMs?: string,
+  ): Promise<void> {
+    const cancellation = signal ?? new AbortController().signal;
+    const deadline = deadlineUnixMs ?? String(Date.now() + this.#cacheClearTimeoutMs);
+    const release = await this.#pluginOperations.acquireCacheClear(pluginId, cancellation, deadline);
+    try {
+      await this.#catalog.remove(pluginId);
+      this.#installedLoaded.delete(pluginId);
+      this.#installedLoadPromises.delete(pluginId);
+      this.#installedSnapshots = Object.freeze(
+        this.#installedSnapshots.filter((item) => item.id !== pluginId),
+      );
+    } finally {
+      release();
+    }
+  }
+
+  #reportUninstallProgress(
+    code: "plugin_uninstall_started" | "plugin_uninstall_completed",
+    snapshot: InstalledPluginSnapshot,
+    itemCount: number,
+    totalItemCount: number,
+  ): void {
+    this.#events({
+      code,
+      itemCount,
+      outcome: code === "plugin_uninstall_started" ? "started" : "success",
+      pluginId: snapshot.id,
+      pluginName: snapshot.displayName,
+      totalItemCount,
+    });
   }
 
   async discover(
@@ -448,18 +498,7 @@ export class PluginManager {
     deadlineUnixMs: string,
     trace?: PluginRuntimeTraceContext,
   ): Promise<PluginDiscoverResult> {
-    return this.#invokeContent(
-      pluginId,
-      "discover",
-      request,
-      signal,
-      deadlineUnixMs,
-      validateDiscoverResult,
-      trace,
-      (result) => request.collectionId === null
-        ? result.kind === "document"
-        : result.kind === "append" && result.collectionId === request.collectionId,
-    );
+    return this.#content.discover(pluginId, request, signal, deadlineUnixMs, trace);
   }
 
   async search(
@@ -469,15 +508,7 @@ export class PluginManager {
     deadlineUnixMs: string,
     trace?: PluginRuntimeTraceContext,
   ): Promise<PluginSearchResult> {
-    return this.#invokeContent(
-      pluginId,
-      "search",
-      request,
-      signal,
-      deadlineUnixMs,
-      validateSearchResult,
-      trace,
-    );
+    return this.#content.search(pluginId, request, signal, deadlineUnixMs, trace);
   }
 
   async searchSuggestions(
@@ -487,15 +518,7 @@ export class PluginManager {
     deadlineUnixMs: string,
     trace?: PluginRuntimeTraceContext,
   ): Promise<PluginSearchSuggestionsResult> {
-    return this.#invokeContent(
-      pluginId,
-      "searchSuggestions",
-      request,
-      signal,
-      deadlineUnixMs,
-      validateSearchSuggestionsResult,
-      trace,
-    );
+    return this.#content.searchSuggestions(pluginId, request, signal, deadlineUnixMs, trace);
   }
 
   async getDetail(
@@ -510,16 +533,7 @@ export class PluginManager {
       readonly sourceName: string;
     }
   > {
-    return this.#invokeContent(
-      pluginId,
-      "getDetail",
-      request,
-      signal,
-      deadlineUnixMs,
-      validateDetailResult,
-      trace,
-      (result) => result.id === request.id,
-    );
+    return this.#content.getDetail(pluginId, request, signal, deadlineUnixMs, trace);
   }
 
   async getChapters(
@@ -529,15 +543,7 @@ export class PluginManager {
     deadlineUnixMs: string,
     trace?: PluginRuntimeTraceContext,
   ): Promise<PluginChaptersResult> {
-    return this.#invokeContent(
-      pluginId,
-      "getChapters",
-      request,
-      signal,
-      deadlineUnixMs,
-      validateChaptersResult,
-      trace,
-    );
+    return this.#content.getChapters(pluginId, request, signal, deadlineUnixMs, trace);
   }
 
   async getContent(
@@ -547,88 +553,7 @@ export class PluginManager {
     deadlineUnixMs: string,
     trace?: PluginRuntimeTraceContext,
   ): Promise<PluginChapterContent> {
-    return this.#invokeContent(
-      pluginId,
-      "getContent",
-      request,
-      signal,
-      deadlineUnixMs,
-      validateContentResult,
-      trace,
-      (result) => result.chapterId === request.chapterId,
-    );
-  }
-
-  async #invokeContent<TResult extends JsonObject>(
-    pluginId: string,
-    operation: PluginContentOperation,
-    request: JsonObject,
-    signal: AbortSignal,
-    deadlineUnixMs: string,
-    validate: (pluginId: string, sourceName: string, value: unknown) => TResult,
-    trace?: PluginRuntimeTraceContext,
-    validateCorrelation?: (result: TResult) => boolean,
-  ): Promise<TResult> {
-    await this.initialize();
-    if (!isPluginId(pluginId)) throw new PluginManagerError("invalid_request");
-    const queuedAt = performance.now();
-    const releaseOperation = await this.#pluginOperations.acquireInvocation(
-      pluginId,
-      signal,
-      deadlineUnixMs,
-    );
-    let development: DevelopmentPlugin | undefined;
-    let operationStarted = false;
-    try {
-      if (this.#debugLogEnabled()) this.#events({ code: "plugin_log_emitted", logCategory: "runtime.plugin.invocation", logLevel: "debug", logMessage: `插件调用取得队列：操作=${operation}，等待毫秒=${Math.round(performance.now() - queuedAt)}`, outcome: "success", pluginId });
-      const execution = (async () => {
-        try {
-          development = await this.#development.ensureLoaded(pluginId);
-          if (development !== undefined) this.#development.retain(development);
-          const installed = development === undefined
-            ? await this.#ensureInstalledLoaded(pluginId)
-            : undefined;
-          return await invokeLoadedPluginContent({
-            debugLogEnabled: this.#debugLogEnabled,
-            ...(development === undefined
-              ? {}
-              : { developmentIsCurrent: () => this.#development.getLoaded(pluginId) === development }),
-            deadlineUnixMs,
-            events: this.#events,
-            invocationScope: this.#invocationScope,
-            operation,
-            plugin: development?.loaded ?? installed,
-            pluginId,
-            request,
-            signal,
-            snapshot: this.#combinedSnapshots().find((item) => item.id === pluginId),
-            ...(trace === undefined ? {} : { trace }),
-            validate,
-            ...(validateCorrelation === undefined ? {} : { validateCorrelation }),
-          });
-        } finally {
-          try {
-            if (development !== undefined) await this.#development.release(development);
-          } finally {
-            releaseOperation();
-          }
-        }
-      })();
-      operationStarted = true;
-      return await waitForPluginOperation(
-        settlePluginOperation(execution),
-        signal,
-        deadlineUnixMs,
-      );
-    } finally {
-      if (!operationStarted) {
-        try {
-          if (development !== undefined) await this.#development.release(development);
-        } finally {
-          releaseOperation();
-        }
-      }
-    }
+    return this.#content.getContent(pluginId, request, signal, deadlineUnixMs, trace);
   }
 
   async #initialize(): Promise<void> {
@@ -976,7 +901,7 @@ export class PluginManager {
   async #loadModule(entryPath: string): Promise<Record<string, unknown>> {
     if (this.#embedded) {
       // Javet owns the V8 module resolver on Android. Ask that resolver to
-      // compile the plugin module so installed files and their dependencies
+      // compile the bundled plugin module so it and Node builtin modules
       // stay in the same VM/module cache as the Runtime Core.
       const loader = (globalThis as {
         __mgreadLoadPluginModule?: (path: string) => Record<string, unknown>;

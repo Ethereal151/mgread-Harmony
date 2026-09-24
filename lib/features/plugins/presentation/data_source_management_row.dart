@@ -57,13 +57,15 @@ class DataSourceManagementRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
     final AppThemeTokens tokens = AppThemeTokens.of(context);
+    final bool isTextScaled = MediaQuery.textScalerOf(context).scale(1) > 1;
+    final int textMaxLines = isTextScaled ? 2 : 1;
     return Semantics(
-      label: '${source.name}，${source.kindLabel}，${source.enabled ? '已启用' : '未启用'}',
+      label: '${source.name}，${source.description}，${source.kindLabel}，${source.enabled ? '已启用' : '未启用'}',
       child: Material(
         color: Colors.transparent,
-        child: SizedBox(
+        child: ConstrainedBox(
           key: ValueKey<String>('data-source-${source.id}'),
-          height: AppSpacing.dataSourceRowHeight + AppSpacing.comfortable,
+          constraints: const BoxConstraints(minHeight: AppSpacing.dataSourceRowHeight + AppSpacing.comfortable),
           child: Padding(
             padding: const EdgeInsets.fromLTRB(AppSpacing.comfortable, AppSpacing.compact, AppSpacing.compact, AppSpacing.compact),
             child: Row(
@@ -97,14 +99,14 @@ class DataSourceManagementRow extends StatelessWidget {
                               children: <Widget>[
                                 Text(
                                   source.name,
-                                  maxLines: 1,
+                                  maxLines: textMaxLines,
                                   overflow: TextOverflow.ellipsis,
                                   style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600, height: 1.12),
                                 ),
                                 const SizedBox(height: AppSpacing.unit),
                                 Text(
                                   source.description,
-                                  maxLines: 1,
+                                  maxLines: textMaxLines,
                                   overflow: TextOverflow.ellipsis,
                                   style: theme.textTheme.bodySmall?.copyWith(color: tokens.mutedText, height: 1.1),
                                 ),
@@ -120,7 +122,7 @@ class DataSourceManagementRow extends StatelessWidget {
                                     Expanded(
                                       child: Text(
                                         source.kindLabel,
-                                        maxLines: 1,
+                                        maxLines: textMaxLines,
                                         overflow: TextOverflow.ellipsis,
                                         style: theme.textTheme.bodySmall?.copyWith(color: tokens.mutedText, height: 1.1),
                                       ),
@@ -222,10 +224,10 @@ class _DataSourceBrandMark extends StatelessWidget {
                 shape: BoxShape.circle,
                 border: Border.all(color: theme.colorScheme.surface, width: 2),
               ),
-              child: const SizedBox(
+              child: SizedBox(
                 width: AppSpacing.regular,
                 height: AppSpacing.regular,
-                child: Icon(Icons.code_rounded, size: AppSpacing.compact, color: Colors.white),
+                child: Icon(Icons.code_rounded, size: AppSpacing.compact, color: theme.colorScheme.onPrimary),
               ),
             ),
           ),

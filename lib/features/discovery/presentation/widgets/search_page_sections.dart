@@ -537,10 +537,11 @@ class _ResultHeader extends StatelessWidget {
           ],
         ),
         const SizedBox(height: AppSpacing.unit),
-        Row(
+        Wrap(
+          spacing: AppSpacing.compact,
+          runSpacing: AppSpacing.unit,
           children: <Widget>[
             Text('（已聚合 $count 条）', style: Theme.of(context).textTheme.bodyMedium),
-            const SizedBox(width: AppSpacing.compact),
             Text(
               '已完成 ${result.completedSourceCount}/${result.totalSourceCount} 个来源',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: tokens.mutedText),

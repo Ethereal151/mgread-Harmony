@@ -1,6 +1,6 @@
 {
   "name": "@mgread-plugin/xiezhenji2",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "private": true,
   "description": "MgRead conversion of the user-provided 写真集2 source.",
   "type": "module",
@@ -8,7 +8,7 @@
   "packageManager": "npm@11.13.0",
   "engines": { "node": ">=24 <25", "npm": "11.13.0" },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && node tools/mgread.mjs build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "npm run build && node --test test/contract.test.mjs test/source.test.mjs",
     "test:live": "npm run build && node --use-env-proxy --test test/live-source.test.mjs",

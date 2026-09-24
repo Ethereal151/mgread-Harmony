@@ -154,6 +154,10 @@ void main() {
           AppLifecycleState.resumed,
         );
         await tester.pump();
+
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump();
+        expect(backend.disposed, isTrue);
       }
     } finally {
       debugDefaultTargetPlatformOverride = previousPlatform;

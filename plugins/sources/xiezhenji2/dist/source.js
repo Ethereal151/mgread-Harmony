@@ -11,8 +11,8 @@ const origin = 'https://cosplaytele.com';
 const listingPolicy = Object.freeze({ namespace: 'listing', staleAfterMs: 10 * 60 * 1000, serveStaleWhileRevalidate: true });
 const detailPolicy = Object.freeze({ namespace: 'detail', staleAfterMs: 60 * 60 * 1000, allowStaleOnError: false });
 export const categories = Object.freeze([
-    ['home', '首页', '/'], ['video', 'Video Cosplay', '/category/video-cosplayy/'],
-    ['nude', 'Cosplay Nude', '/category/cosplay-nude/'], ['ero', 'Cosplay Ero', '/category/cosplay-ero/'],
+    ['home', '首页', '/'], ['video', 'Video Cosplay', '/category/video-cosplayyy/'],
+    ['nude', 'Cosplay Nude', '/category/cosplay-nudee/'], ['ero', 'Cosplay Ero', '/category/cosplay-ero/'],
     ['cosplay', 'Cosplay', '/category/cosplay/'], ['day', '24 Hours', '/24-hours/'],
     ['three-day', '3 Day', '/3-day/'], ['week', '7 Day', '/7-day/'],
     ['best', 'Best Cosplayer', '/best-cosplayer/'],

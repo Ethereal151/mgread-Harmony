@@ -1,4 +1,5 @@
 import type { PluginBrowserSessionProvider } from "./plugin-browser-session.js";
+export { materializeTransferEmbedded } from "./embedded-transfer-materializer.js";
 
 /** Creates the Android-hosted browser bridge when the embedded callback exists. */
 export function createEmbeddedBrowserSession(): PluginBrowserSessionProvider | undefined {

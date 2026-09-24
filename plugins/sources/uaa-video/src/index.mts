@@ -34,6 +34,11 @@ const headers = Object.freeze({
   Referer: mainOrigin + '/video/',
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
 });
+const coverHeaders = Object.freeze({
+  Accept: 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+  Referer: mainOrigin + '/video/',
+  'User-Agent': headers['User-Agent'],
+});
 const channels = Object.freeze<Channel[]>([
   { id: 'latest', title: '最新', path: 'search', parameters: { category: '', orderType: '1', searchType: '1' } },
   { id: 'view-ranking', title: '观看排行', path: 'search', parameters: { category: '', orderType: '3', searchType: '1' } },
@@ -282,13 +287,14 @@ function summary(value: Json, id: string) {
   if (title === null) throw new Error('Source item has no title.');
   const updatedAt = timestamp(value.updateTime);
   const author = nullableText(value.authors) ?? nullableText(value.author) ?? nullableText(value.uploader);
+  const cover = absolute(nullableText(value.coverUrl) ?? nullableText(value.cover));
   return frozen({
     id: 'video:' + id,
     title,
     contentKind: 'video',
     author,
     url: stableIntroUrl(id),
-    coverUrl: absolute(nullableText(value.coverUrl) ?? nullableText(value.cover)),
+    coverUrl: cover === null ? null : requireContext().resource.proxy({ kind: 'image', url: cover, headers: coverHeaders }),
     description: nullableText(value.brief) ?? nullableText(value.description),
     language: 'zh-CN',
     status: 'unknown',

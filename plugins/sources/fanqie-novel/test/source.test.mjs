@@ -31,14 +31,9 @@ test('Fanqie source keeps book/item IDs and formats paragraphs', async () => {
 
 test('Fanqie login opens WebView, checks status, and imports bookshelf IDs through source details', async () => {
   const calls = [];
-  let pageState = { status: 'loggedOut', bookIds: [], url: 'https://fanqienovel.com/bookshelf?enter_from=menu' };
   const page = {
     async navigate(url, options) { calls.push(['navigate', url, options]); },
     async show(options) { calls.push(['show', options]); },
-    async executeJavaScript(code, options) {
-      calls.push(['executeJavaScript', options]);
-      return pageState;
-    },
   };
   await plugin.activate({
     log: { info() {}, warn() {} },
@@ -50,6 +45,11 @@ test('Fanqie login opens WebView, checks status, and imports bookshelf IDs throu
       throw new Error(`unexpected HTTP request: ${url}`);
     } },
     webview: { async open(options) { calls.push(['open', options]); return page; } },
+    browser: { sessionV1: { async request(request) {
+      calls.push(['session', request]);
+      if (request.url.includes('/api/user/info/v2')) return { version: 1, status: 200, body: JSON.stringify({ code: -1, data: {} }), headers: {}, finalUrl: request.url };
+      return { version: 1, status: 200, body: JSON.stringify({ code: 0, data: { book_shelf_info: [{ book_id: '12' }, { book_id: '55' }, { book_id: '12' }] } }), headers: {}, finalUrl: request.url };
+    } } },
   });
   const home = await plugin.discover({ target: null, cursor: null, collectionId: null, pageSize: 10 });
   const actions = home.document.components[1].children[0].categories;
@@ -65,15 +65,18 @@ test('Fanqie login opens WebView, checks status, and imports bookshelf IDs throu
   const loggedOut = await plugin.discover({ target: 'login-status', cursor: null, collectionId: null, pageSize: 10 });
   assert.equal(loggedOut.document.components[0].title, '番茄未登录');
 
-  pageState = { status: 'loggedIn', bookIds: ['12', '55'], url: 'https://fanqienovel.com/bookshelf?enter_from=menu' };
   const shelf = await plugin.discover({ target: 'bookshelf', cursor: null, collectionId: null, pageSize: 10 });
   const items = shelf.document.components[0].children[0].items;
   assert.deepEqual(items.map((item) => item.content.id), ['novel:12', 'novel:55']);
   assert.match(shelf.document.components[0].subtitle, /读取 2 本书的 ID/u);
-  assert.deepEqual(calls.at(-4), ['open', { visible: true, timeoutMs: 30_000 }]);
-  assert.deepEqual(calls.at(-3), ['navigate', 'https://fanqienovel.com/bookshelf?enter_from=menu', { timeoutMs: 45_000 }]);
-  assert.deepEqual(calls.at(-2), ['show', { timeoutMs: 15_000 }]);
-  assert.deepEqual(calls.at(-1), ['executeJavaScript', { timeoutMs: 20_000 }]);
+  const sessionCalls = calls.filter(([kind]) => kind === 'session').map(([, request]) => request);
+  assert.equal(sessionCalls.length, 2);
+  assert.equal(sessionCalls[0].url, 'https://fanqienovel.com/api/user/info/v2');
+  assert.equal(sessionCalls[0].transport, 'http');
+  assert.equal(sessionCalls[0].presentation, 'hidden');
+  assert.equal('cookie' in sessionCalls[0].headers, false);
+  assert.equal(sessionCalls[1].url, 'https://fanqienovel.com/reading/bookapi/bookshelf/info/v:version/?aid=1967&iid=0&version_code=57700&update_version_code=57700');
+  assert.equal(calls.filter(([kind]) => kind === 'navigate').length, 1);
 });
 
 test('Fanqie source migrates legacy search payloads and web detail fallback', async () => {
@@ -97,6 +100,29 @@ test('Fanqie source migrates legacy search payloads and web detail fallback', as
   assert.equal(detail.author, '网页作者');
   assert.equal(detail.description, '网页简介');
   assert.equal(resources.length, 2);
+});
+
+test('Fanqie detail reuses a cover field from the same API response', async () => {
+  const resources = [];
+  let infoCalls = 0;
+  await plugin.activate({
+    log: { info() {}, warn() {} },
+    resource: { proxy(value) { resources.push(value); return 'http://127.0.0.1/resource'; } },
+    http: { async fetch(input) {
+      const url = String(input);
+      if (url.includes('/info?')) {
+        infoCalls += 1;
+        return Response.json({ data: { data: { book_name: '同响应封面', author: '作者' }, cover: 'https://img.example/reused.jpg' } });
+      }
+      throw new Error(url);
+    } },
+  });
+  const detail = await plugin.getDetail({ id: 'novel:77' });
+  assert.equal(infoCalls, 1);
+  assert.equal(detail.title, '同响应封面');
+  assert.equal(resources.length, 1);
+  assert.equal(resources[0].url, 'https://p6-novel.byteimg.com/origin/reused.jpg');
+  assert.equal(resources[0].headers.Referer, 'https://fanqienovel.com/');
 });
 
 test('Fanqie source strips legacy inline image blocks from novel text', async () => {

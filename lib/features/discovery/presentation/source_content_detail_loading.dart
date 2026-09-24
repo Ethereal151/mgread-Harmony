@@ -95,6 +95,7 @@ class _SourceDetailLoadingView extends StatelessWidget {
             isCoverBlurred: isCoverBlurred,
             onAction: onShelfAction!,
             onStartReading: onStartReading!,
+            canStartReading: false,
           )
         else
           Row(

@@ -228,43 +228,46 @@ class _DetailGroupTab extends StatelessWidget {
       button: true,
       selected: selected,
       label: '${group.title}，${group.episodes.length} 集',
-      child: Material(
-        key: ValueKey<String>('source-detail-group-${group.id}'),
-        color: selected ? tokens.accentSoft : tokens.surface,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-          side: BorderSide(color: selected ? tokens.accent : tokens.divider),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.regular, vertical: 10),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                Text(
-                  group.title,
-                  style: theme.textTheme.labelLarge?.copyWith(
-                    color: selected ? tokens.accent : theme.colorScheme.onSurface,
-                    fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(width: AppSpacing.compact),
-                DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: selected ? tokens.accent.withValues(alpha: .14) : tokens.mutedSurface,
-                    borderRadius: AppRadii.pill,
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                    child: Text(
-                      '${group.episodes.length}',
-                      style: theme.textTheme.labelSmall?.copyWith(color: selected ? tokens.accent : tokens.mutedText),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: AppSpacing.minimumTouchTarget),
+        child: Material(
+          key: ValueKey<String>('source-detail-group-${group.id}'),
+          color: selected ? tokens.accentSoft : tokens.surface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(color: selected ? tokens.accent : tokens.divider),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.regular, vertical: 10),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  Text(
+                    group.title,
+                    style: theme.textTheme.labelLarge?.copyWith(
+                      color: selected ? tokens.accent : theme.colorScheme.onSurface,
+                      fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
                     ),
                   ),
-                ),
-              ],
+                  const SizedBox(width: AppSpacing.compact),
+                  DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: selected ? tokens.accent.withValues(alpha: .14) : tokens.mutedSurface,
+                      borderRadius: AppRadii.pill,
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                      child: Text(
+                        '${group.episodes.length}',
+                        style: theme.textTheme.labelSmall?.copyWith(color: selected ? tokens.accent : tokens.mutedText),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),

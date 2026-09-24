@@ -6,9 +6,6 @@
   "engines": {
     "node": ">=24 <25"
   },
-  "dependencies": {
-    "local-helper": "file:./packages/local-helper"
-  },
   "mgread": {
     "schemaVersion": 1,
     "id": "org.mgread.runtime.fixture",

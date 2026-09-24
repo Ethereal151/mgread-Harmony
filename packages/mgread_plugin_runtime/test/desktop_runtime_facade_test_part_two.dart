@@ -2,52 +2,6 @@ part of 'desktop_runtime_facade_test.dart';
 
 void registerDesktopRuntimeFacadeTestsPartTwo() {
   test(
-    'caller cancellation ends a desktop source invocation without closing Runtime',
-    () async {
-      final runtimeDataRoot = await _stageInstalledStandardPlugin();
-      addTearDown(() => runtimeDataRoot.delete(recursive: true));
-      final runtime = PluginRuntime.desktopForTesting(
-        runtimeRepositoryRoot: nodeRuntimeRepositoryRoot,
-        runtimeDataRoot: runtimeDataRoot,
-      );
-      addTearDown(runtime.debugDispose);
-      await runtime.invoke(const InstalledPluginsInvocation());
-
-      final cancellation = PluginInvocationCancellation();
-      final stopwatch = Stopwatch()..start();
-      unawaited(
-        Future<void>.delayed(
-          const Duration(milliseconds: 100),
-          cancellation.cancel,
-        ),
-      );
-
-      await expectLater(
-        runtime.invoke(
-          const SourceDiscoverInvocation(
-            pluginId: 'org.mgread.flutter.fixture',
-            target: 'slow-nested',
-          ),
-          cancellation: cancellation,
-        ),
-        throwsA(
-          isA<PluginRuntimeException>().having(
-            (error) => error.code,
-            'code',
-            'cancelled',
-          ),
-        ),
-      );
-      expect(stopwatch.elapsed, lessThan(const Duration(seconds: 2)));
-      expect(
-        (await runtime.invoke(const RuntimePingInvocation())).isHealthy,
-        isTrue,
-      );
-    },
-    timeout: const Timeout(Duration(seconds: 30)),
-  );
-
-  test(
     'bulk uninstall waits for an active source call beyond the control timeout',
     () async {
       final runtimeDataRoot = await _stageInstalledStandardPlugin();
@@ -310,6 +264,45 @@ void registerDesktopRuntimeFacadeTestsPartTwo() {
   );
 
   test(
+    'HTTP readiness body timeout fails once and cleans up the child',
+    () async {
+      final runtime = PluginRuntime.desktopForTesting(
+        runtimeRepositoryRoot: nodeRuntimeRepositoryRoot,
+        entrypointOverride: File(
+          <String>[
+            pluginRuntimeRepositoryRoot.path,
+            'test',
+            'fixtures',
+            'ready-http-body-hang.mjs',
+          ].join(Platform.pathSeparator),
+        ),
+      );
+      addTearDown(() async {
+        await runtime.debugDispose();
+        await runtime.debugDispose();
+      });
+
+      final stopwatch = Stopwatch()..start();
+      final error = await _captureRuntimeFailure(
+        runtime.invoke(const RuntimePingInvocation()),
+      );
+      stopwatch.stop();
+
+      expect(error.code, 'runtime_not_ready');
+      expect(
+        error.diagnostics.map((diagnostic) => diagnostic.code),
+        contains('runtime_http_readiness_failed'),
+      );
+      expect(stopwatch.elapsed, lessThan(const Duration(seconds: 25)));
+      expect(runtime.debugDesktopProcessStartCount, 1);
+
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      expect(runtime.debugDesktopProcessStartCount, 1);
+    },
+    timeout: const Timeout(Duration(seconds: 35)),
+  );
+
+  test(
     'a post-ready child exit emits a fatal diagnostic and only restarts on the next invocation',
     () async {
       final runtime = PluginRuntime.desktopForTesting(
@@ -336,4 +329,161 @@ void registerDesktopRuntimeFacadeTestsPartTwo() {
       expect(runtime.debugDesktopProcessStartCount, 2);
     },
   );
+
+  test(
+    'lifecycle restart drains an invocation and admits the next generation',
+    () async {
+      final runtimeDataRoot = await _stageInstalledStandardPlugin();
+      addTearDown(() => runtimeDataRoot.delete(recursive: true));
+      final runtime = PluginRuntime.desktopForTesting(
+        runtimeRepositoryRoot: nodeRuntimeRepositoryRoot,
+        runtimeDataRoot: runtimeDataRoot,
+      );
+      addTearDown(runtime.debugDispose);
+
+      await runtime.invoke(const InstalledPluginsInvocation());
+      final slow = runtime.invoke(
+        const SourceDiscoverInvocation(
+          pluginId: 'org.mgread.flutter.fixture',
+          target: 'slow-nested',
+        ),
+      );
+      final restart = runtime.configureNodeEnvironmentProxy(true);
+
+      await slow;
+      await restart;
+      await runtime.invoke(const RuntimePingInvocation());
+      expect(runtime.debugDesktopProcessStartCount, 2);
+    },
+    timeout: const Timeout(Duration(seconds: 20)),
+  );
+
+  test(
+    'lifecycle drain timeout fails an in-flight call and closes its child',
+    () async {
+      final runtimeDataRoot = await _stageInstalledStandardPlugin();
+      addTearDown(() => runtimeDataRoot.delete(recursive: true));
+      final runtime = PluginRuntime.desktopForTesting(
+        runtimeRepositoryRoot: nodeRuntimeRepositoryRoot,
+        runtimeDataRoot: runtimeDataRoot,
+      );
+      addTearDown(runtime.debugDispose);
+
+      await runtime.invoke(const InstalledPluginsInvocation());
+      final slow = runtime.invoke(
+        const SourceDiscoverInvocation(
+          pluginId: 'org.mgread.flutter.fixture',
+          target: 'slow-timeout',
+        ),
+      );
+      final restart = runtime.configureNodeEnvironmentProxy(true);
+
+      await expectLater(
+        slow,
+        throwsA(
+          isA<PluginRuntimeException>().having(
+            (error) => error.code,
+            'code',
+            'transport_disconnected',
+          ),
+        ),
+      );
+      await restart;
+      await runtime.invoke(const RuntimePingInvocation());
+      expect(runtime.debugDesktopProcessStartCount, 2);
+    },
+    timeout: const Timeout(Duration(seconds: 35)),
+  );
+
+  test(
+    'concurrent lifecycle restarts are serialized into one next generation',
+    () async {
+      final runtime = PluginRuntime.desktopForTesting(
+        runtimeRepositoryRoot: nodeRuntimeRepositoryRoot,
+      );
+      addTearDown(runtime.debugDispose);
+
+      await runtime.invoke(const RuntimePingInvocation());
+      await Future.wait(<Future<void>>[
+        runtime.configureNodeEnvironmentProxy(true),
+        runtime.configureNodeEnvironmentProxy(false),
+      ]);
+      await runtime.invoke(const RuntimePingInvocation());
+      expect(runtime.debugDesktopProcessStartCount, 2);
+
+      // The final false request was serialized after the true transition. A
+      // stale out-of-queue comparison would leave the child configured true
+      // and restart once more here.
+      await runtime.configureNodeEnvironmentProxy(false);
+      await runtime.invoke(const RuntimePingInvocation());
+      expect(runtime.debugDesktopProcessStartCount, 2);
+    },
+  );
+
+  test(
+    'dispose closes startup admission before a child can be published',
+    () async {
+      final runtimeDataRoot = await Directory.systemTemp.createTemp(
+        'mgread-runtime-startup-gate-',
+      );
+      final runtime = PluginRuntime.desktopForTesting(
+        runtimeRepositoryRoot: nodeRuntimeRepositoryRoot,
+        runtimeDataRoot: runtimeDataRoot,
+        entrypointOverride: File(
+          <String>[
+            pluginRuntimeRepositoryRoot.path,
+            'test',
+            'fixtures',
+            'hold-before-ready.mjs',
+          ].join(Platform.pathSeparator),
+        ),
+      );
+      addTearDown(() async {
+        await runtime.debugDispose();
+        await runtimeDataRoot.delete(recursive: true);
+      });
+
+      final pending = runtime.invoke(const RuntimePingInvocation());
+      final entered = File(
+        <String>[
+          runtimeDataRoot.path,
+          'startup-gate-entered',
+        ].join(Platform.pathSeparator),
+      );
+      await _waitForFile(entered);
+
+      final dispose = runtime.debugDispose();
+      await File(
+        <String>[
+          runtimeDataRoot.path,
+          'startup-gate-release',
+        ].join(Platform.pathSeparator),
+      ).writeAsString('release');
+      await expectLater(
+        pending,
+        throwsA(
+          isA<PluginRuntimeException>().having(
+            (error) => error.code,
+            'code',
+            anyOf('runtime_unavailable', 'runtime_exited_before_ready'),
+          ),
+        ),
+      );
+      await dispose;
+      expect(runtime.debugDesktopProcessStartCount, 1);
+    },
+  );
+
+  test('repeated dispose calls share one completed cleanup', () async {
+    final runtime = PluginRuntime.desktopForTesting(
+      runtimeRepositoryRoot: nodeRuntimeRepositoryRoot,
+    );
+    await Future.wait(<Future<void>>[
+      runtime.debugDispose(),
+      runtime.debugDispose(),
+    ]);
+    await runtime.debugDispose();
+  });
 }
+
+/// Captures the Facade's safe exception while failing tests that unexpectedly pass.

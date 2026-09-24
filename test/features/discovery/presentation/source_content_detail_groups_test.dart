@@ -5,6 +5,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mgread_plugin_runtime/mgread_plugin_runtime.dart';
 
@@ -13,6 +14,13 @@ import 'package:mg_read/features/discovery/application/source_content_gateway.da
 import 'package:mg_read/features/discovery/presentation/source_content_detail_sheet.dart';
 
 void main() {
+  setUpAll(() async {
+    final miSans = FontLoader('packages/novel_reader_ui/MiSans')
+      ..addFont(rootBundle.load('packages/novel_reader_ui/assets/fonts/MiSansVF.ttf'));
+    final materialIcons = FontLoader('MaterialIcons')..addFont(rootBundle.load('fonts/MaterialIcons-Regular.otf'));
+    await Future.wait(<Future<void>>[miSans.load(), materialIcons.load()]);
+  });
+
   testWidgets('detail switches source groups and forwards them to video playback', (tester) async {
     PluginChaptersResult? forwardedCatalog;
     PluginChapterSummary? forwardedEpisode;
@@ -21,6 +29,7 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
+        debugShowCheckedModeBanner: false,
         theme: AppTheme.light(),
         home: _GroupedVideoDetailHost(
           onVideoEpisodeRequested: ({required detail, required firstCatalogPage, required chapter}) async {
@@ -38,8 +47,12 @@ void main() {
     expect(find.byKey(const Key('source-detail-group-diff')), findsOneWidget);
     expect(find.byKey(const Key('source-detail-episode-laoz-laoz-1')), findsOneWidget);
     expect(find.byKey(const Key('source-detail-episode-diff-diff-1')), findsNothing);
-    await tester.ensureVisible(find.byKey(const Key('source-detail-group-tabs')));
+    expect(find.text('开始播放'), findsOneWidget);
+    expect(find.text('开始阅读'), findsNothing);
+    final verticalScroll = find.descendant(of: find.byKey(const Key('source-content-detail-sheet')), matching: find.byType(Scrollable));
+    await tester.scrollUntilVisible(find.byKey(const Key('source-detail-group-tabs')), 240, scrollable: verticalScroll.first);
     await tester.pumpAndSettle();
+    expect(tester.getSize(find.byKey(const Key('source-detail-group-laoz'))).height, greaterThanOrEqualTo(AppSpacing.minimumTouchTarget));
     await expectLater(find.byType(MaterialApp), matchesGoldenFile('goldens/source_content_detail_grouped_video_phone_light.png'));
 
     await tester.tap(find.byKey(const Key('source-detail-group-diff')));

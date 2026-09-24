@@ -553,7 +553,7 @@ final class OpenRuntimePrivateDirectoryInvocation
 }
 
 /// Selects which part of an installed source version should be measured.
-enum PluginInstallationSizeScope { archive, data, npm }
+enum PluginInstallationSizeScope { archive, data }
 
 /// Returns path-free byte totals for one installed source subtree.
 @immutable
@@ -579,7 +579,6 @@ final class PluginInstallationSizeInvocation
     'scope': switch (scope) {
       PluginInstallationSizeScope.archive => 'archive',
       PluginInstallationSizeScope.data => 'data',
-      PluginInstallationSizeScope.npm => 'npm',
     },
   };
 
@@ -605,7 +604,6 @@ final class PluginInstallationSizeInvocation
     final parsedScope = switch (scope) {
       'archive' => PluginInstallationSizeScope.archive,
       'data' => PluginInstallationSizeScope.data,
-      'npm' => PluginInstallationSizeScope.npm,
       _ => null,
     };
     if (parsedScope == null) {

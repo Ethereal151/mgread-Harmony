@@ -80,7 +80,6 @@ class _DetailContent extends ConsumerWidget {
     final isDesktop = isWindows || Platform.isMacOS;
     final dataUsage = isDevelopment ? null : ref.watch(pluginRuntimeSourceDataSizeProvider(source.id));
     final archiveUsage = isDevelopment ? null : ref.watch(pluginRuntimeSourceArchiveSizeProvider(source.id));
-    final npmUsage = isDevelopment ? null : ref.watch(pluginRuntimeSourceNpmSizeProvider(source.id));
     final opening = ref.watch(pluginRuntimeSourceDirectoryProvider).contains(source.id);
     final packaging = ref.watch(pluginRuntimeDevelopmentPackageProvider).contains(source.id);
     final removing = ref.watch(pluginRuntimeSourceActionProvider).contains(source.id);
@@ -161,7 +160,7 @@ class _DetailContent extends ConsumerWidget {
           ),
         ),
         const SizedBox(height: AppSpacing.comfortable),
-        if (!isDevelopment) _InstallationSizeCard(archiveUsage: archiveUsage!, dataUsage: dataUsage!, npmUsage: npmUsage!),
+        if (!isDevelopment) _InstallationSizeCard(archiveUsage: archiveUsage!, dataUsage: dataUsage!),
         if (!isDevelopment) const SizedBox(height: AppSpacing.comfortable),
         _VerifySourceButton(
           onPressed: source.enabled && source.activeVersion != null && onVerificationRequested != null
@@ -257,12 +256,18 @@ class _VerifySourceButton extends StatelessWidget {
   final VoidCallback? onPressed;
 
   @override
-  Widget build(BuildContext context) => FilledButton.icon(
-    key: const Key('data-source-detail-verify'),
-    onPressed: onPressed,
-    icon: const Icon(Icons.fact_check_outlined),
-    label: const Text('检测搜索、发现与阅读链路'),
-  );
+  Widget build(BuildContext context) {
+    final bool compact = _useCompactDetailActionLayout(context);
+    return SizedBox(
+      width: compact ? double.infinity : null,
+      child: FilledButton.icon(
+        key: const Key('data-source-detail-verify'),
+        onPressed: onPressed,
+        icon: const Icon(Icons.fact_check_outlined),
+        label: _detailActionLabel('检测搜索、发现与阅读链路', compact),
+      ),
+    );
+  }
 }
 
 class _RemoveSourceButton extends StatelessWidget {
@@ -274,6 +279,7 @@ class _RemoveSourceButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = AppThemeTokens.of(context);
+    final bool compact = _useCompactDetailActionLayout(context);
     return SizedBox(
       width: double.infinity,
       child: OutlinedButton.icon(
@@ -282,7 +288,7 @@ class _RemoveSourceButton extends StatelessWidget {
         icon: isRemoving
             ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
             : const Icon(Icons.delete_outline),
-        label: Text(isRemoving ? '正在删除' : '删除数据源'),
+        label: _detailActionLabel(isRemoving ? '正在删除' : '删除数据源', compact),
         style: OutlinedButton.styleFrom(foregroundColor: tokens.notification),
       ),
     );
@@ -290,11 +296,10 @@ class _RemoveSourceButton extends StatelessWidget {
 }
 
 class _InstallationSizeCard extends StatelessWidget {
-  const _InstallationSizeCard({required this.archiveUsage, required this.dataUsage, required this.npmUsage});
+  const _InstallationSizeCard({required this.archiveUsage, required this.dataUsage});
 
   final AsyncValue<PluginInstallationSize> archiveUsage;
   final AsyncValue<PluginInstallationSize> dataUsage;
-  final AsyncValue<PluginInstallationSize> npmUsage;
 
   @override
   Widget build(BuildContext context) {
@@ -303,10 +308,7 @@ class _InstallationSizeCard extends StatelessWidget {
         ? (archiveUsage as AsyncData<PluginInstallationSize>).value
         : null;
     final dataResult = dataUsage is AsyncData<PluginInstallationSize> ? (dataUsage as AsyncData<PluginInstallationSize>).value : null;
-    final npmResult = npmUsage is AsyncData<PluginInstallationSize> ? (npmUsage as AsyncData<PluginInstallationSize>).value : null;
-    final total = archiveResult == null || dataResult == null || npmResult == null
-        ? null
-        : archiveResult.bytes + dataResult.bytes + npmResult.bytes;
+    final total = archiveResult == null || dataResult == null ? null : archiveResult.bytes + dataResult.bytes;
     return DecoratedBox(
       key: const Key('data-source-installation-size-card'),
       decoration: BoxDecoration(
@@ -327,7 +329,6 @@ class _InstallationSizeCard extends StatelessWidget {
             ),
             _InstallationSizeRow(label: '原始安装包', usage: archiveUsage),
             _InstallationSizeRow(label: '数据文件', usage: dataUsage),
-            _InstallationSizeRow(label: 'npm 包', usage: npmUsage, slowHint: true),
           ],
         ),
       ),
@@ -336,11 +337,10 @@ class _InstallationSizeCard extends StatelessWidget {
 }
 
 class _InstallationSizeRow extends StatelessWidget {
-  const _InstallationSizeRow({required this.label, required this.usage, this.slowHint = false});
+  const _InstallationSizeRow({required this.label, required this.usage});
 
   final String label;
   final AsyncValue<PluginInstallationSize> usage;
-  final bool slowHint;
 
   @override
   Widget build(BuildContext context) {
@@ -348,7 +348,7 @@ class _InstallationSizeRow extends StatelessWidget {
     final value = usage.when(
       data: (PluginInstallationSize result) => '${_formatInstallationBytes(result.bytes)}（${result.fileCount} 个文件）',
       error: (Object _, StackTrace _) => '统计失败',
-      loading: () => slowHint ? '统计中（文件较多）…' : '统计中…',
+      loading: () => '统计中…',
     );
     return Padding(
       padding: const EdgeInsets.only(top: AppSpacing.regular),
@@ -421,20 +421,27 @@ class _OpenDirectoryButton extends StatelessWidget {
   final VoidCallback? onPressed;
 
   @override
-  Widget build(BuildContext context) => FilledButton.icon(
-    key: const Key('data-source-detail-open-directory'),
-    onPressed: onPressed,
-    icon: isOpening
-        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-        : const Icon(Icons.folder_open_outlined),
-    label: Text(
-      isOpening
-          ? '正在打开…'
-          : isDevelopment
-          ? '打开开发项目文件夹'
-          : '打开已安装源码文件夹',
-    ),
-  );
+  Widget build(BuildContext context) {
+    final bool compact = _useCompactDetailActionLayout(context);
+    return SizedBox(
+      width: compact ? double.infinity : null,
+      child: FilledButton.icon(
+        key: const Key('data-source-detail-open-directory'),
+        onPressed: onPressed,
+        icon: isOpening
+            ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+            : const Icon(Icons.folder_open_outlined),
+        label: _detailActionLabel(
+          isOpening
+              ? '正在打开…'
+              : isDevelopment
+              ? '打开开发项目文件夹'
+              : '打开已安装源码文件夹',
+          compact,
+        ),
+      ),
+    );
+  }
 }
 
 class _PackageDevelopmentButton extends StatelessWidget {
@@ -444,15 +451,26 @@ class _PackageDevelopmentButton extends StatelessWidget {
   final VoidCallback? onPressed;
 
   @override
-  Widget build(BuildContext context) => OutlinedButton.icon(
-    key: const Key('data-source-detail-package-development'),
-    onPressed: onPressed,
-    icon: isPackaging
-        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-        : const Icon(Icons.inventory_2_outlined),
-    label: Text(isPackaging ? '正在打包…' : '打包数据源插件'),
-  );
+  Widget build(BuildContext context) {
+    final bool compact = _useCompactDetailActionLayout(context);
+    return SizedBox(
+      width: compact ? double.infinity : null,
+      child: OutlinedButton.icon(
+        key: const Key('data-source-detail-package-development'),
+        onPressed: onPressed,
+        icon: isPackaging
+            ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+            : const Icon(Icons.inventory_2_outlined),
+        label: _detailActionLabel(isPackaging ? '正在打包…' : '打包数据源插件', compact),
+      ),
+    );
+  }
 }
+
+bool _useCompactDetailActionLayout(BuildContext context) =>
+    MediaQuery.sizeOf(context).width < 360 || MediaQuery.textScalerOf(context).scale(1) > 1;
+
+Widget _detailActionLabel(String label, bool compact) => compact ? Text(label, textAlign: TextAlign.center, softWrap: true) : Text(label);
 
 class _DetailFailure extends StatelessWidget {
   const _DetailFailure({required this.onRetry, this.message = '数据源详情暂不可用。'});

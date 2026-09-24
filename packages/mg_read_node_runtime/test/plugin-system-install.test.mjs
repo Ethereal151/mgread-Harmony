@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
 import {
   chmod,
   cp,
@@ -8,7 +7,6 @@ import {
   readFile,
   rm,
   stat,
-  symlink,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -19,7 +17,6 @@ import test from "node:test";
 
 import {
   createPluginArchive,
-  DependencyStore,
   extractPluginArchive,
   PluginArchiveError,
   PluginInstaller,
@@ -57,22 +54,13 @@ async function temporaryDirectory(t, prefix) {
   t.after(() => rm(root, { force: true, recursive: true }));
   return root;
 }
-test("standard project uses package.json metadata and npm lockfile only", async () => {
+test("standard project uses package.json metadata", async () => {
   const project = await readPluginProject(fixtureRoot);
   assert.equal(project.descriptor.id, "org.mgread.runtime.fixture");
   assert.equal(project.descriptor.packageMode, "archive");
   assert.equal(project.descriptor.entry, "dist/index.mjs");
   assert.deepEqual(project.descriptor.contentKinds, ["novel"]);
-  assert.deepEqual(project.dependencies, [
-    {
-      installPath: "node_modules/local-helper",
-      kind: "local",
-      optional: false,
-      resolved: "packages/local-helper",
-      sourcePath: "packages/local-helper",
-      version: "1.0.0",
-    },
-  ]);
+  assert.deepEqual(Object.keys(project), ["descriptor", "packageJson"]);
 });
 
 test("legacy manifest-only projects are rejected without a compatibility path", async (t) => {
@@ -100,9 +88,7 @@ test("mgplugin is deterministic, excludes node_modules and rejects traversal", a
   const extracted = join(root, "extracted");
   const paths = await extractPluginArchive(first, extracted);
   assert.ok(paths.includes("package.json"));
-  assert.ok(paths.includes("package-lock.json"));
-  assert.ok(paths.includes("assets/rules.json"));
-  assert.ok(paths.includes("packages/local-helper/index.js"));
+  assert.ok(paths.includes("dist/index.mjs"));
   assert.equal(paths.some((path) => path.includes("node_modules")), false);
   await readPluginProject(extracted);
 
@@ -129,8 +115,6 @@ test("mgplugin archive restores npm packages and manager cold-activates named ex
   const installed = await installer.installArtifact(artifact);
   assert.equal(installed.pendingActivation, true);
   assert.equal(installed.reusedVersion, false);
-  assert.ok(installed.hardlinkedFiles >= 2);
-  assert.equal(installed.copiedFiles, 0);
   assert.deepEqual(
     installEvents.map((event) => event.code),
     ["plugin_install_started", "plugin_install_completed"],
@@ -142,15 +126,6 @@ test("mgplugin archive restores npm packages and manager cold-activates named ex
     "org.mgread.runtime.fixture",
   );
   assert.equal((await readFile(join(pluginRoot, "pending"), "utf8")).trim(), "1.0.0");
-  const source = await stat(
-    join(pluginRoot, "versions", "1.0.0", "packages", "local-helper", "index.js"),
-    { bigint: true },
-  );
-  const installedDependency = await stat(
-    join(pluginRoot, "versions", "1.0.0", "node_modules", "local-helper", "index.js"),
-    { bigint: true },
-  );
-  assert.equal(source.ino, installedDependency.ino);
 
   const managerEvents = [];
   const manager = new PluginManager(dataRoot, {
@@ -216,6 +191,36 @@ test("mgplugin archive restores npm packages and manager cold-activates named ex
   assert.equal(detail.catalogUrl, null);
   assert.equal(chapters.items[0].order, 0);
   assert.equal(content.text, "标准插件正文。");
+
+  const codeDirectory = await manager.resolveCodeDirectory("org.mgread.runtime.fixture");
+  assert.deepEqual(codeDirectory, {
+    directory: join(pluginRoot, "versions", "1.0.0"),
+    kind: "installed",
+  });
+  const cacheRoot = join(dataRoot, "plugin-cache", "org.mgread.runtime.fixture");
+  await mkdir(join(cacheRoot, "nested"), { recursive: true });
+  await writeFile(join(cacheRoot, "nested", "entry.bin"), "cache-bytes");
+  assert.deepEqual(await manager.listCacheUsage("org.mgread.runtime.fixture"), [{
+    bytes: 11,
+    pluginId: "org.mgread.runtime.fixture",
+  }]);
+  const dataUsage = await manager.measureInstallationUsage(
+    "org.mgread.runtime.fixture",
+    "data",
+  );
+  assert.equal(dataUsage.pluginId, "org.mgread.runtime.fixture");
+  assert.equal(dataUsage.scope, "data");
+  assert.equal(dataUsage.version, "1.0.0");
+  assert.ok(dataUsage.bytes > 0);
+  assert.ok(dataUsage.fileCount > 0);
+  assert.deepEqual(await manager.clearAllPluginCaches(), {
+    items: [{
+      bytesBefore: 11,
+      bytesRemaining: 0,
+      pluginId: "org.mgread.runtime.fixture",
+      status: "cleared",
+    }],
+  });
 
   const disabled = await manager.setEnabled(
     "org.mgread.runtime.fixture",
@@ -467,12 +472,7 @@ test("development projects stay metadata-only until an operation needs code", as
   const transferredPackage = JSON.parse(
     await readFile(join(extracted, "package.json"), "utf8"),
   );
-  const transferredLock = JSON.parse(
-    await readFile(join(extracted, "package-lock.json"), "utf8"),
-  );
   assert.equal(transferredPackage.version, exportable[0].version);
-  assert.equal(transferredLock.version, exportable[0].version);
-  assert.equal(transferredLock.packages[""].version, exportable[0].version);
 
   const packaged = await manager.createDevelopmentPackageResource(
     "org.example.live-source",
@@ -508,98 +508,6 @@ test("development projects stay metadata-only until an operation needs code", as
   );
   assert.equal(first.items[0].title, "第一版：测试");
 
-});
-
-test("single-file development loads Node-resolvable external dependencies without a lockfile", async (t) => {
-  const root = await temporaryDirectory(t, "mgread-single-file-development-");
-  const developmentRoot = join(root, "sources");
-  const projectRoot = join(developmentRoot, "external-source");
-  const externalRoot = join(root, "shared-package");
-  const dependencyLink = join(projectRoot, "node_modules", "@fixture", "external");
-  await Promise.all([
-    mkdir(join(projectRoot, "dist"), { recursive: true }),
-    mkdir(join(projectRoot, "node_modules", "@fixture"), { recursive: true }),
-    mkdir(externalRoot, { recursive: true }),
-  ]);
-  await Promise.all([
-    writeFile(
-      join(externalRoot, "package.json"),
-      '{"name":"@fixture/external","version":"1.0.0","type":"module","exports":"./index.js"}\n',
-    ),
-    writeFile(join(externalRoot, "index.js"), "export const marker = 'external-loaded';\n"),
-  ]);
-  await symlink(externalRoot, dependencyLink, process.platform === "win32" ? "junction" : "dir");
-  const packageJson = {
-    name: "@mgread-plugin/external-source",
-    version: "1.0.0",
-    type: "module",
-    main: "dist/index.mjs",
-    engines: { node: ">=24 <25" },
-    dependencies: { "@fixture/external": "file:../../../shared-package" },
-    mgread: {
-      schemaVersion: 1,
-      id: "org.mgread.external-source",
-      displayName: "External source",
-      pluginApi: 1,
-      contentKinds: ["novel"],
-    },
-  };
-  await Promise.all([
-    writeFile(join(projectRoot, "package.json"), `${JSON.stringify(packageJson, null, 2)}\n`),
-    writeFile(
-      join(projectRoot, "dist", "index.mjs"),
-      `import { marker } from "@fixture/external";
-export function activate() { if (marker !== "external-loaded") throw new Error("external dependency missing"); }
-export function discover() { return { kind: "document", document: { components: [] } }; }
-export function search() { return { items: [], nextCursor: null, totalCount: 0 }; }
-export function getDetail() { throw new Error("unused"); }
-export function getChapters() { return { items: [] }; }
-export function getContent() { throw new Error("unused"); }
-`,
-    ),
-  ]);
-
-  const project = await readPluginProject(projectRoot);
-  assert.equal(project.descriptor.packageMode, "single-file");
-  assert.deepEqual(project.dependencies, []);
-  assert.deepEqual(project.lock, {});
-
-  const manager = new PluginManager(join(root, "runtime"), {
-    developmentPluginRoot: developmentRoot,
-  });
-  await manager.initialize();
-  assert.deepEqual(
-    (await manager.listInstalled()).map((plugin) => plugin.id),
-    ["org.mgread.external-source"],
-  );
-  await manager.search(
-    "org.mgread.external-source",
-    { query: "load", cursor: null, pageSize: 20 },
-    new AbortController().signal,
-    String(Date.now() + 5_000),
-  );
-});
-
-test("archive projects still reject external local dependency restoration", async (t) => {
-  const root = await temporaryDirectory(t, "mgread-archive-external-dependency-");
-  await cp(fixtureRoot, root, { recursive: true });
-  const packagePath = join(root, "package.json");
-  const lockPath = join(root, "package-lock.json");
-  const packageJson = JSON.parse(await readFile(packagePath, "utf8"));
-  const lock = JSON.parse(await readFile(lockPath, "utf8"));
-  packageJson.dependencies = { "local-helper": "file:../../../shared-package" };
-  lock.packages[""].dependencies = packageJson.dependencies;
-  lock.packages["node_modules/local-helper"].resolved = "../../../shared-package";
-  await Promise.all([
-    writeFile(packagePath, `${JSON.stringify(packageJson, null, 2)}\n`),
-    writeFile(lockPath, `${JSON.stringify(lock, null, 2)}\n`),
-  ]);
-  await assert.rejects(
-    readPluginProject(root),
-    (error) =>
-      error instanceof PluginPackageError &&
-      error.code === "plugin_package_unsupported_dependency",
-  );
 });
 
 test("Runtime calls reuse the current development snapshot without rescanning directories", async (t) => {

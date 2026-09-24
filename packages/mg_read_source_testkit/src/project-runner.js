@@ -23,6 +23,12 @@ const maximumBuildOutputCharacters = 2400;
 const defaultStageTimeoutMs = 90000;
 const maximumDiscoveryTargets = 6;
 const maximumDiscoveryContinuations = 6;
+const testkitWebViewCapabilities = new Map([
+  ['source_webview_script_unsupported', 'javascriptEvaluation'],
+  ['source_webview_cdp_unsupported', 'cdp'],
+  ['source_webview_wait_unsupported', 'dynamicWait'],
+  ['source_webview_interaction_required', 'visibleInteraction'],
+]);
 
 export function parseSourceTestArguments(arguments_, { cwd = process.cwd() } = {}) {
   let all = false;
@@ -254,6 +260,17 @@ async function runProject(project, options) {
       ...(resourceFailure === null ? {} : { failure: resourceFailure }),
     });
   } catch (error) {
+    const limitation = testkitCapabilityLimitation(error);
+    if (limitation !== null) {
+      return Object.freeze({
+        pluginId: project.pluginId,
+        source: project.directory,
+        version: project.packageJson.version,
+        status: 'partial',
+        durationMs: Date.now() - started,
+        limitation,
+      });
+    }
     const failure = error instanceof SourceTestFailure
       ? error
       : failureFromCause('source_project_failed', 'project', error);
@@ -268,6 +285,19 @@ async function runProject(project, options) {
   } finally {
     await harness?.cleanup().catch(() => {});
   }
+}
+
+function testkitCapabilityLimitation(error) {
+  if (!(error instanceof SourceTestFailure)) return null;
+  const capability = testkitWebViewCapabilities.get(error.code);
+  if (capability === undefined) return null;
+  return Object.freeze({
+    kind: 'testkitWebViewCapability',
+    capability,
+    code: error.code,
+    stage: error.stage,
+    summary: error.summary,
+  });
 }
 
 async function runBuild(project) {

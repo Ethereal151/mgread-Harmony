@@ -1,14 +1,12 @@
 /**
- * Runtime 已安装插件 artifact/data/npm 用量统计。
+ * Runtime 已安装插件 artifact/data 用量统计。
  * 职责：解析兼容双格式的原始 artifact 路径并递归计算受控字节与文件数。
- * 注意：结果仅为 path-free 数值投影，data 统计排除 node_modules。
+ * 注意：结果仅为 path-free 数值投影。
  */
 import { lstat, readdir } from "node:fs/promises";
 import { resolve } from "node:path";
 
 import { PluginManagerError } from "./plugin-manager-contract.js";
-
-export type PluginInstallationUsageScope = "archive" | "data" | "npm";
 
 export async function retainedArtifactPath(dataRoot: string, pluginId: string, version: string): Promise<string> {
   const root = resolve(dataRoot, "plugin-archives", pluginId);
@@ -20,7 +18,6 @@ export async function retainedArtifactPath(dataRoot: string, pluginId: string, v
 
 export async function measureInstallationTree(
   path: string,
-  scope: PluginInstallationUsageScope,
 ): Promise<{ readonly bytes: number; readonly fileCount: number }> {
   let metadata;
   try { metadata = await lstat(path); }
@@ -29,8 +26,7 @@ export async function measureInstallationTree(
   let bytes = 0;
   let fileCount = 0;
   for (const entry of await readdir(path, { withFileTypes: true })) {
-    if (scope === "data" && entry.name === "node_modules") continue;
-    const child = await measureInstallationTree(resolve(path, entry.name), scope);
+    const child = await measureInstallationTree(resolve(path, entry.name));
     bytes += child.bytes;
     fileCount += child.fileCount;
     if (!Number.isSafeInteger(bytes) || !Number.isSafeInteger(fileCount)) throw new PluginManagerError("plugin_load_failed");

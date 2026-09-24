@@ -26,3 +26,8 @@ CLI 默认先执行来源声明的 `build`，再从 `dist` 直接运行发现、
 指定紧凑 JSON 报告。报告中的 `summary.resourceGroups` 会独立给出 `cover`、`comicImages`、`audio` 和
 `video` 的 `passed/failed/notRegistered/notTested` 状态；旧的 `resourceStatus` 仅保留为聚合兼容字段，不能替代
 资源分组结果。资源分组未完整验证时来源状态为 `partial`，CLI 仍以非零退出表示批量未达到严格通过。
+
+临时宿主可直接验证 HTTP、浏览器会话、静态 HTML 和少量已登记的纯投影，但不伪装真实浏览器执行任意脚本、
+CDP、动态等待或可见交互。来源命中这些生产 WebView 能力时，报告使用 `status: partial` 与
+`limitation.kind: testkitWebViewCapability` 记录未验证能力，不写成来源代码 `failure`；仍需用真实主程序
+`--source-check` 验证 Runtime 与平台宿主链路。

@@ -21,7 +21,6 @@ import test from "node:test";
 
 import {
   createPluginArchive,
-  DependencyStore,
   extractPluginArchive,
   PluginArchiveError,
   PluginInstaller,
@@ -73,29 +72,8 @@ export async function createRegistryPlugin(
       contentKinds: ["novel"],
     },
   };
-  const lock = {
-    name,
-    version: "1.0.0",
-    lockfileVersion: 3,
-    requires: true,
-    packages: {
-      "": {
-        name,
-        version: "1.0.0",
-        [dependencyField]: { "fixture-dependency": "1.0.0" },
-      },
-      "node_modules/fixture-dependency": {
-        version: "1.0.0",
-        resolved:
-          "https://registry.npmjs.org/fixture-dependency/-/fixture-dependency-1.0.0.tgz",
-        integrity,
-        ...(optional ? { optional: true } : {}),
-      },
-    },
-  };
   await Promise.all([
     writeFile(join(root, "package.json"), `${JSON.stringify(packageJson, null, 2)}\n`),
-    writeFile(join(root, "package-lock.json"), `${JSON.stringify(lock, null, 2)}\n`),
     writeFile(
       join(root, "dist", "index.mjs"),
       "export async function search(keyword) { return [{ id: keyword, title: keyword }]; }\n",
@@ -120,26 +98,10 @@ export async function createDelayedPlugin(root) {
       contentKinds: ["novel"],
     },
   };
-  const lock = {
-    name: packageJson.name,
-    version: packageJson.version,
-    lockfileVersion: 3,
-    requires: true,
-    packages: {
-      "": {
-        name: packageJson.name,
-        version: packageJson.version,
-      },
-    },
-  };
   await Promise.all([
     writeFile(
       join(root, "package.json"),
       `${JSON.stringify(packageJson, null, 2)}\n`,
-    ),
-    writeFile(
-      join(root, "package-lock.json"),
-      `${JSON.stringify(lock, null, 2)}\n`,
     ),
     writeFile(
       join(root, "dist", "index.mjs"),
@@ -184,15 +146,6 @@ export async function createDevelopmentPlugin(root, prefix) {
       contentKinds: ["novel"],
     },
   };
-  const lock = {
-    name: packageJson.name,
-    version: packageJson.version,
-    lockfileVersion: 3,
-    requires: true,
-    packages: {
-      "": { name: packageJson.name, version: packageJson.version },
-    },
-  };
   const entry = `
 export function activate() {}
 const summary = (query) => ({
@@ -223,7 +176,6 @@ export function getContent(request) { return { contentKind: "novel", chapterId: 
 `;
   await Promise.all([
     writeFile(join(root, "package.json"), `${JSON.stringify(packageJson, null, 2)}\n`),
-    writeFile(join(root, "package-lock.json"), `${JSON.stringify(lock, null, 2)}\n`),
     writeFile(join(root, "dist", "index.mjs"), entry),
     writeFile(
       join(root, "tools", "mgread.mjs"),

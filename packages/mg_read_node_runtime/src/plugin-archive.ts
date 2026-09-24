@@ -1,12 +1,15 @@
+/**
+ * 自包含数据源 ZIP 容器。
+ * 职责：确定性封装单个已打包 JS、元数据和图标，并在解包时校验路径、大小与校验和。
+ * 不读取 lock、不管理 npm 依赖、不分析或执行 JS；构建工具负责内联第三方代码。
+ */
 import { deflateRawSync, inflateRawSync } from "node:zlib";
 import {
-  lstat,
   mkdir,
   readFile,
-  readdir,
   writeFile,
 } from "node:fs/promises";
-import { basename, dirname, extname, resolve } from "node:path";
+import { dirname, extname, resolve } from "node:path";
 
 import {
   normalizePluginRelativePath,
@@ -56,7 +59,7 @@ export interface PluginArchiveCreateOptions {
   readonly versionOverride?: string;
 }
 
-/** Creates a deterministic `.mgplugin` ZIP containing one standard Node project. */
+/** Creates a deterministic `.mgplugin` ZIP containing one bundled Node entry. */
 export async function createPluginArchive(
   projectRoot: string,
   targetFile: string,
@@ -251,6 +254,14 @@ function parseCentralDirectory(archive: Buffer): readonly ZipEntry[] {
   if (offset !== centralOffset + centralSize) {
     throw new PluginArchiveError("plugin_archive_invalid");
   }
+  const codeEntries = entries.filter((entry) => entry.path.startsWith("dist/") &&
+    /\.(?:cjs|js|mjs)$/u.test(extname(entry.path)));
+  if (entries.filter((entry) => entry.path === "package.json").length !== 1 ||
+      codeEntries.length !== 1 ||
+      entries.some((entry) => entry.path !== "package.json" && entry.path !== codeEntries[0]?.path &&
+        !/^assets\/.+\.(?:jpe?g|png|webp)$/iu.test(entry.path))) {
+    throw new PluginArchiveError("plugin_archive_invalid");
+  }
   return Object.freeze(entries);
 }
 
@@ -319,112 +330,45 @@ async function collectProjectFiles(
   projectRoot: string,
   versionOverride?: string,
 ): Promise<ArchiveSourceFile[]> {
-  const allowedRootFiles = new Set([
-    "package.json",
-    "package-lock.json",
-  ]);
-  const allowedRootDirectories = new Set([
-    "assets",
-    "dist",
-    "packages",
-    "tools",
-  ]);
-  const files: ArchiveSourceFile[] = [];
-  for (const entry of await readdir(projectRoot, { withFileTypes: true })) {
-    if (entry.isSymbolicLink()) {
-      throw new PluginArchiveError("plugin_archive_unsafe_path");
-    }
-    if (entry.isFile()) {
-      const lowerName = entry.name.toLowerCase();
-      if (
-        !allowedRootFiles.has(entry.name) &&
-        !lowerName.startsWith("readme") &&
-        !lowerName.startsWith("license")
-      ) {
-        continue;
-      }
-      files.push({
-        bytes: overrideProjectVersion(
-          entry.name,
-          await readFile(resolve(projectRoot, entry.name)),
-          versionOverride,
-        ),
-        path: normalizeArchiveEntryPath(entry.name),
-      });
-      continue;
-    }
-    if (entry.isDirectory() && allowedRootDirectories.has(entry.name)) {
-      await collectDirectory(projectRoot, entry.name, files);
-    }
+  const packagePath = resolve(projectRoot, "package.json");
+  let packageJson: Record<string, unknown>;
+  try {
+    packageJson = JSON.parse(await readFile(packagePath, "utf8")) as Record<string, unknown>;
+  } catch {
+    throw new PluginArchiveError("plugin_archive_invalid");
+  }
+  const entry = packageJson.main;
+  if (typeof entry !== "string" || !entry.startsWith("dist/") || !/\.(?:cjs|js|mjs)$/u.test(entry)) {
+    throw new PluginArchiveError("plugin_archive_invalid");
+  }
+  const files: ArchiveSourceFile[] = [{
+    bytes: sanitizePackageJson(packageJson, versionOverride),
+    path: "package.json",
+  }, {
+    bytes: await readFile(resolveInside(projectRoot, entry)),
+    path: normalizeArchiveEntryPath(entry),
+  }];
+  const icon = packageJson.mgread && typeof packageJson.mgread === "object"
+    ? (packageJson.mgread as Record<string, unknown>).icon
+    : undefined;
+  if (typeof icon === "string") {
+    files.push({ bytes: await readFile(resolveInside(projectRoot, icon)), path: normalizeArchiveEntryPath(icon) });
   }
   files.sort((left, right) => left.path.localeCompare(right.path));
   if (!files.some((file) => file.path === "package.json") ||
-      !files.some((file) => file.path === "package-lock.json") ||
-      !files.some((file) => file.path.startsWith("dist/"))) {
+      files.filter((file) => file.path.startsWith("dist/")).length !== 1) {
     throw new PluginArchiveError("plugin_archive_invalid");
   }
   return files;
 }
 
-function overrideProjectVersion(
-  path: string,
-  bytes: Buffer,
-  versionOverride?: string,
-): Buffer {
-  if (versionOverride === undefined ||
-      (path !== "package.json" && path !== "package-lock.json")) {
-    return bytes;
+function sanitizePackageJson(value: Record<string, unknown>, versionOverride?: string): Buffer {
+  const sanitized = { ...value };
+  for (const key of ["dependencies", "devDependencies", "optionalDependencies", "peerDependencies", "bundledDependencies", "bundleDependencies", "packageManager", "scripts", "bin"]) {
+    delete sanitized[key];
   }
-  let value: Record<string, unknown>;
-  try {
-    value = JSON.parse(bytes.toString("utf8")) as Record<string, unknown>;
-  } catch {
-    throw new PluginArchiveError("plugin_archive_invalid");
-  }
-  value.version = versionOverride;
-  if (path === "package-lock.json") {
-    const packages = value.packages;
-    if (typeof packages !== "object" || packages === null ||
-        !("" in packages)) {
-      throw new PluginArchiveError("plugin_archive_invalid");
-    }
-    const root = (packages as Record<string, unknown>)[""];
-    if (typeof root !== "object" || root === null) {
-      throw new PluginArchiveError("plugin_archive_invalid");
-    }
-    (root as Record<string, unknown>).version = versionOverride;
-  }
-  return Buffer.from(`${JSON.stringify(value, null, 2)}\n`, "utf8");
-}
-
-async function collectDirectory(
-  projectRoot: string,
-  relativeDirectory: string,
-  files: ArchiveSourceFile[],
-): Promise<void> {
-  const absolute = resolveInside(projectRoot, relativeDirectory);
-  for (const entry of await readdir(absolute, { withFileTypes: true })) {
-    const child = `${relativeDirectory}/${entry.name}`;
-    if (entry.isSymbolicLink()) {
-      throw new PluginArchiveError("plugin_archive_unsafe_path");
-    }
-    if (entry.isDirectory()) {
-      if (entry.name === "node_modules") {
-        throw new PluginArchiveError("plugin_archive_invalid");
-      }
-      await collectDirectory(projectRoot, child, files);
-      continue;
-    }
-    if (!entry.isFile()) {
-      throw new PluginArchiveError("plugin_archive_invalid");
-    }
-    const path = normalizeArchiveEntryPath(child);
-    const file = await lstat(resolveInside(projectRoot, path));
-    if (!file.isFile() || file.size > MAX_ENTRY_BYTES) {
-      throw new PluginArchiveError("plugin_archive_limit_exceeded");
-    }
-    files.push({ bytes: await readFile(resolveInside(projectRoot, path)), path });
-  }
+  if (versionOverride !== undefined) sanitized.version = versionOverride;
+  return Buffer.from(`${JSON.stringify(sanitized, null, 2)}\n`, "utf8");
 }
 
 const crcTable = buildCrcTable();

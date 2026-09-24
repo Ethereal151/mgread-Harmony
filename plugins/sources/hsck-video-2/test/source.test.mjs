@@ -34,7 +34,12 @@ test('mirror fixture covers categories, search, detail, single episode and HLS p
   const discovery = await plugin.discover({ target: 'category:gc', cursor: null, collectionId: null, pageSize: 5 });
   const collection = discovery.document.components[0].children[0];
   assert.equal(collection.items.length, 1);
-  assert.equal(collection.items[0].content.coverUrl, 'https://hsck123.25img.com/poster.jpg');
+  assert.equal(collection.items[0].content.coverUrl.startsWith('http://127.0.0.1:'), true);
+  const cover = resources.find((value) => value.kind === 'image');
+  assert.equal(cover.url, 'https://hsck123.25img.com/poster.jpg');
+  assert.equal(cover.headers.Referer, 'https://hsck123.25img.com/');
+  assert.match(cover.headers.Accept, /^image\//u);
+  assert.match(cover.headers['User-Agent'], /^Mozilla\//u);
   assert.equal(collection.continuation.cursor, 'category:gc:2:0');
 
   const search = await plugin.search({ query: 'fixture', cursor: null, pageSize: 5 });
@@ -59,9 +64,9 @@ test('mirror fixture covers categories, search, detail, single episode and HLS p
   assert.equal(content.media.resourceType, 'hls');
   assert.equal(content.media.resourcePolicy, 'sessionOnly');
   assert.equal(content.media.url.startsWith('http://127.0.0.1:'), true);
-  assert.equal(resources[0].kind, 'hls');
-  assert.equal(resources[0].headers.Range, undefined);
-  assert.equal(resources[0].headers.Referer.includes('/view/?id=fixture1'), true);
+  const media = resources.find((value) => value.kind === 'hls');
+  assert.equal(media.headers.Range, undefined);
+  assert.equal(media.headers.Referer.includes('/view/?id=fixture1'), true);
 });
 
 test('retries one transient mirror read without changing the public result', async () => {

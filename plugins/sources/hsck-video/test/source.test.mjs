@@ -33,6 +33,7 @@ test('video fixture retains neutral groups, episodes and HLS proxy metadata', as
   const imageResource = resources.find((resource) => resource.kind === 'image');
   const mediaResource = resources.find((resource) => resource.kind === 'hls');
   assert.equal(imageResource.url, 'https://hsck.la/upload/fixture-cover.jpg');
+  assert.equal(imageResource.resourceTransform, 'sniff-image-content-type-v1');
   assert.equal(imageResource.headers.Referer, 'https://hsck.la/');
   assert.equal(content.media.url.startsWith('http://127.0.0.1:'), true); assert.ok(mediaResource);
   assert.equal(mediaResource.headers.Range, undefined); assert.equal(mediaResource.headers.Referer.includes('/sid/2/nid/2'), true);

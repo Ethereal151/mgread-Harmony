@@ -84,16 +84,16 @@ test('packageMode defaults to single-file and archive remains explicit', async (
   assert.equal(first.fileName, 'org.example.fixture-1.2.3.mgplugin');
   assert.equal(first.bytes.subarray(0, 2).toString(), 'PK');
   assert.deepEqual(first.bytes, second.bytes);
-  assert.equal(first.bytes.includes(Buffer.from('node_modules/')), false);
-  assert.equal(first.bytes.includes(Buffer.from('src/')), false);
+  assert.deepEqual(listZipEntries(first.bytes), ['dist/index.mjs', 'package.json']);
+  assert.equal(listZipEntries(first.bytes).some((name) => name === 'package-lock.json' || name.startsWith('node_modules/')), false);
   const overridden = await tool.buildPluginArtifactForProject(archiveRoot, {
     versionOverride: '1.2.4-devsync.1',
   });
   assert.equal(JSON.parse(readZipEntry(overridden.bytes, 'package.json')).version, '1.2.4-devsync.1');
-  assert.equal(JSON.parse(readZipEntry(overridden.bytes, 'package-lock.json')).version, '1.2.4-devsync.1');
+  assert.deepEqual(listZipEntries(overridden.bytes), ['dist/index.mjs', 'package.json']);
 });
 
-test('single-file fails on sidecars, unresolved imports, dynamic imports, and oversized icons', async (t) => {
+test('single-file rejects sidecars and oversized icons, while preserving unresolved source code', async (t) => {
   const sidecarRoot = await createFixture(t, {});
   await mkdir(resolve(sidecarRoot, 'assets'));
   await writeFile(resolve(sidecarRoot, 'assets/rules.txt'), 'sidecar');
@@ -103,12 +103,16 @@ test('single-file fails on sidecars, unresolved imports, dynamic imports, and ov
   );
 
   const externalRoot = await createFixture(t, {});
-  await writeFile(resolve(externalRoot, 'dist/index.mjs'), "export { value } from 'missing-package';\n");
-  await assert.rejects(tool.buildPluginArtifactForProject(externalRoot), /bundle failed/i);
+  const externalCode = "export { value } from 'missing-package';\n";
+  await writeFile(resolve(externalRoot, 'dist/index.mjs'), externalCode);
+  const externalArtifact = await tool.buildPluginArtifactForProject(externalRoot);
+  assert.equal(decodeSingleFile(externalArtifact.bytes).code.toString(), externalCode);
 
   const dynamicRoot = await createFixture(t, {});
-  await writeFile(resolve(dynamicRoot, 'dist/index.mjs'), 'export const load = (name) => import(name);\n');
-  await assert.rejects(tool.buildPluginArtifactForProject(dynamicRoot), /dynamic import|warnings/i);
+  const dynamicCode = 'export const load = (name) => import(name);\n';
+  await writeFile(resolve(dynamicRoot, 'dist/index.mjs'), dynamicCode);
+  const dynamicArtifact = await tool.buildPluginArtifactForProject(dynamicRoot);
+  assert.equal(decodeSingleFile(dynamicArtifact.bytes).code.toString(), dynamicCode);
 
   const iconRoot = await createFixture(t, { icon: 'assets/icon.png' });
   await mkdir(resolve(iconRoot, 'assets'));
@@ -143,6 +147,8 @@ async function createFixture(t, mgreadOverrides) {
     resolve(fixtureRoot, 'package-lock.json'),
     `${JSON.stringify({ name: fixturePackage.name, version: fixturePackage.version, lockfileVersion: 3, requires: true, packages: { '': { name: fixturePackage.name, version: fixturePackage.version } } }, null, 2)}\n`,
   );
+  await mkdir(resolve(fixtureRoot, 'node_modules/example-package'), { recursive: true });
+  await writeFile(resolve(fixtureRoot, 'node_modules/example-package/index.js'), 'fixture dependency\n');
   await writeFile(resolve(fixtureRoot, 'README.md'), '# Fixture\n');
   await writeFile(resolve(fixtureRoot, 'LICENSE'), 'MIT\n');
   return fixtureRoot;
@@ -190,4 +196,17 @@ function readZipEntry(bytes, expectedName) {
     offset = bodyOffset + compressedSize;
   }
   throw new Error(`ZIP entry is missing: ${expectedName}`);
+}
+
+function listZipEntries(bytes) {
+  const names = [];
+  let offset = 0;
+  while (offset + 4 <= bytes.length && bytes.readUInt32LE(offset) === 0x04034b50) {
+    const compressedSize = bytes.readUInt32LE(offset + 18);
+    const nameSize = bytes.readUInt16LE(offset + 26);
+    const extraSize = bytes.readUInt16LE(offset + 28);
+    names.push(bytes.subarray(offset + 30, offset + 30 + nameSize).toString('utf8'));
+    offset += 30 + nameSize + extraSize + compressedSize;
+  }
+  return names;
 }

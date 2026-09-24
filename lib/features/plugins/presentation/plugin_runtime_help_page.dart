@@ -15,16 +15,12 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:mg_read/app/app_theme.dart';
+import 'package:mg_read/features/diagnostics/presentation/widgets/runtime_debug_panel.dart';
 import 'package:mg_read/features/plugins/application/plugin_runtime_connection.dart';
-import 'package:mg_read/features/plugins/application/plugin_runtime_debug_http.dart';
-import 'package:mg_read/platform/platform_system_actions.dart';
 import 'package:mg_read/shared/presentation/widgets/app_secondary_page_chrome.dart';
-
-typedef RuntimeDebugEndpointLauncher = Future<bool> Function(Uri endpoint);
 
 /// Dedicated page opened by the data-source management help button.
 class PluginRuntimeHelpPage extends ConsumerStatefulWidget {
@@ -110,7 +106,7 @@ class _PluginRuntimeHelpPageState extends ConsumerState<PluginRuntimeHelpPage> {
                       ),
                     ],
                     const SizedBox(height: AppSpacing.regular),
-                    _RuntimeDebugHttpSection(endpointLauncher: widget.debugEndpointLauncher ?? _launchRuntimeDebugEndpoint),
+                    RuntimeDebugPanel(endpointLauncher: widget.debugEndpointLauncher),
                   ],
                 ),
               ),
@@ -121,8 +117,6 @@ class _PluginRuntimeHelpPageState extends ConsumerState<PluginRuntimeHelpPage> {
     );
   }
 }
-
-Future<bool> _launchRuntimeDebugEndpoint(Uri endpoint) => openExternalUri(endpoint);
 
 class _HelpSection extends StatelessWidget {
   const _HelpSection({required this.icon, required this.title, required this.body, this.action});
@@ -213,147 +207,4 @@ class _RuntimePrivateDirectorySection extends StatelessWidget {
       label: Text(isOpening ? '正在打开…' : '打开 Runtime 私有目录'),
     ),
   );
-}
-
-class _RuntimeDebugHttpSection extends ConsumerWidget {
-  const _RuntimeDebugHttpSection({required this.endpointLauncher});
-
-  final RuntimeDebugEndpointLauncher endpointLauncher;
-
-  Future<void> _copyEndpoint(BuildContext context, String endpoint) async {
-    await Clipboard.setData(ClipboardData(text: endpoint));
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('调试地址已复制。')));
-  }
-
-  Future<void> _openEndpoint(BuildContext context, String endpoint) async {
-    final uri = Uri.tryParse(endpoint);
-    var launched = false;
-    if (uri != null && uri.scheme == 'http' && uri.path == '/__debug') {
-      try {
-        launched = await endpointLauncher(uri);
-      } on Object {
-        launched = false;
-      }
-    }
-    if (!context.mounted || launched) return;
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('无法调用系统浏览器打开调试页面。')));
-  }
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final state = ref.watch(pluginRuntimeDebugHttpProvider);
-    final value = switch (state) {
-      AsyncData<PluginRuntimeDebugHttp>(:final value) => value,
-      _ => const PluginRuntimeDebugHttp.disabled(),
-    };
-    final temporaryPort = value.endpoints.isEmpty ? null : Uri.tryParse(value.endpoints.first)?.port;
-    final tokens = AppThemeTokens.of(context);
-    return _HelpSection(
-      icon: Icons.bug_report_outlined,
-      title: 'Runtime 调试页面',
-      body: '开发版、Android、Windows 和 macOS 发布版均可用。开关会保存到 Runtime 私有运行状态，并优先使用端口 52173；端口不可用时自动临时选择可用端口。同一网络设备可无认证访问，请只在可信网络开启，排查完成后关闭。',
-      action: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Material(
-            type: MaterialType.transparency,
-            child: SwitchListTile.adaptive(
-              key: const Key('runtime-debug-http-toggle'),
-              contentPadding: EdgeInsets.zero,
-              title: Text(value.configuredEnabled ? '已保存为开启' : '已保存为关闭'),
-              subtitle: Text(value.enabled ? '调试页面正在监听。' : 'Runtime 重启后会按保存设置恢复。'),
-              value: value.configuredEnabled,
-              onChanged: state.isLoading ? null : (enabled) => ref.read(pluginRuntimeDebugHttpProvider.notifier).setEnabled(enabled),
-            ),
-          ),
-          if (state.hasError)
-            Text('设置读取或保存失败，请检查 Runtime 状态后重试。', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: tokens.warning)),
-          if (value.configuredEnabled && !value.enabled)
-            Text('调试 listener 暂不可用；保存状态不变，Runtime 下次启动会重试。', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: tokens.warning)),
-          if (value.usingTemporaryPort)
-            Padding(
-              padding: const EdgeInsets.only(top: AppSpacing.unit),
-              child: Text(
-                '固定端口 52173 当前不可用，已临时使用端口 ${temporaryPort ?? '--'}；下次 Runtime 启动仍会优先尝试 52173。',
-                key: const Key('runtime-debug-http-temporary-port'),
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: tokens.warning),
-              ),
-            ),
-          if (value.endpoints.isNotEmpty) ...<Widget>[
-            const SizedBox(height: AppSpacing.compact),
-            Text('可访问 IP 地址（${value.endpoints.length}）', style: Theme.of(context).textTheme.labelLarge),
-            const SizedBox(height: AppSpacing.unit),
-            for (final endpoint in value.endpoints)
-              Padding(
-                padding: const EdgeInsets.only(bottom: AppSpacing.unit),
-                child: _RuntimeDebugEndpointCard(
-                  endpoint: endpoint,
-                  onCopy: () => unawaited(_copyEndpoint(context, endpoint)),
-                  onOpen: () => unawaited(_openEndpoint(context, endpoint)),
-                ),
-              ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _RuntimeDebugEndpointCard extends StatelessWidget {
-  const _RuntimeDebugEndpointCard({required this.endpoint, required this.onCopy, required this.onOpen});
-
-  final String endpoint;
-  final VoidCallback onCopy;
-  final VoidCallback onOpen;
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = AppThemeTokens.of(context);
-    final uri = Uri.tryParse(endpoint);
-    final host = uri?.host ?? '--';
-    final port = uri?.port.toString() ?? '--';
-    final scope = host == '127.0.0.1' ? '本机 IP' : '局域网 IP';
-    return Container(
-      key: Key('runtime-debug-http-endpoint-$endpoint'),
-      padding: const EdgeInsets.all(AppSpacing.compact),
-      decoration: BoxDecoration(
-        color: tokens.mutedSurface,
-        border: Border.all(color: tokens.divider),
-        borderRadius: AppRadii.surface,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Row(
-            children: <Widget>[
-              Expanded(child: Text('$scope：$host', style: Theme.of(context).textTheme.labelMedium)),
-              Text('端口：$port', style: Theme.of(context).textTheme.labelMedium?.copyWith(color: tokens.mutedText)),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.unit),
-          SelectableText(endpoint, key: Key('runtime-debug-http-url-$endpoint'), style: Theme.of(context).textTheme.bodySmall),
-          const SizedBox(height: AppSpacing.compact),
-          Wrap(
-            spacing: AppSpacing.unit,
-            runSpacing: AppSpacing.unit,
-            children: <Widget>[
-              OutlinedButton.icon(
-                key: Key('runtime-debug-http-copy-$endpoint'),
-                onPressed: onCopy,
-                icon: const Icon(Icons.copy_outlined),
-                label: const Text('复制'),
-              ),
-              FilledButton.tonalIcon(
-                key: Key('runtime-debug-http-open-$endpoint'),
-                onPressed: onOpen,
-                icon: const Icon(Icons.open_in_new_rounded),
-                label: const Text('打开'),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
 }

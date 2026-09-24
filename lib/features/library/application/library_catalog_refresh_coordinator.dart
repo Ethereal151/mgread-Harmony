@@ -84,6 +84,17 @@ final class LibraryCatalogRefreshCoordinator {
     });
   }
 
+  /// Records a completed manual shelf refresh as the latest attempted check.
+  ///
+  /// Manual refreshes do not consult the interval, but the next automatic
+  /// bookshelf opening should still count from this refresh instead of
+  /// immediately repeating the same source requests.
+  void markCheckedNow() {
+    final nowMs = _now().toUtc().millisecondsSinceEpoch;
+    _lastAttemptAtMs = nowMs;
+    _persistLastAttempt(nowMs);
+  }
+
   Future<void> _run(List<String> bookIds, Future<void> Function(Set<String> bookIds) onChanged) async {
     final changedBookIds = await operation.refreshAll(bookIds);
     if (changedBookIds.isNotEmpty) await onChanged(changedBookIds);

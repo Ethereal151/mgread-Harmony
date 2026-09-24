@@ -119,6 +119,9 @@ Flutter 主应用
 
 数据源采用 Node.js 24 ESM 项目形式，`package.json.mgread` 作为 MgRead 元数据入口。
 
+数据源发布为单个 `.mgplugin.js`，或包含单个 JS、元数据与图标的 `.mgplugin` 压缩包。开发时使用的第三方
+npm 包必须在构建时打入 JS，发布后只使用 Node.js 内置模块，不需要下载或安装 npm 依赖。
+
 仓库中的真实数据源位于：
 
 ```text

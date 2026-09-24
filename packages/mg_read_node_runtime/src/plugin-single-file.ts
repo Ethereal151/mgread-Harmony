@@ -174,11 +174,9 @@ export async function materializePluginSingleFile(
 ): Promise<ParsedSingleFilePlugin> {
   const parsed = await parsePluginSingleFile(artifactFile);
   const packageJson = packageJsonFor(parsed.descriptor);
-  const lock = lockfileFor(parsed.descriptor);
   await mkdir(resolve(destinationRoot, "dist"), { recursive: true });
   await Promise.all([
     writeFile(resolve(destinationRoot, "package.json"), `${JSON.stringify(packageJson, null, 2)}\n`, { flag: "wx", mode: 0o444 }),
-    writeFile(resolve(destinationRoot, "package-lock.json"), `${JSON.stringify(lock, null, 2)}\n`, { flag: "wx", mode: 0o444 }),
     writeFile(resolve(destinationRoot, "dist", "index.mjs"), parsed.code, { flag: "wx", mode: 0o444 }),
   ]);
   if (parsed.icon !== undefined && parsed.descriptor.mgread.icon !== undefined) {
@@ -310,16 +308,6 @@ async function readIcon(projectRoot: string, relativePath: string): Promise<{
 
 function packageJsonFor(descriptor: SingleFilePluginDescriptor): Record<string, unknown> {
   return { ...descriptor };
-}
-
-function lockfileFor(descriptor: SingleFilePluginDescriptor): Record<string, unknown> {
-  return {
-    name: descriptor.name,
-    version: descriptor.version,
-    lockfileVersion: 3,
-    requires: true,
-    packages: { "": { name: descriptor.name, version: descriptor.version } },
-  };
 }
 
 function canonicalJson(value: unknown): string {

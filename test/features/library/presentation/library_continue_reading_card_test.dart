@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:mg_read/app/app_theme.dart';
@@ -11,12 +13,14 @@ import 'package:mg_read/features/library/presentation/widgets/library_continue_r
 void main() {
   testWidgets('renders an immersive surface with a flat cover on the right', (WidgetTester tester) async {
     await tester.pumpWidget(
-      MaterialApp(
-        theme: AppTheme.light(),
-        home: Scaffold(
-          body: Padding(
-            padding: const EdgeInsets.all(20),
-            child: LibraryContinueReadingCard(data: LibraryHomeFixtures.preview.continueReading!, onContinueReading: () {}),
+      ProviderScope(
+        child: MaterialApp(
+          theme: AppTheme.light(),
+          home: Scaffold(
+            body: Padding(
+              padding: const EdgeInsets.all(20),
+              child: LibraryContinueReadingCard(data: LibraryHomeFixtures.preview.continueReading!, onContinueReading: () {}),
+            ),
           ),
         ),
       ),
@@ -63,12 +67,14 @@ void main() {
       coverVariant: LibraryCoverVariant.dusk,
     );
     await tester.pumpWidget(
-      MaterialApp(
-        theme: AppTheme.light(),
-        home: Scaffold(
-          body: Padding(
-            padding: const EdgeInsets.all(16),
-            child: LibraryContinueReadingCard(data: data, showBackdrop: false, onContinueReading: () {}),
+      ProviderScope(
+        child: MaterialApp(
+          theme: AppTheme.light(),
+          home: Scaffold(
+            body: Padding(
+              padding: const EdgeInsets.all(16),
+              child: LibraryContinueReadingCard(data: data, showBackdrop: false, onContinueReading: () {}),
+            ),
           ),
         ),
       ),
@@ -109,10 +115,12 @@ void main() {
         coverVariant: LibraryCoverVariant.dusk,
       );
       await tester.pumpWidget(
-        MaterialApp(
-          theme: AppTheme.light(),
-          home: Scaffold(
-            body: LibraryContinueReadingCard(data: data, showBackdrop: false, onContinueReading: () {}),
+        ProviderScope(
+          child: MaterialApp(
+            theme: AppTheme.light(),
+            home: Scaffold(
+              body: LibraryContinueReadingCard(data: data, showBackdrop: false, onContinueReading: () {}),
+            ),
           ),
         ),
       );
@@ -123,4 +131,46 @@ void main() {
       expect(tester.getSemantics(find.byKey(const Key('continue-reading-cta'))).label, contains(actionLabel));
     }
   });
+
+  testWidgets('keeps the action bounded at a narrow width with enlarged text', (WidgetTester tester) async {
+    const LibraryContinueReadingViewData data = LibraryContinueReadingViewData(
+      bookId: 'narrow-action',
+      title: '窄屏继续阅读条目',
+      chapter: '第1章',
+      progress: 0.42,
+      lastReadLabel: '刚刚',
+      coverVariant: LibraryCoverVariant.dusk,
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          theme: AppTheme.light(),
+          home: MediaQuery(
+            data: const MediaQueryData(textScaler: TextScaler.linear(1.5)),
+            child: Scaffold(
+              body: SizedBox(
+                width: 260,
+                child: LibraryContinueReadingCard(data: data, onContinueReading: _noop),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final Rect action = tester.getRect(find.byKey(const Key('continue-reading-cta')));
+    final Text actionText = tester.widget<Text>(
+      find.descendant(of: find.byKey(const Key('continue-reading-cta')), matching: find.text(data.actionLabel)),
+    );
+    final SemanticsNode semantics = tester.getSemantics(find.byKey(const Key('continue-reading-cta')));
+
+    expect(tester.takeException(), isNull);
+    expect(action.size, const Size(136, 42));
+    expect(actionText.maxLines, 1);
+    expect(actionText.overflow, TextOverflow.ellipsis);
+    expect(semantics.label, contains(data.actionLabel));
+  });
 }
+
+void _noop() {}

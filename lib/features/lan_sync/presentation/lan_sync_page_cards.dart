@@ -4,11 +4,20 @@
 part of 'lan_sync_page.dart';
 
 class _DeviceSyncCard extends StatelessWidget {
-  const _DeviceSyncCard({required this.state, required this.onAddDevice, required this.onManage, required this.onShowAll});
+  const _DeviceSyncCard({
+    required this.state,
+    required this.onAddDevice,
+    required this.onManage,
+    required this.onSync,
+    required this.onAppUpdate,
+    required this.onShowAll,
+  });
 
   final DeviceSyncState state;
   final VoidCallback onAddDevice;
   final ValueChanged<PairedDevice> onManage;
+  final void Function(String deviceId, PairedSyncOperation operation) onSync;
+  final void Function(String deviceId, bool force) onAppUpdate;
   final VoidCallback onShowAll;
 
   @override
@@ -52,7 +61,13 @@ class _DeviceSyncCard extends StatelessWidget {
                   device: device,
                   online: state.onlineDeviceIds.contains(device.deviceId),
                   busy: state.busyDeviceId == device.deviceId,
+                  busyMessage: state.busyMessage,
+                  appOffer: state.appOffersByDeviceId[device.deviceId],
+                  localAppVersion: state.localAppVersion,
+                  canStartAction: state.busyDeviceId == null,
                   onTap: () => onManage(device),
+                  onSync: (operation) => onSync(device.deviceId, operation),
+                  onAppUpdate: (force) => onAppUpdate(device.deviceId, force),
                 ),
                 if (device != displayed.last) Divider(color: tokens.divider, height: AppSpacing.section),
               ],
@@ -75,12 +90,29 @@ class _DeviceSyncCard extends StatelessWidget {
 }
 
 class _DeviceSummaryTile extends StatelessWidget {
-  const _DeviceSummaryTile({required this.device, required this.online, required this.busy, required this.onTap});
+  const _DeviceSummaryTile({
+    required this.device,
+    required this.online,
+    required this.busy,
+    required this.busyMessage,
+    required this.appOffer,
+    required this.localAppVersion,
+    required this.canStartAction,
+    required this.onTap,
+    required this.onSync,
+    required this.onAppUpdate,
+  });
 
   final PairedDevice device;
   final bool online;
   final bool busy;
+  final String? busyMessage;
+  final AppPackageOffer? appOffer;
+  final AppVersionInfo? localAppVersion;
+  final bool canStartAction;
   final VoidCallback onTap;
+  final ValueChanged<PairedSyncOperation> onSync;
+  final ValueChanged<bool> onAppUpdate;
 
   @override
   Widget build(BuildContext context) {
@@ -91,44 +123,100 @@ class _DeviceSummaryTile extends StatelessWidget {
         ? '在线'
         : '离线';
     final detail = busy
-        ? '正在处理同步内容'
+        ? busyMessage ?? '正在处理同步内容'
         : device.lastSyncAtUtc == null
         ? (online ? '等待同步' : '打开另一台设备后可同步')
         : '最近同步：${_relativeTime(device.lastSyncAtUtc!)}';
-    return InkWell(
-      key: Key('device-sync-manage-${device.deviceId}'),
-      borderRadius: AppRadii.detailControl,
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: AppSpacing.compact),
-        child: Row(
-          children: <Widget>[
-            DecoratedBox(
-              decoration: BoxDecoration(color: online ? tokens.accentSoft : tokens.mutedSurface, borderRadius: AppRadii.detailControl),
-              child: SizedBox.square(
-                dimension: 42,
-                child: Icon(_platformIcon(device.platform), color: online ? tokens.success : tokens.mutedText),
-              ),
-            ),
-            const SizedBox(width: AppSpacing.regular),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Text(device.label, maxLines: 1, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.titleSmall),
-                  const SizedBox(height: AppSpacing.unit),
-                  Text(
-                    '$status · $detail',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(color: online ? tokens.success : tokens.mutedText),
+    final actionsEnabled = online && canStartAction;
+    final appUpgradeAvailable =
+        appOffer?.available == true && localAppVersion != null && isRemoteAppUpgrade(appOffer!.version, localAppVersion!);
+    const compactButtonStyle = ButtonStyle(visualDensity: VisualDensity.compact);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.compact),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          InkWell(
+            key: Key('device-sync-manage-${device.deviceId}'),
+            borderRadius: AppRadii.detailControl,
+            onTap: onTap,
+            child: Row(
+              children: <Widget>[
+                DecoratedBox(
+                  decoration: BoxDecoration(color: online ? tokens.accentSoft : tokens.mutedSurface, borderRadius: AppRadii.detailControl),
+                  child: SizedBox.square(
+                    dimension: 42,
+                    child: Icon(_platformIcon(device.platform), color: online ? tokens.success : tokens.mutedText),
                   ),
-                ],
-              ),
+                ),
+                const SizedBox(width: AppSpacing.regular),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(device.label, maxLines: 1, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.titleSmall),
+                      const SizedBox(height: AppSpacing.unit),
+                      Text(
+                        '$status · $detail',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(color: online ? tokens.success : tokens.mutedText),
+                      ),
+                      if (online && appOffer != null)
+                        Text(
+                          '对方 App ${appOffer!.version.displayVersion}${appUpgradeAvailable ? ' · 有新版本' : ''}',
+                          key: Key('device-sync-app-version-${device.deviceId}'),
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: appUpgradeAvailable ? tokens.accent : tokens.mutedText,
+                            fontWeight: appUpgradeAvailable ? FontWeight.w700 : null,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.chevron_right_rounded),
+              ],
             ),
-            const Icon(Icons.chevron_right_rounded),
-          ],
-        ),
+          ),
+          const SizedBox(height: AppSpacing.compact),
+          Wrap(
+            alignment: WrapAlignment.end,
+            spacing: AppSpacing.compact,
+            runSpacing: AppSpacing.unit,
+            children: <Widget>[
+              OutlinedButton.icon(
+                key: Key('device-sync-pull-${device.deviceId}'),
+                style: compactButtonStyle,
+                onPressed: actionsEnabled && device.canReceive ? () => onSync(PairedSyncOperation.pull) : null,
+                icon: const Icon(Icons.file_download_outlined, size: 18),
+                label: const Text('拉取'),
+              ),
+              OutlinedButton.icon(
+                key: Key('device-sync-push-${device.deviceId}'),
+                style: compactButtonStyle,
+                onPressed: actionsEnabled && device.canSend ? () => onSync(PairedSyncOperation.push) : null,
+                icon: const Icon(Icons.file_upload_outlined, size: 18),
+                label: const Text('推送'),
+              ),
+              if (online && appOffer?.available == true)
+                appUpgradeAvailable
+                    ? FilledButton.tonalIcon(
+                        key: Key('device-sync-app-upgrade-${device.deviceId}'),
+                        style: compactButtonStyle,
+                        onPressed: actionsEnabled ? () => onAppUpdate(false) : null,
+                        icon: const Icon(Icons.system_update_alt_rounded, size: 18),
+                        label: const Text('升级 App'),
+                      )
+                    : OutlinedButton.icon(
+                        key: Key('device-sync-app-force-${device.deviceId}'),
+                        style: compactButtonStyle,
+                        onPressed: actionsEnabled ? () => onAppUpdate(true) : null,
+                        icon: const Icon(Icons.replay_rounded, size: 18),
+                        label: const Text('强制安装'),
+                      ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -192,31 +280,50 @@ class _CapabilityCard extends StatelessWidget {
 }
 
 class _AllDevicesSheet extends StatelessWidget {
-  const _AllDevicesSheet({required this.devices, required this.onlineDeviceIds, required this.onManage});
+  const _AllDevicesSheet({required this.state, required this.onManage, required this.onSync, required this.onAppUpdate});
 
-  final List<PairedDevice> devices;
-  final Set<String> onlineDeviceIds;
+  final DeviceSyncState state;
   final ValueChanged<PairedDevice> onManage;
+  final void Function(String deviceId, PairedSyncOperation operation) onSync;
+  final void Function(String deviceId, bool force) onAppUpdate;
 
   @override
   Widget build(BuildContext context) => SafeArea(
     top: false,
-    child: Padding(
-      padding: const EdgeInsets.fromLTRB(AppSpacing.comfortable, AppSpacing.compact, AppSpacing.comfortable, AppSpacing.comfortable),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
-          Text('同步设备', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
-          const SizedBox(height: AppSpacing.regular),
-          for (final device in devices)
-            _DeviceSummaryTile(
-              device: device,
-              online: onlineDeviceIds.contains(device.deviceId),
-              busy: false,
-              onTap: () => onManage(device),
+    child: ConstrainedBox(
+      constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.8),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(AppSpacing.comfortable, AppSpacing.compact, AppSpacing.comfortable, AppSpacing.comfortable),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            Text('同步设备', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
+            const SizedBox(height: AppSpacing.regular),
+            Flexible(
+              child: SingleChildScrollView(
+                key: const Key('device-sync-all-devices-scroll'),
+                child: Column(
+                  children: <Widget>[
+                    for (final device in state.devices)
+                      _DeviceSummaryTile(
+                        device: device,
+                        online: state.onlineDeviceIds.contains(device.deviceId),
+                        busy: state.busyDeviceId == device.deviceId,
+                        busyMessage: state.busyMessage,
+                        appOffer: state.appOffersByDeviceId[device.deviceId],
+                        localAppVersion: state.localAppVersion,
+                        canStartAction: state.busyDeviceId == null,
+                        onTap: () => onManage(device),
+                        onSync: (operation) => onSync(device.deviceId, operation),
+                        onAppUpdate: (force) => onAppUpdate(device.deviceId, force),
+                      ),
+                  ],
+                ),
+              ),
             ),
-        ],
+          ],
+        ),
       ),
     ),
   );

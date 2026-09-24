@@ -2,7 +2,7 @@
 ///
 /// 职责：
 /// - 展示受限详情捕获模式及其运行状态。
-/// - 在 App 与 Runtime 的独立日志数据源之间切换。
+/// - 区分标准元数据日志与显式详情捕获。
 ///
 /// 注意：
 /// - 仅通过显式回调改变捕获状态，不直接访问诊断存储或 Runtime。
@@ -37,7 +37,7 @@ class DiagnosticsViewerCapturePanel extends StatelessWidget {
     final theme = Theme.of(context);
     final tokens = AppThemeTokens.of(context);
     final (String title, String description, IconData icon) = switch (mode) {
-      DiagnosticsDetailMode.off => ('仅关键日志', '大 JSON、HTML、HTTP 正文和小说正文不会构造、缓存或写入。', Icons.shield_outlined),
+      DiagnosticsDetailMode.off => ('标准日志', '实时展示操作、阶段、结果和错误；大 JSON、HTML、HTTP 正文和小说正文不会进入日志。', Icons.article_outlined),
       DiagnosticsDetailMode.memoryOnly => ('实时详情 · 仅内存', '最多 8 MiB / 15 分钟；关闭本窗口即停止并清空，不创建详情文件。', Icons.memory_rounded),
       DiagnosticsDetailMode.persistToText => ('详细日志 · TXT', '最多 64 MiB / 15 分钟；详情写入独立 TXT，关闭本窗口停止捕获。', Icons.description_outlined),
     };
@@ -68,7 +68,7 @@ class DiagnosticsViewerCapturePanel extends StatelessWidget {
               runSpacing: AppSpacing.compact,
               children: <Widget>[
                 DiagnosticsViewerModeChip(
-                  label: '仅关键',
+                  label: '标准日志',
                   selected: mode == DiagnosticsDetailMode.off,
                   enabled: !busy,
                   onSelected: () => onModeSelected(DiagnosticsDetailMode.off),

@@ -10,4 +10,5 @@ export 'src/diagnostic_value.dart';
 export 'src/diagnostics_manager.dart';
 export 'src/deferred_diagnostics.dart';
 export 'src/diagnostics_provider.dart';
+export 'src/live_diagnostics.dart';
 export 'src/persistent_diagnostics.dart';

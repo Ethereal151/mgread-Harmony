@@ -84,10 +84,15 @@ plugins/sources/                    真实数据源及其他能力参考实现
 - 数据源是可信 Node.js 24 ESM 项目，`package.json.mgread` 是唯一 MgRead 元数据。
 - 仓库不维护空白官方模板；新数据源默认参考 `plugins/sources/aisishuwu/`，漫画、WebView、音频或视频
   按能力参考现有同类真实数据源。公共契约仍以 Runtime 类型和直接测试为准，不以某个来源副本为权威。
-- `single-file` 与 `archive` 是独立发布模式。前者生成 `.mgplugin.js` 并内联可打包依赖；后者生成
-  `.mgplugin` 并保留 lock 恢复语义。两者不互相回退，也不携带源码或 `node_modules`。
+- 数据源执行代码必须是一个已打包的 Node 24 ESM JS 文件。`single-file` 发布 `.mgplugin.js`；
+  `archive` 发布 `.mgplugin` 压缩容器，内部同样只有单个 JS 入口及元数据、图标，不是 npm 安装包。
+- npm 只用于开发和构建；构建必须将所有使用的第三方包内联到单个 JS，仅 Node.js 内置模块可外置。
+  不发布源码、lock、本地依赖目录或 `node_modules`，也不支持发布后恢复、下载或安装外部 npm 依赖。
+- 不增加依赖引用扫描、动态导入检查或自定义模块拦截器；由构建配置落实打包要求，模块执行交给 Node。
+  开发加载也使用单文件构建结果，不链接项目的 `node_modules`。
 - artifact 必须确定性、有界，并携带可复核的 descriptor、大小和 SHA-256；传输和安装两端都复核。
-- 安装写入不可变版本并原子切换；失败保留当前版本。不得在安装期运行任意脚本或求解未锁定依赖。
+- 导入、安装、导出和局域网同步共用自包含 artifact 契约；安装写入不可变版本并原子切换，失败保留当前版本。
+  安装不执行构建或任意脚本；删除和占用统计不再维护 npm 缓存、依赖图或共享依赖对象。
 - 插件缓存使用来源声明的展示投影策略；stale 可离线读取，刷新异步单飞，缓存失败按 miss 处理。
 
 ## 插件内容 API
@@ -109,7 +114,9 @@ plugins/sources/                    真实数据源及其他能力参考实现
 - 目录完整、有序且 ID 唯一。小说正文使用 `text`；漫画 `pages`、封面及音视频只登记由数据源校验过的
   `kind + url + headers` Runtime proxy 请求。loopback URL 以明文可逆 Base64URL JSON 自包含该请求，不依赖
   进程内 token 映射；此编码不提供加密或认证。Runtime 持有上游 HTTP 请求、取消和正文流，数据源不得导出
-  `resource` 字节能力或缓冲媒体正文；大资源不进入插件返回值或控制面。
+  `resource` 字节能力或缓冲媒体正文；大资源不进入插件返回值或控制面。若上游图片响应头与有效字节签名不符，
+  来源可显式登记 `sniff-image-content-type-v1`，Runtime 必须复用同一次响应的首块流式纠正 MIME，不得重新请求或
+  整体缓冲图片。
 - fixture 只保留选择器、分页、null/0/空集合和错误分支需要的最小结构。
 - 开发期由纯 Node.js `mg_read_source_testkit` 直接检查插件公开契约和 live 链路；正式 Windows App 内置自检
   经生产 `SourceContentGateway -> Runtime Facade -> Runtime -> 已启用插件` 验证发现、搜索、详情、完整目录、
@@ -144,7 +151,7 @@ plugins/sources/                    真实数据源及其他能力参考实现
 
 ## 诊断
 
-- App 诊断默认关闭；显式启用才创建 writer。历史文件冷存储，只在用户选择后有界读取。
+- App 始终保留有界的当前进程元数据日志供调试中心实时查看；文件 writer 默认关闭，显式启用后才落盘。历史文件冷存储，只在用户选择后有界读取。
 - 诊断字段和显式捕获字节按契约保存；错误终态可额外保存技术上下文。
 - 一个用户操作或长任务只有一个 owner span 和一个终态；高频事件只做有界聚合。
 - 日志、viewer、observer、磁盘或缓冲失败不得改变业务结果；生产代码不得自建日志通道。

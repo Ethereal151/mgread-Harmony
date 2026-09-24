@@ -3,14 +3,20 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:mg_read/app/app_theme.dart';
+import 'package:mg_read/core/settings/settings.dart';
 import 'package:mg_read/features/library/presentation/private_library_page.dart';
 import 'package:mg_read/shared/presentation/app_navigation_destination.dart';
 
+import '../../../core/settings/settings_testkit.dart';
+
 void main() {
   testWidgets('shows a dedicated empty private shelf and returns to home', (WidgetTester tester) async {
+    final settings = AppSettingsManager(store: FakeSettingsStore(), registry: AppSettingKeys.registry);
+    addTearDown(settings.close);
     var backCount = 0;
     await tester.pumpWidget(
       ProviderScope(
+        overrides: [appSettingsProvider.overrideWithValue(settings)],
         child: MaterialApp(
           theme: AppTheme.light(),
           home: PrivateLibraryPage(

@@ -1,3 +1,10 @@
+/// Catalog chapter-state presentation and its recoverable retry action.
+///
+/// Noninteractive badges keep their intrinsic width. Failed-state retry badges
+/// retain a compact 32 dp hit target, tooltip, and one explicit semantics node;
+/// their icon pair scales down only when it cannot fit that target.
+library;
+
 import 'package:flutter/material.dart';
 
 import '../../api/models.dart';
@@ -147,7 +154,10 @@ class ReaderChapterStateBadge extends StatelessWidget {
         child: InkWell(
           borderRadius: BorderRadius.circular(10),
           onTap: onRetry,
-          child: SizedBox(width: 32, height: 32, child: Center(child: content)),
+          child: SizedBox.square(
+            dimension: 32,
+            child: FittedBox(fit: BoxFit.scaleDown, child: content),
+          ),
         ),
       ),
     );

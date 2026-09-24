@@ -287,7 +287,56 @@ void main() {
     await tester.tap(find.byKey(const Key('data-source-org.example.source')));
     expect(detailPressed, isTrue);
   });
+
+  testWidgets('data source rows grow for large text without losing state semantics', (WidgetTester tester) async {
+    await _setViewport(tester, const Size(320, 640));
+    final SemanticsHandle semantics = tester.ensureSemantics();
+    const source = DataSourceManagementRowData(
+      id: 'org.example.large-text',
+      name: '超长数据源名称示例',
+      description: '用于验证大字体换行',
+      kindLabel: '小说 · 官方源',
+      enabled: false,
+      brand: DataSourceBrand.generic,
+      isDevelopment: false,
+    );
+
+    try {
+      await tester.pumpWidget(_rowHost(source));
+      await tester.pumpAndSettle();
+      final Finder row = find.byKey(const Key('data-source-org.example.large-text'));
+      expect(tester.getRect(row).height, AppSpacing.dataSourceRowHeight + AppSpacing.comfortable);
+
+      await tester.pumpWidget(_rowHost(source, textScaler: const TextScaler.linear(2)));
+      await tester.pumpAndSettle();
+
+      expect(tester.getRect(row).height, greaterThan(AppSpacing.dataSourceRowHeight + AppSpacing.comfortable));
+      expect(find.text(source.name), findsOneWidget);
+      expect(find.text(source.description), findsOneWidget);
+      expect(find.text(source.kindLabel), findsOneWidget);
+      expect(tester.widget<Text>(find.text(source.name)).maxLines, 2);
+      expect(tester.widget<Text>(find.text(source.kindLabel)).maxLines, 2);
+      expect(tester.getSemantics(row).label, allOf(contains(source.name), contains(source.description), contains('未启用')));
+      expect(tester.takeException(), isNull);
+    } finally {
+      semantics.dispose();
+    }
+  });
 }
+
+Widget _rowHost(DataSourceManagementRowData source, {TextScaler? textScaler}) => MaterialApp(
+  theme: AppTheme.light(),
+  builder: (BuildContext context, Widget? child) => MediaQuery(
+    data: MediaQuery.of(context).copyWith(textScaler: textScaler ?? MediaQuery.textScalerOf(context)),
+    child: child ?? const SizedBox.shrink(),
+  ),
+  home: Scaffold(
+    body: ListView(
+      shrinkWrap: true,
+      children: <Widget>[DataSourceManagementRow(source: source, isPending: false, onPressed: () {}, onChanged: (_) {})],
+    ),
+  ),
+);
 
 Future<void> _setViewport(WidgetTester tester, Size size) async {
   tester.view.physicalSize = size;

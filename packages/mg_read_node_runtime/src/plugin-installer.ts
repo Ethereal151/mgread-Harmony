@@ -1,6 +1,6 @@
 /**
  * Runtime 双 artifact 安装器。
- * 职责：将 archive/single-file 归一化为同一不可变版本树并维护 pending/依赖事务。
+ * 职责：将 archive/single-file 归一化为同一不可变版本树并维护 pending 事务。
  * 注意：安装不执行插件代码、npm 或 lifecycle script，原始 artifact 仅保存在 Runtime 私有目录。
  */
 import { randomUUID } from "node:crypto";
@@ -10,7 +10,6 @@ import {
   copyFile,
   constants as fsConstants,
   mkdir,
-  readFile,
   readdir,
   rename,
   rm,
@@ -18,11 +17,6 @@ import {
 } from "node:fs/promises";
 import { resolve } from "node:path";
 
-import {
-  DependencyStore,
-  DependencyStoreError,
-  type DependencyMaterializationResult,
-} from "./dependency-store.js";
 import type {
   DesktopRuntimeProgress,
   DesktopRuntimeProgressSink,
@@ -37,18 +31,14 @@ import {
   type PluginArtifactFormat,
 } from "./plugin-single-file.js";
 import {
-  dependencyObjectName,
-  type LockedPluginDependency,
   type PluginPackageDescriptor,
   PluginPackageError,
   readPluginProject,
-  resolveInside,
 } from "./plugin-package.js";
 import { InstalledPluginCatalog } from "./plugin-catalog.js";
 
 /** Stable event names for installer ownership and exactly-one terminal checks. */
 export type PluginInstallerEventCode =
-  | "plugin_dependency_gc_completed"
   | "plugin_install_completed"
   | "plugin_install_failed"
   | "plugin_install_started"
@@ -56,37 +46,29 @@ export type PluginInstallerEventCode =
 
 export interface PluginInstallerEvent {
   readonly code: PluginInstallerEventCode;
-  readonly copiedFiles?: number;
   readonly durationMs?: number;
-  readonly hardlinkedFiles?: number;
   readonly outcome: "error" | "started" | "success";
   readonly pluginId?: string;
-  readonly removedObjects?: number;
 }
 
 export type PluginInstallerEventSink = (event: PluginInstallerEvent) => void;
 
 /** Result of a complete immutable-version install transaction. */
 export interface PluginInstallResult {
-  readonly copiedFiles: number;
   readonly descriptor: PluginPackageDescriptor;
-  readonly hardlinkedFiles: number;
   readonly pendingActivation: true;
   readonly reusedVersion: boolean;
-  readonly skippedOptionalDependencies: number;
 }
 
-/** Runtime-owned standard-project installer and dependency mark/sweep owner. */
+/** Runtime-owned standard-project installer. */
 export class PluginInstaller {
   readonly #catalog: InstalledPluginCatalog;
   readonly #dataRoot: string;
-  readonly #dependencyStore: DependencyStore;
   readonly #events: PluginInstallerEventSink;
 
   constructor(
     runtimeDataRoot: string,
     options: {
-      readonly dependencyStore?: DependencyStore;
       readonly events?: PluginInstallerEventSink;
       readonly onProgress?: DesktopRuntimeProgressSink;
       readonly catalog?: InstalledPluginCatalog;
@@ -94,8 +76,6 @@ export class PluginInstaller {
   ) {
     this.#dataRoot = resolve(runtimeDataRoot);
     this.#catalog = options.catalog ?? new InstalledPluginCatalog(this.#dataRoot);
-    this.#dependencyStore =
-      options.dependencyStore ?? new DependencyStore(this.#dataRoot);
     this.#events = options.events ?? (() => {});
     this.#onProgress = options.onProgress ?? (() => {});
   }
@@ -174,36 +154,25 @@ export class PluginInstaller {
       if (format === "singleFile") await materializePluginSingleFile(artifactFile, stagingRoot);
       else await extractPluginArchive(artifactFile, stagingRoot);
       const project = await readPluginProject(stagingRoot);
-      const requiresNpmDependencies = format !== "singleFile";
-      // A single-file artifact materializes into an empty dependency graph.
-      // Local install and LAN-sync therefore share the same npm-free behavior.
-      if (!requiresNpmDependencies && project.dependencies.length !== 0) {
-        throw new PluginPackageError("plugin_lock_invalid");
-      }
+      const descriptor = project.descriptor;
       this.#reportProgress({
         completedBytes: 0,
-        detail: requiresNpmDependencies
-          ? `已读取 package.json 和 package-lock.json，共 ${project.dependencies.length} 个 npm 依赖`
-          : "已验证单文件数据源插件，npm 依赖已打包，无需安装",
+        detail: "已验证数据源插件包",
         stage: "plugin_installing",
-        totalBytes: requiresNpmDependencies ? Math.max(project.dependencies.length, 1) : 1,
+        totalBytes: 1,
       });
       // The platform inbox is only a hand-off queue and is deleted after the
       // install completes. Keep the validated input archive in Runtime-owned
       // storage for later recovery/export without crossing the Facade.
-      await this.#preserveOriginalArtifact(artifactFile, project.descriptor, format);
+      await this.#preserveOriginalArtifact(artifactFile, descriptor, format);
       const result = await this.#commitProject(
         stagingRoot,
-        project.descriptor,
-        project.dependencies,
-        requiresNpmDependencies,
+        descriptor,
         replaceExistingVersion,
       );
       this.#events({
         code: "plugin_install_completed",
-        copiedFiles: result.copiedFiles,
         durationMs: performance.now() - startedAt,
-        hardlinkedFiles: result.hardlinkedFiles,
         outcome: "success",
         pluginId: result.descriptor.id,
       });
@@ -229,8 +198,8 @@ export class PluginInstaller {
     );
     await mkdir(stagingDirectory, { recursive: true });
     try {
-      const project = await readPluginProject(projectRoot);
-      if (project.descriptor.packageMode === "single-file") {
+      const descriptor = (await readPluginProject(projectRoot)).descriptor;
+      if (descriptor.packageMode === "single-file") {
         const artifact = resolve(stagingDirectory, "plugin.mgplugin.js");
         await createPluginSingleFile(projectRoot, artifact);
         return await this.installSingleFile(artifact);
@@ -264,59 +233,9 @@ export class PluginInstaller {
     await this.#catalog.setEnabled(pluginId, enabled);
   }
 
-  /** Mark-and-sweep GC derived only from retained package-lock files. */
-  async collectUnusedDependencies(): Promise<{ readonly removedObjects: number }> {
-    const marked = new Set<string>();
-    const pluginsRoot = resolve(this.#dataRoot, "plugins");
-    try {
-      for (const plugin of await readdir(pluginsRoot, { withFileTypes: true })) {
-        if (!plugin.isDirectory()) continue;
-        const versionsRoot = resolve(pluginsRoot, plugin.name, "versions");
-        let versions;
-        try {
-          versions = await readdir(versionsRoot, { withFileTypes: true });
-        } catch {
-          continue;
-        }
-        for (const version of versions) {
-          if (!version.isDirectory()) continue;
-          try {
-            const project = await readPluginProject(resolve(versionsRoot, version.name));
-            for (const dependency of project.dependencies) {
-              if (dependency.kind === "registry" && dependency.integrity !== undefined) {
-                marked.add(dependencyObjectName(dependency.integrity));
-              }
-            }
-          } catch {
-            // A damaged version does not keep an object alive; current/pending
-            // activation will surface the package damage separately.
-          }
-        }
-      }
-    } catch (error) {
-      if (!isNodeError(error, "ENOENT")) throw error;
-    }
-
-    let removedObjects = 0;
-    for (const objectName of await this.#dependencyStore.listObjectNames()) {
-      if (!marked.has(objectName)) {
-        await this.#dependencyStore.removeObject(objectName);
-        removedObjects += 1;
-      }
-    }
-    this.#events({
-      code: "plugin_dependency_gc_completed",
-      outcome: "success",
-      removedObjects,
-    });
-    return Object.freeze({ removedObjects });
-  }
-
   async #commitProject(
     stagingRoot: string,
     descriptor: PluginPackageDescriptor,
-    dependencies: readonly LockedPluginDependency[],
-    requiresNpmDependencies: boolean,
     replaceExistingVersion: boolean,
   ): Promise<PluginInstallResult> {
     const pluginRoot = resolve(this.#dataRoot, "plugins", descriptor.id);
@@ -332,83 +251,17 @@ export class PluginInstaller {
     if (existingVersion && !replaceExistingVersion) {
       this.#reportProgress({
         completedBytes: 1,
-        detail: requiresNpmDependencies
-          ? "数据源插件版本已存在，复用已安装的 npm 依赖"
-          : "单文件数据源插件版本已存在，无需安装 npm 依赖",
+        detail: "数据源插件版本已存在，复用已安装版本",
         stage: "plugin_installing",
         totalBytes: 1,
       });
       await this.#catalog.load();
       await this.#catalog.installPending(descriptor, async () => {});
       return Object.freeze({
-        copiedFiles: 0,
         descriptor,
-        hardlinkedFiles: 0,
         pendingActivation: true,
         reusedVersion: true,
-        skippedOptionalDependencies: 0,
       });
-    }
-
-    let copiedFiles = 0;
-    let hardlinkedFiles = 0;
-    let skippedOptionalDependencies = 0;
-    const dependencyTotal = Math.max(dependencies.length, 1);
-    let dependencyIndex = 0;
-    for (const dependency of requiresNpmDependencies ? dependencies : []) {
-      dependencyIndex += 1;
-      const destination = resolveInside(stagingRoot, dependency.installPath);
-      try {
-        let source: string;
-        if (dependency.kind === "registry") {
-          const reused = await this.#dependencyStore.hasRegistryPackage(dependency);
-          this.#reportProgress({
-            completedBytes: dependencyIndex - 1,
-            detail: `${reused ? "正在复用" : "正在下载并校验"} npm 依赖 ${dependencyLabel(dependency)}（${dependencyIndex}/${dependencies.length}）`,
-            stage: "plugin_installing",
-            totalBytes: dependencyTotal,
-          });
-          source = await this.#dependencyStore.ensureRegistryPackage(dependency);
-        } else {
-          this.#reportProgress({
-            completedBytes: dependencyIndex - 1,
-            detail: `正在准备本地 npm 依赖 ${dependencyLabel(dependency)}（${dependencyIndex}/${dependencies.length}）`,
-            stage: "plugin_installing",
-            totalBytes: dependencyTotal,
-          });
-          source = resolveInside(stagingRoot, dependency.sourcePath!);
-          await rejectLocalNativeFiles(source);
-        }
-        const materialized = await this.#dependencyStore.materializePackage(
-          source,
-          destination,
-        );
-        copiedFiles += materialized.copiedFiles;
-        hardlinkedFiles += materialized.hardlinkedFiles;
-        this.#reportProgress({
-          completedBytes: dependencyIndex,
-          detail: `npm 依赖已就绪 ${dependencyLabel(dependency)}（${dependencyIndex}/${dependencies.length}）`,
-          stage: "plugin_installing",
-          totalBytes: dependencyTotal,
-        });
-      } catch (error) {
-        if (
-          dependency.optional &&
-          (error instanceof DependencyStoreError ||
-            error instanceof PluginPackageError ||
-            isNodeError(error, "ENOENT"))
-        ) {
-          skippedOptionalDependencies += 1;
-          this.#reportProgress({
-            completedBytes: dependencyIndex,
-            detail: `可选 npm 依赖跳过 ${dependencyLabel(dependency)}（${dependencyIndex}/${dependencies.length}）`,
-            stage: "plugin_installing",
-            totalBytes: dependencyTotal,
-          });
-          continue;
-        }
-        throw error;
-      }
     }
 
     await this.#catalog.load();
@@ -441,20 +294,15 @@ export class PluginInstaller {
       await makeVersionTreeReadOnly(finalVersionRoot);
     });
     this.#reportProgress({
-      completedBytes: dependencyTotal,
-      detail: requiresNpmDependencies
-        ? "npm 依赖恢复完成，正在完成数据源插件安装"
-        : "单文件数据源插件安装完成，无需安装 npm 依赖",
+      completedBytes: 1,
+      detail: "自包含数据源插件安装完成",
       stage: "plugin_installing",
-      totalBytes: dependencyTotal,
+      totalBytes: 1,
     });
     return Object.freeze({
-      copiedFiles,
       descriptor,
-      hardlinkedFiles,
       pendingActivation: true,
       reusedVersion: false,
-      skippedOptionalDependencies,
     });
   }
 
@@ -463,36 +311,6 @@ export class PluginInstaller {
       this.#onProgress(progress);
     } catch {
       // Progress reporting is observational and must never change install results.
-    }
-  }
-}
-
-function dependencyLabel(dependency: LockedPluginDependency): string {
-  const label = dependency.installPath.replace(/^node_modules[\\/]/, "");
-  return `${label.slice(0, 96)}@${dependency.version.slice(0, 64)}`;
-}
-
-async function rejectLocalNativeFiles(root: string): Promise<void> {
-  for (const entry of await readdir(root, { withFileTypes: true })) {
-    if (entry.isSymbolicLink()) {
-      throw new PluginPackageError("plugin_package_invalid");
-    }
-    const path = resolve(root, entry.name);
-    if (entry.isDirectory()) {
-      await rejectLocalNativeFiles(path);
-      continue;
-    }
-    if (!entry.isFile()) {
-      throw new PluginPackageError("plugin_package_invalid");
-    }
-    const lower = entry.name.toLowerCase();
-    if (
-      lower.endsWith(".node") ||
-      lower.endsWith(".dll") ||
-      lower.endsWith(".so") ||
-      lower === "binding.gyp"
-    ) {
-      throw new PluginPackageError("plugin_native_dependency_unsupported");
     }
   }
 }

@@ -59,6 +59,42 @@ test("source resources deliver the first chunk before the upstream body complete
   assert.deepEqual(await finished.promise, { status: 200, bytes: 6 });
 });
 
+test("source resource proxy corrects a declared image MIME from the existing response stream", async () => {
+  const url = "https://images.example/cover.png";
+  let fetches = 0;
+  let tailPulls = 0;
+  const first = Uint8Array.from([0x47, 0x49, 0x46, 0x38, 0x39, 0x61]);
+  const resource = await openSourceProxyResource({
+    request: {
+      kind: "image",
+      url,
+      resourceTransform: "sniff-image-content-type-v1",
+      headers: {},
+    },
+    async fetch() {
+      fetches += 1;
+      return new Response(new ReadableStream({
+        start(controller) { controller.enqueue(first); },
+        pull(controller) {
+          tailPulls += 1;
+          controller.enqueue(Uint8Array.from([1, 2, 3]));
+          controller.close();
+        },
+      }, { highWaterMark: 0 }), { headers: { "content-type": "image/png" } });
+    },
+    proxy() { return "unused"; },
+  }, {}, new AbortController().signal);
+  assert.notEqual(resource, undefined);
+  assert.equal(fetches, 1);
+  assert.equal(tailPulls, 0);
+  assert.equal(resource.response.headers.get("content-type"), "image/gif");
+  assert.deepEqual(
+    [...new Uint8Array(await resource.response.arrayBuffer())],
+    [...first, 1, 2, 3],
+  );
+  assert.equal(tailPulls, 1);
+});
+
 test("source resource proxy decodes AES-CBC split images in the Node data plane", async () => {
   const firstUrl = "https://images.example/page.b_0";
   const secondUrl = "https://images.example/page.b_1";

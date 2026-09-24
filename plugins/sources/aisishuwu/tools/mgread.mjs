@@ -4,17 +4,17 @@
  * MgRead 插件确定性发布工具。
  *
  * 职责：
- * - 默认生成带规范信封的单文件 Node 24 ESM artifact。
- * - 为显式 archive 模式保留确定性 ZIP 兼容分支。
- * - 向 development sync 提供不写工作区的内存构建函数。
+ * - build 将全部第三方依赖内联到单个 Node 24 ESM JS，并原子写回构建入口。
+ * - pack 将该入口封装为单文件信封或确定性 ZIP，压缩包不带 npm 依赖树。
+ * - 向 development sync 提供只读取已有入口、不写工作区的封装函数。
  *
  * 注意：
  * - esbuild 只在开发机运行，每次构建后必须停止 helper。
  * - single-file 只允许纯 JavaScript/JSON 和 Node builtin；图标是唯一声明式资源。
  */
 
-import { createHash } from 'node:crypto';
-import { lstat, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { createHash, randomUUID } from 'node:crypto';
+import { lstat, mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import { builtinModules, createRequire } from 'node:module';
 import { dirname, extname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -25,31 +25,51 @@ const HEADER_PREFIX = '// @mgread-plugin-v1 ';
 const HEADER_LIMIT = 512 * 1024;
 const ICON_LIMIT = 256 * 1024;
 const ARTIFACT_LIMIT = 32 * 1024 * 1024;
-const BUNDLE_EXTENSIONS = new Set(['.js', '.mjs', '.cjs', '.json']);
 const NODE_BUILTINS = new Set(
   builtinModules.flatMap((name) => [name, name.startsWith('node:') ? name.slice(5) : `node:${name}`]),
 );
 const crcTable = createCrcTable();
 
 if (isMainModule()) {
-  if (process.argv[2] !== 'pack' || process.argv.length !== 3) throw new Error('Usage: mgread pack');
-  const artifact = await buildPluginArtifact();
-  const artifactsRoot = resolve(projectRoot, 'artifacts');
-  const target = resolve(artifactsRoot, artifact.fileName);
-  assertInside(artifactsRoot, target);
-  await mkdir(artifactsRoot, { recursive: true });
-  await rm(target, { force: true });
-  await writeFile(target, artifact.bytes, { mode: 0o444 });
-  process.stdout.write(`${relative(projectRoot, target).replaceAll('\\', '/')}\n`);
+  if (process.argv[2] === 'build' && process.argv.length === 3) {
+    await buildBundledEntryForProject(projectRoot);
+    process.stdout.write('Bundled source entry.\n');
+  } else if (process.argv[2] === 'pack' && process.argv.length === 3) {
+    const artifact = await buildPluginArtifact();
+    const artifactsRoot = resolve(projectRoot, 'artifacts');
+    const target = resolve(artifactsRoot, artifact.fileName);
+    assertInside(artifactsRoot, target);
+    await mkdir(artifactsRoot, { recursive: true });
+    await rm(target, { force: true });
+    await writeFile(target, artifact.bytes, { mode: 0o444 });
+    process.stdout.write(`${relative(projectRoot, target).replaceAll('\\', '/')}\n`);
+  } else {
+    throw new Error('Usage: mgread build|pack');
+  }
 }
 
 /** Builds this project without writing either the workspace or an output path. */
 export async function buildPluginArtifact({ versionOverride } = {}) {
-  return buildPluginArtifactForProject(projectRoot, { versionOverride, toolingRoot: projectRoot });
+  return buildPluginArtifactForProject(projectRoot, { versionOverride });
+}
+
+export async function buildBundledEntryForProject(root, toolingRoot = root) {
+  const packageJson = JSON.parse(await readFile(resolve(root, 'package.json'), 'utf8'));
+  const code = await buildBundledCode(root, toolingRoot, 'src/index.mts');
+  const entry = resolve(root, packageJson.main);
+  assertInside(root, entry);
+  const temporary = `${entry}.${randomUUID()}.part`;
+  try {
+    // Publish atomically so readers keep a complete generation on Windows.
+    await writeFile(temporary, code, { flag: 'wx' });
+    await rename(temporary, entry);
+  } finally {
+    await rm(temporary, { force: true });
+  }
 }
 
 /** Project-root variant used by deterministic offline contract tests. */
-export async function buildPluginArtifactForProject(root, { versionOverride, toolingRoot = projectRoot } = {}) {
+export async function buildPluginArtifactForProject(root, { versionOverride } = {}) {
   const originalPackage = JSON.parse(await readFile(resolve(root, 'package.json'), 'utf8'));
   const packageMode = originalPackage?.mgread?.packageMode ?? 'single-file';
   validatePackage(originalPackage, packageMode, versionOverride);
@@ -57,7 +77,8 @@ export async function buildPluginArtifactForProject(root, { versionOverride, too
   if (versionOverride !== undefined) packageJson.version = versionOverride;
 
   if (packageMode === 'archive') {
-    const bytes = await buildArchive(root, packageJson, versionOverride);
+    const code = await readFile(resolve(root, packageJson.main));
+    const bytes = await buildArchive(root, packageJson, versionOverride, code);
     assertArtifactSize(bytes);
     return {
       bytes,
@@ -66,7 +87,7 @@ export async function buildPluginArtifactForProject(root, { versionOverride, too
     };
   }
 
-  const bytes = await buildSingleFile(root, packageJson, toolingRoot);
+  const bytes = await buildSingleFile(root, packageJson);
   assertArtifactSize(bytes);
   return {
     bytes,
@@ -75,44 +96,9 @@ export async function buildPluginArtifactForProject(root, { versionOverride, too
   };
 }
 
-async function buildSingleFile(root, packageJson, toolingRoot) {
+async function buildSingleFile(root, packageJson) {
   await validateSingleFileAssets(root, packageJson.mgread.icon);
-  const { build, stop } = createRequire(resolve(toolingRoot, 'package.json'))('esbuild');
-  let result;
-  try {
-    result = await build({
-      absWorkingDir: root,
-      entryPoints: [packageJson.main],
-      bundle: true,
-      charset: 'utf8',
-      conditions: ['node', 'import', 'default'],
-      external: [...NODE_BUILTINS],
-      format: 'esm',
-      legalComments: 'none',
-      logLevel: 'silent',
-      mainFields: ['module', 'main'],
-      metafile: true,
-      minify: false,
-      platform: 'node',
-      sourcemap: false,
-      target: 'node24',
-      treeShaking: true,
-      write: false,
-    });
-  } catch (error) {
-    throw new Error(`Single-file bundle failed: ${formatBuildError(error)}`);
-  } finally {
-    await stop();
-  }
-  if (result.warnings.length !== 0) {
-    throw new Error(`Single-file bundle warnings are not allowed: ${result.warnings[0].text}`);
-  }
-  if (result.outputFiles.length !== 1) {
-    throw new Error('Single-file mode must produce exactly one JavaScript output.');
-  }
-  validateBundleGraph(result.metafile);
-  const code = Buffer.from(result.outputFiles[0].contents);
-  validateBundleCode(code);
+  const code = await readFile(resolve(root, packageJson.main));
   const descriptor = createDescriptor(packageJson);
   const envelope = {
     formatVersion: 1,
@@ -127,32 +113,43 @@ async function buildSingleFile(root, packageJson, toolingRoot) {
   return Buffer.concat([header, code]);
 }
 
-function validateBundleGraph(metafile) {
-  for (const input of Object.keys(metafile.inputs)) {
-    if (!BUNDLE_EXTENSIONS.has(extname(input).toLowerCase())) {
-      throw new Error(`Unsupported bundled resource: ${input}`);
-    }
+async function buildBundledCode(root, toolingRoot, entry) {
+  const { build, stop } = createRequire(resolve(toolingRoot, 'package.json'))('esbuild');
+  let result;
+  try {
+    result = await build({
+      absWorkingDir: root,
+      entryPoints: [entry],
+      bundle: true,
+      banner: { js: "import { createRequire as __mgreadCreateRequire } from 'node:module'; const require = __mgreadCreateRequire(import.meta.url);" },
+      charset: 'utf8',
+      conditions: ['node', 'import', 'default'],
+      external: [...NODE_BUILTINS],
+      format: 'esm',
+      legalComments: 'none',
+      logLevel: 'silent',
+      mainFields: ['module', 'main'],
+      packages: 'bundle',
+      splitting: false,
+      minify: false,
+      platform: 'node',
+      sourcemap: false,
+      target: 'node24',
+      treeShaking: true,
+      write: false,
+    });
+  } catch (error) {
+    throw new Error(`Single-file bundle failed: ${formatBuildError(error)}`);
+  } finally {
+    await stop();
   }
-  for (const output of Object.values(metafile.outputs)) {
-    for (const dependency of output.imports) {
-      if (!dependency.external || !NODE_BUILTINS.has(dependency.path)) {
-        throw new Error(`Only Node builtin externals are allowed: ${dependency.path}`);
-      }
-    }
+  if (result.outputFiles.length !== 1) {
+    throw new Error('Single-file mode must produce exactly one JavaScript output.');
   }
+  const code = Buffer.from(result.outputFiles[0].contents);
+  return code;
 }
 
-function validateBundleCode(code) {
-  const source = code.toString('utf8');
-  const executable = source.replace(/\/\*[\s\S]*?\*\//gu, '').replace(/^\s*\/\/.*$/gmu, '');
-  if (/\bimport\s*\(/u.test(executable)) {
-    throw new Error('Dynamic import is not supported by single-file artifacts.');
-  }
-  if (/import\.meta\.url/u.test(source)) {
-    throw new Error('Single-file artifacts cannot reference sidecar files through import.meta.url.');
-  }
-  if (/sourceMappingURL=/u.test(source)) throw new Error('Single-file artifacts cannot contain source maps.');
-}
 
 async function validateSingleFileAssets(root, iconPath) {
   const assetsRoot = resolve(root, 'assets');
@@ -221,24 +218,13 @@ function createDescriptor(packageJson) {
   };
 }
 
-async function buildArchive(root, packageJson, versionOverride) {
+async function buildArchive(root, packageJson, versionOverride, code) {
   const files = [];
-  for (const name of ['package.json', 'package-lock.json', 'README.md', 'LICENSE']) {
-    let bytes = await readFile(resolve(root, name));
-    if (name === 'package.json' && versionOverride !== undefined) {
-      bytes = Buffer.from(`${JSON.stringify(packageJson, null, 2)}\n`);
-    }
-    if (name === 'package-lock.json' && versionOverride !== undefined) {
-      const lock = JSON.parse(bytes.toString('utf8'));
-      lock.version = versionOverride;
-      if (lock.packages?.[''] !== undefined) lock.packages[''].version = versionOverride;
-      bytes = Buffer.from(`${JSON.stringify(lock, null, 2)}\n`);
-    }
-    files.push({ path: name, bytes });
-  }
-  for (const directory of ['dist', 'assets', 'packages', 'tools']) {
-    await collectArchiveDirectory(root, directory, files);
-  }
+  const archivePackage = structuredClone(packageJson);
+  for (const key of ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies', 'bundledDependencies', 'bundleDependencies', 'packageManager', 'scripts', 'bin']) delete archivePackage[key];
+  files.push({ path: 'package.json', bytes: Buffer.from(`${JSON.stringify(archivePackage, null, 2)}\n`) });
+  files.push({ path: packageJson.main, bytes: code });
+  if (packageJson.mgread.icon !== undefined) files.push({ path: packageJson.mgread.icon, bytes: await readFile(resolve(root, packageJson.mgread.icon)) });
   files.sort((left, right) => left.path.localeCompare(right.path));
   return createZip(files);
 }

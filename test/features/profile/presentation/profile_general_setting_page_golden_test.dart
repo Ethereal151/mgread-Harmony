@@ -20,7 +20,6 @@ void main() {
   for (final (String settingId, String goldenName) in <(String, String)>[
     ('reading-settings', 'reading_settings_compact_light.png'),
     ('theme-appearance', 'appearance_settings_compact_light.png'),
-    ('privacy-permissions', 'privacy_settings_compact_light.png'),
   ]) {
     testWidgets('matches $settingId compact light reference', (WidgetTester tester) async {
       final AppSettingsManager settings = AppSettingsManager(store: FakeSettingsStore(), registry: AppSettingKeys.registry);

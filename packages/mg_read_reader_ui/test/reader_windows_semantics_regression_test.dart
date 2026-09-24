@@ -2,8 +2,55 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:novel_reader_ui/novel_reader_ui.dart';
+import 'package:novel_reader_ui/src/ui/chapter/reader_chapter_state_badge.dart';
+import 'package:novel_reader_ui/src/ui/reader_theme.dart';
 
 void main() {
+  testWidgets('failed chapter badge keeps its compact retry contract', (
+    WidgetTester tester,
+  ) async {
+    final SemanticsHandle semantics = tester.ensureSemantics();
+    final TestGesture mouse = await tester.createGesture(
+      kind: PointerDeviceKind.mouse,
+    );
+    await mouse.addPointer(location: Offset.zero);
+    var retryCalls = 0;
+    try {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: ReaderChapterStateBadge(
+                key: const ValueKey<String>('failed-chapter-badge'),
+                availability: ReaderChapterAvailability.failed,
+                palette: ReaderPalette.fromPreset(ReaderThemePreset.day),
+                onRetry: () => retryCalls += 1,
+              ),
+            ),
+          ),
+        ),
+      );
+
+      final Finder retrySemantics = _explicitSemanticsLabel('下载失败，未读，重试加载章节状态');
+      expect(retrySemantics, findsOneWidget);
+      expect(tester.getSize(retrySemantics), const Size.square(32));
+      expect(tester.takeException(), isNull);
+
+      await mouse.moveTo(tester.getCenter(retrySemantics));
+      await tester.pumpAndSettle();
+      expect(find.text('重试加载章节状态'), findsOneWidget);
+      expect(find.byType(OverlayPortal), findsNothing);
+
+      await tester.tap(retrySemantics);
+      await tester.pump();
+      expect(retryCalls, 1);
+      expect(tester.takeException(), isNull);
+    } finally {
+      await mouse.removePointer();
+      semantics.dispose();
+    }
+  });
+
   testWidgets('Windows reader chrome keeps hover hints and semantics stable', (
     WidgetTester tester,
   ) async {
@@ -115,13 +162,13 @@ void main() {
         await tester.tap(find.text('目录'));
         await tester.pumpAndSettle();
 
-        final Finder failedState = find.descendant(
-          of: find.byKey(
-            const ValueKey<String>('reader-catalog-chapter-chapter-1'),
-          ),
-          matching: find.byIcon(Icons.error_outline_rounded),
-        );
-        expect(failedState, findsOneWidget);
+        final Finder failedStates = _explicitSemanticsLabel('下载失败，未读，重试加载章节状态');
+        expect(failedStates, findsWidgets);
+        final Finder hitTestableFailedStates = failedStates.hitTestable();
+        expect(hitTestableFailedStates, findsWidgets);
+        final Finder failedState = hitTestableFailedStates.first;
+        await mouse.moveTo(Offset.zero);
+        await tester.pumpAndSettle();
         await mouse.moveTo(tester.getCenter(failedState));
         await tester.pumpAndSettle();
         expect(find.text('重试加载章节状态'), findsOneWidget);
@@ -179,9 +226,14 @@ void main() {
 
         await tester.tap(find.widgetWithText(Tab, '书籍详情'));
         await tester.pumpAndSettle();
-        final Finder externalAction = find
-            .byIcon(Icons.open_in_new_rounded)
-            .last;
+        // The detail action can mount underneath the stationary mouse pointer.
+        // Move away first so the following move exercises a real hover entry.
+        await mouse.moveTo(Offset.zero);
+        await tester.pumpAndSettle();
+        final Finder externalAction = _explicitSemanticsLabel('在外部浏览器打开来源链接');
+        expect(externalAction, findsOneWidget);
+        await tester.ensureVisible(externalAction);
+        await tester.pumpAndSettle();
         await mouse.moveTo(tester.getCenter(externalAction));
         await tester.pumpAndSettle();
         expect(find.text('在外部浏览器打开来源链接'), findsOneWidget);
