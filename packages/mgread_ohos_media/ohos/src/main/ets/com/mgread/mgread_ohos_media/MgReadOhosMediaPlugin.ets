@@ -171,19 +171,18 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
       const hls = this.isHlsUrl(url, resourceType)
       this.log(`open session=${sessionId} video=${video} resourceType=${resourceType} hls=${hls} urlLength=${url.length} headerCount=${Object.keys(headers).length}`)
       const runtimeLoopback = this.isRuntimeLoopbackUrl(url)
-      // Match LegadoArkTS: a local proxy is already a normal HTTP media
-      // resource with its upstream URL and headers encoded in the token.
-      // API 26 closes a MediaSourceLoader HLS root before open/read, then
-      // tries to parse its internal fd URI, so local HLS must use AVPlayer.url.
-      // Remote resources that need request headers continue through
-      // MediaSource, where the explicit HLS MIME keeps extensionless URLs
-      // unambiguous.
-      if (hls && runtimeLoopback) {
+      // Match LegadoArkTS: standard HLS starts through AVPlayer.url. On API
+      // 26, MediaSource-backed remote HLS may close its loader before the
+      // first playlist read and leave AVPlayer in initialized with
+      // "Invalid fd uri format". The decoded OHOS HLS URL already points to
+      // the signed variant playlist, so it must not be routed through the
+      // failing MediaSource path just because the source also supplied
+      // request headers. Loopback HLS follows the same URL-first path.
+      if (hls) {
         player.url = url
-        this.log(`url_set session=${sessionId} mode=loopback_hls`)
+        this.log(`url_set session=${sessionId} mode=${runtimeLoopback ? 'loopback_hls' : 'remote_hls'}`)
       } else {
         const source = media.createMediaSourceWithUrl(url, headers)
-        if (hls) source.setMimeType(media.AVMimeTypes.APPLICATION_M3U8)
         // API 26 devices expose setMediaSource(strategy) in the type surface,
         // but the runtime does not expose preferredBufferDurationForPlaying or
         // preferredBufferDuration. Passing a PlaybackStrategy therefore makes

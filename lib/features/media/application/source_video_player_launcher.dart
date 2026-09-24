@@ -233,6 +233,11 @@ final class _SourceVideoPlayerDestinationState extends State<_SourceVideoPlayerD
           diagnostics: widget.diagnostics,
         ),
         startupSession: widget.startupSession,
+        // Public HLS sources on OHOS can take longer than the desktop
+        // backend's default first-frame window to resolve and expose stream
+        // information. Keep the native AVPlayer session alive while it is
+        // still preparing instead of pausing it at 25 seconds.
+        firstFrameTimeout: platformCapabilities.isOhos ? const Duration(seconds: 90) : const Duration(seconds: 25),
         backendFactory: () =>
             platformCapabilities.isOhos ? createOhosVideoPlaybackBackend() : createMediaKitVideoPlaybackBackend(proxyUri: setup.proxyUri),
         supportsBufferedPosition: !platformCapabilities.isOhos || platformCapabilities.supportsOhosVideoBufferedPosition,
