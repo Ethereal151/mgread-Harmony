@@ -15,14 +15,11 @@ import common from '@ohos.app.ability.common'
 import media from '@ohos.multimedia.media'
 import audio from '@ohos.multimedia.audio'
 import avSession from '@ohos.multimedia.avsession'
-import http from '@ohos.net.http'
 import { SurfaceTextureEntry, TextureRegistry } from '@ohos/flutter_ohos'
 import OhosMediaEventStreamHandler from './OhosMediaEventStreamHandler'
 
 interface MediaSession {
   player: media.AVPlayer
-  source?: media.MediaSource
-  loader?: media.MediaSourceLoader
   texture?: SurfaceTextureEntry
   video: boolean
   initialPositionMs: number
@@ -172,42 +169,27 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
       const resourceType = this.stringValue(args, 'resourceType')
       const hls = this.isHlsUrl(url, resourceType)
       this.log(`open session=${sessionId} video=${video} resourceType=${resourceType} hls=${hls} urlLength=${url.length} headerCount=${Object.keys(headers).length}`)
-      // Windows MediaKit opens every resource with its request headers. Keep
-      // the same invariant on OHOS: Runtime media URLs are loopback URLs and
-      // intentionally do not retain the upstream .m3u8 suffix, so AVPlayer.url
-      // cannot reliably infer HLS and would also discard the source headers.
-      // MediaSource supports network HLS; its explicit MIME type makes the
-      // extensionless Runtime resource unambiguous to AVPlayer.
-      // API 26 cannot use MediaSourceLoader for the HLS root playlist: it
-      // registers the delegate and immediately closes uuid 0 before reading.
-      // OHOS source adapters decode Runtime proxy URLs to direct upstream HLS
-      // URLs before reaching this bridge. Keep the loader only as a fallback
-      // for legacy loopback callers; direct HLS URLs use MediaKit's native
-      // network path with the original request headers.
       const runtimeLoopback = this.isRuntimeLoopbackUrl(url)
-      // Keep a non-routable HLS root for the AVPlayer parser. The custom
-      // loader replaces this sentinel with the Runtime loopback URL while
-      // allowing child playlist and segment URLs to resolve normally.
-      const sourceUrl = hls && runtimeLoopback ? 'http://mgread.invalid/runtime.m3u8' : url
-      const source = media.createMediaSourceWithUrl(sourceUrl, headers)
-      session.source = source
+      // Match LegadoArkTS: a local proxy is already a normal HTTP media
+      // resource with its upstream URL and headers encoded in the token.
+      // API 26 closes a MediaSourceLoader HLS root before open/read, then
+      // tries to parse its internal fd URI, so local HLS must use AVPlayer.url.
+      // Remote resources that need request headers continue through
+      // MediaSource, where the explicit HLS MIME keeps extensionless URLs
+      // unambiguous.
       if (hls && runtimeLoopback) {
-        source.setMimeType(media.AVMimeTypes.APPLICATION_M3U8)
-        // HarmonyOS media_service cannot reliably open an application-local
-        // Runtime URL (127.0.0.1) from its own process. Keep the URL visible
-        // to the player for HLS resolution, but service every media read in
-        // this application process where the Runtime loopback is reachable.
-        const loader = this.createResourceLoader(sessionId, url)
-        session.loader = loader
-        source.setMediaResourceLoaderDelegate(loader)
+        player.url = url
+        this.log(`url_set session=${sessionId} mode=loopback_hls`)
+      } else {
+        const source = media.createMediaSourceWithUrl(url, headers)
+        if (hls) source.setMimeType(media.AVMimeTypes.APPLICATION_M3U8)
+        // API 26 devices expose setMediaSource(strategy) in the type surface,
+        // but the runtime does not expose preferredBufferDurationForPlaying or
+        // preferredBufferDuration. Passing a PlaybackStrategy therefore makes
+        // the native parser enter an unsupported configuration before it reads
+        // the HLS playlist. Let MediaKit use its default buffering policy.
+        await player.setMediaSource(source)
       }
-      if (hls && !runtimeLoopback) source.setMimeType(media.AVMimeTypes.APPLICATION_M3U8)
-      // API 26 devices expose setMediaSource(strategy) in the type surface,
-      // but the runtime does not expose preferredBufferDurationForPlaying or
-      // preferredBufferDuration. Passing a PlaybackStrategy therefore makes
-      // the native parser enter an unsupported configuration before it reads
-      // the HLS playlist. Let MediaKit use its default buffering policy.
-      await player.setMediaSource(source)
       this.log(`source_set session=${sessionId} state=${player.state}`)
       await this.waitForState(player, 'initialized')
       if (texture !== undefined) {
@@ -492,111 +474,6 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
 
   private isRuntimeLoopbackUrl(url: string): boolean {
     return url.startsWith('http://127.0.0.1:') || url.startsWith('http://localhost:') || url.startsWith('http://[::1]:')
-  }
-
-  private createResourceLoader(sessionId: string, fallbackUrl: string): media.MediaSourceLoader {
-    const requests = new Map<number, media.MediaSourceLoadingRequest>()
-    const inFlight = new Set<number>()
-    let nextHandle = 1
-    return {
-      open: (request: media.MediaSourceLoadingRequest): number => {
-        const handle = nextHandle++
-        requests.set(handle, request)
-        this.log(`loader_open session=${sessionId} handle=${handle} urlLength=${request.url.length}`)
-        return handle
-      },
-      read: (handle: number, offset: number, length: number): void => {
-        if (inFlight.has(handle)) return
-        const request = requests.get(handle)
-        if (request === undefined) return
-        inFlight.add(handle)
-        this.readResource(request, handle, offset, length, fallbackUrl).catch((error: Error): void => {
-          this.log(`loader_error session=${sessionId} handle=${handle} message=${this.errorMessage(error)}`)
-          try {
-            request.finishLoading(handle, media.LoadingRequestError.LOADING_ERROR_ACCESS_DENIED)
-          } catch (_) {
-            // The player may have released the request while the HTTP read
-            // was in flight. There is nothing left to notify in that case.
-          }
-        }).finally((): void => {
-          inFlight.delete(handle)
-        })
-      },
-      close: (handle: number): void => {
-        requests.delete(handle)
-        inFlight.delete(handle)
-        this.log(`loader_close session=${sessionId} handle=${handle}`)
-      },
-    }
-  }
-
-  private async readResource(
-    request: media.MediaSourceLoadingRequest,
-    handle: number,
-    offset: number,
-    length: number,
-    fallbackUrl: string,
-  ): Promise<void> {
-    const client = http.createHttp()
-    try {
-      const resourceUrl = request.url.includes('mgread.invalid') ? fallbackUrl : request.url
-      const options: http.HttpRequestOptions = {
-        method: http.RequestMethod.GET,
-        header: request.header,
-        expectDataType: http.HttpDataType.ARRAY_BUFFER,
-        usingCache: false,
-        usingProxy: false,
-        connectTimeout: 10_000,
-        readTimeout: 30_000,
-        maxLimit: 50 * 1024 * 1024,
-      }
-      if (offset > 0) options.resumeFrom = offset
-      if (length > 0 && offset <= Number.MAX_SAFE_INTEGER - length) {
-        options.resumeTo = offset + length - 1
-      }
-      const response = await client.request(resourceUrl, options)
-      const body = response.result
-      if (!(body instanceof ArrayBuffer) || response.responseCode < 200 || response.responseCode >= 400) {
-        throw new Error(`http_status_${response.responseCode}`)
-      }
-      const responseHeaders = this.httpResponseHeaders(response.header)
-      request.respondHeader(handle, responseHeaders)
-      const bytes = body.byteLength > 0 ? body : new ArrayBuffer(0)
-      let sent = 0
-      while (sent < bytes.byteLength) {
-        const end = length > 0 ? Math.min(bytes.byteLength, length) : bytes.byteLength
-        const pushed = request.respondData(handle, offset + sent, bytes.slice(sent, end))
-        if (pushed === -2) return
-        if (pushed === -3) {
-          await new Promise<void>((resolve): void => {
-            setTimeout((): void => resolve(), 20)
-          })
-          continue
-        }
-        if (pushed < 0) throw new Error(`respond_data_${pushed}`)
-        sent += Math.min(pushed, end - sent)
-      }
-      request.finishLoading(handle, media.LoadingRequestError.LOADING_ERROR_SUCCESS)
-    } finally {
-      client.destroy()
-    }
-  }
-
-  private httpResponseHeaders(value: Object): Record<string, string> {
-    let raw: Record<string, Object> = value as Record<string, Object>
-    if (typeof value === 'string') {
-      try {
-        raw = JSON.parse(value) as Record<string, Object>
-      } catch (_) {
-        raw = JSON.parse('{}') as Record<string, Object>
-      }
-    }
-    const result: Record<string, string> = {}
-    Object.keys(raw).forEach((name: string): void => {
-      const item = raw[name]
-      if (typeof item === 'string' || typeof item === 'number') result[name] = String(item)
-    })
-    return result
   }
 
   private errorMessage(error: Object): string {
