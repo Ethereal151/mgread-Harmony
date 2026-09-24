@@ -48,6 +48,11 @@ test('fixture covers channels, search, detail, one episode and HLS proxy metadat
   assert.equal(detailResult.title, 'Fixture video');
   assert.deepEqual(detailResult.aliases, ['Fixture alias']);
   assert.equal(detailResult.chapterCount, 1);
+  const cover = resources.find((value) => value.kind === 'image');
+  assert.equal(cover.url, 'https://cdn.example.test/cover.jpg');
+  assert.equal(cover.headers.Referer, 'https://www.uaa.com/video/');
+  assert.match(cover.headers.Accept, /^image\//u);
+  assert.match(cover.headers['User-Agent'], /^Mozilla\//u);
 
   const catalog = await plugin.getChapters({ id: detailResult.id });
   assert.equal(catalog.groups.length, 1);
@@ -59,7 +64,7 @@ test('fixture covers channels, search, detail, one episode and HLS proxy metadat
   assert.equal(content.media.resourcePolicy, 'sessionOnly');
   assert.equal(content.media.url.startsWith('http://127.0.0.1:'), true);
   assert.equal(content.media.url.includes('media.example.test'), false);
-  assert.equal(resources[0].kind, 'hls');
-  assert.equal(resources[0].url, 'https://media.example.test/fixture.m3u8');
-  assert.equal(resources[0].headers.Range, undefined);
+  const media = resources.find((value) => value.kind === 'hls');
+  assert.equal(media.url, 'https://media.example.test/fixture.m3u8');
+  assert.equal(media.headers.Range, undefined);
 });

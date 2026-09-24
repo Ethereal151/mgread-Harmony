@@ -1,6 +1,6 @@
 import { createRequire as __mgreadCreateRequire } from 'node:module'; const require = __mgreadCreateRequire(import.meta.url);
 
-// dist/index.mjs
+// src/index.mts
 var bootstrapBase = "https://feza.uuss.uk";
 var categories = Object.freeze([["recent", "Recently Updated", "/"], ["popular", "Popular", "/popular/"], ["cosplay", "Cosplay", "/cosplay/"], ["ai", "AI Enhanced", "/tag/ai-enhanced/"], ["aigirl", "AIGirl", "/tag/aigirl/"], ["coser", "Coser", "/tag/coser/"], ["rosi", "Rosi", "/tag/rosi/"], ["youxi", "Youxi", "/tag/youxi/"]]);
 var context;
@@ -14,8 +14,7 @@ async function activate(next) {
 }
 async function search(request) {
   const query = request.query.trim();
-  if (query === "")
-    return frozen({ items: [], nextCursor: null, totalCount: 0 });
+  if (query === "") return frozen({ items: [], nextCursor: null, totalCount: 0 });
   await ensureBase();
   const page = cursorPage(request.cursor, "search"), size = clamp(request.pageSize), url = `${base}/search/${encodeURIComponent(query)}/${page > 1 ? `page/${page}/` : ""}`;
   let parsed = [];
@@ -31,18 +30,15 @@ async function searchSuggestions(_request) {
 }
 async function discover(request) {
   if (request.target === null) {
-    if (request.cursor !== null || request.collectionId !== null)
-      throw new Error("Initial discovery request is invalid.");
+    if (request.cursor !== null || request.collectionId !== null) throw new Error("Initial discovery request is invalid.");
     return frozen({ kind: "document", document: { components: [{ type: "section", id: "photo-categories", title: "4KHD", subtitle: "写真与图集分类", icon: "manga", children: [{ type: "categoryCollection", id: "photo-category-list", layout: "chips", categories: categories.map(([id, title]) => ({ id, title, target: `category:${id}`, count: null, url: null, icon: "manga" })) }] }] } });
   }
   await ensureBase();
   const category = categories.find(([id]) => request.target === `category:${id}`);
-  if (category === void 0)
-    throw new Error("Discovery target is invalid.");
+  if (category === void 0) throw new Error("Discovery target is invalid.");
   const page = cursorPage(request.cursor, request.target), size = clamp(request.pageSize), pagePath = page === 1 ? category[2] : category[2] === "/" ? `/page/${page}/` : `${category[2]}page/${page}/`, html = await fetchText(`${base}${pagePath}`), parsed = parseList(html), values = parsed.length > 0 ? parsed.slice(0, size) : (await fetchPosts(page, size, "")).slice(0, size), collectionId = `manga:${category[0]}`, items = values.map((content) => frozen({ content, rank: null, metric: null, recommendation: null })), continuation = values.length >= size ? frozen({ target: request.target, cursor: `${request.target}:${page + 1}` }) : null;
   if (request.collectionId !== null) {
-    if (request.collectionId !== collectionId)
-      throw new Error("Discovery collection is invalid.");
+    if (request.collectionId !== collectionId) throw new Error("Discovery collection is invalid.");
     return frozen({ kind: "append", collectionId, items, continuation });
   }
   return frozen({ kind: "document", document: { components: [{ type: "section", id: `${collectionId}:section`, title: category[1], subtitle: null, icon: "manga", children: [{ type: "contentCollection", id: collectionId, layout: "coverGrid", items, continuation }] }] } });
@@ -59,23 +55,20 @@ async function getChapters(request) {
 async function getContent(request) {
   await ensureBase();
   const path = contentPath(request.id);
-  if (request.chapterId !== `manga:${encodeKey(path)}:main`)
-    throw new Error("Chapter ID is invalid.");
+  if (request.chapterId !== `manga:${encodeKey(path)}:main`) throw new Error("Chapter ID is invalid.");
   const seenPages = /* @__PURE__ */ new Set(), seenImages = /* @__PURE__ */ new Set(), images = [];
   let current = `${base}${path}`;
   for (let page = 0; page < 40 && current !== "" && !seenPages.has(current); page += 1) {
     seenPages.add(current);
     const html = await fetchText(current);
-    for (const image of extractImages(html))
-      if (!seenImages.has(image)) {
-        seenImages.add(image);
-        images.push(image);
-      }
+    for (const image of extractImages(html)) if (!seenImages.has(image)) {
+      seenImages.add(image);
+      images.push(image);
+    }
     const next = firstCapture(html, /<link[^>]+rel=["']next["'][^>]+href=["']([^"']+)["']/iu) || firstCapture(html, /<link[^>]+href=["']([^"']+)["'][^>]+rel=["']next["']/iu);
     current = next === "" ? "" : new URL(next, current).toString();
   }
-  if (images.length === 0)
-    throw new Error("Album images are unavailable.");
+  if (images.length === 0) throw new Error("Album images are unavailable.");
   const pages = images.map((upstream, index) => frozen({ id: `page:${index + 1}`, index, url: requireContext().resource.proxy({ kind: "image", url: upstream, headers: { Referer: `${base}${path}` } }), mimeType: imageMime(upstream), width: null, height: null }));
   return frozen({ chapterId: request.chapterId, contentKind: "manga", title: null, updatedAt: null, text: null, pages: Object.freeze(pages) });
 }
@@ -83,23 +76,19 @@ async function fetchPosts(page, size, query) {
   const url = new URL(`${base}/wp-json/wp/v2/posts`);
   url.searchParams.set("per_page", String(size));
   url.searchParams.set("page", String(page));
-  if (query !== "")
-    url.searchParams.set("search", query);
+  if (query !== "") url.searchParams.set("search", query);
   const response = await requireContext().http.fetch(url, { headers: requestHeaders(base) });
-  if (!response.ok)
-    return [];
+  if (!response.ok) return [];
   let value;
   try {
     value = await response.json();
   } catch {
     return [];
   }
-  if (!Array.isArray(value))
-    return [];
+  if (!Array.isArray(value)) return [];
   return value.filter(isObject).map((post) => {
     const path = normalizePath(text(post.link));
-    if (path === null)
-      return null;
+    if (path === null) return null;
     const title = decode(strip(text(object(post.title).rendered))) || `Photo ${text(post.id)}`, cover = text(post.jetpack_featured_media_url);
     return summary(path, title, cover);
   }).filter(notNull);
@@ -110,11 +99,9 @@ async function ensureBase() {
 }
 async function resolveBase() {
   const probePath = "/wp-json/wp/v2/posts?per_page=1&page=1", bootstrap = await requireContext().http.fetch(`${bootstrapBase}${probePath}`, { headers: requestHeaders(bootstrapBase) });
-  if (!bootstrap.ok)
-    throw new Error("Source origin request failed.");
+  if (!bootstrap.ok) throw new Error("Source origin request failed.");
   const body = await bootstrap.text();
-  if (isPosts(body))
-    return bootstrapBase;
+  if (isPosts(body)) return bootstrapBase;
   const sites = firstCapture(body, /\bconst\s+sites\s*=\s*\[([\s\S]*?)\]/u), candidates = [...sites.matchAll(/["'](https:\/\/[a-z0-9.-]+)["']/giu)].map((match) => match[1] ?? "").slice(0, 8), seen = /* @__PURE__ */ new Set();
   for (const candidate of candidates) {
     let origin;
@@ -123,13 +110,11 @@ async function resolveBase() {
     } catch {
       continue;
     }
-    if (seen.has(origin))
-      continue;
+    if (seen.has(origin)) continue;
     seen.add(origin);
     try {
       const response = await requireContext().http.fetch(`${origin}${probePath}`, { headers: requestHeaders(origin) });
-      if (response.ok && isPosts(await response.text()))
-        return origin;
+      if (response.ok && isPosts(await response.text())) return origin;
     } catch {
     }
   }
@@ -147,41 +132,32 @@ function requestHeaders(origin) {
 }
 async function fetchText(url) {
   const response = await requireContext().http.fetch(url, { headers: requestHeaders(base) });
-  if (!response.ok)
-    throw new Error("Source request failed.");
+  if (!response.ok) throw new Error("Source request failed.");
   return response.text();
 }
 function parseList(html) {
   const values = /* @__PURE__ */ new Map();
   for (const row of html.matchAll(/<li\b[^>]*class=["'][^"']*\bpost-\d+\b[^"']*["'][^>]*>([\s\S]*?)<\/li>/giu)) {
     const body = row[1] ?? "", path = normalizePath(firstCapture(body, /<a\b[^>]*href=["']([^"']*\/(?:content|album|pic)\/[^"']+)["']/iu));
-    if (path === null || values.has(path))
-      continue;
+    if (path === null || values.has(path)) continue;
     const image = /<img\b[^>]*>/iu.exec(body)?.[0] ?? "", title = strip(firstCapture(body, /<h2[^>]*>([\s\S]*?)<\/h2>/iu));
-    if (title === "")
-      continue;
+    if (title === "") continue;
     values.set(path, summary(path, decode(title), attribute(image, "src") || attribute(image, "data-src") || attribute(image, "data-lazy-src")));
   }
   for (const match of html.matchAll(/<a\b([^>]*)href=["']([^"']*\/(?:content|album|pic)\/[^"']+)["']([^>]*)>([\s\S]*?)<\/a>/giu)) {
     const path = normalizePath(match[2] ?? "");
-    if (path === null || values.has(path))
-      continue;
+    if (path === null || values.has(path)) continue;
     const body = match[4] ?? "", image = /<img\b[^>]*>/iu.exec(body)?.[0] ?? "", title = strip(firstCapture(body, /<h2[^>]*>([\s\S]*?)<\/h2>/iu)) || attribute(`${match[1] ?? ""} ${match[3] ?? ""}`, "title") || strip(body);
-    if (title === "")
-      continue;
+    if (title === "") continue;
     values.set(path, summary(path, decode(title), attribute(image, "src") || attribute(image, "data-src") || attribute(image, "data-lazy-src")));
   }
   return [...values.values()];
 }
 function extractImages(html) {
   const end = html.indexOf('id="basicE"'), start = html.indexOf('<p><a href="https://i'), gallery = start >= 0 ? html.slice(start, end >= 0 ? end : void 0) : html, values = [];
-  for (const match of gallery.matchAll(/<a[^>]+href=["'](https:\/\/i\d+\.wp\.com\/pic\.4khd\.com\/[^?"'\s]+)["'][^>]*>\s*<img/giu))
-    if (match[1])
-      values.push(match[1]);
+  for (const match of gallery.matchAll(/<a[^>]+href=["'](https:\/\/i\d+\.wp\.com\/pic\.4khd\.com\/[^?"'\s]+)["'][^>]*>\s*<img/giu)) if (match[1]) values.push(match[1]);
   if (values.length === 0) {
-    for (const match of gallery.matchAll(/<img[^>]+src=["'](https:\/\/i\d+\.wp\.com\/pic\.4khd\.com\/[^?"'\s]+)/giu))
-      if (match[1])
-        values.push(match[1]);
+    for (const match of gallery.matchAll(/<img[^>]+src=["'](https:\/\/i\d+\.wp\.com\/pic\.4khd\.com\/[^?"'\s]+)/giu)) if (match[1]) values.push(match[1]);
   }
   return values;
 }
@@ -189,12 +165,10 @@ function summary(path, title, cover) {
   return frozen({ id: `manga:${encodeKey(path)}`, title, contentKind: "manga", coverOrientation: "portrait", author: null, url: `${base}${path}`, coverUrl: proxyImage(cover), description: null, language: null, status: "completed", access: "free", wordCount: null, chapterCount: 1, publishedAt: null, updatedAt: null, latestChapter: { id: `manga:${encodeKey(path)}:main`, title: "Full Album", url: null, updatedAt: null }, categories: ["Photo"], tags: [], attributes: [] });
 }
 function normalizePath(value) {
-  if (value === "")
-    return null;
+  if (value === "") return null;
   try {
     const url = new URL(value, base);
-    if (!["/content/", "/album/", "/pic/"].some((prefix) => url.pathname.startsWith(prefix)))
-      return null;
+    if (!["/content/", "/album/", "/pic/"].some((prefix) => url.pathname.startsWith(prefix))) return null;
     return url.pathname;
   } catch {
     return null;
@@ -202,24 +176,20 @@ function normalizePath(value) {
 }
 function contentPath(id) {
   const encoded = /^manga:([A-Za-z0-9_-]+)$/u.exec(id)?.[1];
-  if (encoded === void 0)
-    throw new Error("Content ID is invalid.");
+  if (encoded === void 0) throw new Error("Content ID is invalid.");
   const path = decodeKey(encoded);
-  if (normalizePath(path) !== path)
-    throw new Error("Content ID is invalid.");
+  if (normalizePath(path) !== path) throw new Error("Content ID is invalid.");
   return path;
 }
 function encodeKey(value) {
   return Buffer.from(value, "utf8").toString("base64url");
 }
 function decodeKey(value) {
-  if (!/^[A-Za-z0-9_-]+$/u.test(value))
-    throw new Error("Source key is invalid.");
+  if (!/^[A-Za-z0-9_-]+$/u.test(value)) throw new Error("Source key is invalid.");
   return Buffer.from(value, "base64url").toString("utf8");
 }
 function proxyImage(value) {
-  if (value === "")
-    return null;
+  if (value === "") return null;
   let url;
   try {
     url = new URL(value, base).toString();
@@ -245,11 +215,9 @@ function decode(value) {
   return value.replace(/&#8211;/gu, "–").replace(/&#038;|&amp;/gu, "&").replace(/&quot;/gu, '"').replace(/&#39;/gu, "'");
 }
 function cursorPage(cursor, target) {
-  if (cursor === null)
-    return 1;
+  if (cursor === null) return 1;
   const raw = cursor.startsWith(`${target}:`) ? cursor.slice(target.length + 1) : "", page = Number(raw);
-  if (!Number.isSafeInteger(page) || page < 2 || page > 1e3)
-    throw new Error("Cursor is invalid.");
+  if (!Number.isSafeInteger(page) || page < 2 || page > 1e3) throw new Error("Cursor is invalid.");
   return page;
 }
 function object(value) {
@@ -271,8 +239,7 @@ function frozen(value) {
   return Object.freeze(value);
 }
 function requireContext() {
-  if (context === void 0)
-    throw new Error("Source is not activated.");
+  if (context === void 0) throw new Error("Source is not activated.");
   return context;
 }
 export {

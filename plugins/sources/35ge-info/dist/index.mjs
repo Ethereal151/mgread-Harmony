@@ -47,7 +47,7 @@ var require_boolbase = __commonJS({
   }
 });
 
-// dist/source.js
+// src/source.ts
 import { Buffer as Buffer2 } from "node:buffer";
 import { createHash } from "node:crypto";
 
@@ -6496,22 +6496,19 @@ function isNode(obj) {
 // node_modules/cheerio/dist/esm/slim.js
 var load = getLoad(getParse(parseDocument), esm_default);
 
-// dist/projection-cache.js
+// src/projection-cache.ts
 var ProjectionCache = class {
+  constructor(policy, now = Date.now) {
+    this.policy = policy;
+    this.now = now;
+    if (!Number.isSafeInteger(policy.capacity) || policy.capacity < 1) throw new Error("Cache capacity is invalid.");
+    if (!Number.isFinite(policy.freshTtlMs) || policy.freshTtlMs < 0) throw new Error("Cache fresh TTL is invalid.");
+    if (!Number.isFinite(policy.staleTtlMs) || policy.staleTtlMs <= policy.freshTtlMs) throw new Error("Cache stale TTL is invalid.");
+  }
   policy;
   now;
   #entries = /* @__PURE__ */ new Map();
   #flights = /* @__PURE__ */ new Map();
-  constructor(policy, now = Date.now) {
-    this.policy = policy;
-    this.now = now;
-    if (!Number.isSafeInteger(policy.capacity) || policy.capacity < 1)
-      throw new Error("Cache capacity is invalid.");
-    if (!Number.isFinite(policy.freshTtlMs) || policy.freshTtlMs < 0)
-      throw new Error("Cache fresh TTL is invalid.");
-    if (!Number.isFinite(policy.staleTtlMs) || policy.staleTtlMs <= policy.freshTtlMs)
-      throw new Error("Cache stale TTL is invalid.");
-  }
   async get(key, load2) {
     const current = this.now();
     const entry = this.#entries.get(key);
@@ -6524,20 +6521,17 @@ var ProjectionCache = class {
       void this.#refresh(key, load2).catch(() => void 0);
       return entry.value;
     }
-    if (entry !== void 0)
-      this.#entries.delete(key);
+    if (entry !== void 0) this.#entries.delete(key);
     return this.#refresh(key, load2);
   }
   #refresh(key, load2) {
     const active = this.#flights.get(key);
-    if (active !== void 0)
-      return active;
+    if (active !== void 0) return active;
     const flight = Promise.resolve().then(load2).then((value) => {
       this.#store(key, value);
       return value;
     }).finally(() => {
-      if (this.#flights.get(key) === flight)
-        this.#flights.delete(key);
+      if (this.#flights.get(key) === flight) this.#flights.delete(key);
     });
     this.#flights.set(key, flight);
     return flight;
@@ -6556,14 +6550,13 @@ var ProjectionCache = class {
     });
     while (this.#entries.size > this.policy.capacity) {
       const oldest = this.#entries.keys().next().value;
-      if (oldest === void 0)
-        break;
+      if (oldest === void 0) break;
       this.#entries.delete(oldest);
     }
   }
 };
 
-// dist/source.js
+// src/source.ts
 var origin = "http://www.35ge.info";
 var categories = Object.freeze([
   ["fantasy", "玄幻魔法", "/xs/1-default-0-0-0-0-0-0-1.html"],
@@ -6580,14 +6573,14 @@ var projectionCachePolicy = Object.freeze({
   books: Object.freeze({ capacity: 64, freshTtlMs: 10 * 6e4, staleTtlMs: 60 * 6e4 })
 });
 var ThirtyFiveSource = class {
-  context;
-  #listCache;
-  #bookCache;
   constructor(context2, options = {}) {
     this.context = context2;
     this.#listCache = new ProjectionCache(projectionCachePolicy.lists, options.now);
     this.#bookCache = new ProjectionCache(projectionCachePolicy.books, options.now);
   }
+  context;
+  #listCache;
+  #bookCache;
   async search(query) {
     const url = new URL("/modules/article/search.php", origin);
     url.searchParams.set("searchkey", query);
@@ -6598,8 +6591,7 @@ var ThirtyFiveSource = class {
   }
   async discover(categoryId, page) {
     const category = categories.find(([id]) => id === categoryId);
-    if (category === void 0)
-      throw new Error("Unknown category.");
+    if (category === void 0) throw new Error("Unknown category.");
     const path = category[2].replace(/-\d+\.html$/u, `-${page}.html`);
     const url = new URL(path, origin);
     return this.#listCache.get(`discover:${categoryId}:${page}`, async () => {
@@ -6619,18 +6611,15 @@ var ThirtyFiveSource = class {
     const chapterUrl = decodeChapterId(chapterId, bookUrl);
     const $ = load(await this.#html(chapterUrl));
     const content = $("#content").first();
-    if (content.length === 0)
-      throw new Error("Chapter content is missing.");
+    if (content.length === 0) throw new Error("Chapter content is missing.");
     let html3 = content.html() ?? "";
     html3 = html3.replace(/<script[\s\S]*?<\/script>/giu, "");
     const paragraphs = [];
     for (const fragment of html3.split(/<br\s*\/?>|<\/?p[^>]*>/giu)) {
       let line = clean(load(`<div>${fragment}</div>`)("div").text());
-      if (line === null)
-        continue;
+      if (line === null) continue;
       line = line.replace(/[（(][^)）]*飞速小说网[^)）]*[)）]/giu, "").replace(/飞速小说网\s*www[\s/／．.]*feisuxs\.com/giu, "").replace(/chaptererror\s*\(\s*\)\s*;?/giu, "").replace(/(?:本章未完|加入书签|章节报错|请收藏|最快更新|天才一秒记住|35中文网|35ge\.info)/giu, "").trim();
-      if (line !== "")
-        paragraphs.push(line);
+      if (line !== "") paragraphs.push(line);
     }
     return Object.freeze({
       chapterId,
@@ -6649,11 +6638,9 @@ var ThirtyFiveSource = class {
       const link = root2.find('.s2 a[href], a[href*="/xs/"]').first();
       const href = link.attr("href");
       const title = clean(link.text());
-      if (href === void 0 || title === null)
-        continue;
+      if (href === void 0 || title === null) continue;
       const url = new URL(href, pageUrl);
-      if (!isBookUrl(url) || seen.has(bookIdentity(url)))
-        continue;
+      if (!isBookUrl(url) || seen.has(bookIdentity(url))) continue;
       seen.add(bookIdentity(url));
       const category = stripBrackets(clean(root2.find(".s1").first().text())) ?? fallbackCategory;
       const latestLink = root2.find(".s3 a[href]").first();
@@ -6679,8 +6666,7 @@ var ThirtyFiveSource = class {
     return this.#bookCache.get(`book:${bookIdentity(bookUrl)}`, async () => {
       const $ = load(await this.#html(bookUrl));
       const title = meta($, "og:novel:book_name") ?? clean($("#info h1").first().text());
-      if (title === null)
-        throw new Error("Detail title is missing.");
+      if (title === null) throw new Error("Detail title is missing.");
       const category = meta($, "og:novel:category");
       const latestTitle = meta($, "og:novel:latest_chapter_name");
       const latestRaw = meta($, "og:novel:latest_chapter_url");
@@ -6705,18 +6691,15 @@ var ThirtyFiveSource = class {
       });
       const headings = $("#list dl dt").toArray();
       const bodyHeading = headings.find((element) => /正文/u.test($(element).text()));
-      if (bodyHeading === void 0)
-        throw new Error("Catalog body section is missing.");
+      if (bodyHeading === void 0) throw new Error("Catalog body section is missing.");
       const seen = /* @__PURE__ */ new Set();
       const chapters = [];
       $(bodyHeading).nextAll("dd").find("a[href]").each((_, element) => {
         const href = $(element).attr("href");
         const chapterTitle = clean($(element).text());
-        if (href === void 0 || chapterTitle === null)
-          return;
+        if (href === void 0 || chapterTitle === null) return;
         const chapterUrl = new URL(href, bookUrl);
-        if (!sameBookChapter(chapterUrl, bookUrl) || seen.has(chapterUrl.pathname))
-          return;
+        if (!sameBookChapter(chapterUrl, bookUrl) || seen.has(chapterUrl.pathname)) return;
         seen.add(chapterUrl.pathname);
         chapters.push(Object.freeze({
           id: encodeChapterId(chapterUrl),
@@ -6730,18 +6713,15 @@ var ThirtyFiveSource = class {
           attributes: Object.freeze([])
         }));
       });
-      if (chapters.length === 0)
-        throw new Error("Catalog is empty.");
-      if (chapters.length > 5e3)
-        throw new Error("Catalog exceeds the Runtime chapter limit.");
+      if (chapters.length === 0) throw new Error("Catalog is empty.");
+      if (chapters.length > 5e3) throw new Error("Catalog exceeds the Runtime chapter limit.");
       return Object.freeze({ detail, chapters: Object.freeze({ items: Object.freeze(chapters) }) });
     });
   }
   async #html(url) {
     const response = await this.context.http.fetch(url, { headers: { accept: "text/html,application/xhtml+xml", "accept-language": "zh-CN,zh;q=0.9", referer: `${origin}/` } });
     const body = await response.text();
-    if (!response.ok || /(?:cf-challenge|cf-turnstile|Just a moment|Checking your browser|challenge-platform)/iu.test(body))
-      throw new Error("Source page is unavailable.");
+    if (!response.ok || /(?:cf-challenge|cf-turnstile|Just a moment|Checking your browser|challenge-platform)/iu.test(body)) throw new Error("Source page is unavailable.");
     return body;
   }
   #proxyImage(url, referer) {
@@ -6788,20 +6768,16 @@ function cacheKey(scope, value) {
 }
 function decodeBookId(id) {
   const value = /^book:([A-Za-z0-9_-]+)$/u.exec(id)?.[1];
-  if (value === void 0)
-    throw new Error("Content ID is invalid.");
+  if (value === void 0) throw new Error("Content ID is invalid.");
   const identity = Buffer2.from(value, "base64url").toString("utf8");
-  if (!/^\/\d+\/\d+\/$/u.test(identity))
-    throw new Error("Content ID is invalid.");
+  if (!/^\/\d+\/\d+\/$/u.test(identity)) throw new Error("Content ID is invalid.");
   return new URL(`/xs${identity}`, origin);
 }
 function decodeChapterId(id, bookUrl) {
   const value = /^chapter:([A-Za-z0-9_-]+)$/u.exec(id)?.[1];
-  if (value === void 0)
-    throw new Error("Chapter ID is invalid.");
+  if (value === void 0) throw new Error("Chapter ID is invalid.");
   const url = new URL(Buffer2.from(value, "base64url").toString("utf8"), origin);
-  if (!sameBookChapter(url, bookUrl))
-    throw new Error("Chapter ID is invalid.");
+  if (!sameBookChapter(url, bookUrl)) throw new Error("Chapter ID is invalid.");
   return url;
 }
 function isBookUrl(url) {
@@ -6823,11 +6799,9 @@ function normalizeIntro(value) {
   return value === null ? null : clean(value.replace(/\\[nr]/gu, "").replace(/[\r\n\u2028\u2029]+/gu, " "));
 }
 function parseTimestamp(value) {
-  if (value === null)
-    return null;
+  if (value === null) return null;
   const match = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?$/u.exec(value);
-  if (match === null)
-    return null;
+  if (match === null) return null;
   const iso = `${match[1]}-${match[2]}-${match[3]}T${match[4]}:${match[5]}:${match[6] ?? "00"}+08:00`;
   return Number.isNaN(Date.parse(iso)) ? null : new Date(iso).toISOString();
 }
@@ -6839,18 +6813,14 @@ function stripBrackets(value) {
   return value === null ? null : clean(value.replace(/^\[|\]$/gu, ""));
 }
 function parseStatus(value) {
-  if (value === null)
-    return "unknown";
-  if (/(?:全本|完本|完结)/u.test(value))
-    return "completed";
-  if (/连载/u.test(value))
-    return "ongoing";
-  if (/(?:停更|暂停)/u.test(value))
-    return "hiatus";
+  if (value === null) return "unknown";
+  if (/(?:全本|完本|完结)/u.test(value)) return "completed";
+  if (/连载/u.test(value)) return "ongoing";
+  if (/(?:停更|暂停)/u.test(value)) return "hiatus";
   return "unknown";
 }
 
-// dist/index.mjs
+// src/index.mts
 var context;
 var source;
 async function activate(next2) {
@@ -6858,8 +6828,7 @@ async function activate(next2) {
   next2.log.info("source_activated");
 }
 async function search(request) {
-  if (request.cursor !== null)
-    throw new Error("Search cursor is unsupported.");
+  if (request.cursor !== null) throw new Error("Search cursor is unsupported.");
   return invoke("search", async (active) => Object.freeze({
     items: Object.freeze((await active.search(request.query)).slice(0, request.pageSize)),
     nextCursor: null,
@@ -6868,14 +6837,12 @@ async function search(request) {
 }
 async function discover(request) {
   if (request.target === null) {
-    if (request.cursor !== null || request.collectionId !== null)
-      throw new Error("Initial discovery request is invalid.");
+    if (request.cursor !== null || request.collectionId !== null) throw new Error("Initial discovery request is invalid.");
     const content2 = await invoke("discover_home", (active) => active.discover("fantasy", 1));
     return categoriesDocument(content2.slice(0, Math.min(request.pageSize, 10)));
   }
   const match = /^category:([a-z-]+)$/u.exec(request.target);
-  if (match?.[1] === void 0)
-    throw new Error("Discovery target is invalid.");
+  if (match?.[1] === void 0) throw new Error("Discovery target is invalid.");
   const categoryId = match[1];
   const page = cursorPage(request.cursor, `category:${categoryId}`);
   const content = await invoke("discover", (active) => active.discover(categoryId, page));
@@ -6883,8 +6850,7 @@ async function discover(request) {
   const collectionId = `category-books:${categoryId}`;
   const continuation = content.length > 0 && page < 50 ? Object.freeze({ target: request.target, cursor: `category:${categoryId}:${page + 1}` }) : null;
   if (request.collectionId !== null) {
-    if (request.collectionId !== collectionId)
-      throw new Error("Discovery collection is invalid.");
+    if (request.collectionId !== collectionId) throw new Error("Discovery collection is invalid.");
     return Object.freeze({ kind: "append", collectionId, items, continuation });
   }
   return Object.freeze({ kind: "document", document: { components: Object.freeze([{
@@ -6937,13 +6903,11 @@ function categoryIcon(id) {
   return { fantasy: "fantasy", wuxia: "wuxia", urban: "urban", history: "history", game: "game", "science-fiction": "scienceFiction", completed: "completed" }[id] ?? "other";
 }
 function requireSource() {
-  if (context === void 0)
-    throw new Error("Source is not activated.");
+  if (context === void 0) throw new Error("Source is not activated.");
   return source ??= new ThirtyFiveSource(context);
 }
 async function invoke(operation, action) {
-  if (context === void 0)
-    throw new Error("Source is not activated.");
+  if (context === void 0) throw new Error("Source is not activated.");
   context.log.info(`source_${operation}_started`);
   try {
     const result = await action(requireSource());
@@ -6955,12 +6919,10 @@ async function invoke(operation, action) {
   }
 }
 function cursorPage(cursor, scope) {
-  if (cursor === null)
-    return 1;
+  if (cursor === null) return 1;
   const escaped = scope.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
   const page = Number(new RegExp(`^${escaped}:(\\d+)$`, "u").exec(cursor)?.[1]);
-  if (!Number.isSafeInteger(page) || page < 2 || page > 50)
-    throw new Error("Cursor is invalid.");
+  if (!Number.isSafeInteger(page) || page < 2 || page > 50) throw new Error("Cursor is invalid.");
   return page;
 }
 export {

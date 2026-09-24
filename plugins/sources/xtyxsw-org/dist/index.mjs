@@ -6492,22 +6492,19 @@ function isNode(obj) {
 // node_modules/cheerio/dist/esm/slim.js
 var load = getLoad(getParse(parseDocument), esm_default);
 
-// dist/projection-cache.js
+// src/projection-cache.ts
 var ProjectionCache = class {
+  constructor(policy, now = Date.now) {
+    this.policy = policy;
+    this.now = now;
+    if (!Number.isSafeInteger(policy.capacity) || policy.capacity < 1) throw new Error("Cache capacity is invalid.");
+    if (!Number.isFinite(policy.freshTtlMs) || policy.freshTtlMs < 0) throw new Error("Cache fresh TTL is invalid.");
+    if (!Number.isFinite(policy.staleTtlMs) || policy.staleTtlMs <= policy.freshTtlMs) throw new Error("Cache stale TTL is invalid.");
+  }
   policy;
   now;
   #entries = /* @__PURE__ */ new Map();
   #flights = /* @__PURE__ */ new Map();
-  constructor(policy, now = Date.now) {
-    this.policy = policy;
-    this.now = now;
-    if (!Number.isSafeInteger(policy.capacity) || policy.capacity < 1)
-      throw new Error("Cache capacity is invalid.");
-    if (!Number.isFinite(policy.freshTtlMs) || policy.freshTtlMs < 0)
-      throw new Error("Cache fresh TTL is invalid.");
-    if (!Number.isFinite(policy.staleTtlMs) || policy.staleTtlMs <= policy.freshTtlMs)
-      throw new Error("Cache stale TTL is invalid.");
-  }
   async get(key, load2) {
     const current = this.now();
     const entry = this.#entries.get(key);
@@ -6520,20 +6517,17 @@ var ProjectionCache = class {
       void this.#refresh(key, load2).catch(() => void 0);
       return entry.value;
     }
-    if (entry !== void 0)
-      this.#entries.delete(key);
+    if (entry !== void 0) this.#entries.delete(key);
     return this.#refresh(key, load2);
   }
   #refresh(key, load2) {
     const active = this.#flights.get(key);
-    if (active !== void 0)
-      return active;
+    if (active !== void 0) return active;
     const flight = Promise.resolve().then(load2).then((value) => {
       this.#store(key, value);
       return value;
     }).finally(() => {
-      if (this.#flights.get(key) === flight)
-        this.#flights.delete(key);
+      if (this.#flights.get(key) === flight) this.#flights.delete(key);
     });
     this.#flights.set(key, flight);
     return flight;
@@ -6552,14 +6546,13 @@ var ProjectionCache = class {
     });
     while (this.#entries.size > this.policy.capacity) {
       const oldest = this.#entries.keys().next().value;
-      if (oldest === void 0)
-        break;
+      if (oldest === void 0) break;
       this.#entries.delete(oldest);
     }
   }
 };
 
-// dist/source.js
+// src/source.ts
 var origin = "https://www.xtyxsw.org";
 var categories = Object.freeze([
   ["fantasy", "玄幻", "sort", "1"],
@@ -6588,26 +6581,24 @@ var categories = Object.freeze([
 var projectionCachePolicy = Object.freeze({ lists: Object.freeze({ capacity: 32, freshTtlMs: 5 * 6e4, staleTtlMs: 30 * 6e4 }), details: Object.freeze({ capacity: 64, freshTtlMs: 10 * 6e4, staleTtlMs: 60 * 6e4 }), chapters: Object.freeze({ capacity: 64, freshTtlMs: 10 * 6e4, staleTtlMs: 60 * 6e4 }) });
 var searchFallbackPolicy = Object.freeze({ categoryBudget: 4, concurrency: 2, maxResults: 20 });
 var TianyueSource = class {
-  context;
-  #listCache;
-  #detailCache;
-  #chaptersCache;
   constructor(context2, options = {}) {
     this.context = context2;
     this.#listCache = new ProjectionCache(projectionCachePolicy.lists, options.now);
     this.#detailCache = new ProjectionCache(projectionCachePolicy.details, options.now);
     this.#chaptersCache = new ProjectionCache(projectionCachePolicy.chapters, options.now);
   }
+  context;
+  #listCache;
+  #detailCache;
+  #chaptersCache;
   async search(query) {
-    if (query.trim() === "")
-      return Object.freeze([]);
+    if (query.trim() === "") return Object.freeze([]);
     const url = new URL("/search.html", origin);
     const body = new URLSearchParams({ searchkey: query }).toString();
     try {
       const response = await this.#fetch(url, { method: "POST", headers: { accept: "text/html,application/xhtml+xml", "accept-language": "zh-CN,zh;q=0.9", "content-type": "application/x-www-form-urlencoded; charset=UTF-8", origin, referer: `${origin}/` }, body });
       const direct = this.parseList(response, url, null);
-      if (direct.length > 0)
-        return direct;
+      if (direct.length > 0) return direct;
     } catch {
       this.context.log.warn("source_direct_search_unavailable");
     }
@@ -6615,8 +6606,7 @@ var TianyueSource = class {
   }
   async discover(categoryId, page) {
     const category = categories.find(([id]) => id === categoryId);
-    if (category === void 0)
-      throw new Error("Unknown category.");
+    if (category === void 0) throw new Error("Unknown category.");
     return this.#listCache.get(`discover:${categoryId}:${page}`, () => this.#loadDiscovery(category, page));
   }
   async #loadDiscovery(category, page, signal) {
@@ -6630,15 +6620,13 @@ var TianyueSource = class {
     return Object.freeze({ items, hasNext });
   }
   parseList(html3, pageUrl, fallbackCategory) {
-    if (/找不到您要搜索的内容/u.test(html3))
-      return Object.freeze([]);
+    if (/找不到您要搜索的内容/u.test(html3)) return Object.freeze([]);
     const $ = load(html3);
     const seen = /* @__PURE__ */ new Set();
     const items = [];
     const push = (url, title, author, cover, description, latestTitle, latestUrl, category) => {
       const bookId = bookNumber(url);
-      if (bookId === null || seen.has(bookId))
-        return;
+      if (bookId === null || seen.has(bookId)) return;
       seen.add(bookId);
       items.push(summary({ bookId, title, author, url: readUrl(bookId), coverUrl: cover === null ? null : this.#proxyImage(new URL(cover, pageUrl), pageUrl), description, status: "unknown", updatedAt: null, latestTitle, latestUrl, categories: category === null ? [] : [category] }));
     };
@@ -6648,8 +6636,7 @@ var TianyueSource = class {
       const link = titleLink.length > 0 ? titleLink : root2.find(".pic a[href]").first();
       const href = link.attr("href");
       const title = clean(link.text()) ?? clean(root2.find(".pic img").first().attr("alt"));
-      if (href === void 0 || title === null)
-        return;
+      if (href === void 0 || title === null) return;
       const latest = root2.find(".sys a[href]").first();
       const latestHref = latest.attr("href");
       push(new URL(href, pageUrl), title, clean(root2.find(".info .title span a").first().text()) ?? stripAuthor(clean(root2.find(".info .title span").text())), root2.find(".pic img").first().attr("src") ?? null, clean(root2.find(".intro").text()), clean(latest.text()), latestHref === void 0 ? null : new URL(latestHref, pageUrl), fallbackCategory);
@@ -6659,8 +6646,7 @@ var TianyueSource = class {
       const link = root2.find("p.bookname a[href]").first();
       const href = link.attr("href");
       const title = clean(link.text());
-      if (href === void 0 || title === null)
-        return;
+      if (href === void 0 || title === null) return;
       const latest = root2.find("p.data a[href]").filter((_2, a) => !$(a).hasClass("layui-btn")).first();
       const latestHref = latest.attr("href");
       push(new URL(href, pageUrl), title, clean(root2.find("p.data a.layui-btn").first().text()), root2.find("img").first().attr("src") ?? null, null, clean(latest.text()), latestHref === void 0 ? null : new URL(latestHref, pageUrl), fallbackCategory);
@@ -6676,8 +6662,7 @@ var TianyueSource = class {
       const author = clean(heading.find("em").text())?.replace(/^作者[：:]?\s*/u, "") ?? null;
       heading.find("em").remove();
       const title = clean(heading.text());
-      if (title === null)
-        throw new Error("Detail title is missing.");
+      if (title === null) throw new Error("Detail title is missing.");
       const table = clean($(".box_info table").text()) ?? "";
       const category = clean(/小说分类[：:]?\s*([^首]+?)(?:首发状态|小说状态)/u.exec(table)?.[1]);
       const status = parseStatus(/小说状态[：:]?\s*([^收]+?)(?:收藏总数|$)/u.exec(table)?.[1] ?? null);
@@ -6698,19 +6683,15 @@ var TianyueSource = class {
       $(".link_14 dl dd a[href]").each((_, element) => {
         const href = $(element).attr("href");
         const title = clean($(element).text());
-        if (href === void 0 || title === null)
-          return;
+        if (href === void 0 || title === null) return;
         const chapter = new URL(href, url);
         const chapterNumberValue = chapterNumber(chapter, bookId);
-        if (chapterNumberValue === null || seen.has(chapterNumberValue))
-          return;
+        if (chapterNumberValue === null || seen.has(chapterNumberValue)) return;
         seen.add(chapterNumberValue);
         chapters.push(Object.freeze({ id: `chapter:${bookId}:${chapterNumberValue}`, title, order: chapters.length, url: chapter.toString(), volumeTitle: null, wordCount: null, updatedAt: null, isLocked: false, attributes: Object.freeze([]) }));
       });
-      if (chapters.length === 0)
-        throw new Error("Catalog is empty.");
-      if (chapters.length > 5e3)
-        throw new Error("Catalog exceeds the Runtime chapter limit.");
+      if (chapters.length === 0) throw new Error("Catalog is empty.");
+      if (chapters.length > 5e3) throw new Error("Catalog exceeds the Runtime chapter limit.");
       return Object.freeze({ items: Object.freeze(chapters) });
     });
   }
@@ -6722,28 +6703,23 @@ var TianyueSource = class {
     const paragraphs = [];
     let title = null;
     for (let page = 0; page < 120; page += 1) {
-      if (visited.has(url.toString()))
-        throw new Error("Chapter pagination loop detected.");
+      if (visited.has(url.toString())) throw new Error("Chapter pagination loop detected.");
       visited.add(url.toString());
       const $ = load(await this.#fetch(url));
       title ??= clean($("h2").first().text());
       for (const element of $("#content p").toArray()) {
         const value = clean($(element).text());
-        if (value !== null && !isNoise(value))
-          paragraphs.push(value);
+        if (value !== null && !isNoise(value)) paragraphs.push(value);
       }
       const next2 = $("#thumb a,.pager a").toArray().find((element) => {
         const label = (clean($(element).text()) ?? "").replace(/\s+/gu, "");
         return label.includes("下一页") && !label.includes("下一章");
       });
-      if (next2 === void 0)
-        return Object.freeze({ chapterId, contentKind: "novel", title, updatedAt: null, text: paragraphs.join("\n\n"), pages: Object.freeze([]) });
+      if (next2 === void 0) return Object.freeze({ chapterId, contentKind: "novel", title, updatedAt: null, text: paragraphs.join("\n\n"), pages: Object.freeze([]) });
       const href = $(next2).attr("href");
-      if (href === void 0)
-        throw new Error("Chapter continuation is invalid.");
+      if (href === void 0) throw new Error("Chapter continuation is invalid.");
       const candidate = new URL(href, url);
-      if (!isChapterContinuation(candidate, bookId, chapterNumberValue) || candidate.toString() === url.toString())
-        throw new Error("Chapter continuation is invalid.");
+      if (!isChapterContinuation(candidate, bookId, chapterNumberValue) || candidate.toString() === url.toString()) throw new Error("Chapter continuation is invalid.");
       url = candidate;
     }
     throw new Error("Chapter page count exceeds the source limit.");
@@ -6759,23 +6735,19 @@ var TianyueSource = class {
     let stopped = false;
     const worker = async () => {
       for (; ; ) {
-        if (stopped)
-          return;
+        if (stopped) return;
         const index2 = next2;
         next2 += 1;
         const category = candidates[index2];
-        if (category === void 0)
-          return;
+        if (category === void 0) return;
         let result;
         try {
           result = await this.#loadDiscovery(category, 1, controller.signal);
         } catch (error) {
-          if (stopped && isAbortError(error))
-            return;
+          if (stopped && isAbortError(error)) return;
           throw error;
         }
-        if (stopped)
-          return;
+        if (stopped) return;
         for (const item of result.items) {
           const hay = `${item.title} ${item.author ?? ""}`.toLocaleLowerCase("zh-CN");
           if (hay.includes(needle) && !seen.has(item.id)) {
@@ -6803,8 +6775,7 @@ var TianyueSource = class {
     const request = { ...init ?? { headers: { accept: "text/html,application/xhtml+xml", "accept-language": "zh-CN,zh;q=0.9", referer: `${origin}/` } }, proxyMode: "direct" };
     const response = await this.context.http.fetch(url, request);
     const body = await response.text();
-    if (!response.ok || /(?:cf-challenge|cf-turnstile|Just a moment|Checking your browser|challenge-platform)/iu.test(body))
-      throw new Error("Source page is unavailable.");
+    if (!response.ok || /(?:cf-challenge|cf-turnstile|Just a moment|Checking your browser|challenge-platform)/iu.test(body)) throw new Error("Source page is unavailable.");
     return body;
   }
   #proxyImage(url, referer) {
@@ -6826,14 +6797,12 @@ function chapterNumber(url, bookId) {
 }
 function decodeBookId(id) {
   const value = /^book:(\d+)$/u.exec(id)?.[1];
-  if (value === void 0)
-    throw new Error("Content ID is invalid.");
+  if (value === void 0) throw new Error("Content ID is invalid.");
   return value;
 }
 function decodeChapterId(id, bookId) {
   const match = /^chapter:(\d+):(\d+)$/u.exec(id);
-  if (match?.[1] !== bookId || match[2] === void 0)
-    throw new Error("Chapter ID is invalid.");
+  if (match?.[1] !== bookId || match[2] === void 0) throw new Error("Chapter ID is invalid.");
   return match[2];
 }
 function isChapterContinuation(url, bookId, chapterId) {
@@ -6850,21 +6819,17 @@ function stripAuthor(value) {
   return value === null ? null : clean(value.replace(/^作者[：:]?\s*/u, ""));
 }
 function parseStatus(value) {
-  if (value === null)
-    return "unknown";
-  if (/(?:完结|已完结|完本)/u.test(value))
-    return "completed";
-  if (/(?:连载|更新)/u.test(value))
-    return "ongoing";
-  if (/(?:停更|暂停)/u.test(value))
-    return "hiatus";
+  if (value === null) return "unknown";
+  if (/(?:完结|已完结|完本)/u.test(value)) return "completed";
+  if (/(?:连载|更新)/u.test(value)) return "ongoing";
+  if (/(?:停更|暂停)/u.test(value)) return "hiatus";
   return "unknown";
 }
 function isNoise(value) {
   return /(?:天悦小说网|手机阅读|无弹窗|小主，这个章节后面还有哦|请点击下一页继续阅读|请大家收藏：|更新速度全网最快|章节报错|加入书签)/u.test(value);
 }
 
-// dist/index.mjs
+// src/index.mts
 var context;
 var source;
 async function activate(next2) {
@@ -6872,28 +6837,24 @@ async function activate(next2) {
   next2.log.info("source_activated");
 }
 async function search(request) {
-  if (request.cursor !== null)
-    throw new Error("Search cursor is unsupported.");
+  if (request.cursor !== null) throw new Error("Search cursor is unsupported.");
   return invoke("search", async (active) => Object.freeze({ items: Object.freeze((await active.search(request.query)).slice(0, request.pageSize)), nextCursor: null, totalCount: null }));
 }
 async function discover(request) {
   if (request.target === null) {
-    if (request.cursor !== null || request.collectionId !== null)
-      throw new Error("Initial discovery request is invalid.");
+    if (request.cursor !== null || request.collectionId !== null) throw new Error("Initial discovery request is invalid.");
     const result2 = await invoke("discover_home", (active) => active.discover("new", 1));
     return categoriesDocument(result2.items.slice(0, Math.min(request.pageSize, 10)));
   }
   const categoryId = /^category:([a-z-]+)$/u.exec(request.target)?.[1];
-  if (categoryId === void 0)
-    throw new Error("Discovery target is invalid.");
+  if (categoryId === void 0) throw new Error("Discovery target is invalid.");
   const page = cursorPage(request.cursor, `category:${categoryId}`);
   const result = await invoke("discover", (active) => active.discover(categoryId, page));
   const items = Object.freeze(result.items.slice(0, request.pageSize).map((content) => Object.freeze({ content, rank: null, metric: null, recommendation: null })));
   const collectionId = `category-books:${categoryId}`;
   const continuation = result.hasNext ? Object.freeze({ target: request.target, cursor: `category:${categoryId}:${page + 1}` }) : null;
   if (request.collectionId !== null) {
-    if (request.collectionId !== collectionId)
-      throw new Error("Discovery collection is invalid.");
+    if (request.collectionId !== collectionId) throw new Error("Discovery collection is invalid.");
     return Object.freeze({ kind: "append", collectionId, items, continuation });
   }
   return Object.freeze({ kind: "document", document: { components: Object.freeze([{ type: "section", id: `${collectionId}-section`, title: categories.find(([id]) => id === categoryId)?.[1] ?? "分类", subtitle: null, children: Object.freeze([{ type: "contentCollection", id: collectionId, layout: "list", items, continuation }]) }]) } });
@@ -6915,13 +6876,11 @@ function categoriesDocument(content) {
   return Object.freeze({ kind: "document", document: { components: Object.freeze([...items.length === 0 ? [] : [{ type: "section", id: "latest-section", title: "新书入库", subtitle: "官网新近收录作品", icon: "newRelease", children: Object.freeze([{ type: "contentCollection", id: "latest-books", layout: "shelf", items, continuation: null }]) }], { type: "section", id: "categories-section", title: "分类与榜单", subtitle: "按题材或热度继续发现", icon: "explore", children: Object.freeze([{ type: "categoryCollection", id: "categories", layout: "chips", categories: Object.freeze(categories.map(([id, title]) => Object.freeze({ id, title, target: `category:${id}`, count: null, url: null, icon: id === "visits" ? "hot" : id === "votes" ? "recommendation" : id === "favorites" ? "star" : id === "new" ? "newRelease" : id.includes("romance") ? "romance" : id === "fantasy" || id === "fantasy-west" ? "fantasy" : id === "wuxia" || id === "xianxia" ? "wuxia" : id === "urban" ? "urban" : id === "history" ? "history" : id === "military" ? "military" : id === "mystery" ? "mystery" : id === "game" ? "game" : id === "science-fiction" ? "scienceFiction" : id === "sports" ? "sports" : "category" }))) }]) }]) } });
 }
 function requireSource() {
-  if (context === void 0)
-    throw new Error("Source is not activated.");
+  if (context === void 0) throw new Error("Source is not activated.");
   return source ??= new TianyueSource(context);
 }
 async function invoke(operation, action) {
-  if (context === void 0)
-    throw new Error("Source is not activated.");
+  if (context === void 0) throw new Error("Source is not activated.");
   context.log.info(`source_${operation}_started`);
   try {
     const result = await action(requireSource());
@@ -6933,12 +6892,10 @@ async function invoke(operation, action) {
   }
 }
 function cursorPage(cursor, scope) {
-  if (cursor === null)
-    return 1;
+  if (cursor === null) return 1;
   const escaped = scope.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
   const page = Number(new RegExp(`^${escaped}:(\\d+)$`, "u").exec(cursor)?.[1]);
-  if (!Number.isSafeInteger(page) || page < 2 || page > 100)
-    throw new Error("Cursor is invalid.");
+  if (!Number.isSafeInteger(page) || page < 2 || page > 100) throw new Error("Cursor is invalid.");
   return page;
 }
 export {

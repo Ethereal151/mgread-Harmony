@@ -47,7 +47,7 @@ var require_boolbase = __commonJS({
   }
 });
 
-// dist/source.js
+// src/source.ts
 import { Buffer as Buffer2 } from "node:buffer";
 
 // node_modules/cheerio/dist/esm/options.js
@@ -6699,7 +6699,7 @@ function byteLength(value) {
   }
 }
 
-// dist/source.js
+// src/source.ts
 var origin = "https://m.diyibanzhu.me";
 var browserTimeoutMs = 12e4;
 var listingPolicy = Object.freeze({ namespace: "listing", staleAfterMs: 10 * 60 * 1e3, serveStaleWhileRevalidate: true });
@@ -6707,15 +6707,15 @@ var detailPolicy = Object.freeze({ namespace: "detail", staleAfterMs: 60 * 60 * 
 var catalogPolicy = Object.freeze({ namespace: "catalog", staleAfterMs: 60 * 60 * 1e3, allowStaleOnError: false });
 var categories = Object.freeze([["total", "总人气榜", "/wap.php?action=shuku&order=1"], ["month", "月人气榜", "/wap.php?action=shuku&order=2"], ["new", "新书榜", "/wap.php?action=shuku&order=3"], ["words", "字数榜", "/wap.php?action=shuku&order=4"], ["updates", "最新更新", "/wap.php?action=shuku"], ["fantasy", "玄幻·奇幻", "/wap.php?action=shuku&order=3&tid=4"], ["martial", "仙侠·武侠", "/wap.php?action=shuku&order=3&tid=3"], ["city", "都市·言情", "/wap.php?action=shuku&order=3&tid=2"], ["history", "穿越·历史", "/wap.php?action=shuku&order=3&tid=1"], ["scifi", "科幻·灵异", "/wap.php?action=shuku&order=3&tid=6"], ["other", "其他小说", "/wap.php?action=shuku&order=3&tid=8"]]);
 var DiyibanzhuSource = class {
+  constructor(context2) {
+    this.context = context2;
+    this.#cache = new PluginCache(context2.cacheDir, { logger: context2.log });
+  }
   context;
   #cache;
   #pagePromise;
   #readyPromise;
   #browserTail = Promise.resolve();
-  constructor(context2) {
-    this.context = context2;
-    this.#cache = new PluginCache(context2.cacheDir, { logger: context2.log });
-  }
   async search(query) {
     const url = new URL("/wap.php?action=search", origin);
     const html3 = await this.#browser(url, "POST", `objectType=2&wd=${encodeURIComponent(query)}`);
@@ -6723,8 +6723,7 @@ var DiyibanzhuSource = class {
   }
   async discover(id, page) {
     const rule = categories.find(([key]) => key === id);
-    if (rule === void 0)
-      throw new Error("Unknown category.");
+    if (rule === void 0) throw new Error("Unknown category.");
     const firstUrl = new URL(rule[2], origin);
     this.context.log.info("source_discover_listing_started");
     const firstHtml = await this.#cache.getOrFetchText(firstUrl, listingPolicy, () => this.#browser(firstUrl, "GET", null));
@@ -6744,11 +6743,9 @@ var DiyibanzhuSource = class {
       const link = root2.find("a.name,.right a").first();
       const href = link.attr("href");
       const title = clean(link.text()) ?? clean(root2.find(".right .name").text());
-      if (href === void 0 || title === null)
-        return;
+      if (href === void 0 || title === null) return;
       const url = new URL(href, base);
-      if (!isBook(url) || seen.has(url.toString()))
-        return;
+      if (!isBook(url) || seen.has(url.toString())) return;
       seen.add(url.toString());
       const info = clean(root2.find(".info").text()) ?? "";
       const author = clean(root2.find(".author").text()) ?? clean(/作者[：:]\s*(.+?)(?=字数[：:]|$)/u.exec(info)?.[1]);
@@ -6763,8 +6760,7 @@ var DiyibanzhuSource = class {
     const html3 = await this.#cache.getOrFetchText(url, detailPolicy, () => this.#browser(url, "GET", null));
     const $ = load(html3);
     const title = clean($(".mod.detail .right h1,.detail h1").first().text());
-    if (title === null)
-      throw new Error("Detail title is missing.");
+    if (title === null) throw new Error("Detail title is missing.");
     const info = clean($(".mod.detail .right p").text()) ?? "";
     const author = clean(/作者[：:]\s*(.+?)(?=类型|字数|人气|$)/u.exec(info)?.[1]) ?? clean($(".mod.detail .author").text());
     const kind = clean(/类型[：:]\s*(.+?)(?=字数|人气|$)/u.exec(info)?.[1]);
@@ -6789,24 +6785,19 @@ var DiyibanzhuSource = class {
       block.find(".bd li a").each((_, element) => {
         const href = $(element).attr("href");
         const title = clean($(element).text());
-        if (href === void 0 || title === null)
-          return;
+        if (href === void 0 || title === null) return;
         const chapter = new URL(href, url);
-        if (!isChapter(chapter) || seen.has(chapter.toString()))
-          return;
+        if (!isChapter(chapter) || seen.has(chapter.toString())) return;
         seen.add(chapter.toString());
         items.push({ id: `chapter:${token(chapter)}`, title, order: items.length, url: chapter.toString(), volumeTitle: null, wordCount: null, updatedAt: null, isLocked: false, attributes: Object.freeze([]) });
       });
       const next2 = $("a.nextPage,.pagelistbox .nextPage").first().attr("href");
-      if (next2 === void 0)
-        break;
+      if (next2 === void 0) break;
       const candidate = new URL(next2, url);
-      if (candidate.toString() === url.toString() || candidate.origin !== origin)
-        break;
+      if (candidate.toString() === url.toString() || candidate.origin !== origin) break;
       url = candidate;
     }
-    if (items.length === 0)
-      throw new Error("Catalog is empty.");
+    if (items.length === 0) throw new Error("Catalog is empty.");
     return Object.freeze({ items: Object.freeze(items) });
   }
   async content(id, chapterId) {
@@ -6821,26 +6812,21 @@ var DiyibanzhuSource = class {
       const raw = $("#nr1").text();
       for (const value of raw.split(/\r?\n/u)) {
         const line = value.replace(/[\u00a0\u3000]/gu, " ").trim();
-        if (line !== "" && !/(?:本章未完|点击.*继续阅读|加入书签|章节报错|第一版主)/u.test(line))
-          lines.push(line);
+        if (line !== "" && !/(?:本章未完|点击.*继续阅读|加入书签|章节报错|第一版主)/u.test(line)) lines.push(line);
       }
       let next2;
       $(".chapterPages a[href]").each((_, element) => {
-        if (next2 !== void 0)
-          return;
+        if (next2 !== void 0) return;
         const candidate = new URL($(element).attr("href"), url);
         const number = Number(/_(\d+)\.html$/u.exec(candidate.pathname)?.[1] ?? candidate.searchParams.get("fenye"));
         const current = Number(/_(\d+)\.html$/u.exec(url.pathname)?.[1] ?? url.searchParams.get("fenye") ?? 1);
-        if (number === current + 1)
-          next2 = candidate;
+        if (number === current + 1) next2 = candidate;
       });
-      if (next2 === void 0 || next2.toString() === url.toString())
-        break;
+      if (next2 === void 0 || next2.toString() === url.toString()) break;
       url = next2;
     }
     const text3 = lines.join("\n\n");
-    if (text3 === "")
-      throw new Error("Chapter text is empty.");
+    if (text3 === "") throw new Error("Chapter text is empty.");
     return Object.freeze({ chapterId, contentKind: "novel", title: null, updatedAt: null, text: text3, pages: Object.freeze([]) });
   }
   #browser(url, method, body) {
@@ -6866,12 +6852,9 @@ var DiyibanzhuSource = class {
         response = await this.#fetchWithDiagnostics(page, url, method, body, "retry");
       }
       stage = "response_validation";
-      if (response.status >= 400)
-        throw new Error(`Browser request failed with status ${response.status}.`);
-      if (typeof response.body !== "string")
-        throw new Error("Browser returned a non-text response.");
-      if (isCf(response.body))
-        throw new Error("Browser verification is incomplete.");
+      if (response.status >= 400) throw new Error(`Browser request failed with status ${response.status}.`);
+      if (typeof response.body !== "string") throw new Error("Browser returned a non-text response.");
+      if (isCf(response.body)) throw new Error("Browser verification is incomplete.");
       return response.body;
     } catch (error) {
       this.context.log.warn(`source_browser_failed_stage_${stage}`);
@@ -6879,28 +6862,24 @@ var DiyibanzhuSource = class {
     }
   }
   async #page() {
-    if (this.#pagePromise !== void 0)
-      return this.#pagePromise;
+    if (this.#pagePromise !== void 0) return this.#pagePromise;
     const pending = this.context.webview.open({ visible: false, timeoutMs: browserTimeoutMs });
     this.#pagePromise = pending;
     try {
       return await pending;
     } catch (error) {
-      if (this.#pagePromise === pending)
-        this.#pagePromise = void 0;
+      if (this.#pagePromise === pending) this.#pagePromise = void 0;
       throw error;
     }
   }
   async #ready(page) {
-    if (this.#readyPromise !== void 0)
-      return this.#readyPromise;
+    if (this.#readyPromise !== void 0) return this.#readyPromise;
     const pending = this.#verify(page, new URL(origin));
     this.#readyPromise = pending;
     try {
       await pending;
     } catch (error) {
-      if (this.#readyPromise === pending)
-        this.#readyPromise = void 0;
+      if (this.#readyPromise === pending) this.#readyPromise = void 0;
       throw error;
     }
   }
@@ -6916,11 +6895,9 @@ var DiyibanzhuSource = class {
       await this.#waitForVerification(page);
       this.context.log.info("source_browser_verification_wait_completed");
       const current = new URL(await page.getUrl({ timeoutMs: browserTimeoutMs }));
-      if (current.origin !== origin)
-        throw new Error("Browser verification left the source origin.");
+      if (current.origin !== origin) throw new Error("Browser verification left the source origin.");
       html3 = await page.getHtml({ timeoutMs: browserTimeoutMs });
-      if (isCf(html3))
-        throw new Error("Browser verification is incomplete.");
+      if (isCf(html3)) throw new Error("Browser verification is incomplete.");
       await page.hide({ timeoutMs: browserTimeoutMs });
     }
   }
@@ -6928,8 +6905,7 @@ var DiyibanzhuSource = class {
     const deadline = Date.now() + browserTimeoutMs;
     while (Date.now() < deadline) {
       await delay(1e3);
-      if (!isCf(await page.getHtml({ timeoutMs: browserTimeoutMs })))
-        return;
+      if (!isCf(await page.getHtml({ timeoutMs: browserTimeoutMs }))) return;
     }
     throw new Error("Browser verification is incomplete.");
   }
@@ -6943,8 +6919,7 @@ var DiyibanzhuSource = class {
     return page.fetch({ url: url.toString(), method, headers: method === "POST" ? { "content-type": "application/x-www-form-urlencoded", accept: "text/html" } : { accept: "text/html" }, body, responseType: "text", timeoutMs: browserTimeoutMs });
   }
   #proxy(url, referer) {
-    if (url.origin !== origin || referer.origin !== origin)
-      throw new Error("Image URL is invalid.");
+    if (url.origin !== origin || referer.origin !== origin) throw new Error("Image URL is invalid.");
     return this.context.resource.proxy({ kind: "image", url: url.toString(), headers: { Accept: "image/*", Referer: referer.toString() } });
   }
 };
@@ -6956,11 +6931,9 @@ function token(url) {
 }
 function decode(value, prefix) {
   const match = new RegExp(`^${prefix}:([A-Za-z0-9_-]+)$`, "u").exec(value);
-  if (match?.[1] === void 0)
-    throw new Error("Opaque ID is invalid.");
+  if (match?.[1] === void 0) throw new Error("Opaque ID is invalid.");
   const url = new URL(Buffer2.from(match[1], "base64url").toString("utf8"), origin);
-  if (url.origin !== origin || (prefix === "book" ? !isBook(url) : !isChapter(url)))
-    throw new Error("Opaque ID is invalid.");
+  if (url.origin !== origin || (prefix === "book" ? !isBook(url) : !isChapter(url))) throw new Error("Opaque ID is invalid.");
   return url;
 }
 function isBook(url) {
@@ -6973,17 +6946,13 @@ function paginationUrl(html3, base, page) {
   const $ = load(html3);
   let template;
   $("a[href]").each((_, element) => {
-    if (template !== void 0)
-      return;
+    if (template !== void 0) return;
     const href = $(element).attr("href");
-    if (href === void 0)
-      return;
+    if (href === void 0) return;
     const candidate = new URL(href, base);
-    if (candidate.origin === origin && candidate.pathname === "/wap.php" && candidate.searchParams.get("action") === "shuku" && candidate.searchParams.has("pageno"))
-      template = candidate;
+    if (candidate.origin === origin && candidate.pathname === "/wap.php" && candidate.searchParams.get("action") === "shuku" && candidate.searchParams.has("pageno")) template = candidate;
   });
-  if (template === void 0)
-    throw new Error("Listing pagination is missing.");
+  if (template === void 0) throw new Error("Listing pagination is missing.");
   template.searchParams.set("pageno", String(page));
   return template;
 }
@@ -6993,8 +6962,7 @@ function clean(value) {
 }
 function parseCount(value) {
   const match = /([0-9]+(?:\.[0-9]+)?)(万?)/u.exec(value);
-  if (match?.[1] === void 0)
-    return null;
+  if (match?.[1] === void 0) return null;
   const count = Math.round(Number(match[1]) * (match[2] === "万" ? 1e4 : 1));
   return Number.isSafeInteger(count) ? count : null;
 }
@@ -7005,21 +6973,17 @@ function needsVerification(status, body) {
   return status === 403 || status === 503 || typeof body === "string" && isCf(body);
 }
 function statusClass(status) {
-  if (status >= 200 && status < 300)
-    return "2xx";
-  if (status >= 300 && status < 400)
-    return "3xx";
-  if (status >= 400 && status < 500)
-    return "4xx";
-  if (status >= 500 && status < 600)
-    return "5xx";
+  if (status >= 200 && status < 300) return "2xx";
+  if (status >= 300 && status < 400) return "3xx";
+  if (status >= 400 && status < 500) return "4xx";
+  if (status >= 500 && status < 600) return "5xx";
   return "other";
 }
 function delay(ms) {
   return new Promise((resolve2) => setTimeout(resolve2, ms));
 }
 
-// dist/index.mjs
+// src/index.mts
 var context;
 var source;
 async function activate(next2) {
@@ -7029,8 +6993,7 @@ async function activate(next2) {
 }
 async function search(request) {
   return invoke("search", async () => {
-    if (request.cursor !== null)
-      throw new Error("Search cursor is unsupported by this endpoint.");
+    if (request.cursor !== null) throw new Error("Search cursor is unsupported by this endpoint.");
     const items = (await requireSource().search(request.query)).slice(0, request.pageSize);
     return Object.freeze({ items, nextCursor: null, totalCount: null });
   });
@@ -7038,20 +7001,17 @@ async function search(request) {
 async function discover(request) {
   return invoke("discover", async () => {
     if (request.target === null) {
-      if (request.cursor !== null || request.collectionId !== null)
-        throw new Error("Initial discovery request is invalid.");
+      if (request.cursor !== null || request.collectionId !== null) throw new Error("Initial discovery request is invalid.");
       const content = (await requireSource().discover("updates", 1)).slice(0, Math.min(request.pageSize, 10));
       return homeDocument(content);
     }
     const match = /^category:([a-z-]+)$/u.exec(request.target);
-    if (match?.[1] === void 0)
-      throw new Error("Target is invalid.");
+    if (match?.[1] === void 0) throw new Error("Target is invalid.");
     const page = cursor(request.cursor, `category:${match[1]}`);
     const items = (await requireSource().discover(match[1], page)).slice(0, request.pageSize).map((content) => Object.freeze({ content, rank: null, metric: null, recommendation: null }));
     const collectionId = `category-books:${match[1]}`;
     const continuation = items.length === request.pageSize ? Object.freeze({ target: request.target, cursor: `category:${match[1]}:${page + 1}` }) : null;
-    if (request.collectionId !== null)
-      return Object.freeze({ kind: "append", collectionId, items: Object.freeze(items), continuation });
+    if (request.collectionId !== null) return Object.freeze({ kind: "append", collectionId, items: Object.freeze(items), continuation });
     return Object.freeze({ kind: "document", document: { components: Object.freeze([{ type: "section", id: `${collectionId}-section`, title: categories.find(([id]) => id === match[1])?.[1] ?? "分类", subtitle: null, children: Object.freeze([{ type: "contentCollection", id: collectionId, layout: "list", items: Object.freeze(items), continuation }]) }]) } });
   });
 }
@@ -7072,13 +7032,11 @@ async function getContent(request) {
   return invoke("content", () => requireSource().content(request.id, request.chapterId));
 }
 function requireSource() {
-  if (context === void 0)
-    throw new Error("Source is not activated.");
+  if (context === void 0) throw new Error("Source is not activated.");
   return source ??= new DiyibanzhuSource(context);
 }
 async function invoke(name, action) {
-  if (context === void 0)
-    throw new Error("Source is not activated.");
+  if (context === void 0) throw new Error("Source is not activated.");
   context.log.info(`source_${name}_started`);
   try {
     const result = await action();
@@ -7090,11 +7048,9 @@ async function invoke(name, action) {
   }
 }
 function cursor(value, scope) {
-  if (value === null)
-    return 1;
+  if (value === null) return 1;
   const page = Number(new RegExp(`^${scope}:(\\d+)$`, "u").exec(value)?.[1]);
-  if (!Number.isSafeInteger(page) || page < 2)
-    throw new Error("Cursor is invalid.");
+  if (!Number.isSafeInteger(page) || page < 2) throw new Error("Cursor is invalid.");
   return page;
 }
 export {

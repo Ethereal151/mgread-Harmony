@@ -1,6 +1,6 @@
 import { createRequire as __mgreadCreateRequire } from 'node:module'; const require = __mgreadCreateRequire(import.meta.url);
 
-// dist/index.mjs
+// src/index.mts
 var site = "https://www.deqixs.cc";
 var agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36";
 var headers = { "User-Agent": agent, Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8", "Accept-Language": "zh-CN,zh;q=0.9", Referer: `${site}/` };
@@ -14,8 +14,7 @@ async function activate(next) {
 }
 async function search(request) {
   const query = request.query.trim();
-  if (query === "")
-    return frozen({ items: [], nextCursor: null, totalCount: 0 });
+  if (query === "") return frozen({ items: [], nextCursor: null, totalCount: 0 });
   const page = cursorPage(request.cursor, "search"), url = `${site}/modules/article/search.php?searchkey=${encodeURIComponent(query)}&action=search&searchtype=articlename&page=${page}`, source = await get(url), values = parseBooks(source), single = values.length ? values : singleBook(source), items = single.map(summary).slice(0, clamp(request.pageSize));
   return frozen({ items, nextCursor: items.length >= clamp(request.pageSize) ? `search:${page + 1}` : null, totalCount: null });
 }
@@ -23,15 +22,12 @@ async function searchSuggestions(_request) {
   return frozen({ items: [], nextCursor: null });
 }
 async function discover(request) {
-  if (request.target === null)
-    return frozen({ kind: "document", document: { components: [{ type: "section", id: "deqi-channels", title: "得奇小说网", subtitle: "免费小说分类", icon: "book", children: [{ type: "categoryCollection", id: "deqi-channel-list", layout: "chips", categories: channels.map((channel2) => ({ id: channel2.id, title: channel2.title, target: `channel:${channel2.id}`, count: null, url: null, icon: "book" })) }] }] } });
+  if (request.target === null) return frozen({ kind: "document", document: { components: [{ type: "section", id: "deqi-channels", title: "得奇小说网", subtitle: "免费小说分类", icon: "book", children: [{ type: "categoryCollection", id: "deqi-channel-list", layout: "chips", categories: channels.map((channel2) => ({ id: channel2.id, title: channel2.title, target: `channel:${channel2.id}`, count: null, url: null, icon: "book" })) }] }] } });
   const channel = channels.find((value) => request.target === `channel:${value.id}`);
-  if (!channel)
-    throw new Error("Discovery target is invalid.");
+  if (!channel) throw new Error("Discovery target is invalid.");
   const page = cursorPage(request.cursor, request.target), size = clamp(request.pageSize), values = parseBooks(await get(`${site}/sort/${channel.id}/${page}.html`)), contents = values.map(summary).slice(0, size), collectionId = `deqi:${channel.id}`, items = contents.map((content) => frozen({ content, rank: null, metric: null, recommendation: null })), continuation = values.length >= size ? frozen({ target: request.target, cursor: `channel:${channel.id}:${page + 1}` }) : null;
   if (request.collectionId !== null) {
-    if (request.collectionId !== collectionId)
-      throw new Error("Discovery collection is invalid.");
+    if (request.collectionId !== collectionId) throw new Error("Discovery collection is invalid.");
     return frozen({ kind: "append", collectionId, items, continuation });
   }
   return frozen({ kind: "document", document: { components: [{ type: "section", id: `${collectionId}:section`, title: channel.title, subtitle: null, icon: "book", children: [{ type: "contentCollection", id: collectionId, layout: "coverGrid", items, continuation }] }] } });
@@ -46,8 +42,7 @@ async function getChapters(request) {
 }
 async function getContent(request) {
   const id = contentId(request.id), chapter = chapterNative(request.chapterId, id), pageUrl = `${site}/books/${id}/${chapter}.html`, page = await get(pageUrl), script = await get(`${site}/scripts/chapter.js.php?aid=${id}&cid=${chapter}&referrer=${encodeURIComponent(pageUrl)}`, { ...headers, Referer: pageUrl, Accept: "*/*" }), token = script.match(/var chapterToken = '([^']+)'/u)?.[1], timestamp = script.match(/var timestamp = (\d+)/u)?.[1], nonce = script.match(/var nonce = '([^']+)'/u)?.[1];
-  if (!token || !timestamp || !nonce)
-    throw new Error("Chapter token is unavailable.");
+  if (!token || !timestamp || !nonce) throw new Error("Chapter token is unavailable.");
   const api = `${site}/modules/article/ajax2.php?aid=${id}&cid=${chapter}&token=${encodeURIComponent(token)}&timestamp=${timestamp}&nonce=${encodeURIComponent(nonce)}`, raw = await get(api, { ...headers, Origin: site, Referer: pageUrl, "X-Requested-With": "XMLHttpRequest", Accept: "application/json, text/javascript, */*; q=0.01" }, false);
   let value;
   try {
@@ -56,34 +51,28 @@ async function getContent(request) {
     throw new Error("Chapter response is invalid.");
   }
   const data = isRecord(value) && isRecord(value.data) ? value.data : {}, html = text(data.content);
-  if (Number(isRecord(value) ? value.status : 0) !== 1 || !html)
-    throw new Error("Chapter content is unavailable.");
+  if (Number(isRecord(value) ? value.status : 0) !== 1 || !html) throw new Error("Chapter content is unavailable.");
   const content = cleanContent(html, page);
   return frozen({ chapterId: request.chapterId, contentKind: "novel", title: chapterTitle(page), updatedAt: null, text: content, pages: [], media: null });
 }
 async function get(url, requestHeaders = headers, useCache = true) {
   if (useCache) {
     const hit = cache.get(url);
-    if (hit)
-      return hit;
+    if (hit) return hit;
   }
   const response = await requireContext().http.fetch(url, { headers: requestHeaders });
-  if (!response.ok)
-    throw new Error("Source request failed.");
+  if (!response.ok) throw new Error("Source request failed.");
   const value = await response.text();
-  if (useCache)
-    cache.set(url, value);
+  if (useCache) cache.set(url, value);
   return value;
 }
 function parseBooks(source) {
   const result = /* @__PURE__ */ new Map();
   for (const match of source.matchAll(/<div\b[^>]*class="[^"]*bookbox[^"]*"[^>]*>([\s\S]*?)(?=<div\b[^>]*class="[^"]*bookbox|$)/gu)) {
     const block = match[1] ?? "", link = block.match(/<h4\b[^>]*class="[^"]*bookname[^"]*"[^>]*>[\s\S]*?<a[^>]*href="([^"]*\/books\/(\d+)\/)[^"]*"[^>]*>([\s\S]*?)<\/a>/u);
-    if (!link)
-      continue;
+    if (!link) continue;
     const id = link[2] ?? "", title = clean(link[3] ?? "");
-    if (!id || !title)
-      continue;
+    if (!id || !title) continue;
     const author = clean(block.match(/<div\b[^>]*class="[^"]*author[^"]*"[^>]*>([\s\S]*?)<\/div>/u)?.[1] ?? "").replace(/^作者：/u, ""), latest = clean(block.match(/<div\b[^>]*class="[^"]*cat[^"]*"[^>]*>[\s\S]*?<a[^>]*>([\s\S]*?)<\/a>/u)?.[1] ?? "");
     result.set(id, { id, title, author, latest, category: "", cover: cover(id), description: "" });
   }
@@ -100,8 +89,7 @@ function parseChapters(source, id) {
   const result = /* @__PURE__ */ new Map(), pattern = new RegExp(`<a\\s+href="[^"]*\\/books\\/${id}\\/(\\d+)\\.html"[^>]*>([^<]*)<\\/a>`, "giu");
   for (const match of source.matchAll(pattern)) {
     const chapter = match[1] ?? "", title = clean(match[2] ?? "");
-    if (chapter && title && !["开始阅读", "加入书架", "推荐本书", "TXT下载"].includes(title))
-      result.set(chapter, { id: chapter, title });
+    if (chapter && title && !["开始阅读", "加入书架", "推荐本书", "TXT下载"].includes(title)) result.set(chapter, { id: chapter, title });
   }
   return [...result.values()].sort((a, b) => Number(a.id) - Number(b.id));
 }
@@ -130,14 +118,12 @@ function decode(value) {
 }
 function contentId(id) {
   const value = /^book:(\d+)$/u.exec(id)?.[1];
-  if (!value)
-    throw new Error("Content ID is invalid.");
+  if (!value) throw new Error("Content ID is invalid.");
   return value;
 }
 function chapterNative(id, book) {
   const value = new RegExp(`^book:${book}:(\\d+)$`, "u").exec(id)?.[1];
-  if (!value)
-    throw new Error("Chapter ID is invalid.");
+  if (!value) throw new Error("Chapter ID is invalid.");
   return value;
 }
 function proxyImage(url) {
@@ -151,11 +137,9 @@ function safeUrl(value) {
   }
 }
 function cursorPage(cursor, target) {
-  if (cursor === null)
-    return 1;
+  if (cursor === null) return 1;
   const page = Number(cursor.startsWith(`${target}:`) ? cursor.slice(target.length + 1) : "");
-  if (!Number.isSafeInteger(page) || page < 2)
-    throw new Error("Cursor is invalid.");
+  if (!Number.isSafeInteger(page) || page < 2) throw new Error("Cursor is invalid.");
   return page;
 }
 function isRecord(value) {
@@ -171,8 +155,7 @@ function frozen(value) {
   return Object.freeze(value);
 }
 function requireContext() {
-  if (!context)
-    throw new Error("Source is not activated.");
+  if (!context) throw new Error("Source is not activated.");
   return context;
 }
 export {

@@ -23,6 +23,11 @@ const headers = {
   Referer: base + '/',
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36',
 };
+const coverHeaders = {
+  Accept: 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+  Referer: base + '/',
+  'User-Agent': headers['User-Agent'],
+};
 const categories = Object.freeze<Category[]>([
   { code: 'ycgc', title: '国产新片' },
   { code: 'gcjp', title: '國產舊篇' },
@@ -250,7 +255,7 @@ function parseList(html: string): ContentSummary[] {
       || attribute(image, 'data-original')
       || attribute(image, 'data-src')
       || attribute(image, 'src');
-    const candidate = summary(id, title, cover === '' ? null : cover, null, null);
+    const candidate = summary(id, title, cover === '' ? null : cover, null, null, base + '/');
     const previous = unique.get(id);
     if (previous === undefined || (previous.coverUrl === null && candidate.coverUrl !== null)) unique.set(id, candidate);
   }
@@ -265,19 +270,20 @@ function parseDetail(html: string, id: string) {
   const poster = attribute(videoTag, 'alt') || null;
   const mediaUrl = absolute(attribute(videoTag, 'src'));
   const updatedAt = dateTimestamp(/时间\s*[：:]\s*(\d{4}-\d{2}-\d{2})/u.exec(strip(html))?.[1]);
-  const item = summary(id, headings[0] || ('视频 ' + id), poster, updatedAt, 1);
+  const item = summary(id, headings[0] || ('视频 ' + id), poster, updatedAt, 1, detailUrl(id));
   return frozen({ item: frozen({ ...item, aliases: [], catalogUrl: item.url }), mediaUrl });
 }
 
-function summary(id: string, title: string, cover: string | null, updatedAt: string | null, chapterCount: number | null) {
+function summary(id: string, title: string, cover: string | null, updatedAt: string | null, chapterCount: number | null, coverReferer = base + '/') {
   if (!/^[a-z0-9_-]+$/iu.test(id)) throw new Error('Source item has no ID.');
+  const coverUrl = absolute(cover);
   return frozen({
     id: 'video:' + id,
     title: decode(title) || ('视频 ' + id),
     contentKind: 'video',
     author: null,
     url: detailUrl(id),
-    coverUrl: absolute(cover),
+    coverUrl: coverUrl === null ? null : requireContext().resource.proxy({ kind: 'image', url: coverUrl, headers: { ...coverHeaders, Referer: coverReferer } }),
     description: null,
     language: 'zh-CN',
     status: 'unknown',

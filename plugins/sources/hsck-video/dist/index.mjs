@@ -1,6 +1,6 @@
 import { createRequire as __mgreadCreateRequire } from 'node:module'; const require = __mgreadCreateRequire(import.meta.url);
 
-// dist/index.mjs
+// src/index.mts
 var base = "https://hsck.la";
 var headers = { Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,application/json,text/plain,*/*;q=0.8", "Accept-Language": "zh-CN,zh;q=0.9", Referer: `${base}/`, "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36" };
 var categories = Object.freeze([["1", "麻豆"], ["2", "中字"], ["3", "国产"], ["4", "欧美"], ["5", "日韩"]]);
@@ -11,8 +11,7 @@ async function activate(next) {
 }
 async function search(request) {
   const query = request.query.trim();
-  if (query === "")
-    return frozen({ items: [], nextCursor: null, totalCount: 0 });
+  if (query === "") return frozen({ items: [], nextCursor: null, totalCount: 0 });
   const page = cursorPage(request.cursor, "search");
   const limit = clamp(request.pageSize);
   const values = parseList(await fetchText(searchUrl(query, page))).slice(0, limit);
@@ -23,13 +22,11 @@ async function searchSuggestions(_request) {
 }
 async function discover(request) {
   if (request.target === null) {
-    if (request.cursor !== null || request.collectionId !== null)
-      throw new Error("Initial discovery request is invalid.");
+    if (request.cursor !== null || request.collectionId !== null) throw new Error("Initial discovery request is invalid.");
     return rootDocument(request.pageSize);
   }
   const category = categories.find(([id2]) => request.target === `category:${id2}`);
-  if (category === void 0)
-    throw new Error("Discovery target is invalid.");
+  if (category === void 0) throw new Error("Discovery target is invalid.");
   const page = cursorPage(request.cursor, request.target);
   const [id, title] = category;
   const html = await fetchText(categoryUrl(id, page));
@@ -38,8 +35,7 @@ async function discover(request) {
   const items = values.map((content) => frozen({ content, rank: null, metric: null, recommendation: null }));
   const continuation = values.length >= clamp(request.pageSize) && page < 50 ? frozen({ target: request.target, cursor: `${request.target}:${page + 1}` }) : null;
   if (request.collectionId !== null) {
-    if (request.collectionId !== collectionId)
-      throw new Error("Discovery collection is invalid.");
+    if (request.collectionId !== collectionId) throw new Error("Discovery collection is invalid.");
     return frozen({ kind: "append", collectionId, items, continuation });
   }
   return frozen({ kind: "document", document: { components: [{ type: "section", id: `${collectionId}:section`, title, subtitle: null, icon: "video", children: [{ type: "contentCollection", id: collectionId, layout: "coverGrid", items, continuation }] }] } });
@@ -59,21 +55,18 @@ async function getContent(request) {
   const chapter = parseChapterId(request.chapterId, id);
   const catalog = await getChapters({ id: request.id });
   const selected = catalog.items.find((item) => item.id === request.chapterId);
-  if (selected === void 0)
-    throw new Error("Chapter ID is invalid.");
+  if (selected === void 0) throw new Error("Chapter ID is invalid.");
   const page = playUrl(id, chapter.sid, chapter.nid);
   const player = parsePlayerData(await fetchText(page));
   const upstream = playerUrl(player);
-  if (!safeMediaUrl(upstream))
-    throw new Error("Playback address is unavailable.");
+  if (!safeMediaUrl(upstream)) throw new Error("Playback address is unavailable.");
   const resourceType = /\.m3u8(?:$|[?#])/iu.test(upstream) ? "hls" : "video";
   const mediaHeaders = { Referer: page, "User-Agent": headers["User-Agent"] };
   return frozen({ chapterId: request.chapterId, contentKind: "video", title: selected.title, updatedAt: null, text: null, pages: [], media: { url: requireContext().resource.proxy({ kind: resourceType, url: upstream, headers: mediaHeaders }), resourceType, resourcePolicy: "sessionOnly", expiresAt: null, mimeType: resourceType === "hls" ? "application/vnd.apple.mpegurl" : "video/mp4", headers: mediaHeaders } });
 }
 async function fetchText(url) {
   const response = await requireContext().http.fetch(url, { headers });
-  if (!response.ok)
-    throw new Error(`Source request failed (HTTP ${response.status}).`);
+  if (!response.ok) throw new Error(`Source request failed (HTTP ${response.status}).`);
   return response.text();
 }
 async function rootDocument(pageSize) {
@@ -81,17 +74,14 @@ async function rootDocument(pageSize) {
   const values = parseList(await fetchText(categoryUrl("1", 1))).slice(0, limit);
   const items = values.map((content) => frozen({ content, rank: null, metric: null, recommendation: null }));
   const components = [];
-  if (items.length > 0)
-    components.push({ type: "section", id: "video-featured", title: "热门视频", subtitle: "横版封面快速浏览", icon: "hot", children: [{ type: "contentCollection", id: "video-featured-list", layout: "coverGrid", items, continuation: null }] });
+  if (items.length > 0) components.push({ type: "section", id: "video-featured", title: "热门视频", subtitle: "横版封面快速浏览", icon: "hot", children: [{ type: "contentCollection", id: "video-featured-list", layout: "coverGrid", items, continuation: null }] });
   components.push({ type: "section", id: "video-categories", title: "视频分类", subtitle: "按频道继续发现", icon: "video", children: [{ type: "categoryCollection", id: "video-categories-list", layout: "chips", categories: categories.map(([id, title]) => ({ id, title, target: `category:${id}`, count: null, url: null, icon: "video" })) }] });
   return frozen({ kind: "document", document: { components } });
 }
 function parseList(html) {
   const entries = listEntries(html);
   const unique = /* @__PURE__ */ new Map();
-  for (const entry of entries)
-    if (!unique.has(entry.id))
-      unique.set(entry.id, summary(entry.id, entry.title, entry.cover, null));
+  for (const entry of entries) if (!unique.has(entry.id)) unique.set(entry.id, summary(entry.id, entry.title, entry.cover, null));
   return [...unique.values()];
 }
 function listEntries(html) {
@@ -101,8 +91,7 @@ function listEntries(html) {
     const body = match[2] ?? "";
     const href = attribute(attributes, "href");
     const id = /\/vod\/(?:detail|play)\/id\/(\d+)/iu.exec(href)?.[1];
-    if (id === void 0)
-      continue;
+    if (id === void 0) continue;
     const image = /<img\b[^>]*>/iu.exec(body)?.[0] ?? "";
     const title = attribute(attributes, "title") || attribute(image, "alt") || strip(body) || `视频 ${id}`;
     const cover = attribute(attributes, "data-original") || attribute(attributes, "data-src") || attribute(attributes, "data-lazy-src") || attribute(image, "data-original") || attribute(image, "data-src") || attribute(image, "data-lazy-src") || attribute(image, "src");
@@ -116,8 +105,7 @@ function parseDetail(html, id) {
   return summary(id, title || `视频 ${id}`, cover, null);
 }
 function summary(id, title, cover, updatedAt) {
-  if (!/^\d+$/u.test(id))
-    throw new Error("Source item has no ID.");
+  if (!/^\d+$/u.test(id)) throw new Error("Source item has no ID.");
   return frozen({ id: `video:${id}`, title: decode(title) || `视频 ${id}`, contentKind: "video", author: null, url: detailUrl(id), coverUrl: proxyImage(cover), description: null, language: "zh-CN", status: "unknown", access: "unknown", wordCount: null, chapterCount: null, publishedAt: null, updatedAt, latestChapter: null, categories: [], tags: [], attributes: [] });
 }
 function detail(item) {
@@ -125,8 +113,7 @@ function detail(item) {
 }
 function parseGroups(html, id) {
   const entries = links(html).filter((entry) => entry.id === id);
-  if (entries.length === 0)
-    throw new Error("No playable episodes found.");
+  if (entries.length === 0) throw new Error("No playable episodes found.");
   const blocks = playlistBlocks(html);
   return [...new Set(entries.map((entry) => entry.sid))].map((sid, order) => {
     const title = playlistTitle(html, blocks, sid) || `线路 ${order + 1}`;
@@ -141,8 +128,7 @@ function playlistBlocks(html) {
 }
 function playlistTitle(html, blocks, sid) {
   const block = blocks.find((value) => links(value.html).some((entry) => entry.sid === sid));
-  if (block?.title)
-    return block.title;
+  if (block?.title) return block.title;
   const match = new RegExp(`<(?:div|section)[^>]*id=["']playlist_${escape(sid)}["'][^>]*>[\\s\\S]*?<h[1-6][^>]*>([\\s\\S]*?)<\\/h[1-6]>`, "iu").exec(html);
   return strip(match?.[1] ?? "");
 }
@@ -151,21 +137,18 @@ function links(html) {
   for (const match of html.matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/giu)) {
     const href = attribute(match[1] ?? "", "href");
     const parsed = /\/vod\/play\/id\/(\d+)\/sid\/(\d+)\/nid\/(\d+)\.html/iu.exec(href);
-    if (parsed?.[1] === void 0 || parsed[2] === void 0 || parsed[3] === void 0)
-      continue;
+    if (parsed?.[1] === void 0 || parsed[2] === void 0 || parsed[3] === void 0) continue;
     result.push({ id: parsed[1], sid: parsed[2], nid: parsed[3], title: attribute(match[1] ?? "", "title") || strip(match[2] ?? "") });
   }
   return result;
 }
 function parsePlayerData(html) {
   const start = html.search(/(?:var\s+)?player_\w+\s*=\s*\{/iu);
-  if (start < 0)
-    throw new Error("Player data is unavailable.");
+  if (start < 0) throw new Error("Player data is unavailable.");
   const brace = html.indexOf("{", start);
   const json = balancedObject(html, brace);
   const value = JSON.parse(json);
-  if (!isObject(value))
-    throw new Error("Player data is invalid.");
+  if (!isObject(value)) throw new Error("Player data is invalid.");
   return value;
 }
 function balancedObject(text2, start) {
@@ -175,24 +158,19 @@ function balancedObject(text2, start) {
   for (let index = start; index < text2.length; index += 1) {
     const char = text2[index] ?? "";
     if (quote !== "") {
-      if (escaped)
-        escaped = false;
-      else if (char === "\\")
-        escaped = true;
-      else if (char === quote)
-        quote = "";
+      if (escaped) escaped = false;
+      else if (char === "\\") escaped = true;
+      else if (char === quote) quote = "";
       continue;
     }
     if (char === '"' || char === "'") {
       quote = char;
       continue;
     }
-    if (char === "{")
-      depth += 1;
+    if (char === "{") depth += 1;
     if (char === "}") {
       depth -= 1;
-      if (depth === 0)
-        return text2.slice(start, index + 1);
+      if (depth === 0) return text2.slice(start, index + 1);
     }
   }
   throw new Error("Player data is incomplete.");
@@ -229,22 +207,18 @@ function playUrl(id, sid, nid) {
 }
 function contentId(id) {
   const match = /^video:(\d+)$/u.exec(id);
-  if (match?.[1] === void 0)
-    throw new Error("Content ID is invalid.");
+  if (match?.[1] === void 0) throw new Error("Content ID is invalid.");
   return match[1];
 }
 function parseChapterId(id, content) {
   const match = new RegExp(`^video:${content}:(\\d+):(\\d+)$`, "u").exec(id);
-  if (match?.[1] === void 0 || match[2] === void 0)
-    throw new Error("Chapter ID is invalid.");
+  if (match?.[1] === void 0 || match[2] === void 0) throw new Error("Chapter ID is invalid.");
   return { sid: match[1], nid: match[2] };
 }
 function cursorPage(cursor, target) {
-  if (cursor === null)
-    return 1;
+  if (cursor === null) return 1;
   const value = Number(new RegExp(`^${escape(target)}:(\\d+)$`, "u").exec(cursor)?.[1]);
-  if (!Number.isSafeInteger(value) || value < 2 || value > 50)
-    throw new Error("Discovery cursor is invalid.");
+  if (!Number.isSafeInteger(value) || value < 2 || value > 50) throw new Error("Discovery cursor is invalid.");
   return value;
 }
 function safeMediaUrl(value) {
@@ -256,8 +230,7 @@ function safeMediaUrl(value) {
   }
 }
 function absolute(value) {
-  if (value === null || value === "")
-    return null;
+  if (value === null || value === "") return null;
   try {
     return new URL(value.replaceAll("\\/", "/"), base).toString();
   } catch {
@@ -300,8 +273,7 @@ function escape(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 }
 function requireContext() {
-  if (context === void 0)
-    throw new Error("Source is not activated.");
+  if (context === void 0) throw new Error("Source is not activated.");
   return context;
 }
 export {

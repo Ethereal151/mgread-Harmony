@@ -1,6 +1,6 @@
 import { createRequire as __mgreadCreateRequire } from 'node:module'; const require = __mgreadCreateRequire(import.meta.url);
 
-// dist/index.mjs
+// src/index.mts
 import { createHmac } from "node:crypto";
 var web = "https://www.qtfm.cn";
 var graphql = "https://webbff.qtfm.cn/www";
@@ -63,8 +63,7 @@ async function activate(next) {
 }
 async function search(request) {
   const query = request.query.trim();
-  if (query === "")
-    return frozen({ items: [], nextCursor: null, totalCount: 0 });
+  if (query === "") return frozen({ items: [], nextCursor: null, totalCount: 0 });
   const page = cursorPage(request.cursor, "search");
   const json = await graph(`{ searchResultsPage(keyword:${JSON.stringify(query)}, page:${page}, include:"channel_live") { searchData numFound } }`);
   const values = unwrap(object(object(json.data).searchResultsPage).searchData).slice(0, clamp(request.pageSize));
@@ -75,13 +74,11 @@ async function searchSuggestions(_request) {
 }
 async function discover(request) {
   if (request.target === null) {
-    if (request.cursor !== null || request.collectionId !== null)
-      throw new Error("Initial discovery request is invalid.");
+    if (request.cursor !== null || request.collectionId !== null) throw new Error("Initial discovery request is invalid.");
     return frozen({ kind: "document", document: { components: [{ type: "section", id: "radio-categories", title: "电台分类", subtitle: "按地区与内容浏览", icon: "audio", children: [{ type: "categoryCollection", id: "radio-categories-list", layout: "chips", categories: categories.map(([id2, title2]) => ({ id: id2, title: title2, target: `category:${id2}`, count: null, url: null, icon: "audio" })) }] }] } });
   }
   const category = categories.find(([id2]) => request.target === `category:${id2}`);
-  if (category === void 0)
-    throw new Error("Discovery target is invalid.");
+  if (category === void 0) throw new Error("Discovery target is invalid.");
   const page = cursorPage(request.cursor, request.target);
   const limit = clamp(request.pageSize);
   const [id, title] = category;
@@ -91,8 +88,7 @@ async function discover(request) {
   const items = values.map((value) => frozen({ content: summary(value), rank: null, metric: null, recommendation: null }));
   const continuation = values.length >= limit ? frozen({ target: request.target, cursor: `${request.target}:${page + 1}` }) : null;
   if (request.collectionId !== null) {
-    if (request.collectionId !== collectionId)
-      throw new Error("Discovery collection is invalid.");
+    if (request.collectionId !== collectionId) throw new Error("Discovery collection is invalid.");
     return frozen({ kind: "append", collectionId, items, continuation });
   }
   return frozen({ kind: "document", document: { components: [{ type: "section", id: `${collectionId}:section`, title, subtitle: null, icon: "audio", children: [{ type: "contentCollection", id: collectionId, layout: "coverGrid", items, continuation }] }] } });
@@ -111,8 +107,7 @@ async function getChapters(request) {
 }
 async function getContent(request) {
   const id = contentId(request.id);
-  if (request.chapterId !== `radio:${encodeKey(id)}:live`)
-    throw new Error("Chapter ID is invalid.");
+  if (request.chapterId !== `radio:${encodeKey(id)}:live`) throw new Error("Chapter ID is invalid.");
   const resource = liveAudioResource(id);
   const mediaHeaders = { Referer: web, "User-Agent": headers["User-Agent"] };
   return frozen({ chapterId: request.chapterId, contentKind: "audio", title: "直播", updatedAt: null, text: null, pages: [], media: { url: requireContext().resource.proxy({ kind: "audio", url: resource.url, headers: mediaHeaders }), resourceType: "audio", resourcePolicy: "refreshable", expiresAt: resource.expiresAt, mimeType: "audio/mpeg", headers: mediaHeaders } });
@@ -122,17 +117,14 @@ async function graph(query) {
 }
 async function fetchJson(url, body) {
   const response = await requireContext().http.fetch(url, body === void 0 ? { headers } : { method: "POST", headers, body: JSON.stringify(body) });
-  if (!response.ok)
-    throw new Error("Source request failed.");
+  if (!response.ok) throw new Error("Source request failed.");
   const value = await response.json();
-  if (!isObject(value))
-    throw new Error("Source response is invalid.");
+  if (!isObject(value)) throw new Error("Source response is invalid.");
   return value;
 }
 function summary(value) {
   const native = text(first(value.id, value.channelId, value.radioId, value.cid));
-  if (native === "")
-    throw new Error("Source item has no ID.");
+  if (native === "") throw new Error("Source item has no ID.");
   const merged = mergeChannel(channels.get(native), value);
   channels.set(native, merged);
   const id = encodeKey(native);
@@ -148,36 +140,29 @@ function unwrap(value) {
       return [];
     }
   }
-  if (Array.isArray(value))
-    return records(value);
-  if (!isObject(value))
-    return [];
+  if (Array.isArray(value)) return records(value);
+  if (!isObject(value)) return [];
   for (const key of ["contents", "items", "list", "data"]) {
     const result = unwrap(value[key]);
-    if (result.length > 0)
-      return result;
+    if (result.length > 0) return result;
   }
   return [];
 }
 function contentId(id) {
   const encoded = /^radio:([^:]+)$/u.exec(id)?.[1];
-  if (encoded === void 0)
-    throw new Error("Content ID is invalid.");
+  if (encoded === void 0) throw new Error("Content ID is invalid.");
   return decodeKey(encoded);
 }
 function cursorPage(cursor, target) {
-  if (cursor === null)
-    return 1;
+  if (cursor === null) return 1;
   const match = cursor.startsWith(`${target}:`) ? cursor.slice(target.length + 1) : "";
   const page = Number(match);
-  if (!Number.isSafeInteger(page) || page < 2 || page > 1e3)
-    throw new Error("Cursor is invalid.");
+  if (!Number.isSafeInteger(page) || page < 2 || page > 1e3) throw new Error("Cursor is invalid.");
   return page;
 }
 function absolute(value) {
   const raw = text(value);
-  if (raw === "")
-    return null;
+  if (raw === "") return null;
   try {
     return new URL(raw, web).toString();
   } catch {
@@ -201,8 +186,7 @@ function encodeKey(value) {
   return Buffer.from(value, "utf8").toString("base64url");
 }
 function decodeKey(value) {
-  if (!/^[A-Za-z0-9_-]+$/u.test(value))
-    throw new Error("Source key is invalid.");
+  if (!/^[A-Za-z0-9_-]+$/u.test(value)) throw new Error("Source key is invalid.");
   return Buffer.from(value, "base64url").toString("utf8");
 }
 function first(...values) {
@@ -210,9 +194,7 @@ function first(...values) {
 }
 function mergeChannel(previous, current) {
   const result = { ...previous ?? {} };
-  for (const [key, value] of Object.entries(current))
-    if (value !== null && value !== void 0 && value !== "")
-      result[key] = value;
+  for (const [key, value] of Object.entries(current)) if (value !== null && value !== void 0 && value !== "") result[key] = value;
   return result;
 }
 function records(value) {
@@ -242,8 +224,7 @@ function frozen(value) {
   return Object.freeze(value);
 }
 function requireContext() {
-  if (context === void 0)
-    throw new Error("Source is not activated.");
+  if (context === void 0) throw new Error("Source is not activated.");
   return context;
 }
 export {

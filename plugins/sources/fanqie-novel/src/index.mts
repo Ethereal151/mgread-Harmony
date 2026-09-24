@@ -33,6 +33,11 @@ const WEB_HEADERS = {
   Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
   'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
 } as const;
+const COVER_HEADERS = {
+  Accept: 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+  Referer: `${WEB_HOST}/`,
+  'User-Agent': USER_AGENT,
+} as const;
 const CHANNELS: readonly Channel[] = [
   ['1', '都市', 1], ['2', '都市生活', 1], ['7', '玄幻', 1], ['8', '科幻', 1],
   ['10', '悬疑', 1], ['11', '乡村', 1], ['12', '仙侠', 1], ['13', '历史', 1],
@@ -375,7 +380,7 @@ function summary(value: Json): Json | null {
   const status = statusCode === 1 ? 'completed' : statusCode === 4 ? 'hiatus' : 'ongoing';
   return frozen({
     id: `novel:${id}`, title, contentKind: 'novel', coverOrientation: 'portrait', author: clean(text(value.author)) || null,
-    url: `${WEB_HOST}/page/${id}`, coverUrl: cover ? requireContext().resource.proxy({ kind: 'image', url: cover, headers: { Referer: `${WEB_HOST}/` } }) : null,
+    url: `${WEB_HOST}/page/${id}`, coverUrl: cover ? requireContext().resource.proxy({ kind: 'image', url: cover, headers: COVER_HEADERS }) : null,
     description: clean(text(value.abstract || value.book_abstract_v2 || value.intro)) || null, language: 'zh-CN', status, access: 'free',
     wordCount: number(value.word_number) || null, chapterCount: number(value.chapter_number) || null, publishedAt: null,
     updatedAt: timestamp(value.last_update_time || value.update_time), latestChapter: null,
@@ -385,14 +390,31 @@ function summary(value: Json): Json | null {
 
 function findBook(root: Json): Json {
   const queue: Json[] = [root]; const seen = new Set<Json>();
+  let selected: Json | undefined;
   while (queue.length > 0) {
     const current = queue.shift()!;
     if (seen.has(current)) continue;
     seen.add(current);
-    if (text(current.book_name || current.name)) return current;
+    if (selected === undefined && text(current.book_name || current.name)) selected = current;
     for (const value of Object.values(current)) if (isObject(value)) queue.push(value);
   }
-  return {};
+  if (selected === undefined) return {};
+  if (text(selected.thumb_url || selected.cover || selected.cover_url)) return selected;
+  const cover = findCover(root);
+  return cover === null ? selected : { ...selected, thumb_url: cover };
+}
+
+function findCover(root: Json): string | null {
+  const queue: Json[] = [root]; const seen = new Set<Json>();
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    if (seen.has(current)) continue;
+    seen.add(current);
+    const cover = text(current.thumb_url || current.cover || current.cover_url);
+    if (cover !== '') return cover;
+    for (const value of Object.values(current)) if (isObject(value)) queue.push(value);
+  }
+  return null;
 }
 
 function latestChapter(value: Json, bookId: string) {

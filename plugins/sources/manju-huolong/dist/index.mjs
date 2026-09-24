@@ -1,6 +1,6 @@
 import { createRequire as __mgreadCreateRequire } from 'node:module'; const require = __mgreadCreateRequire(import.meta.url);
 
-// dist/index.mjs
+// src/index.mts
 import { createDecipheriv } from "node:crypto";
 var root = "https://api.999888456.xyz/api/huolong/";
 var headers = { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/116.0.0.0 Safari/537.36", Accept: "application/json, text/plain, */*" };
@@ -12,8 +12,7 @@ async function activate(next) {
 }
 async function search(request) {
   const query = request.query.trim();
-  if (query === "")
-    return frozen({ items: [], nextCursor: null, totalCount: 0 });
+  if (query === "") return frozen({ items: [], nextCursor: null, totalCount: 0 });
   const page = cursorPage(request.cursor, "search"), values = list(await api(`search?wd=${encodeURIComponent(query)}&pg=${page}`)), items = summaries(values).slice(0, clamp(request.pageSize));
   return frozen({ items, nextCursor: values.length >= clamp(request.pageSize) ? `search:${page + 1}` : null, totalCount: null });
 }
@@ -21,14 +20,11 @@ async function searchSuggestions(_request) {
   return frozen({ items: [], nextCursor: null });
 }
 async function discover(request) {
-  if (request.target === null)
-    return frozen({ kind: "document", document: { components: [{ type: "section", id: "huolong-channels", title: "漫剧小龙", subtitle: "腾讯漫剧与榜单", icon: "video", children: [{ type: "categoryCollection", id: "huolong-channel-list", layout: "chips", categories: channels.map((channel2) => ({ id: channel2.id, title: channel2.title, target: `channel:${channel2.id}`, count: null, url: null, icon: "video" })) }] }] } });
+  if (request.target === null) return frozen({ kind: "document", document: { components: [{ type: "section", id: "huolong-channels", title: "漫剧小龙", subtitle: "腾讯漫剧与榜单", icon: "video", children: [{ type: "categoryCollection", id: "huolong-channel-list", layout: "chips", categories: channels.map((channel2) => ({ id: channel2.id, title: channel2.title, target: `channel:${channel2.id}`, count: null, url: null, icon: "video" })) }] }] } });
   const channel = channels.find((value) => request.target === `channel:${value.id}`);
-  if (channel === void 0)
-    throw new Error("Discovery target is invalid.");
+  if (channel === void 0) throw new Error("Discovery target is invalid.");
   const page = cursorPage(request.cursor, request.target), size = clamp(request.pageSize), values = list(await api(`category?tid=${encodeURIComponent(channel.id)}&pg=${page}&itype=-1&setting=-1&attraction=-1&item=-1&sort=-1`)), contents = summaries(values).slice(0, size), collectionId = `huolong:${channel.id}`, items = contents.map((content) => frozen({ content, rank: null, metric: null, recommendation: null })), continuation = values.length >= size ? frozen({ target: request.target, cursor: `channel:${channel.id}:${page + 1}` }) : null;
-  if (request.collectionId !== null)
-    return request.collectionId === collectionId ? frozen({ kind: "append", collectionId, items, continuation }) : Promise.reject(new Error("Discovery collection is invalid."));
+  if (request.collectionId !== null) return request.collectionId === collectionId ? frozen({ kind: "append", collectionId, items, continuation }) : Promise.reject(new Error("Discovery collection is invalid."));
   return frozen({ kind: "document", document: { components: [{ type: "section", id: `${collectionId}:section`, title: channel.title, subtitle: null, icon: "video", children: [{ type: "contentCollection", id: collectionId, layout: "coverGrid", items, continuation }] }] } });
 }
 async function getDetail(request) {
@@ -41,41 +37,34 @@ async function getChapters(request) {
 }
 async function getContent(request) {
   const id = contentId(request.id), index = chapterIndex(request.chapterId, id), episodes = split(text(first((await detail(id)).vod_play_url))), episode = episodes[index];
-  if (episode === void 0)
-    throw new Error("Video episode is unavailable.");
+  if (episode === void 0) throw new Error("Video episode is unavailable.");
   const upstream = pickUrl(await api(`play?id=${encodeURIComponent(episode.url)}`));
-  if (!safeUrl(upstream))
-    throw new Error("Video address is unavailable.");
+  if (!safeUrl(upstream)) throw new Error("Video address is unavailable.");
   const mediaHeaders = { Referer: "https://v.qq.com/", "User-Agent": headers["User-Agent"] };
   return frozen({ chapterId: request.chapterId, contentKind: "video", title: episode.title, updatedAt: null, text: null, pages: [], media: { url: requireContext().resource.proxy({ kind: "video", url: upstream, headers: mediaHeaders }), resourceType: "video", resourcePolicy: "sessionOnly", expiresAt: null, mimeType: /\.m3u8(?:$|[?#])/iu.test(upstream) ? "application/vnd.apple.mpegurl" : "video/mp4", headers: mediaHeaders } });
 }
 async function detail(id) {
   const values = list(await api(`detail?id=${encodeURIComponent(JSON.stringify({ cid: id }))}`));
-  if (values[0] === void 0)
-    throw new Error("Video detail is unavailable.");
+  if (values[0] === void 0) throw new Error("Video detail is unavailable.");
   return values[0];
 }
 async function api(path) {
   const response = await requireContext().http.fetch(new URL(path, root).toString(), { headers });
-  if (!response.ok)
-    throw new Error("Source request failed.");
+  if (!response.ok) throw new Error("Source request failed.");
   const raw = (await response.text()).trim(), plain = decrypt(raw);
   try {
     const value = JSON.parse(plain);
     raiseUpgradeRequired(value);
     return value;
   } catch (error) {
-    if (error instanceof SyntaxError)
-      throw new Error("Source response is invalid.");
+    if (error instanceof SyntaxError) throw new Error("Source response is invalid.");
     throw error;
   }
 }
 function decrypt(raw) {
-  if (raw.startsWith("{") || raw.startsWith("["))
-    return raw;
+  if (raw.startsWith("{") || raw.startsWith("[")) return raw;
   const parts = raw.split(".");
-  if (parts.length < 3)
-    throw new Error("Encrypted response is invalid.");
+  if (parts.length < 3) throw new Error("Encrypted response is invalid.");
   const keyIv = derive(parts[1] ?? ""), decipher = createDecipheriv("aes-128-cbc", keyIv.subarray(0, 16), keyIv.subarray(16, 32));
   return Buffer.concat([decipher.update(Buffer.from(parts[2] ?? "", "base64")), decipher.final()]).toString("utf8");
 }
@@ -85,36 +74,28 @@ function derive(token) {
     const r = i % mask.length, r0 = bytes[i] ?? 0, r1 = i === 0 ? 109 : bytes[i - 1] ?? 0, r2 = ((mask[r] ?? 0) ^ 90 + r * 13 & 255 ^ 85) & 255, r3 = r0 + 215 - 11 * i & 255, r4 = (r3 << 3 | r3 >>> 5) & 255, r5 = ~(r2 ^ r1) & 255, r6 = r5 & 54 | ~r5 & 255 & 201, r7 = ~r4 & 255 & 54 | r4 & 201;
     out[i] = (r6 ^ r7) & 255;
   }
-  if (out.length < 32)
-    throw new Error("Encrypted response key is invalid.");
+  if (out.length < 32) throw new Error("Encrypted response key is invalid.");
   return out;
 }
 function list(value) {
-  if (Array.isArray(value))
-    return value.filter(isObject);
-  if (!isObject(value))
-    return [];
-  if (Array.isArray(value.list))
-    return value.list.filter(isObject);
+  if (Array.isArray(value)) return value.filter(isObject);
+  if (!isObject(value)) return [];
+  if (Array.isArray(value.list)) return value.list.filter(isObject);
   const data = isObject(value.data) ? value.data : null;
-  if (data && Array.isArray(data.list))
-    return data.list.filter(isObject);
+  if (data && Array.isArray(data.list)) return data.list.filter(isObject);
   return [];
 }
 function raiseUpgradeRequired(value) {
   const item = list(value)[0];
-  if (item === void 0)
-    return;
+  if (item === void 0) return;
   const id = text(first(item.vod_id, item.id)), title = text(first(item.vod_name, item.title));
-  if (id === "upgrade_required" || /请更新到.*最新版/u.test(title))
-    requireContext().errors.raise({ code: "source_access_blocked", message: "漫剧小龙上游服务当前要求升级，暂时无法读取内容。", annotation: "上游仅返回“请更新到唐三最新版”，未提供真实作品或分集目录。" });
+  if (id === "upgrade_required" || /请更新到.*最新版/u.test(title)) requireContext().errors.raise({ code: "source_access_blocked", message: "漫剧小龙上游服务当前要求升级，暂时无法读取内容。", annotation: "上游仅返回“请更新到唐三最新版”，未提供真实作品或分集目录。" });
 }
 function summaries(values) {
   const result = /* @__PURE__ */ new Map();
   for (const value of values) {
     const id = nativeId(first(value.vod_id, value.id));
-    if (id !== null && text(first(value.vod_name, value.title)) !== "")
-      result.set(id, summary(value, id));
+    if (id !== null && text(first(value.vod_name, value.title)) !== "") result.set(id, summary(value, id));
   }
   return [...result.values()];
 }
@@ -130,8 +111,7 @@ function split(raw) {
 }
 function nativeId(value) {
   const raw = text(value);
-  if (/^[-\w]+$/u.test(raw))
-    return raw;
+  if (/^[-\w]+$/u.test(raw)) return raw;
   try {
     const parsed = JSON.parse(raw);
     if (isObject(parsed)) {
@@ -144,33 +124,27 @@ function nativeId(value) {
 }
 function contentId(id) {
   const value = /^video:([-\w]+)$/u.exec(id)?.[1];
-  if (!value)
-    throw new Error("Content ID is invalid.");
+  if (!value) throw new Error("Content ID is invalid.");
   return value;
 }
 function chapterIndex(id, content) {
   const value = new RegExp(`^video:${content}:(\\d+)$`, "u").exec(id)?.[1], index = Number(value);
-  if (value === void 0 || !Number.isSafeInteger(index))
-    throw new Error("Chapter ID is invalid.");
+  if (value === void 0 || !Number.isSafeInteger(index)) throw new Error("Chapter ID is invalid.");
   return index;
 }
 function pickUrl(value) {
-  if (typeof value === "string")
-    return safeUrl(value) ? value : "";
+  if (typeof value === "string") return safeUrl(value) ? value : "";
   if (Array.isArray(value)) {
     for (const item of value) {
       const found = pickUrl(item);
-      if (found)
-        return found;
+      if (found) return found;
     }
     return "";
   }
-  if (!isObject(value))
-    return "";
+  if (!isObject(value)) return "";
   for (const candidate of [value.url, value.play_url, value.playUrl, value.video_url, value.videoUrl, value.data]) {
     const found = pickUrl(candidate);
-    if (found)
-      return found;
+    if (found) return found;
   }
   return "";
 }
@@ -189,11 +163,9 @@ function countHint(value) {
   return Number.isSafeInteger(count) ? count : null;
 }
 function cursorPage(cursor, target) {
-  if (cursor === null)
-    return 1;
+  if (cursor === null) return 1;
   const page = Number(cursor.startsWith(`${target}:`) ? cursor.slice(target.length + 1) : "");
-  if (!Number.isSafeInteger(page) || page < 2)
-    throw new Error("Cursor is invalid.");
+  if (!Number.isSafeInteger(page) || page < 2) throw new Error("Cursor is invalid.");
   return page;
 }
 function stringList(value) {
@@ -220,8 +192,7 @@ function frozen(v) {
   return Object.freeze(v);
 }
 function requireContext() {
-  if (!context)
-    throw new Error("Source is not activated.");
+  if (!context) throw new Error("Source is not activated.");
   return context;
 }
 export {

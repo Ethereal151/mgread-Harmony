@@ -1,6 +1,6 @@
 import { createRequire as __mgreadCreateRequire } from 'node:module'; const require = __mgreadCreateRequire(import.meta.url);
 
-// dist/index.mjs
+// src/index.mts
 var base = "https://wooyun.tv";
 var headers = Object.freeze({ Accept: "application/json, text/plain, */*", "Accept-Language": "zh-CN,zh;q=0.9", "Content-Type": "application/json", Referer: `${base}/`, "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/136.0.0.0" });
 var categories = Object.freeze([["recommend", "推荐"], ["movie", "电影"], ["tv_series", "电视剧"], ["korean_drama", "韩剧"], ["short_drama", "短剧"], ["animation", "动画"], ["variety", "综艺"]]);
@@ -11,8 +11,7 @@ async function activate(next) {
 }
 async function search(request) {
   const query = request.query.trim();
-  if (query === "")
-    return frozen({ items: [], nextCursor: null, totalCount: 0 });
+  if (query === "") return frozen({ items: [], nextCursor: null, totalCount: 0 });
   const page = cursorPage(request.cursor, "search"), limit = clamp(request.pageSize), data = object(await api("/movie/media/search", { menuCodeList: [], pageIndex: page, pageSize: limit, searchKey: query, topCode: "" })), values = records(data.records).slice(0, limit);
   return frozen({ items: values.map(summary), nextCursor: values.length >= limit ? `search:${page + 1}` : null, totalCount: integer(data.total) });
 }
@@ -21,19 +20,16 @@ async function searchSuggestions(_request) {
 }
 async function discover(request) {
   if (request.target === null) {
-    if (request.cursor !== null || request.collectionId !== null)
-      throw new Error("Initial discovery request is invalid.");
+    if (request.cursor !== null || request.collectionId !== null) throw new Error("Initial discovery request is invalid.");
     return frozen({ kind: "document", document: { components: [{ type: "section", id: "video-categories", title: "影视分类", subtitle: "按频道浏览", icon: "video", children: [{ type: "categoryCollection", id: "video-categories-list", layout: "chips", categories: categories.map(([id, title2]) => ({ id, title: title2, target: `category:${id}`, count: null, url: null, icon: "video" })) }] }] } });
   }
   const category = categories.find(([id]) => request.target === `category:${id}`);
-  if (category === void 0)
-    throw new Error("Discovery target is invalid.");
+  if (category === void 0) throw new Error("Discovery target is invalid.");
   const page = cursorPage(request.cursor, request.target), limit = clamp(request.pageSize), [code, title] = category;
   let values = [];
   if (code === "recommend") {
     const data = object(await api(`/movie/media/home/custom/classify/${page}/3?limit=${limit}`));
-    for (const section of records(data.records))
-      values.push(...records(section.mediaResources).concat(records(section.records)));
+    for (const section of records(data.records)) values.push(...records(section.mediaResources).concat(records(section.records)));
   } else {
     const data = object(await api("/movie/media/search", { menuCodeList: [], pageIndex: page, pageSize: limit, searchKey: "", topCode: code }));
     values = records(data.records);
@@ -41,8 +37,7 @@ async function discover(request) {
   values = uniqueById(values).slice(0, limit);
   const collectionId = `video:${code}`, items = values.map((value) => frozen({ content: summary(value), rank: null, metric: null, recommendation: null })), continuation = values.length >= limit ? frozen({ target: request.target, cursor: `${request.target}:${page + 1}` }) : null;
   if (request.collectionId !== null) {
-    if (request.collectionId !== collectionId)
-      throw new Error("Discovery collection is invalid.");
+    if (request.collectionId !== collectionId) throw new Error("Discovery collection is invalid.");
     return frozen({ kind: "append", collectionId, items, continuation });
   }
   return frozen({ kind: "document", document: { components: [{ type: "section", id: `${collectionId}:section`, title, subtitle: null, icon: "video", children: [{ type: "contentCollection", id: collectionId, layout: "coverGrid", items, continuation }] }] } });
@@ -60,29 +55,22 @@ async function getContent(request) {
   let selected;
   for (let groupIndex = 0; groupIndex < groups.length; groupIndex += 1) {
     const group = groups[groupIndex] ?? {}, line = lineKey(group, groupIndex);
-    if (line !== parsed.line)
-      continue;
+    if (line !== parsed.line) continue;
     selected = records(group.videoList).find((video, index) => videoKey(video, index) === parsed.video);
-    if (selected !== void 0)
-      break;
+    if (selected !== void 0) break;
   }
-  if (selected === void 0)
-    throw new Error("Chapter ID is invalid.");
+  if (selected === void 0) throw new Error("Chapter ID is invalid.");
   const upstream = text(selected.playUrl).replaceAll("\\/", "/");
-  if (!safeUrl(upstream))
-    throw new Error("Playback address is unavailable.");
+  if (!safeUrl(upstream)) throw new Error("Playback address is unavailable.");
   const resourceType = /\.m3u8(?:$|[?#])/iu.test(upstream) ? "hls" : "video", mediaHeaders = { Referer: `${base}/play/${encodeURIComponent(id)}`, "User-Agent": headers["User-Agent"] };
   return frozen({ chapterId: request.chapterId, contentKind: "video", title: chapterTitle(selected, 0), updatedAt: null, text: null, pages: [], media: { url: requireContext().resource.proxy({ kind: resourceType, url: upstream, headers: mediaHeaders }), resourceType, resourcePolicy: "sessionOnly", expiresAt: null, mimeType: resourceType === "hls" ? "application/vnd.apple.mpegurl" : "video/mp4", headers: mediaHeaders } });
 }
 async function api(path, body) {
   const url = `${base}/api/proxy?url=${encodeURIComponent(path)}`, init = body === void 0 ? { headers } : { method: "POST", headers, body: JSON.stringify(body) }, response = await requireContext().http.fetch(url, init);
-  if (!response.ok)
-    throw new Error("Source request failed.");
+  if (!response.ok) throw new Error("Source request failed.");
   const root = await response.json();
-  if (!isObject(root))
-    throw new Error("Source response is invalid.");
-  if (Number(root.code) !== 200 || root.isSuccess === false)
-    throw new Error(text(root.resultMsg) || "Source API failed.");
+  if (!isObject(root)) throw new Error("Source response is invalid.");
+  if (Number(root.code) !== 200 || root.isSuccess === false) throw new Error(text(root.resultMsg) || "Source API failed.");
   return root.data;
 }
 async function videoGroups(id) {
@@ -91,8 +79,7 @@ async function videoGroups(id) {
 }
 function summary(value) {
   const native = text(first(value.id, value.mediaId));
-  if (native === "")
-    throw new Error("Source item has no ID.");
+  if (native === "") throw new Error("Source item has no ID.");
   const id = encodeKey(native), mediaType = object(value.mediaType), genres = strings(value.genres), categories2 = [text(mediaType.name), text(value.region), text(value.releaseYear), ...genres, ...records(value.mediaCategories).map((item) => text(item.name))].filter(Boolean);
   return frozen({ id: `video:${id}`, title: text(first(value.title, value.mediaName)) || native, contentKind: "video", coverOrientation: "portrait", author: join(first(value.directors, value.actors)), url: `${base}/play/${encodeURIComponent(native)}`, coverUrl: proxyImage(first(value.posterUrlS3, value.posterUrl, value.coverUrl, value.backdropUrlS3, value.backdropUrl)), description: nullable(first(value.overview, value.description, value.originalTitle)), language: "zh-CN", status: "unknown", access: "unknown", wordCount: null, chapterCount: null, publishedAt: null, updatedAt: null, latestChapter: null, categories: [...new Set(categories2)], tags: [], attributes: [] });
 }
@@ -108,8 +95,7 @@ function lineKey(group, index) {
 }
 function videoKey(video, index) {
   const key = text(first(video.id, video.videoId, video.epNo));
-  if (key === "")
-    throw new Error(`Episode ${index + 1} has no stable ID.`);
+  if (key === "") throw new Error(`Episode ${index + 1} has no stable ID.`);
   return key;
 }
 function chapterTitle(video, index) {
@@ -118,14 +104,12 @@ function chapterTitle(video, index) {
 }
 function contentId(id) {
   const encoded = /^video:([^:]+)$/u.exec(id)?.[1];
-  if (encoded === void 0)
-    throw new Error("Content ID is invalid.");
+  if (encoded === void 0) throw new Error("Content ID is invalid.");
   return decodeKey(encoded);
 }
 function parseChapterId(id, content) {
   const parts = id.split(":");
-  if (parts.length !== 4 || parts[0] !== "video" || parts[1] !== encodeKey(content))
-    throw new Error("Chapter ID is invalid.");
+  if (parts.length !== 4 || parts[0] !== "video" || parts[1] !== encodeKey(content)) throw new Error("Chapter ID is invalid.");
   return { line: decodeKey(parts[2] ?? ""), video: decodeKey(parts[3] ?? "") };
 }
 function proxyImage(value) {
@@ -134,8 +118,7 @@ function proxyImage(value) {
 }
 function absolute(value) {
   const raw = text(value);
-  if (raw === "")
-    return null;
+  if (raw === "") return null;
   try {
     return new URL(raw, base).toString();
   } catch {
@@ -154,8 +137,7 @@ function uniqueById(values) {
   const seen = /* @__PURE__ */ new Set();
   return values.filter((value) => {
     const id = text(first(value.id, value.mediaId));
-    if (id === "" || seen.has(id))
-      return false;
+    if (id === "" || seen.has(id)) return false;
     seen.add(id);
     return true;
   });
@@ -167,19 +149,16 @@ function strings(value) {
   return Array.isArray(value) ? value.map(text).filter(Boolean) : [];
 }
 function cursorPage(cursor, target) {
-  if (cursor === null)
-    return 1;
+  if (cursor === null) return 1;
   const raw = cursor.startsWith(`${target}:`) ? cursor.slice(target.length + 1) : "", page = Number(raw);
-  if (!Number.isSafeInteger(page) || page < 2 || page > 1e3)
-    throw new Error("Cursor is invalid.");
+  if (!Number.isSafeInteger(page) || page < 2 || page > 1e3) throw new Error("Cursor is invalid.");
   return page;
 }
 function encodeKey(value) {
   return Buffer.from(value, "utf8").toString("base64url");
 }
 function decodeKey(value) {
-  if (!/^[A-Za-z0-9_-]+$/u.test(value))
-    throw new Error("Source key is invalid.");
+  if (!/^[A-Za-z0-9_-]+$/u.test(value)) throw new Error("Source key is invalid.");
   return Buffer.from(value, "base64url").toString("utf8");
 }
 function first(...values) {
@@ -212,8 +191,7 @@ function frozen(value) {
   return Object.freeze(value);
 }
 function requireContext() {
-  if (context === void 0)
-    throw new Error("Source is not activated.");
+  if (context === void 0) throw new Error("Source is not activated.");
   return context;
 }
 export {

@@ -18,6 +18,10 @@ let source: P5HanmanSource | undefined;
 
 export async function activate(nextContext: ActiveContext): Promise<void> {
   context = nextContext;
+  // A Runtime activation may provide a new resource registry while the module
+  // remains loaded. Recreate the source so cached HTML is parsed into fresh
+  // process-scoped proxy descriptors instead of retaining the old registry.
+  source = undefined;
   nextContext.log.info('source_activated');
 }
 

@@ -6704,13 +6704,13 @@ function byteLength(value) {
   }
 }
 
-// dist/utils.js
+// src/utils.ts
 function nonBlank(value) {
   const normalized = value?.replace(/\u00a0/g, " ").replace(/\s+/g, " ").trim();
   return normalized === void 0 || normalized.length === 0 ? null : normalized;
 }
 
-// dist/source.js
+// src/source.ts
 var discoveryListingPolicy = Object.freeze({ namespace: "listing", staleAfterMs: 60 * 60 * 1e3, serveStaleWhileRevalidate: true });
 var searchListingPolicy = Object.freeze({ namespace: "search", staleAfterMs: 10 * 60 * 1e3 });
 var detailPolicy = Object.freeze({ namespace: "detail", staleAfterMs: 60 * 60 * 1e3, allowStaleOnError: false });
@@ -6722,6 +6722,16 @@ function loadCheerio() {
   return Promise.resolve(slim_exports);
 }
 var ShuduguSource = class {
+  constructor(context2, rules) {
+    this.context = context2;
+    this.#baseUrl = new URL(rules.origin);
+    if (this.#baseUrl.protocol !== "https:" || this.#baseUrl.pathname !== "/") throw new Error("Source origin is invalid.");
+    this.#categories = Object.freeze(rules.categories.map((item) => {
+      if (!/^[a-z]+$/.test(item.id) || nonBlank(item.title) === null) throw new Error("Source categories are invalid.");
+      return Object.freeze({ id: item.id, title: item.title });
+    }));
+    this.#cache = new PluginCache(context2.cacheDir, { logger: context2.log });
+  }
   context;
   #baseUrl;
   #categories;
@@ -6730,18 +6740,6 @@ var ShuduguSource = class {
   #details = /* @__PURE__ */ new Map();
   #discoveryDetailRequests = /* @__PURE__ */ new Map();
   #detailRequests = /* @__PURE__ */ new Map();
-  constructor(context2, rules) {
-    this.context = context2;
-    this.#baseUrl = new URL(rules.origin);
-    if (this.#baseUrl.protocol !== "https:" || this.#baseUrl.pathname !== "/")
-      throw new Error("Source origin is invalid.");
-    this.#categories = Object.freeze(rules.categories.map((item) => {
-      if (!/^[a-z]+$/.test(item.id) || nonBlank(item.title) === null)
-        throw new Error("Source categories are invalid.");
-      return Object.freeze({ id: item.id, title: item.title });
-    }));
-    this.#cache = new PluginCache(context2.cacheDir, { logger: context2.log });
-  }
   async discover(request) {
     if (request.target === null) {
       const home = await this.#loadHomeDiscovery();
@@ -6834,8 +6832,7 @@ var ShuduguSource = class {
     const continuation = books.length >= boundedPageSize(request.pageSize) ? Object.freeze({ target: request.target, cursor: `category-page:${page + 1}` }) : null;
     const items = Object.freeze(visible.map((content) => Object.freeze({ content, rank: null, metric: null, recommendation: null })));
     if (request.collectionId !== null) {
-      if (request.collectionId !== collectionId || request.cursor === null)
-        throw new Error("Discovery continuation is invalid.");
+      if (request.collectionId !== collectionId || request.cursor === null) throw new Error("Discovery continuation is invalid.");
       return Object.freeze({ kind: "append", collectionId, items, continuation });
     }
     return documentResult(Object.freeze({
@@ -6850,27 +6847,23 @@ var ShuduguSource = class {
     const page = decodePage(request.cursor, "search-page");
     const url = new URL("/i/sor.aspx", this.#baseUrl);
     url.searchParams.set("key", request.query);
-    if (page > 1)
-      url.searchParams.set("page", String(page));
+    if (page > 1) url.searchParams.set("page", String(page));
     const html3 = await this.#getHtml(url, searchListingPolicy);
     const books = await this.#parseList(html3, url);
     const size = boundedPageSize(request.pageSize);
     return Object.freeze({ items: await this.#withDetails(books.slice(0, size)), nextCursor: null, totalCount: parseSearchTotal(html3) });
   }
   async searchSuggestions(request) {
-    if (decodePage(request.cursor, "suggestions-page") > 1)
-      return Object.freeze({ items: Object.freeze([]), nextCursor: null });
+    if (decodePage(request.cursor, "suggestions-page") > 1) return Object.freeze({ items: Object.freeze([]), nextCursor: null });
     const url = new URL("/", this.#baseUrl);
     const queries = await this.#parseHotSearches(await this.#getHtml(url, hotSearchPolicy));
     return Object.freeze({ items: Object.freeze(queries.slice(0, boundedPageSize(request.pageSize)).map((query) => Object.freeze({ query, metric: null }))), nextCursor: null });
   }
   async getDetail(request) {
     const cached = this.#details.get(request.id);
-    if (cached !== void 0 && cached.expiresAtMs >= Date.now())
-      return cached.value;
+    if (cached !== void 0 && cached.expiresAtMs >= Date.now()) return cached.value;
     const inFlight = this.#detailRequests.get(request.id);
-    if (inFlight !== void 0)
-      return inFlight;
+    if (inFlight !== void 0) return inFlight;
     const pending = this.#loadCachedDetail(request, detailProjectionPolicy, detailPolicy).then((projection) => projection.detail);
     this.#detailRequests.set(request.id, pending);
     void pending.then(() => this.#detailRequests.delete(request.id), () => this.#detailRequests.delete(request.id));
@@ -6936,45 +6929,37 @@ var ShuduguSource = class {
   async getChapters(request) {
     decodeNovelId(request.id);
     const cached = this.#catalogs.get(request.id);
-    if (cached !== void 0 && cached.expiresAtMs >= Date.now())
-      return cached.value;
+    if (cached !== void 0 && cached.expiresAtMs >= Date.now()) return cached.value;
     await this.#loadCachedDetail(request, detailProjectionPolicy, detailPolicy);
     const loaded = this.#catalogs.get(request.id);
-    if (loaded === void 0)
-      throw new Error("Source catalog was not loaded.");
+    if (loaded === void 0) throw new Error("Source catalog was not loaded.");
     return loaded.value;
   }
   async getContent(request) {
     const bookId = decodeNovelId(request.id);
     const chapterUrl = this.#decodeChapterId(request.chapterId);
     const firstPage = parseChapterPage(chapterUrl);
-    if (firstPage === null || firstPage.bookId !== bookId)
-      throw new Error("Chapter ID is invalid.");
+    if (firstPage === null || firstPage.bookId !== bookId) throw new Error("Chapter ID is invalid.");
     const cheerio = await loadCheerio();
     const visited = /* @__PURE__ */ new Set();
     const parts = [];
     let pageUrl = chapterUrl;
     let title = null;
     for (let page = 1; page <= 120; page += 1) {
-      if (visited.has(pageUrl.toString()))
-        throw new Error("Chapter pagination loop detected.");
+      if (visited.has(pageUrl.toString())) throw new Error("Chapter pagination loop detected.");
       visited.add(pageUrl.toString());
       const $ = cheerio.load(await this.#getHtml(pageUrl));
       const content = $(".container .con").first();
-      if (content.length === 0)
-        throw new Error("Source chapter content was not found.");
+      if (content.length === 0) throw new Error("Source chapter content was not found.");
       title ??= textOrNull($(".submenu h1").first().text())?.split(">").pop()?.trim() ?? null;
       const nextPage = this.#nextChapterPage($, pageUrl, firstPage);
       content.find("script,style,iframe,.submenu,.prenext").remove();
       const markup = (content.html() ?? "").replace(/<br\s*\/?>(?=.)/giu, "\n").replace(/<\/(?:p|div)>/giu, "\n\n");
       const pageText = cheerio.load(`<body>${markup}</body>`).text().replace(/\r/g, "").replace(/[ \t]+\n/g, "\n").replace(/\n[ \t]+/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
-      if (pageText !== "")
-        parts.push(pageText);
-      if (nextPage === null)
-        break;
+      if (pageText !== "") parts.push(pageText);
+      if (nextPage === null) break;
       pageUrl = nextPage;
-      if (page === 120)
-        throw new Error("Chapter pagination exceeds the safety limit.");
+      if (page === 120) throw new Error("Chapter pagination exceeds the safety limit.");
     }
     const text3 = parts.join("\n\n").trim();
     return Object.freeze({ chapterId: request.chapterId, contentKind: "novel", title, updatedAt: null, text: text3, pages: Object.freeze([]) });
@@ -6986,8 +6971,7 @@ var ShuduguSource = class {
     const request = async () => {
       this.context.log.debug("source_http_fetch_started");
       const response = await this.context.http.fetch(url, { headers: { Accept: "text/html,application/xhtml+xml", "Accept-Language": "zh-CN,zh;q=0.9" } });
-      if (!response.ok)
-        throw new Error(`Source request failed with HTTP ${response.status}.`);
+      if (!response.ok) throw new Error(`Source request failed with HTTP ${response.status}.`);
       if (response.url !== "" && new URL(response.url).origin !== this.#baseUrl.origin) {
         this.context.errors.raise({
           code: "source_access_blocked",
@@ -7023,20 +7007,17 @@ var ShuduguSource = class {
     const cheerio = await loadCheerio();
     const $ = cheerio.load(html3);
     const title = $("h2 a").filter((_, element) => textOrNull($(element).text()) === heading).first();
-    if (title.length === 0)
-      return Object.freeze([]);
+    if (title.length === 0) return Object.freeze([]);
     const section = title.closest(".container");
     const seen = /* @__PURE__ */ new Set();
     return Object.freeze(section.find("ul.list a[href]").toArray().flatMap((element) => {
       const link = $(element);
       const label = textOrNull(link.text());
       const href = link.attr("href");
-      if (label === null || href === void 0)
-        return [];
+      if (label === null || href === void 0) return [];
       const url = this.#sourceUrl(href, pageUrl);
       const id = novelIdFromUrl(url);
-      if (id === null || seen.has(id))
-        return [];
+      if (id === null || seen.has(id)) return [];
       seen.add(id);
       return [this.#summary({ id, title: label, author: null, category: null, coverUrl: null, description: null, status, wordCount: null, chapterCount: null, latestChapter: null, updatedAt: null })];
     }));
@@ -7053,13 +7034,11 @@ var ShuduguSource = class {
     const cheerio = await loadCheerio();
     const $ = cheerio.load(html3);
     const heading = $("h2 a").filter((_, element) => textOrNull($(element).text()) === "阅读排行").first();
-    if (heading.length === 0)
-      return Object.freeze([]);
+    if (heading.length === 0) return Object.freeze([]);
     const seen = /* @__PURE__ */ new Set();
     const queries = heading.closest(".container").find("ul.list.top > li p a[href]").toArray().flatMap((element) => {
       const query = textOrNull($(element).text());
-      if (query === null || seen.has(query))
-        return [];
+      if (query === null || seen.has(query)) return [];
       seen.add(query);
       return [query];
     });
@@ -7070,12 +7049,10 @@ var ShuduguSource = class {
     const link = root2.find("a[href]").toArray().map((candidate) => $(candidate)).find((candidate) => /^\/\d+\/$/u.test(candidate.attr("href") ?? ""));
     const href = link?.attr("href");
     const title = textOrNull(root2.find(".itemtxt h1 a, .itemtxt h3 a").first().text());
-    if (href === void 0 || title === null)
-      return [];
+    if (href === void 0 || title === null) return [];
     const url = this.#sourceUrl(href, pageUrl);
     const id = novelIdFromUrl(url);
-    if (id === null || seen.has(id))
-      return [];
+    if (id === null || seen.has(id)) return [];
     seen.add(id);
     const spans = root2.find(".itemtxt p span").toArray().map((candidate) => textOrNull($(candidate).text())).filter((value) => value !== null);
     const author = textOrNull(root2.find(".itemtxt a").filter((_, candidate) => /^作者[：:]/u.test($(candidate).text())).first().text().replace(/^作者[：:]/u, ""));
@@ -7108,11 +7085,9 @@ var ShuduguSource = class {
   }
   async #getDiscoveryDetail(request) {
     const cached = this.#details.get(request.id);
-    if (cached !== void 0 && cached.expiresAtMs >= Date.now())
-      return cached.value;
+    if (cached !== void 0 && cached.expiresAtMs >= Date.now()) return cached.value;
     const inFlight = this.#discoveryDetailRequests.get(request.id);
-    if (inFlight !== void 0)
-      return inFlight;
+    if (inFlight !== void 0) return inFlight;
     const pending = this.#loadCachedDetail(request, discoveryDetailProjectionPolicy, discoveryDetailPolicy).then((projection) => projection.detail);
     this.#discoveryDetailRequests.set(request.id, pending);
     void pending.then(() => this.#discoveryDetailRequests.delete(request.id), () => this.#discoveryDetailRequests.delete(request.id));
@@ -7122,10 +7097,14 @@ var ShuduguSource = class {
     const cached = this.#details.get(request.id);
     if (cached !== void 0 && cached.expiresAtMs >= Date.now()) {
       const catalog = this.#catalogs.get(request.id)?.value;
-      if (catalog !== void 0)
-        return Object.freeze({ detail: cached.value, catalog });
+      if (catalog !== void 0) return Object.freeze({ detail: cached.value, catalog });
     }
-    const result = await this.#cache.getOrFetchJsonResult(`detail:${request.id}`, projectionPolicy, () => this.#loadDetailProjection(request, htmlPolicy), decodeDetailProjection);
+    const result = await this.#cache.getOrFetchJsonResult(
+      `detail:${request.id}`,
+      projectionPolicy,
+      () => this.#loadDetailProjection(request, htmlPolicy),
+      decodeDetailProjection
+    );
     const expiresAtMs = result.storedAtMs + projectionPolicy.staleAfterMs;
     this.#details.set(request.id, Object.freeze({ expiresAtMs, value: result.value.detail }));
     this.#catalogs.set(request.id, Object.freeze({ expiresAtMs, value: result.value.catalog }));
@@ -7136,12 +7115,10 @@ var ShuduguSource = class {
     return Object.freeze($("#list a[href]").toArray().flatMap((element) => {
       const title = textOrNull($(element).text());
       const href = $(element).attr("href");
-      if (title === null || href === void 0)
-        return [];
+      if (title === null || href === void 0) return [];
       const url = this.#sourceUrl(href, base);
       const id = this.#chapterId(url);
-      if (seen.has(id))
-        return [];
+      if (seen.has(id)) return [];
       seen.add(id);
       return [Object.freeze({ id, title, url })];
     }));
@@ -7154,16 +7131,13 @@ var ShuduguSource = class {
     for (let page = 1; page <= 120; page += 1) {
       const $ = cheerio.load(pageHtml);
       for (const chapter of this.#parseCatalog($, pageUrl)) {
-        if (seen.has(chapter.id))
-          continue;
+        if (seen.has(chapter.id)) continue;
         seen.add(chapter.id);
         chapters.push(chapter);
       }
       const nextPage = this.#nextCatalogPage($, pageUrl, bookId);
-      if (nextPage === null)
-        return Object.freeze(chapters);
-      if (page === 120)
-        throw new Error("Catalog pagination exceeds the safety limit.");
+      if (nextPage === null) return Object.freeze(chapters);
+      if (page === 120) throw new Error("Catalog pagination exceeds the safety limit.");
       pageUrl = nextPage;
       pageHtml = await this.#getHtml(pageUrl, policy);
     }
@@ -7174,16 +7148,13 @@ var ShuduguSource = class {
       const label = (textOrNull($(element).text()) ?? "").replace(/\s+/gu, "");
       return label === "下一页";
     });
-    if (next2 === void 0)
-      return null;
+    if (next2 === void 0) return null;
     const href = $(next2).attr("href");
-    if (href === void 0)
-      throw new Error("Catalog continuation is invalid.");
+    if (href === void 0) throw new Error("Catalog continuation is invalid.");
     const candidate = this.#sourceUrl(href, current);
     const currentPage = parseCatalogPage(current, bookId);
     const candidatePage = parseCatalogPage(candidate, bookId);
-    if (currentPage === null || candidatePage === null || candidatePage !== currentPage + 1)
-      throw new Error("Catalog continuation is invalid.");
+    if (currentPage === null || candidatePage === null || candidatePage !== currentPage + 1) throw new Error("Catalog continuation is invalid.");
     return candidate;
   }
   #nextChapterPage($, current, firstPage) {
@@ -7191,11 +7162,9 @@ var ShuduguSource = class {
       const label = (textOrNull($(element).text()) ?? "").replace(/\s+/gu, "");
       return /^(?:下一页|下页|next|>|›|»)$/iu.test(label);
     });
-    if (next2 === void 0)
-      return null;
+    if (next2 === void 0) return null;
     const href = $(next2).attr("href");
-    if (href === void 0)
-      throw new Error("Chapter continuation is invalid.");
+    if (href === void 0) throw new Error("Chapter continuation is invalid.");
     const candidate = this.#sourceUrl(href, current);
     const page = parseChapterPage(candidate);
     const currentPage = parseChapterPage(current);
@@ -7207,8 +7176,7 @@ var ShuduguSource = class {
   #category(target) {
     const id = target.startsWith("category:") ? target.slice(9) : "";
     const result = this.#categories.find((category) => category.id === id);
-    if (result === void 0)
-      throw new Error("Category target is invalid.");
+    if (result === void 0) throw new Error("Category target is invalid.");
     return result;
   }
   #categoryUrl(id, page) {
@@ -7216,58 +7184,40 @@ var ShuduguSource = class {
   }
   #sourceUrl(value, base) {
     const url = new URL(value, base);
-    if (url.origin !== this.#baseUrl.origin || url.protocol !== "https:")
-      throw new Error("Source URL is invalid.");
+    if (url.origin !== this.#baseUrl.origin || url.protocol !== "https:") throw new Error("Source URL is invalid.");
     return url;
   }
   #proxyCoverUrl(value, base) {
     const url = publicHttpUrl(value, base);
-    if (url === null || new URL(url).origin !== this.#baseUrl.origin)
-      return null;
+    if (url === null || new URL(url).origin !== this.#baseUrl.origin) return null;
     return this.context.resource.proxy({ kind: "image", url, headers: { Accept: "image/*" } });
   }
   #chapterId(url) {
-    if (parseChapterPage(url) === null)
-      throw new Error("Chapter URL is invalid.");
+    if (parseChapterPage(url) === null) throw new Error("Chapter URL is invalid.");
     return `chapter:${Buffer.from(url.pathname).toString("base64url")}`;
   }
   #decodeChapterId(id) {
-    if (!id.startsWith("chapter:"))
-      throw new Error("Chapter ID is invalid.");
+    if (!id.startsWith("chapter:")) throw new Error("Chapter ID is invalid.");
     const path = Buffer.from(id.slice(8), "base64url").toString("utf8");
     const url = this.#sourceUrl(path, this.#baseUrl);
-    if (parseChapterPage(url) === null)
-      throw new Error("Chapter ID is invalid.");
+    if (parseChapterPage(url) === null) throw new Error("Chapter ID is invalid.");
     return url;
   }
 };
 function categoryIcon(id, title) {
-  if (id === "dushi")
-    return "urban";
-  if (id === "xuanhuan" || id === "qihuan" || id === "xianxia")
-    return "fantasy";
-  if (id === "qing")
-    return "lightNovel";
-  if (id === "lishi")
-    return "history";
-  if (id === "kehuan" || id === "zhutianwuxian")
-    return "scienceFiction";
-  if (id === "youxi")
-    return "game";
-  if (id === "xuanyi")
-    return "mystery";
-  if (id === "tiyu")
-    return "sports";
-  if (id === "junshi")
-    return "military";
-  if (id === "wuxia")
-    return "wuxia";
-  if (id === "xiangcun")
-    return "rural";
-  if (id === "yanqing")
-    return "romance";
-  if (title.includes("官场") || title.includes("现实"))
-    return "globe";
+  if (id === "dushi") return "urban";
+  if (id === "xuanhuan" || id === "qihuan" || id === "xianxia") return "fantasy";
+  if (id === "qing") return "lightNovel";
+  if (id === "lishi") return "history";
+  if (id === "kehuan" || id === "zhutianwuxian") return "scienceFiction";
+  if (id === "youxi") return "game";
+  if (id === "xuanyi") return "mystery";
+  if (id === "tiyu") return "sports";
+  if (id === "junshi") return "military";
+  if (id === "wuxia") return "wuxia";
+  if (id === "xiangcun") return "rural";
+  if (id === "yanqing") return "romance";
+  if (title.includes("官场") || title.includes("现实")) return "globe";
   return "category";
 }
 function documentResult(section) {
@@ -7275,8 +7225,7 @@ function documentResult(section) {
 }
 function required(value) {
   const result = textOrNull(value);
-  if (result === null)
-    throw new Error("Required source field is empty.");
+  if (result === null) throw new Error("Required source field is empty.");
   return result;
 }
 function textOrNull(value) {
@@ -7287,37 +7236,30 @@ function novelIdFromUrl(url) {
 }
 function decodeNovelId(id) {
   const value = /^novel:(\d+)$/u.exec(id)?.[1];
-  if (value === void 0)
-    throw new Error("Novel ID is invalid.");
+  if (value === void 0) throw new Error("Novel ID is invalid.");
   return value;
 }
 function parseChapterPage(url) {
   const match = /^\/(\d+)\/(\d+)(?:-(\d+))?\.html$/u.exec(url.pathname);
-  if (match === null)
-    return null;
+  if (match === null) return null;
   const pageNumber = Number(match[3] ?? "1");
   return Number.isSafeInteger(pageNumber) && pageNumber >= 1 ? Object.freeze({ bookId: match[1], chapterNumber: match[2], pageNumber }) : null;
 }
 function parseCatalogPage(url, bookId) {
-  if (url.pathname === `/${bookId}/`)
-    return 1;
+  if (url.pathname === `/${bookId}/`) return 1;
   const match = new RegExp(`^/${bookId}/p-(\\d+)\\.html$`, "u").exec(url.pathname);
-  if (match === null)
-    return null;
+  if (match === null) return null;
   const page = Number(match[1]);
   return Number.isSafeInteger(page) && page >= 2 ? page : null;
 }
 function decodePage(cursor, scope) {
-  if (cursor === null)
-    return 1;
+  if (cursor === null) return 1;
   const value = Number(new RegExp(`^${scope}:(\\d+)$`, "u").exec(cursor)?.[1] ?? Number.NaN);
-  if (!Number.isSafeInteger(value) || value < 1)
-    throw new Error("Cursor is invalid.");
+  if (!Number.isSafeInteger(value) || value < 1) throw new Error("Cursor is invalid.");
   return value;
 }
 function boundedPageSize(value) {
-  if (!Number.isSafeInteger(value) || value < 1)
-    throw new Error("Page size is invalid.");
+  if (!Number.isSafeInteger(value) || value < 1) throw new Error("Page size is invalid.");
   return Math.min(value, 100);
 }
 function parseSearchTotal(value) {
@@ -7326,32 +7268,26 @@ function parseSearchTotal(value) {
 }
 function parseCount(value, suffix) {
   const match = /([\d.]+)(万|亿)?/u.exec(value);
-  if (match === null)
-    return null;
+  if (match === null) return null;
   const number = Number(match[1]);
   const result = Math.round(number * (match[2] === "万" ? 1e4 : match[2] === "亿" ? 1e8 : 1));
   return Number.isSafeInteger(result) && result >= 0 && value.includes(suffix) ? result : null;
 }
 function parseStatus(value) {
   const text3 = value ?? "";
-  if (/连载|更新中/u.test(text3))
-    return "ongoing";
-  if (/完结/u.test(text3))
-    return "completed";
-  if (/暂停|断更|停更/u.test(text3))
-    return "hiatus";
+  if (/连载|更新中/u.test(text3)) return "ongoing";
+  if (/完结/u.test(text3)) return "completed";
+  if (/暂停|断更|停更/u.test(text3)) return "hiatus";
   return "unknown";
 }
 function parseDate(value) {
   const match = /(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?/u.exec(value);
-  if (match === null)
-    return null;
+  if (match === null) return null;
   const iso = `${match[1]}-${match[2]}-${match[3]}T${match[4]}:${match[5]}:${match[6] ?? "00"}+08:00`;
   return Number.isNaN(Date.parse(iso)) ? null : new Date(iso).toISOString();
 }
 function publicHttpUrl(value, base) {
-  if (value === void 0)
-    return null;
+  if (value === void 0) return null;
   try {
     const url = new URL(value, base);
     return (url.protocol === "http:" || url.protocol === "https:") && url.username === "" && url.password === "" ? url.toString() : null;
@@ -7360,23 +7296,19 @@ function publicHttpUrl(value, base) {
   }
 }
 function decodeDetailProjection(value) {
-  if (!isRecord2(value) || !isRecord2(value.detail) || !isRecord2(value.catalog))
-    return void 0;
+  if (!isRecord2(value) || !isRecord2(value.detail) || !isRecord2(value.catalog)) return void 0;
   const detail = value.detail;
   const catalog = value.catalog;
-  if (!Array.isArray(catalog.items))
-    return void 0;
-  if (typeof detail.id !== "string" || typeof detail.title !== "string" || detail.contentKind !== "novel" || !Array.isArray(detail.aliases) || !(typeof detail.catalogUrl === "string" || detail.catalogUrl === null))
-    return void 0;
-  if (!catalog.items.every((item) => isRecord2(item) && typeof item.id === "string" && typeof item.title === "string" && Number.isSafeInteger(item.order)))
-    return void 0;
+  if (!Array.isArray(catalog.items)) return void 0;
+  if (typeof detail.id !== "string" || typeof detail.title !== "string" || detail.contentKind !== "novel" || !Array.isArray(detail.aliases) || !(typeof detail.catalogUrl === "string" || detail.catalogUrl === null)) return void 0;
+  if (!catalog.items.every((item) => isRecord2(item) && typeof item.id === "string" && typeof item.title === "string" && Number.isSafeInteger(item.order))) return void 0;
   return Object.freeze({ detail, catalog });
 }
 function isRecord2(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-// dist/index.mjs
+// src/index.mts
 var context;
 var source;
 var sourceRules = Object.freeze({
@@ -7425,14 +7357,12 @@ async function getContent(request) {
   return invoke("get_content", () => requireSource().getContent(request));
 }
 function requireSource() {
-  if (source === void 0)
-    throw new Error("Source is not activated.");
+  if (source === void 0) throw new Error("Source is not activated.");
   return source;
 }
 async function invoke(operation, action) {
   const activeContext = context;
-  if (activeContext === void 0)
-    throw new Error("Source is not activated.");
+  if (activeContext === void 0) throw new Error("Source is not activated.");
   activeContext.log.info(`source_${operation}_started`);
   try {
     activeContext.log.debug(`source_${operation}_validated`);
@@ -7443,14 +7373,12 @@ async function invoke(operation, action) {
     return result;
   } catch (error) {
     activeContext.log.warn(`source_${operation}_failed`);
-    if (isRuntimeRaisedError(error))
-      throw error;
+    if (isRuntimeRaisedError(error)) throw error;
     throw new Error("Source operation failed.");
   }
 }
 function isRuntimeRaisedError(error) {
-  if (error === null || typeof error !== "object")
-    return false;
+  if (error === null || typeof error !== "object") return false;
   const candidate = error;
   return candidate.name === "PluginManagerError" && typeof candidate.code === "string";
 }

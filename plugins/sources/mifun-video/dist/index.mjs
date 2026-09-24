@@ -1,6 +1,6 @@
 import { createRequire as __mgreadCreateRequire } from 'node:module'; const require = __mgreadCreateRequire(import.meta.url);
 
-// dist/index.mjs
+// src/index.mts
 var initial = "https://getcf.mymifun.com";
 var hostList = "https://miget-1313189639.cos.ap-guangzhou.myqcloud.com/mifun.txt";
 var agent = "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/126.0 Mobile Safari/537.36";
@@ -18,8 +18,7 @@ async function activate(next) {
 }
 async function search(request) {
   const query = request.query.trim();
-  if (query === "")
-    return frozen({ items: [], nextCursor: null, totalCount: 0 });
+  if (query === "") return frozen({ items: [], nextCursor: null, totalCount: 0 });
   const page = cursorPage(request.cursor, "search"), path = page === 1 ? `/vodsearch/?wd=${encodeURIComponent(query)}` : `/vodsearch${encodeURIComponent(query)}/page/${page}/`, values = parseItems(await html(path)), items = values.map(summary).slice(0, clamp(request.pageSize));
   return frozen({ items, nextCursor: values.length >= clamp(request.pageSize) ? `search:${page + 1}` : null, totalCount: null });
 }
@@ -27,18 +26,14 @@ async function searchSuggestions(_request) {
   return frozen({ items: [], nextCursor: null });
 }
 async function discover(request) {
-  if (request.target === null)
-    return frozen({ kind: "document", document: { components: [{ type: "section", id: "mifun-channels", title: "MiFun", subtitle: "动漫分类", icon: "video", children: [{ type: "categoryCollection", id: "mifun-channel-list", layout: "chips", categories: channels.map((channel2) => ({ id: channel2.id, title: channel2.title, target: `channel:${channel2.id}`, count: null, url: null, icon: "video" })) }] }] } });
+  if (request.target === null) return frozen({ kind: "document", document: { components: [{ type: "section", id: "mifun-channels", title: "MiFun", subtitle: "动漫分类", icon: "video", children: [{ type: "categoryCollection", id: "mifun-channel-list", layout: "chips", categories: channels.map((channel2) => ({ id: channel2.id, title: channel2.title, target: `channel:${channel2.id}`, count: null, url: null, icon: "video" })) }] }] } });
   const channel = channels.find((value) => request.target === `channel:${value.id}`);
-  if (!channel)
-    throw new Error("Discovery target is invalid.");
+  if (!channel) throw new Error("Discovery target is invalid.");
   const page = cursorPage(request.cursor, request.target), size = clamp(request.pageSize);
-  if (channel.id === "0" && (request.cursor !== null || request.collectionId !== null))
-    throw new Error("Discovery continuation is not supported.");
+  if (channel.id === "0" && (request.cursor !== null || request.collectionId !== null)) throw new Error("Discovery continuation is not supported.");
   const path = channel.id === "0" ? "/" : page === 1 ? `/vodtype/${channel.id}/` : `/vodtype/${channel.id}-${page}/`, source = await html(path), values = parseItems(source), contents = values.map(summary).slice(0, size), collectionId = `mifun:${channel.id}`, items = contents.map((content) => frozen({ content, rank: null, metric: null, recommendation: null })), nextPath = channel.id === "0" ? null : `/vodtype/${channel.id}-${page + 1}/`, continuation = nextPath !== null && hasLink(source, nextPath) ? frozen({ target: request.target, cursor: `channel:${channel.id}:${page + 1}` }) : null;
   if (request.collectionId !== null) {
-    if (request.collectionId !== collectionId)
-      throw new Error("Discovery collection is invalid.");
+    if (request.collectionId !== collectionId) throw new Error("Discovery collection is invalid.");
     return frozen({ kind: "append", collectionId, items, continuation });
   }
   return frozen({ kind: "document", document: { components: [{ type: "section", id: `${collectionId}:section`, title: channel.title, subtitle: null, icon: "video", children: [{ type: "contentCollection", id: collectionId, layout: "coverGrid", items, continuation }] }] } });
@@ -53,8 +48,7 @@ async function getChapters(request) {
 }
 async function getContent(request) {
   const id = contentId(request.id), episode = chapterKey(request.chapterId, id), pageUrl = `${await currentBase()}/vodplay/${id}-${episode.line}-${episode.number}/`, source = await html(pageUrl), raw = source.match(/player_aaaa\s*=\s*(\{[\s\S]*?\})\s*(?:<\/script>|;)/u)?.[1];
-  if (!raw)
-    throw new Error("Player data is unavailable.");
+  if (!raw) throw new Error("Player data is unavailable.");
   let data;
   try {
     data = JSON.parse(raw);
@@ -62,17 +56,14 @@ async function getContent(request) {
     throw new Error("Player data is invalid.");
   }
   const input = isRecord(data) ? text(data.url) : "", upstream = safeUrl(input) ? input : await resolvePlayer(input, pageUrl);
-  if (!safeUrl(upstream))
-    throw new Error("Video address is unavailable.");
+  if (!safeUrl(upstream)) throw new Error("Video address is unavailable.");
   const mediaHeaders = { "User-Agent": agent, Referer: pageUrl };
   return frozen({ chapterId: request.chapterId, contentKind: "video", title: null, updatedAt: null, text: null, pages: [], media: { url: requireContext().resource.proxy({ kind: "video", url: upstream, headers: mediaHeaders }), resourceType: "video", resourcePolicy: "sessionOnly", expiresAt: null, mimeType: /\.m3u8(?:$|[?#])/iu.test(upstream) ? "application/vnd.apple.mpegurl" : "video/mp4", headers: mediaHeaders } });
 }
 async function resolvePlayer(input, chapterUrl) {
-  if (!input)
-    throw new Error("Player token is unavailable.");
+  if (!input) throw new Error("Player token is unavailable.");
   const page = `https://data.m3u8.in/player/?url=${encodeURIComponent(input)}`, source = await requestText(page, { ...headers(chapterUrl), Accept: "text/html,*/*;q=0.8" }), sign = source.match(/(?:const|var)\s+Sign\s*=\s*["']([^"']+)/u)?.[1] ?? source.match(/["']sign["']\s*:\s*["']([a-fA-F0-9]{32})/u)?.[1];
-  if (!sign)
-    throw new Error("Player signature is unavailable.");
+  if (!sign) throw new Error("Player signature is unavailable.");
   const raw = await requestText(`https://data.m3u8.in/player/api.php?url=${encodeURIComponent(input)}&sign=${encodeURIComponent(sign)}`, { "User-Agent": agent, Accept: "application/json,text/plain,*/*", Referer: page });
   let value;
   try {
@@ -84,44 +75,40 @@ async function resolvePlayer(input, chapterUrl) {
 }
 async function html(input) {
   const root = await currentBase(), url = safeUrl(input) ? input : new URL(input, `${root}/`).toString(), cached = pageCache.get(url);
-  if (cached)
-    return cached;
+  if (cached) return cached;
   const value = decode(await requestText(url, headers(`${root}/`)));
   pageCache.set(url, value);
   return value;
 }
 async function requestText(url, requestHeaders) {
   const response = await requireContext().http.fetch(url, { headers: requestHeaders });
-  if (!response.ok)
-    throw new Error("Source request failed.");
+  if (!response.ok) throw new Error("Source request failed.");
   return await response.text();
 }
 function headers(referer) {
   return { "User-Agent": agent, Accept: "application/json,text/plain,*/*;q=0.9,text/html;q=0.8", Referer: referer };
 }
 async function currentBase() {
-  if (!basePromise)
-    basePromise = (async () => {
-      for (const candidate of [base, ...await candidates()]) {
-        try {
-          const response = await requireContext().http.fetch(`${candidate.replace(/\/+$/u, "")}/`, { headers: headers(`${candidate}/`) }), source = await response.text();
-          if (response.ok && (source.includes("MiFun") || source.includes("voddetail"))) {
-            base = candidate.replace(/\/+$/u, "");
-            return base;
-          }
-        } catch {
-          continue;
+  if (!basePromise) basePromise = (async () => {
+    for (const candidate of [base, ...await candidates()]) {
+      try {
+        const response = await requireContext().http.fetch(`${candidate.replace(/\/+$/u, "")}/`, { headers: headers(`${candidate}/`) }), source = await response.text();
+        if (response.ok && (source.includes("MiFun") || source.includes("voddetail"))) {
+          base = candidate.replace(/\/+$/u, "");
+          return base;
         }
+      } catch {
+        continue;
       }
-      return base;
-    })();
+    }
+    return base;
+  })();
   return basePromise;
 }
 async function candidates() {
   try {
     const response = await requireContext().http.fetch(hostList, { headers: headers("") });
-    if (!response.ok)
-      return [];
+    if (!response.ok) return [];
     return (await response.text()).split(/\r?\n/u).map((value) => value.trim().replace(/\/+$/u, "")).filter(safeUrl);
   } catch {
     return [];
@@ -131,11 +118,9 @@ function parseItems(source) {
   const result = /* @__PURE__ */ new Map();
   for (const match of source.matchAll(/<li\b[^>]*class="[^"]*hl-list-item[^"]*"[^>]*>([\s\S]*?)<\/li>/gu)) {
     const block = match[1] ?? "", link = block.match(/<a\b[^>]*href="([^"]*\/voddetail\/(\d+)\/[^"]*)"/u), id = link?.[2];
-    if (!id)
-      continue;
+    if (!id) continue;
     const title = clean(pick(block, /<a\b[^>]*title="([^"]+)"/u) || pick(block, /<div\b[^>]*hl-item-title[\s\S]*?<a[^>]*>([\s\S]*?)<\/a>/u));
-    if (!title)
-      continue;
+    if (!title) continue;
     result.set(id, { id, title, cover: absolute(pick(block, /data-original="([^"]+)"/u) || pick(block, /src="([^"]+)"/u)), author: clean(pick(block, /class="[^"]*hl-item-sub[^"]*"[^>]*>([\s\S]*?)<\/div>/u)), remark: clean(pick(block, /class="[^"]*remarks[^"]*"[^>]*>([\s\S]*?)<\/span>/u)), category: clean(pick(block, /class="[^"]*state[^"]*"[^>]*>([\s\S]*?)<\/span>/u)) });
   }
   return [...result.values()];
@@ -145,12 +130,10 @@ function detail(source, id) {
 }
 function parseEpisodes(source) {
   const result = /* @__PURE__ */ new Map(), names = /* @__PURE__ */ new Map();
-  for (const match of source.matchAll(/<li\b[^>]*data-href="[^"]*\/vodplay\/\d+-(\d+)-\d+\/[^"]*"[^>]*>[\s\S]*?<span\b[^>]*>([\s\S]*?)<\/span>/gu))
-    names.set(match[1] ?? "", clean(match[2] ?? ""));
+  for (const match of source.matchAll(/<li\b[^>]*data-href="[^"]*\/vodplay\/\d+-(\d+)-\d+\/[^"]*"[^>]*>[\s\S]*?<span\b[^>]*>([\s\S]*?)<\/span>/gu)) names.set(match[1] ?? "", clean(match[2] ?? ""));
   for (const match of source.matchAll(/<a\b[^>]*href="[^"]*\/vodplay\/(\d+)-(\d+)-(\d+)\/[^"]*"[^>]*>([\s\S]*?)<\/a>/gu)) {
     const line = match[2] ?? "", number = match[3] ?? "", title = clean(match[4] ?? "");
-    if (title === "立即播放" || title === "播放")
-      continue;
+    if (title === "立即播放" || title === "播放") continue;
     result.set(`${line}:${number}`, { line, number, title: title || `第${number}集`, group: names.get(line) || `线路${line}` });
   }
   return [...result.values()].sort((a, b) => Number(a.line) - Number(b.line) || Number(a.number) - Number(b.number));
@@ -160,24 +143,20 @@ function summary(value) {
 }
 function contentId(id) {
   const value = /^video:(\d+)$/u.exec(id)?.[1];
-  if (!value)
-    throw new Error("Content ID is invalid.");
+  if (!value) throw new Error("Content ID is invalid.");
   return value;
 }
 function chapterKey(id, content) {
   const match = new RegExp(`^video:${content}:(\\d+):(\\d+)$`, "u").exec(id);
-  if (!match)
-    throw new Error("Chapter ID is invalid.");
+  if (!match) throw new Error("Chapter ID is invalid.");
   return { line: match[1] ?? "", number: match[2] ?? "" };
 }
 function proxyImage(url) {
   return safeUrl(url) ? requireContext().resource.proxy({ kind: "image", url, headers: { Referer: `${base}/` } }) : null;
 }
 function absolute(value) {
-  if (value.startsWith("//"))
-    return `https:${value}`;
-  if (value.startsWith("/"))
-    return `${base}${value}`;
+  if (value.startsWith("//")) return `https:${value}`;
+  if (value.startsWith("/")) return `${base}${value}`;
   return value;
 }
 function safeUrl(value) {
@@ -206,11 +185,9 @@ function text(value) {
   return typeof value === "string" ? value.trim() : typeof value === "number" ? String(value) : "";
 }
 function cursorPage(cursor, target) {
-  if (cursor === null)
-    return 1;
+  if (cursor === null) return 1;
   const page = Number(cursor.startsWith(`${target}:`) ? cursor.slice(target.length + 1) : "");
-  if (!Number.isSafeInteger(page) || page < 2)
-    throw new Error("Cursor is invalid.");
+  if (!Number.isSafeInteger(page) || page < 2) throw new Error("Cursor is invalid.");
   return page;
 }
 function clamp(value) {
@@ -220,8 +197,7 @@ function frozen(value) {
   return Object.freeze(value);
 }
 function requireContext() {
-  if (!context)
-    throw new Error("Source is not activated.");
+  if (!context) throw new Error("Source is not activated.");
   return context;
 }
 export {

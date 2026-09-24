@@ -44706,7 +44706,7 @@ var undici = __toESM(require_undici(), 1);
 var import_whatwg_mimetype = __toESM(require_mime_type(), 1);
 import { Writable as Writable2, finished } from "node:stream";
 
-// dist/index.mjs
+// src/index.mts
 var base = "https://manwamu.cc";
 var imageTransformKey = "0B6666A0-BB59-1381-B746-a0E4C9AC";
 var headers = Object.freeze({ "User-Agent": "Mozilla/5.0 MgRead", Accept: "text/html,application/json,*/*" });
@@ -44718,8 +44718,7 @@ async function activate(next2) {
 }
 async function search(request) {
   const query = request.query.trim();
-  if (query === "")
-    return frozen({ items: [], nextCursor: null, totalCount: 0 });
+  if (query === "") return frozen({ items: [], nextCursor: null, totalCount: 0 });
   const page = cursorPage(request.cursor, "search"), size = clamp(request.pageSize), json = await fetchJson(`${base}/api/search?type=mh&page=${page}&pageSize=${size}&keyword=${encodeURIComponent(query)}`), data2 = object(json.data), items = records(data2.list).map(apiSummary).filter(notNull), totalCount = nonNegative(first2(data2.total, data2.totalCount));
   return frozen({ items, nextCursor: totalCount !== null ? page * size < totalCount ? `search:${page + 1}` : null : items.length >= size ? `search:${page + 1}` : null, totalCount });
 }
@@ -44728,17 +44727,14 @@ async function searchSuggestions(_request) {
 }
 async function discover(request) {
   if (request.target === null) {
-    if (request.cursor !== null || request.collectionId !== null)
-      throw new Error("Initial discovery request is invalid.");
+    if (request.cursor !== null || request.collectionId !== null) throw new Error("Initial discovery request is invalid.");
     return frozen({ kind: "document", document: { components: [{ type: "section", id: "manwa-categories", title: "漫蛙漫画", subtitle: "按分类浏览", icon: "manga", children: [{ type: "categoryCollection", id: "manwa-category-list", layout: "chips", categories: categories.map(([id, title]) => ({ id, title, target: `category:${id}`, count: null, url: null, icon: "manga" })) }] }] } });
   }
   const category = categories.find(([id]) => request.target === `category:${id}`);
-  if (category === void 0)
-    throw new Error("Discovery target is invalid.");
+  if (category === void 0) throw new Error("Discovery target is invalid.");
   const page = cursorPage(request.cursor, request.target), size = clamp(request.pageSize), json = await fetchJson(`${base}/api/home?page=${page}&pageSize=${size}&type=${category[2]}&flag=true`), values = records(object(json.data)[`${category[2]}List`]).map(apiSummary).filter(notNull), collectionId = `manga:${category[0]}`, items = values.map((content) => frozen({ content, rank: null, metric: null, recommendation: null })), continuation = values.length >= size ? frozen({ target: request.target, cursor: `${request.target}:${page + 1}` }) : null;
   if (request.collectionId !== null) {
-    if (request.collectionId !== collectionId)
-      throw new Error("Discovery collection is invalid.");
+    if (request.collectionId !== collectionId) throw new Error("Discovery collection is invalid.");
     return frozen({ kind: "append", collectionId, items, continuation });
   }
   return frozen({ kind: "document", document: { components: [{ type: "section", id: `${collectionId}:section`, title: category[1], subtitle: null, icon: "manga", children: [{ type: "contentCollection", id: collectionId, layout: "coverGrid", items, continuation }] }] } });
@@ -44751,8 +44747,7 @@ async function getChapters(request) {
   const id = contentId(request.id), $2 = load(await fetchText(bookUrl(id))), items = [];
   for (const node of $2('#chapter-grid-container a.chapter-item,a.chapter-item[href*="/comic/"]').toArray()) {
     const href = $2(node).attr("href") ?? "", match = /\/comic\/\d+\/(\d+)(?:_(\d+))?/u.exec(href), native = match?.[1], page = match?.[2] ?? "1", title = clean($2(node).attr("data-title") ?? $2(node).find(".chapter-name").text() ?? $2(node).text());
-    if (native === void 0 || title === "")
-      continue;
+    if (native === void 0 || title === "") continue;
     items.push(frozen({ id: chapterId(id, native, page), title, order: items.length, url: null, volumeTitle: "章节", wordCount: null, updatedAt: null, isLocked: null, attributes: [] }));
   }
   return frozen({ items, groups: items.length === 0 ? [] : [frozen({ id: `group:manga:${id}`, title: "章节", order: 0, episodes: items })] });
@@ -44761,34 +44756,28 @@ async function getContent(request) {
   const book = contentId(request.id), { cid, page } = chapterNative(request.chapterId, book), json = await fetchJson(`${base}/api/comic/image/${encodeURIComponent(cid)}?page=${encodeURIComponent(page)}&page_size=60&image_source=`), rawImages = object(json.data).images, images = Array.isArray(rawImages) ? rawImages : [], pages = [];
   for (const value of images) {
     const upstream = typeof value === "string" ? value : isObject(value) ? text3(first2(value.url, value.src)) : "";
-    if (!safeUrl(upstream))
-      continue;
+    if (!safeUrl(upstream)) continue;
     const index2 = pages.length;
     pages.push(frozen({ id: `page:${cid}:${page}:${index2 + 1}`, index: index2, url: proxyEncryptedImage(upstream, bookUrl(book)), mimeType: imageMime(upstream), width: null, height: null }));
   }
-  if (pages.length === 0)
-    throw new Error("Chapter images are unavailable.");
+  if (pages.length === 0) throw new Error("Chapter images are unavailable.");
   return frozen({ chapterId: request.chapterId, contentKind: "manga", title: null, updatedAt: null, text: null, pages: Object.freeze(pages) });
 }
 async function fetchJson(url) {
   const response = await requireContext().http.fetch(url, { headers });
-  if (!response.ok)
-    throw new Error("Source request failed.");
+  if (!response.ok) throw new Error("Source request failed.");
   const value = await response.json();
-  if (!isObject(value))
-    throw new Error("Source response is invalid.");
+  if (!isObject(value)) throw new Error("Source response is invalid.");
   return value;
 }
 async function fetchText(url) {
   const response = await requireContext().http.fetch(url, { headers });
-  if (!response.ok)
-    throw new Error("Source request failed.");
+  if (!response.ok) throw new Error("Source request failed.");
   return response.text();
 }
 function apiSummary(value) {
   const id = bookId(first2(value.id, value.comicId, value.url));
-  if (id === null)
-    return null;
+  if (id === null) return null;
   return summary(id, text3(first2(value.title, value.name)) || id, text3(first2(value.author, value.authors)), text3(first2(value.cover, value.pic, value.coverUrl)), text3(first2(value.description, value.intro)), stringList(value.tags));
 }
 function summary(id, title, author, cover, description, tags) {
@@ -44804,8 +44793,7 @@ function bookUrl(id) {
 }
 function contentId(id) {
   const value = /^manga:(\d+)$/u.exec(id)?.[1];
-  if (value === void 0)
-    throw new Error("Content ID is invalid.");
+  if (value === void 0) throw new Error("Content ID is invalid.");
   return value;
 }
 function chapterId(book, cid, page) {
@@ -44813,11 +44801,9 @@ function chapterId(book, cid, page) {
 }
 function chapterNative(id, book) {
   const encoded = new RegExp(`^manga:${book}:chapter:([A-Za-z0-9_-]+)$`, "u").exec(id)?.[1];
-  if (encoded === void 0)
-    throw new Error("Chapter ID is invalid.");
+  if (encoded === void 0) throw new Error("Chapter ID is invalid.");
   const [cid, page] = Buffer.from(encoded, "base64url").toString("utf8").split("|");
-  if (!cid || !page || !/^\d+$/u.test(cid) || !/^\d+$/u.test(page))
-    throw new Error("Chapter ID is invalid.");
+  if (!cid || !page || !/^\d+$/u.test(cid) || !/^\d+$/u.test(page)) throw new Error("Chapter ID is invalid.");
   return { cid, page };
 }
 function proxyImage(value) {
@@ -44845,16 +44831,13 @@ function safeUrl(value) {
   }
 }
 function cursorPage(cursor, target) {
-  if (cursor === null)
-    return 1;
+  if (cursor === null) return 1;
   const raw = cursor.startsWith(`${target}:`) ? cursor.slice(target.length + 1) : "", page = Number(raw);
-  if (!Number.isSafeInteger(page) || page < 2 || page > 1e3)
-    throw new Error("Cursor is invalid.");
+  if (!Number.isSafeInteger(page) || page < 2 || page > 1e3) throw new Error("Cursor is invalid.");
   return page;
 }
 function stringList(value) {
-  if (Array.isArray(value))
-    return value.map(text3).filter(Boolean).slice(0, 32);
+  if (Array.isArray(value)) return value.map(text3).filter(Boolean).slice(0, 32);
   const raw = text3(value);
   return raw === "" ? [] : raw.split(/[,，/]/u).map((part) => part.trim()).filter(Boolean).slice(0, 32);
 }
@@ -44890,8 +44873,7 @@ function frozen(value) {
   return Object.freeze(value);
 }
 function requireContext() {
-  if (context === void 0)
-    throw new Error("Source is not activated.");
+  if (context === void 0) throw new Error("Source is not activated.");
   return context;
 }
 export {

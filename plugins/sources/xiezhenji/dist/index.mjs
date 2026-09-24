@@ -47,7 +47,7 @@ var require_boolbase = __commonJS({
   }
 });
 
-// dist/source.js
+// src/source.ts
 import { Buffer as Buffer2 } from "node:buffer";
 
 // node_modules/cheerio/dist/esm/options.js
@@ -6699,22 +6699,22 @@ function byteLength(value) {
   }
 }
 
-// dist/source.js
+// src/source.ts
 var origin = "https://xx.knit.bid";
 var browserTimeoutMs = 12e4;
 var listingPolicy = Object.freeze({ namespace: "listing", staleAfterMs: 10 * 60 * 1e3, serveStaleWhileRevalidate: true });
 var detailPolicy = Object.freeze({ namespace: "detail", staleAfterMs: 60 * 60 * 1e3, allowStaleOnError: false });
 var categories = Object.freeze([["home", "首页", "/"], ["sexy", "性感美女", "/type/1/"], ["pure", "清纯美女", "/type/2/"], ["stockings", "丝袜美女", "/type/3/"], ["legs", "美腿美女", "/type/4/"], ["cosplay", "Cosplay", "/type/6/"], ["ai", "AI美女", "/type/10/"], ["new", "最新发布", "/sort/new/"], ["hot", "最受欢迎", "/sort/hot/"], ["daily", "今日热门", "/rankings/daily/"], ["weekly", "本周热门", "/rankings/weekly/"], ["monthly", "本月热门", "/rankings/monthly/"]]);
 var XiezhenjiSource = class {
+  constructor(context2) {
+    this.context = context2;
+    this.#cache = new PluginCache(context2.cacheDir, { logger: context2.log });
+  }
   context;
   #cache;
   #pagePromise;
   #readyPromise;
   #browserTail = Promise.resolve();
-  constructor(context2) {
-    this.context = context2;
-    this.#cache = new PluginCache(context2.cacheDir, { logger: context2.log });
-  }
   async search(query, page) {
     const url = new URL(page === 1 ? "/search/" : `/search/page/${page}/`, origin);
     url.searchParams.set("s", query);
@@ -6722,8 +6722,7 @@ var XiezhenjiSource = class {
   }
   async discover(id, page) {
     const rule = categories.find(([key]) => key === id);
-    if (rule === void 0)
-      throw new Error("Unknown category.");
+    if (rule === void 0) throw new Error("Unknown category.");
     const base = new URL(rule[2], origin);
     const url = page === 1 ? base : new URL(`${base.pathname.replace(/\/?$/u, "/")}page/${page}/`, origin);
     return this.parseList(await this.#cached(url, listingPolicy), url);
@@ -6737,11 +6736,9 @@ var XiezhenjiSource = class {
       const link = root2.find('a.imgbox-link[href*="/article/"],a.homepage-content-card__media[href*="/article/"],a[href*="/article/"]').first();
       const href = link.attr("href");
       const title = clean(link.attr("title")) ?? clean(root2.find('h2 a, h3 a, a[href*="/article/"]').first().text());
-      if (href === void 0 || title === null)
-        return;
+      if (href === void 0 || title === null) return;
       const url = new URL(href, base);
-      if (!/^\/article\/\d+\/?$/u.test(url.pathname) || seen.has(url.pathname))
-        return;
+      if (!/^\/article\/\d+\/?$/u.test(url.pathname) || seen.has(url.pathname)) return;
       seen.add(url.pathname);
       const image = root2.find("img.imgbox-img,img[data-homepage-content-image]").first();
       const raw = image.attr("data-original-src") ?? image.attr("data-src") ?? image.attr("src");
@@ -6754,8 +6751,7 @@ var XiezhenjiSource = class {
     const html3 = await this.#cached(url, detailPolicy);
     const $ = load(html3);
     const title = clean($("h1.focusbox-title").first().text()) ?? clean($('meta[property="og:title"]').attr("content"));
-    if (title === null)
-      throw new Error("Detail title is missing.");
+    if (title === null) throw new Error("Detail title is missing.");
     const description = clean($('meta[name="description"]').attr("content"));
     const rawCover = clean($('meta[property="og:image"]').attr("content"));
     const tags = unique($(".article-tags a").toArray().map((element) => $(element).text()));
@@ -6774,8 +6770,7 @@ var XiezhenjiSource = class {
     const url = galleryPageUrl(base, page);
     const html3 = await this.#cached(url, detailPolicy);
     const images = parseImages(html3, url);
-    if (images.length === 0)
-      throw new Error("Gallery images are missing.");
+    if (images.length === 0) throw new Error("Gallery images are missing.");
     return Object.freeze({ chapterId: chapterId2, contentKind: "manga", title: `第${page}页`, updatedAt: null, text: null, pages: Object.freeze(images.map((image, index2) => Object.freeze({ id: `image:${page}-${index2 + 1}`, index: index2, url: this.#proxy(image, url), mimeType: mime(image), width: null, height: null }))) });
   }
   async #cached(url, policy) {
@@ -6796,49 +6791,41 @@ var XiezhenjiSource = class {
       this.#readyPromise = Promise.resolve();
       response = await page.fetch({ url: url.toString(), method: "GET", headers: { accept: "text/html,application/xhtml+xml" }, body: null, responseType: "text", timeoutMs: browserTimeoutMs });
     }
-    if (needsVerification(response.status, response.body))
-      this.#raiseAccessBlocked();
-    if (response.status < 200 || response.status >= 400 || typeof response.body !== "string")
-      throw new Error("Source request is unavailable.");
+    if (needsVerification(response.status, response.body)) this.#raiseAccessBlocked();
+    if (response.status < 200 || response.status >= 400 || typeof response.body !== "string") throw new Error("Source request is unavailable.");
     return response.body;
   }
   async #page() {
-    if (this.#pagePromise !== void 0)
-      return this.#pagePromise;
+    if (this.#pagePromise !== void 0) return this.#pagePromise;
     const pending = this.context.webview.open({ visible: false, timeoutMs: browserTimeoutMs });
     this.#pagePromise = pending;
     try {
       return await pending;
     } catch (error) {
-      if (this.#pagePromise === pending)
-        this.#pagePromise = void 0;
+      if (this.#pagePromise === pending) this.#pagePromise = void 0;
       throw error;
     }
   }
   async #ready(page) {
-    if (this.#readyPromise !== void 0)
-      return this.#readyPromise;
+    if (this.#readyPromise !== void 0) return this.#readyPromise;
     const pending = this.#verify(page);
     this.#readyPromise = pending;
     try {
       await pending;
     } catch (error) {
-      if (this.#readyPromise === pending)
-        this.#readyPromise = void 0;
+      if (this.#readyPromise === pending) this.#readyPromise = void 0;
       throw error;
     }
   }
   async #verify(page) {
     await page.navigate(`${origin}/`, { timeoutMs: browserTimeoutMs });
     let html3 = await page.getHtml({ timeoutMs: browserTimeoutMs });
-    if (!isCf(html3))
-      return;
+    if (!isCf(html3)) return;
     const hiddenDeadline = Date.now() + 3e4;
     while (Date.now() < hiddenDeadline) {
       await delay(1e3);
       html3 = await page.getHtml({ timeoutMs: browserTimeoutMs });
-      if (!isCf(html3))
-        return;
+      if (!isCf(html3)) return;
     }
     await page.show({ timeoutMs: browserTimeoutMs });
     const deadline = Date.now() + browserTimeoutMs;
@@ -6847,8 +6834,7 @@ var XiezhenjiSource = class {
       html3 = await page.getHtml({ timeoutMs: browserTimeoutMs });
       if (!isCf(html3)) {
         const current = new URL(await page.getUrl({ timeoutMs: browserTimeoutMs }));
-        if (current.origin !== origin)
-          throw new Error("Browser verification left the source origin.");
+        if (current.origin !== origin) throw new Error("Browser verification left the source origin.");
         await page.hide({ timeoutMs: browserTimeoutMs });
         return;
       }
@@ -6859,8 +6845,7 @@ var XiezhenjiSource = class {
     this.context.errors.raise({ code: "source_access_blocked", message: "写真集访问需要完成浏览器验证后重试。", annotation: "请在来源页面完成安全验证，然后点击“刷新”。" });
   }
   #proxy(url, referer) {
-    if (url.origin !== origin || referer.origin !== origin)
-      throw new Error("Image request is invalid.");
+    if (url.origin !== origin || referer.origin !== origin) throw new Error("Image request is invalid.");
     return this.context.resource.proxy({ kind: "image", url: url.toString(), headers: { Accept: "image/*", Referer: referer.toString() } });
   }
 };
@@ -6876,11 +6861,9 @@ function token(url) {
 }
 function decodeId(id) {
   const match = /^article:([A-Za-z0-9_-]+)$/u.exec(id);
-  if (match?.[1] === void 0)
-    throw new Error("Content ID is invalid.");
+  if (match?.[1] === void 0) throw new Error("Content ID is invalid.");
   const url = new URL(Buffer2.from(match[1], "base64url").toString("utf8"), origin);
-  if (url.origin !== origin || !/^\/article\/\d+\/?$/u.test(url.pathname))
-    throw new Error("Content ID is invalid.");
+  if (url.origin !== origin || !/^\/article\/\d+\/?$/u.test(url.pathname)) throw new Error("Content ID is invalid.");
   return url;
 }
 function chapterId(url, page) {
@@ -6897,12 +6880,10 @@ function chapterItems(url, total) {
 }
 function parseChapterPage(base, value) {
   const legacy = `gallery:${token(base)}`;
-  if (value === legacy)
-    return 1;
+  if (value === legacy) return 1;
   const prefix = `${legacy}:`;
   const page = value.startsWith(prefix) ? Number(value.slice(prefix.length)) : NaN;
-  if (!Number.isSafeInteger(page) || page < 1 || page > 80)
-    throw new Error("Chapter ID is invalid.");
+  if (!Number.isSafeInteger(page) || page < 1 || page > 80) throw new Error("Chapter ID is invalid.");
   return page;
 }
 function clean(value) {
@@ -6927,8 +6908,7 @@ function parseImages(html3, base) {
   const $ = load(html3);
   return uniqueUrls($("#image-gallery .image-container img, article.article-content img").toArray().flatMap((element) => {
     const raw = $(element).attr("data-src") ?? $(element).attr("data-original-src") ?? $(element).attr("src");
-    if (raw === void 0)
-      return [];
+    if (raw === void 0) return [];
     const url = new URL(raw, base);
     return url.origin === origin && /\/static\/images\//u.test(url.pathname) && /\.(?:jpe?g|png|webp|gif)$/iu.test(url.pathname) ? [url] : [];
   }));
@@ -6937,8 +6917,7 @@ function uniqueUrls(values) {
   const seen = /* @__PURE__ */ new Set();
   return values.filter((url) => {
     const key = `${url.origin}${url.pathname}`;
-    if (seen.has(key))
-      return false;
+    if (seen.has(key)) return false;
     seen.add(key);
     return true;
   });
@@ -6957,7 +6936,7 @@ function delay(ms) {
   return new Promise((resolve2) => setTimeout(resolve2, ms));
 }
 
-// dist/index.mjs
+// src/index.mts
 var context;
 var source;
 async function activate(next2) {
@@ -6971,20 +6950,17 @@ async function search(request) {
 }
 async function discover(request) {
   if (request.target === null) {
-    if (request.cursor !== null || request.collectionId !== null)
-      throw new Error("Initial discovery request is invalid.");
+    if (request.cursor !== null || request.collectionId !== null) throw new Error("Initial discovery request is invalid.");
     const content = (await requireSource().discover("home", 1)).slice(0, Math.min(request.pageSize, 10));
     return homeDocument(content);
   }
   const match = /^category:([a-z-]+)$/u.exec(request.target);
-  if (match?.[1] === void 0)
-    throw new Error("Target is invalid.");
+  if (match?.[1] === void 0) throw new Error("Target is invalid.");
   const page = cursor(request.cursor, `category:${match[1]}`);
   const items = (await requireSource().discover(match[1], page)).slice(0, request.pageSize).map((content) => Object.freeze({ content, rank: null, metric: null, recommendation: null }));
   const collectionId = `category-books:${match[1]}`;
   const continuation = items.length === request.pageSize ? Object.freeze({ target: request.target, cursor: `category:${match[1]}:${page + 1}` }) : null;
-  if (request.collectionId !== null)
-    return Object.freeze({ kind: "append", collectionId, items: Object.freeze(items), continuation });
+  if (request.collectionId !== null) return Object.freeze({ kind: "append", collectionId, items: Object.freeze(items), continuation });
   return Object.freeze({ kind: "document", document: { components: Object.freeze([{ type: "section", id: `${collectionId}-section`, title: categories.find(([id]) => id === match[1])?.[1] ?? "分类", subtitle: null, children: Object.freeze([{ type: "contentCollection", id: collectionId, layout: "coverGrid", items: Object.freeze(items), continuation }]) }]) } });
 }
 function homeDocument(content) {
@@ -7004,17 +6980,14 @@ async function getContent(request) {
   return requireSource().content(request.id, request.chapterId);
 }
 function requireSource() {
-  if (context === void 0)
-    throw new Error("Source is not activated.");
+  if (context === void 0) throw new Error("Source is not activated.");
   return source ??= new XiezhenjiSource(context);
 }
 function cursor(value, scope) {
-  if (value === null)
-    return 1;
+  if (value === null) return 1;
   const match = new RegExp(`^${scope.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}:(\\d+)$`, "u").exec(value);
   const page = Number(match?.[1]);
-  if (!Number.isSafeInteger(page) || page < 2)
-    throw new Error("Cursor is invalid.");
+  if (!Number.isSafeInteger(page) || page < 2) throw new Error("Cursor is invalid.");
   return page;
 }
 export {

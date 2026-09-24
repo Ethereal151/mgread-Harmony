@@ -1,6 +1,6 @@
 import { createRequire as __mgreadCreateRequire } from 'node:module'; const require = __mgreadCreateRequire(import.meta.url);
 
-// dist/index.mjs
+// src/index.mts
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes } from "node:crypto";
 import { gunzipSync, gzipSync } from "node:zlib";
 var apiHosts = Object.freeze([
@@ -32,8 +32,7 @@ async function activate(next) {
 }
 async function search(request) {
   const query = request.query.trim();
-  if (query === "")
-    return frozen({ items: [], nextCursor: null, totalCount: 0 });
+  if (query === "") return frozen({ items: [], nextCursor: null, totalCount: 0 });
   const limit = clampPageSize(request.pageSize);
   const scope = `search:${digest(query)}`;
   const page = cursorPage(request.cursor, scope);
@@ -41,15 +40,13 @@ async function search(request) {
   return frozen({ items, nextCursor: continuationCursor(items.length, limit, page, scope), totalCount: null });
 }
 async function searchSuggestions(request) {
-  if (request.cursor !== null)
-    throw new Error("Search suggestion cursor is unsupported.");
+  if (request.cursor !== null) throw new Error("Search suggestion cursor is unsupported.");
   clampPageSize(request.pageSize);
   return frozen({ items: [], nextCursor: null });
 }
 async function discover(request) {
   if (request.target === null) {
-    if (request.cursor !== null || request.collectionId !== null)
-      throw new Error("Initial discovery request is invalid.");
+    if (request.cursor !== null || request.collectionId !== null) throw new Error("Initial discovery request is invalid.");
     return rootDiscovery(request.pageSize);
   }
   const target = decodeTarget(request.target);
@@ -59,8 +56,7 @@ async function discover(request) {
   const collectionId = collectionFor(request.target);
   const continuation = items.length >= limit && page < maximumPage ? frozen({ target: request.target, cursor: encodeCursor(`discover:${request.target}`, page + 1) }) : null;
   if (request.collectionId !== null) {
-    if (request.collectionId !== collectionId)
-      throw new Error("Discovery collection is invalid.");
+    if (request.collectionId !== collectionId) throw new Error("Discovery collection is invalid.");
     return frozen({ kind: "append", collectionId, items, continuation });
   }
   return frozen({
@@ -81,8 +77,7 @@ async function getDetail(request) {
   const id = decodeDramaId(request.id);
   const detail = await fetchDramaDetail(id);
   const summary = dramaSummary(detail);
-  if (summary === null || decodeDramaId(summary.id) !== id)
-    throw new Error("Drama detail is invalid.");
+  if (summary === null || decodeDramaId(summary.id) !== id) throw new Error("Drama detail is invalid.");
   return frozen({ ...summary, aliases: [], catalogUrl: null });
 }
 async function getChapters(request) {
@@ -90,8 +85,7 @@ async function getChapters(request) {
   const detail = await fetchDramaDetail(id);
   const episodes = records(detail.episodes);
   const items = episodes.map((episode, index) => episodeSummary(id, episode, index));
-  if (items.length === 0)
-    throw new Error("Drama catalog is empty.");
+  if (items.length === 0) throw new Error("Drama catalog is empty.");
   return frozen({
     items,
     groups: [frozen({ id: `group:${id}:default`, title: "默认线路", order: 0, episodes: items })]
@@ -100,22 +94,18 @@ async function getChapters(request) {
 async function getContent(request) {
   const id = decodeDramaId(request.id);
   const chapter = decodeEpisodeId(request.chapterId);
-  if (chapter.dramaId !== id)
-    throw new Error("Episode ID does not belong to the drama.");
+  if (chapter.dramaId !== id) throw new Error("Episode ID does not belong to the drama.");
   const detail = await fetchDramaDetail(id);
   const episode = records(detail.episodes).find((item, index) => episodeSequence(item, index) === chapter.sequence);
-  if (episode === void 0)
-    throw new Error("Episode ID is invalid.");
+  if (episode === void 0) throw new Error("Episode ID is invalid.");
   let play = null;
   try {
     play = await fetchDramaPlay(id, chapter.sequence);
   } catch (error) {
-    if (!(error instanceof ApiFailure))
-      throw error;
+    if (!(error instanceof ApiFailure)) throw error;
   }
   const selected = playableFrom(play, detail, episode);
-  if (selected === null)
-    throw new Error("Playback address is unavailable.");
+  if (selected === null) throw new Error("Playback address is unavailable.");
   const headers = frozen({ Accept: "*/*", Referer: `${activeHost ?? apiHosts[0]}/`, "User-Agent": playerUserAgent });
   const resourceType = selected.kind;
   const proxyUrl = requireContext().resource.proxy({ kind: resourceType, url: selected.url, headers });
@@ -174,8 +164,7 @@ async function rootDiscovery(pageSize) {
       children: [{ type: "categoryCollection", id: "huangdou-categories", layout: "chips", categories }]
     });
   }
-  if (components.length === 0)
-    throw new Error("Discovery data is empty.");
+  if (components.length === 0) throw new Error("Discovery data is empty.");
   return frozen({ kind: "document", document: { components } });
 }
 function discoveryCategories(navs, configured) {
@@ -183,8 +172,7 @@ function discoveryCategories(navs, configured) {
   const seen = /* @__PURE__ */ new Set();
   const add = (title, target, icon) => {
     const key = title.trim();
-    if (key === "" || seen.has(key) || result.length >= 32)
-      return;
+    if (key === "" || seen.has(key) || result.length >= 32) return;
     seen.add(key);
     result.push({ id: `category:${digest(target).slice(0, 20)}`, title: key, target, count: null, url: null, icon });
   };
@@ -193,30 +181,25 @@ function discoveryCategories(navs, configured) {
   for (const nav of navs) {
     const title = text(nav.name);
     const code = text(nav.code ?? nav.id);
-    if (title === "" || code === "")
-      continue;
+    if (title === "" || code === "") continue;
     const matching = configured.find((item) => text(item.name) === title && !emptyCategory(item));
     add(title, encodeTarget({ kind: "nav", code, fallbackCategoryId: matching === void 0 ? null : text(matching.id ?? matching.cat_id) || null }), "video");
   }
   for (const category of configured) {
-    if (emptyCategory(category))
-      continue;
+    if (emptyCategory(category)) continue;
     const title = text(category.name);
     const id = text(category.id ?? category.cat_id);
-    if (title !== "" && id !== "")
-      add(title, encodeTarget({ kind: "category", id }), "video");
+    if (title !== "" && id !== "") add(title, encodeTarget({ kind: "category", id }), "video");
   }
   return result;
 }
 async function discoverItems(target, page, pageSize) {
-  if (target.kind === "hot")
-    return fetchDramaList(page, { order: "hot", pageSize });
+  if (target.kind === "hot") return fetchDramaList(page, { order: "hot", pageSize });
   if (target.kind === "rank") {
     const data = await apiData("/drama/rank", { page: String(page), page_size: String(pageSize) });
     return records(data.list).map(dramaSummary).filter(notNull);
   }
-  if (target.kind === "category")
-    return fetchDramaList(page, { categoryId: target.id, order: "hot", pageSize });
+  if (target.kind === "category") return fetchDramaList(page, { categoryId: target.id, order: "hot", pageSize });
   const filters = await fetchNavFilters(target.code);
   if (filters !== null) {
     return fetchDramaList(page, {
@@ -229,8 +212,7 @@ async function discoverItems(target, page, pageSize) {
       updateStatus: text(filters.update_status)
     });
   }
-  if (target.fallbackCategoryId !== null)
-    return fetchDramaList(page, { categoryId: target.fallbackCategoryId, order: "hot", pageSize });
+  if (target.fallbackCategoryId !== null) return fetchDramaList(page, { categoryId: target.fallbackCategoryId, order: "hot", pageSize });
   return fetchDramaList(page, { order: "hot", pageSize });
 }
 async function fetchNavList() {
@@ -244,20 +226,16 @@ async function fetchNavFilters(code) {
   try {
     const data = await apiData("/drama/navFilter", { code });
     const first = records(data.list)[0];
-    if (first !== void 0 && isObject(first.filter))
-      return first.filter;
+    if (first !== void 0 && isObject(first.filter)) return first.filter;
   } catch (error) {
-    if (!(error instanceof ApiFailure))
-      throw error;
+    if (!(error instanceof ApiFailure)) throw error;
   }
   try {
     const data = await apiData("/drama/navBlock", { code, tab: "", page: "1" });
     const first = records(data.list)[0];
-    if (first !== void 0 && isObject(first.filter))
-      return first.filter;
+    if (first !== void 0 && isObject(first.filter)) return first.filter;
   } catch (error) {
-    if (!(error instanceof ApiFailure))
-      throw error;
+    if (!(error instanceof ApiFailure)) throw error;
   }
   return null;
 }
@@ -288,18 +266,15 @@ async function postApi(path, data, authenticated) {
   try {
     return await postAcrossHosts(path, data, token);
   } catch (error) {
-    if (!authenticated || !(error instanceof ApiFailure) || !error.authExpired)
-      throw error;
+    if (!authenticated || !(error instanceof ApiFailure) || !error.authExpired) throw error;
     authToken = void 0;
     const nextToken = await ensureAuth();
     return postAcrossHosts(path, data, nextToken);
   }
 }
 async function ensureAuth() {
-  if (authToken !== void 0)
-    return authToken;
-  if (authPromise !== void 0)
-    return authPromise;
+  if (authToken !== void 0) return authToken;
+  if (authPromise !== void 0) return authPromise;
   const pending = (async () => {
     const response = await postAcrossHosts("/login/device", {
       line_code: "china_1",
@@ -310,8 +285,7 @@ async function ensureAuth() {
     }, "");
     const data = isObject(response.data) ? response.data : {};
     const token = text(data.token);
-    if (token === "")
-      throw new Error("Source login did not return a token.");
+    if (token === "") throw new Error("Source login did not return a token.");
     authToken = token;
     requireContext().log.info("source_guest_session_ready");
     return token;
@@ -320,8 +294,7 @@ async function ensureAuth() {
   try {
     return await pending;
   } finally {
-    if (authPromise === pending)
-      authPromise = void 0;
+    if (authPromise === pending) authPromise = void 0;
   }
 }
 async function postAcrossHosts(path, data, token) {
@@ -333,8 +306,7 @@ async function postAcrossHosts(path, data, token) {
       activeHost = host;
       return response;
     } catch (error) {
-      if (error instanceof ApiFailure)
-        throw error;
+      if (error instanceof ApiFailure) throw error;
       lastError = error;
       requireContext().log.warn(`source_host_failed_${index + 1}_${errorCode(error)}`);
     }
@@ -371,35 +343,29 @@ async function postOnHost(host, path, data, token) {
     },
     body: payload
   });
-  if (!response.ok)
-    throw new Error(`Source HTTP status ${response.status}.`);
+  if (!response.ok) throw new Error(`Source HTTP status ${response.status}.`);
   const bytes = Buffer.from(await response.arrayBuffer());
-  if (bytes.length === 0)
-    throw new Error("Source response is empty.");
+  if (bytes.length === 0) throw new Error("Source response is empty.");
   if (looksLikeJson(bytes)) {
     const value2 = JSON.parse(bytes.toString("utf8"));
-    if (!isObject(value2))
-      throw new Error("Source response is invalid.");
+    if (!isObject(value2)) throw new Error("Source response is invalid.");
     throw apiFailure(value2);
   }
-  if (bytes.length <= 16)
-    throw new Error("Source response is truncated.");
+  if (bytes.length <= 16) throw new Error("Source response is truncated.");
   const decipher = createDecipheriv("aes-256-cbc", key, bytes.subarray(0, 16));
   const decrypted = Buffer.concat([decipher.update(bytes.subarray(16)), decipher.final()]);
   const value = JSON.parse(gunzipSync(decrypted).toString("utf8"));
-  if (!isObject(value))
-    throw new Error("Source response is invalid.");
-  if (text(value.status).toLowerCase() === "n")
-    throw apiFailure(value);
+  if (!isObject(value)) throw new Error("Source response is invalid.");
+  if (text(value.status).toLowerCase() === "n") throw apiFailure(value);
   return value;
 }
 var ApiFailure = class extends Error {
-  authExpired;
   constructor(authExpired) {
     super("Source API rejected the request.");
     this.authExpired = authExpired;
     this.name = "ApiFailure";
   }
+  authExpired;
 };
 function apiFailure(value) {
   const code = text(value.errorCode ?? value.error);
@@ -411,8 +377,7 @@ function requestKey(requestId) {
 function dramaSummary(item) {
   const rawId = text(item.id ?? item.drama_id).replace(/^rp_/u, "");
   const title = text(item.name);
-  if (rawId === "" || title === "")
-    return null;
+  if (rawId === "" || title === "") return null;
   const latest = nullableText(item.update_label);
   const category = nullableText(item.category ?? item.cat_name);
   const pay = payment(item);
@@ -454,17 +419,14 @@ function episodeSummary(dramaId, episode, index) {
 }
 function playableFrom(play, detail, episode) {
   const direct = play === null ? "" : text(play.m3u8);
-  if (safeMediaUrl(direct))
-    return { url: direct, kind: "hls" };
+  if (safeMediaUrl(direct)) return { url: direct, kind: "hls" };
   if (play !== null) {
     for (const line of records(play.lines)) {
       const url = text(line.url);
-      if (safeMediaUrl(url))
-        return { url, kind: mediaKind(url) };
+      if (safeMediaUrl(url)) return { url, kind: mediaKind(url) };
     }
     const preview2 = text(play.preview_m3u8);
-    if (safeMediaUrl(preview2))
-      return { url: preview2, kind: "hls" };
+    if (safeMediaUrl(preview2)) return { url: preview2, kind: "hls" };
   }
   const preview = text(episode.preview_m3u8 ?? detail.preview_m3u8);
   return safeMediaUrl(preview) ? { url: preview, kind: mediaKind(preview) } : null;
@@ -472,23 +434,20 @@ function playableFrom(play, detail, episode) {
 function payment(item) {
   const type = text(item.pay_type ?? item.payType ?? item.type).toLowerCase();
   const amount = numericText(item.episode_price ?? item.points_price ?? item.money ?? item.price);
-  if (type === "vip" || truthy(item.vip) || truthy(item.is_vip))
-    return { kind: "vip", label: "VIP", price: amount };
+  if (type === "vip" || truthy(item.vip) || truthy(item.is_vip)) return { kind: "vip", label: "VIP", price: amount };
   if (type === "coin" || type === "money" || type === "points" || amount !== null && Number(amount) > 0) {
     return { kind: "coin", label: "金币", price: amount };
   }
   return { kind: "free", label: null, price: null };
 }
 function episodeLocked(item, kind) {
-  if (kind === "free")
-    return false;
+  if (kind === "free") return false;
   const bought = knownBoolean(item.is_buy ?? item.bought);
   return bought === null ? true : !bought;
 }
 function proxyCover(value) {
   const raw = text(value);
-  if (!safeHttpUrl(raw))
-    return null;
+  if (!safeHttpUrl(raw)) return null;
   return requireContext().resource.proxy({
     kind: "image",
     url: raw,
@@ -500,11 +459,9 @@ function encodeDramaId(id) {
 }
 function decodeDramaId(id) {
   const encoded = /^drama:([A-Za-z0-9_-]+)$/u.exec(id)?.[1];
-  if (encoded === void 0)
-    throw new Error("Drama ID is invalid.");
+  if (encoded === void 0) throw new Error("Drama ID is invalid.");
   const decoded = Buffer.from(encoded, "base64url").toString("utf8");
-  if (decoded === "" || decoded.length > 256 || /[\u0000-\u001f]/u.test(decoded))
-    throw new Error("Drama ID is invalid.");
+  if (decoded === "" || decoded.length > 256 || /[\u0000-\u001f]/u.test(decoded)) throw new Error("Drama ID is invalid.");
   return decoded;
 }
 function encodeEpisodeId(dramaId, sequence) {
@@ -512,12 +469,10 @@ function encodeEpisodeId(dramaId, sequence) {
 }
 function decodeEpisodeId(id) {
   const encoded = /^episode:([A-Za-z0-9_-]+)$/u.exec(id)?.[1];
-  if (encoded === void 0)
-    throw new Error("Episode ID is invalid.");
+  if (encoded === void 0) throw new Error("Episode ID is invalid.");
   try {
     const value = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8"));
-    if (!isObject(value) || text(value.dramaId) === "" || !/^\d+$/u.test(text(value.sequence)))
-      throw new Error();
+    if (!isObject(value) || text(value.dramaId) === "" || !/^\d+$/u.test(text(value.sequence))) throw new Error();
     return frozen({ dramaId: text(value.dramaId), sequence: text(value.sequence) });
   } catch {
     throw new Error("Episode ID is invalid.");
@@ -528,16 +483,12 @@ function encodeTarget(target) {
 }
 function decodeTarget(value) {
   const encoded = /^target:([A-Za-z0-9_-]+)$/u.exec(value)?.[1];
-  if (encoded === void 0)
-    throw new Error("Discovery target is invalid.");
+  if (encoded === void 0) throw new Error("Discovery target is invalid.");
   try {
     const target = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8"));
-    if (!isObject(target))
-      throw new Error();
-    if (target.kind === "hot" || target.kind === "rank")
-      return { kind: target.kind };
-    if (target.kind === "category" && text(target.id) !== "")
-      return { kind: "category", id: text(target.id) };
+    if (!isObject(target)) throw new Error();
+    if (target.kind === "hot" || target.kind === "rank") return { kind: target.kind };
+    if (target.kind === "category" && text(target.id) !== "") return { kind: "category", id: text(target.id) };
     if (target.kind === "nav" && text(target.code) !== "" && (target.fallbackCategoryId === null || typeof target.fallbackCategoryId === "string")) {
       return { kind: "nav", code: text(target.code), fallbackCategoryId: nullableText(target.fallbackCategoryId) };
     }
@@ -549,8 +500,7 @@ function encodeCursor(scope, page) {
   return `page:${page}:${digest(scope).slice(0, 20)}`;
 }
 function cursorPage(cursor, scope) {
-  if (cursor === null)
-    return 1;
+  if (cursor === null) return 1;
   const match = /^page:(\d+):([a-f0-9]{20})$/u.exec(cursor);
   const page = Number(match?.[1]);
   if (!Number.isSafeInteger(page) || page < 2 || page > maximumPage || match?.[2] !== digest(scope).slice(0, 20)) {
@@ -565,10 +515,8 @@ function collectionFor(target) {
   return `collection:${digest(target).slice(0, 20)}`;
 }
 function targetTitle(target) {
-  if (target.kind === "hot")
-    return "热门短剧";
-  if (target.kind === "rank")
-    return "短剧排行榜";
+  if (target.kind === "hot") return "热门短剧";
+  if (target.kind === "rank") return "短剧排行榜";
   return "频道短剧";
 }
 function discoveryItem(content) {
@@ -579,10 +527,8 @@ function episodeSequence(episode, index) {
   return /^\d+$/u.test(sequence) && Number(sequence) > 0 ? sequence : String(index + 1);
 }
 function contentStatus(value) {
-  if (value === 1 || value === "1")
-    return "completed";
-  if (value === 0 || value === "0")
-    return "ongoing";
+  if (value === 1 || value === "1") return "completed";
+  if (value === 0 || value === "0") return "ongoing";
   return "unknown";
 }
 function emptyCategory(value) {
@@ -590,8 +536,7 @@ function emptyCategory(value) {
 }
 function looksLikeJson(bytes) {
   let index = 0;
-  while (index < bytes.length && (bytes[index] === 9 || bytes[index] === 10 || bytes[index] === 13 || bytes[index] === 32))
-    index += 1;
+  while (index < bytes.length && (bytes[index] === 9 || bytes[index] === 10 || bytes[index] === 13 || bytes[index] === 32)) index += 1;
   return bytes[index] === 123 || bytes[index] === 91;
 }
 function safeMediaUrl(value) {
@@ -617,10 +562,8 @@ function numericText(value) {
   return Number.isFinite(number) && number > 0 ? String(value).trim() : null;
 }
 function knownBoolean(value) {
-  if (value === true || value === 1 || value === "1" || value === "y" || value === "Y")
-    return true;
-  if (value === false || value === 0 || value === "0" || value === "n" || value === "N")
-    return false;
+  if (value === true || value === 1 || value === "1" || value === "y" || value === "Y") return true;
+  if (value === false || value === 0 || value === "0" || value === "n" || value === "N") return false;
   return null;
 }
 function truthy(value) {
@@ -630,21 +573,16 @@ function digest(value) {
   return createHash("sha256").update(value).digest("hex");
 }
 function setText(target, key, value) {
-  if (value !== void 0 && value !== "")
-    target[key] = value;
+  if (value !== void 0 && value !== "") target[key] = value;
 }
 function clampPageSize(value) {
-  if (!Number.isFinite(value))
-    throw new Error("Page size is invalid.");
+  if (!Number.isFinite(value)) throw new Error("Page size is invalid.");
   return Math.max(1, Math.min(50, Math.floor(value)));
 }
 function errorCode(error) {
-  if (error instanceof SyntaxError)
-    return "invalid_json";
-  if (error instanceof TypeError)
-    return "transport";
-  if (error instanceof Error && /decrypt|bad decrypt|wrong final block/iu.test(error.message))
-    return "decrypt";
+  if (error instanceof SyntaxError) return "invalid_json";
+  if (error instanceof TypeError) return "transport";
+  if (error instanceof Error && /decrypt|bad decrypt|wrong final block/iu.test(error.message)) return "decrypt";
   return "invalid_response";
 }
 function nullableText(value) {
@@ -667,8 +605,7 @@ function frozen(value) {
   return Object.freeze(value);
 }
 function requireContext() {
-  if (context === void 0)
-    throw new Error("Source is not activated.");
+  if (context === void 0) throw new Error("Source is not activated.");
   return context;
 }
 export {

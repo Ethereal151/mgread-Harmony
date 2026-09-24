@@ -1,16 +1,16 @@
 import { createRequire as __mgreadCreateRequire } from 'node:module'; const require = __mgreadCreateRequire(import.meta.url);
 
-// dist/source.js
-import { Buffer } from "node:buffer";
+// src/source.ts
+import "node:buffer";
 var siteOrigin = "https://rehanman.com";
 var imageOrigin = "https://img.rehanman.com";
 var graphQlUrl = "https://api.rehanman.com/manga-graphql";
 var entriesQuery = "query entries($inputs: InputEntries) { entries(inputs: $inputs) { docs { title title_normalized description thumbnail authors { name } genres { name } created_date modified_date status entries_setting { premium isHide } } totalPages totalDocs page } }";
 var RehanmanSource = class {
-  context;
   constructor(context) {
     this.context = context;
   }
+  context;
   async latest(page) {
     return this.#entries({ type: "new", page, limit: 30 });
   }
@@ -31,11 +31,9 @@ var RehanmanSource = class {
     const entry = await this.#entry(id);
     this.#assertFree(entry);
     const chapter = (entry.entries_data?.chapters ?? []).find((value) => chapterId(entry, value) === idForChapter);
-    if (chapter === void 0)
-      throw new Error("Chapter ID is invalid.");
+    if (chapter === void 0) throw new Error("Chapter ID is invalid.");
     const images = chapter.images.flatMap((path) => imageUrl(path) === null ? [] : [imageUrl(path)]);
-    if (images.length === 0)
-      throw new Error("Chapter images are missing.");
+    if (images.length === 0) throw new Error("Chapter images are missing.");
     const referer = chapterUrl(entry, chapter);
     return Object.freeze({ chapterId: idForChapter, contentKind: "manga", title: chapter.name, updatedAt: entry.modified_date, text: null, pages: Object.freeze(images.map((url, index) => Object.freeze({ id: `page:${index + 1}`, index, url: this.#proxyImage(url, referer), mimeType: mime(url), width: null, height: null }))) });
   }
@@ -43,14 +41,12 @@ var RehanmanSource = class {
     const url = bookUrlFromId(id);
     const page = await this.#page(url);
     const entry = parseEntry(object(object(page.props)?.pageProps)?.entrySSR);
-    if (entry === null || entry.title_normalized !== tokenFromId(id))
-      throw new Error("Content detail is invalid.");
+    if (entry === null || entry.title_normalized !== tokenFromId(id)) throw new Error("Content detail is invalid.");
     return entry;
   }
   async #entries(inputs) {
     const response = await this.context.http.fetch(graphQlUrl, { method: "POST", headers: { accept: "application/json", "content-type": "application/json" }, body: JSON.stringify({ query: entriesQuery, variables: { inputs: { ...inputs, adult: true, is_hide: false } } }) });
-    if (!response.ok)
-      throw new Error("Source listing is unavailable.");
+    if (!response.ok) throw new Error("Source listing is unavailable.");
     const payload = object(await response.json());
     const entries = object(object(payload?.data)?.entries);
     const items = array(entries?.docs).flatMap((value) => {
@@ -60,8 +56,7 @@ var RehanmanSource = class {
     const current = number(entries?.page);
     const totalPages = number(entries?.totalPages);
     const totalCount = number(entries?.totalDocs);
-    if (current === null || totalPages === null || totalCount === null)
-      throw new Error("Source listing is invalid.");
+    if (current === null || totalPages === null || totalCount === null) throw new Error("Source listing is invalid.");
     return Object.freeze({ items: Object.freeze(items), hasNext: current < totalPages, totalCount });
   }
   #summary(entry) {
@@ -70,24 +65,20 @@ var RehanmanSource = class {
   }
   async #page(url) {
     const response = await this.context.http.fetch(url, { headers: { accept: "text/html,application/xhtml+xml", referer: `${siteOrigin}/` } });
-    if (!response.ok)
-      throw new Error("Source page is unavailable.");
+    if (!response.ok) throw new Error("Source page is unavailable.");
     return parseNextData(await response.text());
   }
   #proxyImage(url, referer) {
-    if (imageUrl(url.toString()) === null || referer.origin !== siteOrigin)
-      throw new Error("Image request is invalid.");
+    if (imageUrl(url.toString()) === null || referer.origin !== siteOrigin) throw new Error("Image request is invalid.");
     return this.context.resource.proxy({ kind: "rehanman-image", url: url.toString(), headers: { Accept: "image/*", Referer: `${siteOrigin}/` } });
   }
   #assertFree(entry) {
-    if (entry.entries_setting.some((setting) => setting.premium || setting.isHide))
-      throw new Error("Content is not publicly available.");
+    if (entry.entries_setting.some((setting) => setting.premium || setting.isHide)) throw new Error("Content is not publicly available.");
   }
 };
 function parseNextData(html) {
   const match = /<script id="__NEXT_DATA__" type="application\/json">(?<json>[\s\S]*?)<\/script>/u.exec(html);
-  if (match?.groups?.json === void 0)
-    throw new Error("Source response does not contain page data.");
+  if (match?.groups?.json === void 0) throw new Error("Source response does not contain page data.");
   try {
     return JSON.parse(match.groups.json);
   } catch {
@@ -98,8 +89,7 @@ function parseEntry(value) {
   const raw = object(value);
   const title = text(raw?.title);
   const normalized = text(raw?.title_normalized);
-  if (title === null || normalized === null || !/^\d+$/u.test(normalized))
-    return null;
+  if (title === null || normalized === null || !/^\d+$/u.test(normalized)) return null;
   const entryData = object(raw?.entries_data);
   const chapters = array(entryData?.chapters).flatMap((chapter) => {
     const current = object(chapter);
@@ -123,8 +113,7 @@ function contentId(token) {
 }
 function tokenFromId(id) {
   const match = /^webtoon:(\d+)$/u.exec(id);
-  if (match?.[1] === void 0)
-    throw new Error("Content ID is invalid.");
+  if (match?.[1] === void 0) throw new Error("Content ID is invalid.");
   return match[1];
 }
 function bookUrlFromId(id) {
@@ -168,21 +157,19 @@ function mime(url) {
   return extension === "jpg" || extension === "jpeg" ? "image/jpeg" : extension === "png" ? "image/png" : extension === "webp" ? "image/webp" : extension === "gif" ? "image/gif" : null;
 }
 
-// dist/index.mjs
+// src/index.mts
 var source;
 async function activate(context) {
   source = new RehanmanSource(context);
   context.log.info("source_activated");
 }
 async function discover(request) {
-  if (request.target !== null && request.target !== "latest")
-    throw new Error("Target is invalid.");
+  if (request.target !== null && request.target !== "latest") throw new Error("Target is invalid.");
   const page = parseCursor(request.cursor);
   const result = await requireSource().latest(page);
   const items = result.items.slice(0, request.pageSize).map((content) => Object.freeze({ content, rank: null, metric: null, recommendation: null }));
   const continuation = result.hasNext && items.length === request.pageSize ? Object.freeze({ target: "latest", cursor: `latest:${page + 1}` }) : null;
-  if (request.collectionId !== null)
-    return Object.freeze({ kind: "append", collectionId: "latest", items: Object.freeze(items), continuation });
+  if (request.collectionId !== null) return Object.freeze({ kind: "append", collectionId: "latest", items: Object.freeze(items), continuation });
   return Object.freeze({ kind: "document", document: { components: Object.freeze([
     Object.freeze({ type: "section", id: "latest-section", title: "最新漫画", subtitle: null, children: Object.freeze([
       Object.freeze({ type: "contentCollection", id: "latest", layout: "coverGrid", items: Object.freeze(items), continuation })
@@ -192,8 +179,7 @@ async function discover(request) {
 async function search(request) {
   const page = parseCursor(request.cursor, "search");
   const query = request.query.trim();
-  if (query === "")
-    return Object.freeze({ items: Object.freeze([]), nextCursor: null, totalCount: 0 });
+  if (query === "") return Object.freeze({ items: Object.freeze([]), nextCursor: null, totalCount: 0 });
   const result = await requireSource().search(query, page);
   const items = result.items.slice(0, request.pageSize);
   return Object.freeze({ items: Object.freeze(items), nextCursor: result.hasNext && items.length === request.pageSize ? `search:${page + 1}` : null, totalCount: result.totalCount });
@@ -211,17 +197,14 @@ async function getContent(request) {
   return requireSource().content(request.id, request.chapterId);
 }
 function requireSource() {
-  if (source === void 0)
-    throw new Error("Source is not activated.");
+  if (source === void 0) throw new Error("Source is not activated.");
   return source;
 }
 function parseCursor(value, scope = "latest") {
-  if (value === null)
-    return 1;
+  if (value === null) return 1;
   const match = new RegExp(`^${scope}:(\\d+)$`, "u").exec(value);
   const page = Number(match?.[1]);
-  if (!Number.isSafeInteger(page) || page < 2)
-    throw new Error("Cursor is invalid.");
+  if (!Number.isSafeInteger(page) || page < 2) throw new Error("Cursor is invalid.");
   return page;
 }
 export {

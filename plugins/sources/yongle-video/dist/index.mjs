@@ -1,6 +1,6 @@
 import { createRequire as __mgreadCreateRequire } from 'node:module'; const require = __mgreadCreateRequire(import.meta.url);
 
-// dist/index.mjs
+// src/index.mts
 var base = "https://www.ylsp.lv";
 var headers = Object.freeze({ Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8", "Accept-Language": "zh-CN,zh;q=0.9", Referer: `${base}/`, "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/136.0.0.0" });
 var categories = Object.freeze([["home", "首页", "/"], ["movie", "电影", "/vodtype/1/"], ["series", "剧集", "/vodtype/2/"], ["variety", "综艺", "/vodtype/3/"], ["anime", "动漫", "/vodtype/4/"], ["new", "更新", "/label/new/"], ["hot", "热榜", "/label/hot/"]]);
@@ -11,8 +11,7 @@ async function activate(next) {
 }
 async function search(request) {
   const query = request.query.trim();
-  if (query === "")
-    return frozen({ items: [], nextCursor: null, totalCount: 0 });
+  if (query === "") return frozen({ items: [], nextCursor: null, totalCount: 0 });
   const page = cursorPage(request.cursor, "search"), limit = clamp(request.pageSize), path = page === 1 ? `/vodsearch/${encodeURIComponent(query)}-------------/` : `/vodsearch/${encodeURIComponent(query)}----------${page}---/`, values = parseList(await fetchText(`${base}${path}`)).slice(0, limit);
   return frozen({ items: values, nextCursor: values.length >= limit ? `search:${page + 1}` : null, totalCount: null });
 }
@@ -21,17 +20,14 @@ async function searchSuggestions(_request) {
 }
 async function discover(request) {
   if (request.target === null) {
-    if (request.cursor !== null || request.collectionId !== null)
-      throw new Error("Initial discovery request is invalid.");
+    if (request.cursor !== null || request.collectionId !== null) throw new Error("Initial discovery request is invalid.");
     return frozen({ kind: "document", document: { components: [{ type: "section", id: "video-categories", title: "影视分类", subtitle: "按频道浏览", icon: "video", children: [{ type: "categoryCollection", id: "video-categories-list", layout: "chips", categories: categories.map(([id2, title2]) => ({ id: id2, title: title2, target: `category:${id2}`, count: null, url: null, icon: "video" })) }] }] } });
   }
   const category = categories.find(([id2]) => request.target === `category:${id2}`);
-  if (category === void 0)
-    throw new Error("Discovery target is invalid.");
+  if (category === void 0) throw new Error("Discovery target is invalid.");
   const page = cursorPage(request.cursor, request.target), limit = clamp(request.pageSize), [id, title, path] = category, values = parseList(await fetchText(pageUrl(path, page))).slice(0, limit), collectionId = `video:${id}`, items = values.map((content) => frozen({ content, rank: null, metric: null, recommendation: null })), continuation = values.length >= limit ? frozen({ target: request.target, cursor: `${request.target}:${page + 1}` }) : null;
   if (request.collectionId !== null) {
-    if (request.collectionId !== collectionId)
-      throw new Error("Discovery collection is invalid.");
+    if (request.collectionId !== collectionId) throw new Error("Discovery collection is invalid.");
     return frozen({ kind: "append", collectionId, items, continuation });
   }
   return frozen({ kind: "document", document: { components: [{ type: "section", id: `${collectionId}:section`, title, subtitle: null, icon: "video", children: [{ type: "contentCollection", id: collectionId, layout: "coverGrid", items, continuation }] }] } });
@@ -69,23 +65,20 @@ async function getContent(request) {
     } catch {
     }
   }
-  if (!safeUrl(upstream))
-    throw new Error("Playback address is unavailable.");
+  if (!safeUrl(upstream)) throw new Error("Playback address is unavailable.");
   const resourceType = /\.m3u8(?:$|[?#])/iu.test(upstream) ? "hls" : "video", mediaHeaders = { Origin: base, Referer: page, "User-Agent": headers["User-Agent"] };
   return frozen({ chapterId: request.chapterId, contentKind: "video", title: null, updatedAt: null, text: null, pages: [], media: { url: requireContext().resource.proxy({ kind: resourceType, url: upstream, headers: mediaHeaders }), resourceType, resourcePolicy: "sessionOnly", expiresAt: null, mimeType: resourceType === "hls" ? "application/vnd.apple.mpegurl" : "video/mp4", headers: mediaHeaders } });
 }
 async function fetchText(url) {
   const response = await requireContext().http.fetch(url, { headers });
-  if (!response.ok)
-    throw new Error("Source request failed.");
+  if (!response.ok) throw new Error("Source request failed.");
   return response.text();
 }
 function parseList(html) {
   const values = /* @__PURE__ */ new Map();
   for (const match of html.matchAll(/<a\b([^>]*)href=["']([^"']*\/voddetail\/(\d+)\/)["']([^>]*)>([\s\S]*?)<\/a>/giu)) {
     const id = match[3] ?? "", attrs = `${match[1] ?? ""} ${match[4] ?? ""}`, body = match[5] ?? "", image = /<img\b[^>]*>/iu.exec(body)?.[0] ?? "", title = attribute(attrs, "title") || attribute(image, "alt") || strip(body), cover = attribute(image, "data-original") || attribute(image, "data-src") || attribute(image, "src");
-    if (id !== "" && title !== "" && !values.has(id))
-      values.set(id, summary(id, title, cover));
+    if (id !== "" && title !== "" && !values.has(id)) values.set(id, summary(id, title, cover));
   }
   return [...values.values()];
 }
@@ -104,11 +97,9 @@ function parsePlayLinks(html) {
 }
 function parsePlayer(html) {
   const start = html.search(/(?:var\s+)?player_\w+\s*=\s*\{/iu);
-  if (start < 0)
-    throw new Error("Player data is unavailable.");
+  if (start < 0) throw new Error("Player data is unavailable.");
   const brace = html.indexOf("{", start), raw = balancedObject(html, brace), value = JSON.parse(raw);
-  if (!isObject(value))
-    throw new Error("Player data is invalid.");
+  if (!isObject(value)) throw new Error("Player data is invalid.");
   return value;
 }
 function balancedObject(value, start) {
@@ -116,24 +107,19 @@ function balancedObject(value, start) {
   for (let index = start; index < value.length; index += 1) {
     const char = value[index] ?? "";
     if (quote !== "") {
-      if (escaped)
-        escaped = false;
-      else if (char === "\\")
-        escaped = true;
-      else if (char === quote)
-        quote = "";
+      if (escaped) escaped = false;
+      else if (char === "\\") escaped = true;
+      else if (char === quote) quote = "";
       continue;
     }
     if (char === '"' || char === "'") {
       quote = char;
       continue;
     }
-    if (char === "{")
-      depth += 1;
+    if (char === "{") depth += 1;
     if (char === "}") {
       depth -= 1;
-      if (depth === 0)
-        return value.slice(start, index + 1);
+      if (depth === 0) return value.slice(start, index + 1);
     }
   }
   throw new Error("Player data is incomplete.");
@@ -142,10 +128,8 @@ function summary(id, title, cover) {
   return frozen({ id: `video:${id}`, title: decode(title) || `视频 ${id}`, contentKind: "video", coverOrientation: "portrait", author: null, url: detailUrl(id), coverUrl: proxyImage(cover), description: null, language: "zh-CN", status: "unknown", access: "unknown", wordCount: null, chapterCount: null, publishedAt: null, updatedAt: null, latestChapter: null, categories: [], tags: [], attributes: [] });
 }
 function pageUrl(path, page) {
-  if (page <= 1)
-    return `${base}${path}`;
-  if (path === "/")
-    return `${base}/index-${page}.html`;
+  if (page <= 1) return `${base}${path}`;
+  if (path === "/") return `${base}/index-${page}.html`;
   return `${base}${path.replace(/\/$/u, "")}-${page}/`;
 }
 function detailUrl(id) {
@@ -156,14 +140,12 @@ function playUrl(id, sid, nid) {
 }
 function contentId(id) {
   const value = /^video:(\d+)$/u.exec(id)?.[1];
-  if (value === void 0)
-    throw new Error("Content ID is invalid.");
+  if (value === void 0) throw new Error("Content ID is invalid.");
   return value;
 }
 function parseChapterId(id, content) {
   const match = new RegExp(`^video:${content}:(\\d+):(\\d+)$`, "u").exec(id);
-  if (!match?.[1] || !match[2])
-    throw new Error("Chapter ID is invalid.");
+  if (!match?.[1] || !match[2]) throw new Error("Chapter ID is invalid.");
   return { sid: match[1], nid: match[2] };
 }
 function proxyImage(value) {
@@ -171,8 +153,7 @@ function proxyImage(value) {
   return url === null ? null : requireContext().resource.proxy({ kind: "image", url, headers: { Referer: `${base}/` } });
 }
 function absolute(value) {
-  if (value === "")
-    return null;
+  if (value === "") return null;
   try {
     return new URL(decode(value), base).toString();
   } catch {
@@ -204,11 +185,9 @@ function decode(value) {
   return value.replace(/&amp;/giu, "&").replace(/&quot;/giu, '"').replace(/&#39;/giu, "'").replace(/&lt;/giu, "<").replace(/&gt;/giu, ">").replace(/&nbsp;/giu, " ");
 }
 function cursorPage(cursor, target) {
-  if (cursor === null)
-    return 1;
+  if (cursor === null) return 1;
   const raw = cursor.startsWith(`${target}:`) ? cursor.slice(target.length + 1) : "", page = Number(raw);
-  if (!Number.isSafeInteger(page) || page < 2 || page > 1e3)
-    throw new Error("Cursor is invalid.");
+  if (!Number.isSafeInteger(page) || page < 2 || page > 1e3) throw new Error("Cursor is invalid.");
   return page;
 }
 function clamp(value) {
@@ -224,8 +203,7 @@ function frozen(value) {
   return Object.freeze(value);
 }
 function requireContext() {
-  if (context === void 0)
-    throw new Error("Source is not activated.");
+  if (context === void 0) throw new Error("Source is not activated.");
   return context;
 }
 export {

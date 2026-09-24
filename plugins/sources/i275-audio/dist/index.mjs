@@ -44706,7 +44706,7 @@ var undici = __toESM(require_undici(), 1);
 var import_whatwg_mimetype = __toESM(require_mime_type(), 1);
 import { Writable as Writable2, finished } from "node:stream";
 
-// dist/index.mjs
+// src/index.mts
 var base = "https://m.i275.com";
 var ua = "Mozilla/5.0 (Linux; Android 11; Pixel 5) AppleWebKit/537.36 Chrome/90.0.4430.91 Mobile Safari/537.36";
 var sessionKey = "i275-public";
@@ -44717,8 +44717,7 @@ async function activate(next2) {
 }
 async function search(request) {
   const query = request.query.trim();
-  if (query === "")
-    return frozen({ items: [], nextCursor: null, totalCount: 0 });
+  if (query === "") return frozen({ items: [], nextCursor: null, totalCount: 0 });
   const page = cursorPage(request.cursor, "search");
   const limit = clamp(request.pageSize);
   const values = parseBooks(await fetchText(`${base}/search.php?q=${encodeURIComponent(query)}&page=${page}`)).slice(0, limit);
@@ -44729,8 +44728,7 @@ async function searchSuggestions(_request) {
 }
 async function discover(request) {
   if (request.target === null) {
-    if (request.cursor !== null || request.collectionId !== null)
-      throw new Error("Initial discovery request is invalid.");
+    if (request.cursor !== null || request.collectionId !== null) throw new Error("Initial discovery request is invalid.");
     const values = parseBooks(await fetchText(`${base}/`)).slice(0, clamp(request.pageSize));
     const items = values.map((content) => frozen({ content, rank: null, metric: null, recommendation: null }));
     return frozen({
@@ -44778,8 +44776,7 @@ async function getChapters(request) {
   const id = contentId(request.id);
   const $2 = load(await fetchText(bookUrl(id)));
   const items = parseChapters($2, id);
-  if (items.length === 0)
-    throw new Error("No audio chapters found.");
+  if (items.length === 0) throw new Error("No audio chapters found.");
   return frozen({ items, groups: [frozen({ id: `group:${id}:default`, title: "默认线路", order: 0, episodes: items })] });
 }
 async function getContent(request) {
@@ -44850,8 +44847,7 @@ async function fetchPage(url, referer) {
       "User-Agent": ua
     }
   });
-  if (!response.ok)
-    throw new Error("Source request failed.");
+  if (!response.ok) throw new Error("Source request failed.");
   return { body: await response.text(), status: response.status, sessionUserAgent: ua };
 }
 function parseBooks(html3) {
@@ -44860,13 +44856,11 @@ function parseBooks(html3) {
   $2('a[href^="/book/"]').each((_, node) => {
     const href = $2(node).attr("href") ?? "";
     const id = /\/book\/(\d+)\.html/u.exec(href)?.[1];
-    if (id === void 0 || values.has(id))
-      return;
+    if (id === void 0 || values.has(id)) return;
     const title = clean($2(node).find("h3,.font-medium.text-sm,.font-medium").first().text()) || clean($2(node).find("img").first().attr("alt") ?? "");
     const cover = $2(node).find("img").first().attr("src") ?? "";
     const description = clean($2(node).find(".line-clamp-2").first().text());
-    if (title !== "")
-      values.set(id, summary(id, title, cover, description));
+    if (title !== "") values.set(id, summary(id, title, cover, description));
   });
   return [...values.values()];
 }
@@ -44877,8 +44871,7 @@ function parseChapters($2, book) {
     const href = $2(node).attr("href") ?? "";
     const match = new RegExp(`/play/${book}/(\\d+)\\.html`, "u").exec(href);
     const title = clean($2(node).find(".text-sm.text-gray-700").first().text()) || clean($2(node).text());
-    if (!match?.[1] || title === "" || seen.has(match[1]))
-      return;
+    if (!match?.[1] || title === "" || seen.has(match[1])) return;
     seen.add(match[1]);
     values.push({ id: match[1], title });
   });
@@ -44926,8 +44919,7 @@ function audioFromHtml(html3) {
   ];
   for (const pattern of patterns) {
     const value = pattern.exec(html3)?.[1];
-    if (value)
-      return value.replaceAll("\\/", "/").replaceAll("\\u0026", "&").replaceAll("\\x26", "&").replaceAll("&amp;", "&");
+    if (value) return value.replaceAll("\\/", "/").replaceAll("\\u0026", "&").replaceAll("\\x26", "&").replaceAll("&amp;", "&");
   }
   return "";
 }
@@ -44939,14 +44931,12 @@ function chapterUrl(book, chapter) {
 }
 function contentId(id) {
   const value = /^audio:(\d+)$/u.exec(id)?.[1];
-  if (value === void 0)
-    throw new Error("Content ID is invalid.");
+  if (value === void 0) throw new Error("Content ID is invalid.");
   return value;
 }
 function parseChapterId(id, book) {
   const value = new RegExp(`^audio:${book}:(\\d+)$`, "u").exec(id)?.[1];
-  if (value === void 0)
-    throw new Error("Chapter ID is invalid.");
+  if (value === void 0) throw new Error("Chapter ID is invalid.");
   return value;
 }
 function proxyImage(value) {
@@ -44955,8 +44945,7 @@ function proxyImage(value) {
 }
 function absolute(value) {
   const raw = value.trim();
-  if (raw === "")
-    return null;
+  if (raw === "") return null;
   try {
     return new URL(raw.replaceAll("\\/", "/"), base).toString();
   } catch {
@@ -44967,24 +44956,19 @@ function isAudio(url) {
   return /\.(?:mp3|m4a|aac|flac|wav|ogg|opus|ape|wma)(?:$|[?#])/iu.test(url);
 }
 function mime(url) {
-  if (/\.m4a(?:$|[?#])/iu.test(url))
-    return "audio/mp4";
-  if (/\.aac(?:$|[?#])/iu.test(url))
-    return "audio/aac";
-  if (/\.flac(?:$|[?#])/iu.test(url))
-    return "audio/flac";
+  if (/\.m4a(?:$|[?#])/iu.test(url)) return "audio/mp4";
+  if (/\.aac(?:$|[?#])/iu.test(url)) return "audio/aac";
+  if (/\.flac(?:$|[?#])/iu.test(url)) return "audio/flac";
   return "audio/mpeg";
 }
 function clean(value) {
   return value.replace(/\s+/gu, " ").trim();
 }
 function cursorPage(cursor, target) {
-  if (cursor === null)
-    return 1;
+  if (cursor === null) return 1;
   const raw = cursor.startsWith(`${target}:`) ? cursor.slice(target.length + 1) : "";
   const page = Number(raw);
-  if (!Number.isSafeInteger(page) || page < 2 || page > 1e3)
-    throw new Error("Cursor is invalid.");
+  if (!Number.isSafeInteger(page) || page < 2 || page > 1e3) throw new Error("Cursor is invalid.");
   return page;
 }
 function clamp(value) {
@@ -44994,8 +44978,7 @@ function frozen(value) {
   return Object.freeze(value);
 }
 function requireContext() {
-  if (context === void 0)
-    throw new Error("Source is not activated.");
+  if (context === void 0) throw new Error("Source is not activated.");
   return context;
 }
 export {

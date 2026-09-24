@@ -44706,7 +44706,7 @@ var undici = __toESM(require_undici(), 1);
 var import_whatwg_mimetype = __toESM(require_mime_type(), 1);
 import { Writable as Writable2, finished } from "node:stream";
 
-// dist/index.mjs
+// src/index.mts
 var base = "https://www.tatays.com";
 var searchBase = "https://m.tatays.com";
 var headers = Object.freeze({ Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8", "Accept-Language": "zh-CN,zh;q=0.9", Referer: `${base}/`, "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" });
@@ -44718,8 +44718,7 @@ async function activate(next2) {
 }
 async function search(request) {
   const query = request.query.trim();
-  if (query === "")
-    return frozen({ items: [], nextCursor: null, totalCount: 0 });
+  if (query === "") return frozen({ items: [], nextCursor: null, totalCount: 0 });
   const page = cursorPage(request.cursor, "search"), limit = clamp(request.pageSize), body = new URLSearchParams({ searchtype: "all", searchkey: query, page: String(page) }), html3 = await fetchText(`${searchBase}/modules/article/search.php`, { method: "POST", headers: { ...headers, Referer: `${searchBase}/`, "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8" }, body: body.toString() }), values = parseSearch(html3).slice(0, limit);
   return frozen({ items: values, nextCursor: values.length >= limit ? `search:${page + 1}` : null, totalCount: null });
 }
@@ -44728,17 +44727,14 @@ async function searchSuggestions(_request) {
 }
 async function discover(request) {
   if (request.target === null) {
-    if (request.cursor !== null || request.collectionId !== null)
-      throw new Error("Initial discovery request is invalid.");
+    if (request.cursor !== null || request.collectionId !== null) throw new Error("Initial discovery request is invalid.");
     return frozen({ kind: "document", document: { components: [{ type: "section", id: "novel-categories", title: "小说分类", subtitle: "按题材浏览", icon: "book", children: [{ type: "categoryCollection", id: "novel-categories-list", layout: "chips", categories: categories.map(([id2, title2]) => ({ id: id2, title: title2, target: `category:${id2}`, count: null, url: null, icon: "book" })) }] }] } });
   }
   const category = categories.find(([id2]) => request.target === `category:${id2}`);
-  if (category === void 0)
-    throw new Error("Discovery target is invalid.");
+  if (category === void 0) throw new Error("Discovery target is invalid.");
   const page = cursorPage(request.cursor, request.target), limit = clamp(request.pageSize), [id, title] = category, values = parseListing(await fetchText(`${base}/${id}/p${page}.html`)).slice(0, limit), collectionId = `novel:${id}`, items = values.map((content) => frozen({ content, rank: null, metric: null, recommendation: null })), continuation = values.length >= limit ? frozen({ target: request.target, cursor: `${request.target}:${page + 1}` }) : null;
   if (request.collectionId !== null) {
-    if (request.collectionId !== collectionId)
-      throw new Error("Discovery collection is invalid.");
+    if (request.collectionId !== collectionId) throw new Error("Discovery collection is invalid.");
     return frozen({ kind: "append", collectionId, items, continuation });
   }
   return frozen({ kind: "document", document: { components: [{ type: "section", id: `${collectionId}:section`, title, subtitle: null, icon: "book", children: [{ type: "contentCollection", id: collectionId, layout: "coverGrid", items, continuation }] }] } });
@@ -44749,43 +44745,35 @@ async function getDetail(request) {
 }
 async function getChapters(request) {
   const id = contentId(request.id), root2 = bookUrl(id), firstHtml = await fetchText(root2), maxPage = Math.min(100, chapterPageCount(firstHtml, id)), pages = await Promise.all(Array.from({ length: Math.max(0, maxPage - 1) }, (_, index2) => fetchText(`${root2}${index2 + 2}s.html`))), chapters = parseChapters([firstHtml, ...pages], id);
-  if (chapters.length === 0)
-    throw new Error("No chapters found.");
+  if (chapters.length === 0) throw new Error("No chapters found.");
   const group = frozen({ id: `group:${id}:default`, title: "正文", order: 0, episodes: chapters });
   return frozen({ items: chapters, groups: [group] });
 }
 async function getContent(request) {
   const id = contentId(request.id), chapter = parseChapterId(request.chapterId, id), $2 = load(await fetchText(chapterUrl(id, chapter))), html3 = $2(".chapter-content").first().html() ?? "", paragraphs = decode(html3.replace(/<br\s*\/?\s*>/giu, "\n").replace(/<\/?p[^>]*>/giu, "\n").replace(/<[^>]+>/gu, " ")).split(/\n+/u).map(clean).filter((value) => value !== "" && !/本章未完|加入书签|章节报错|126小说|tatays/iu.test(value));
-  if (paragraphs.length === 0)
-    throw new Error("Chapter content is empty.");
+  if (paragraphs.length === 0) throw new Error("Chapter content is empty.");
   return frozen({ chapterId: request.chapterId, contentKind: "novel", title: null, updatedAt: null, text: paragraphs.join("\n\n"), pages: [], media: null });
 }
 async function fetchText(url, init = { headers }) {
   const response = await requireContext().http.fetch(url, init);
   const text3 = await response.text();
-  if (!response.ok)
-    throw new Error(`Source request failed (${response.status}).`);
-  if (/<title[^>]*>\s*Not Found\s*<\/title>/iu.test(text3))
-    throw new Error("Source page is unavailable.");
+  if (!response.ok) throw new Error(`Source request failed (${response.status}).`);
+  if (/<title[^>]*>\s*Not Found\s*<\/title>/iu.test(text3)) throw new Error("Source page is unavailable.");
   return text3;
 }
 function parseSearch(html3) {
   const $2 = load(html3), result = [];
   $2(".sort-list.search_words li").slice(1).each((_, node) => {
     const href = $2(node).find(".one a").first().attr("href") ?? "", id = bookId(href);
-    if (id === null)
-      return;
+    if (id === null) return;
     const title = clean($2(node).find(".one a").first().text()), author = clean($2(node).find(".three").first().text()), latest = clean($2(node).find(".two a").first().text());
-    if (title !== "")
-      result.push(summary(id, title, author, "", "", latest));
+    if (title !== "") result.push(summary(id, title, author, "", "", latest));
   });
   $2(".blockcontent .c_row").each((_, node) => {
     const root2 = $2(node), link = root2.find('a[href*="/book/"]').first(), id = bookId(link.attr("href") ?? "");
-    if (id === null)
-      return;
+    if (id === null) return;
     const title = clean(root2.find(".search_text h2").first().text()), cover = root2.find(".row_cover img").first().attr("src") ?? "", spans = root2.find(".search_text p").first().find("span"), author = clean(spans.eq(0).text()), category = clean(spans.eq(1).text());
-    if (title !== "")
-      result.push(summary(id, title, author, cover, category, ""));
+    if (title !== "") result.push(summary(id, title, author, cover, category, ""));
   });
   if (result.length === 0) {
     const mobile = $2(".novel-box .row_textl"), title = clean($2(".chapter-list-info .mid h2").first().text()) || clean(mobile.find("h2").first().text()), self = $2('link[rel="canonical"][href*="/book/"], a[href*="/book/"]').first().attr("href") ?? "", id = bookId(self);
@@ -44800,11 +44788,9 @@ function parseListing(html3) {
   const $2 = load(html3), result = [];
   $2(".list-title li").each((_, node) => {
     const href = $2(node).find("a").first().attr("href") ?? "", id = bookId(href);
-    if (id === null)
-      return;
+    if (id === null) return;
     const title = clean($2(node).find("h2").first().text()), cover = $2(node).find("img").first().attr("src") ?? "", author = /作者[：:]\s*([^|]+)/u.exec(clean($2(node).find("p.info").first().text()))?.[1]?.trim() ?? "";
-    if (title !== "")
-      result.push(summary(id, title, author, cover, "", ""));
+    if (title !== "") result.push(summary(id, title, author, cover, "", ""));
   });
   return result;
 }
@@ -44814,8 +44800,7 @@ function parseChapters(htmlPages, book) {
     const $2 = load(html3);
     $2(".chapter-box .chapter-list.clears a").each((_, node) => {
       const href = $2(node).attr("href") ?? "", match = new RegExp(`/book/${book}/(\\d+)\\.html`, "u").exec(href), title = clean($2(node).text());
-      if (!match?.[1] || title === "" || seen.has(match[1]))
-        return;
+      if (!match?.[1] || title === "" || seen.has(match[1])) return;
       seen.add(match[1]);
       values.push({ id: match[1], title });
     });
@@ -44830,8 +44815,7 @@ function chapterPageCount(html3, id) {
   let max = 1;
   for (const match of html3.matchAll(new RegExp(`/book/${id}/(\\d+)s\\.html`, "gu"))) {
     const value2 = Number(match[1]);
-    if (Number.isSafeInteger(value2) && value2 > max)
-      max = value2;
+    if (Number.isSafeInteger(value2) && value2 > max) max = value2;
   }
   const fraction = /<kbd>[\s\S]*?(\d+)\s*\/\s*(\d+)[\s\S]*?<\/kbd>/iu.exec(html3), value = Number(fraction?.[2]);
   return Number.isSafeInteger(value) && value > max ? value : max;
@@ -44847,20 +44831,17 @@ function chapterUrl(book, chapter) {
 }
 function contentId(id) {
   const value = /^novel:(\d+)$/u.exec(id)?.[1];
-  if (value === void 0)
-    throw new Error("Content ID is invalid.");
+  if (value === void 0) throw new Error("Content ID is invalid.");
   return value;
 }
 function parseChapterId(id, book) {
   const value = new RegExp(`^novel:${book}:(\\d+)$`, "u").exec(id)?.[1];
-  if (value === void 0)
-    throw new Error("Chapter ID is invalid.");
+  if (value === void 0) throw new Error("Chapter ID is invalid.");
   return value;
 }
 function proxyImage(value) {
   const raw = value.trim();
-  if (raw === "")
-    return null;
+  if (raw === "") return null;
   let url;
   try {
     url = new URL(raw, base).toString();
@@ -44876,11 +44857,9 @@ function clean(value) {
   return decode(value).replace(/[\s\u3000\u00a0]+/gu, " ").trim();
 }
 function cursorPage(cursor, target) {
-  if (cursor === null)
-    return 1;
+  if (cursor === null) return 1;
   const raw = cursor.startsWith(`${target}:`) ? cursor.slice(target.length + 1) : "", page = Number(raw);
-  if (!Number.isSafeInteger(page) || page < 2 || page > 1e3)
-    throw new Error("Cursor is invalid.");
+  if (!Number.isSafeInteger(page) || page < 2 || page > 1e3) throw new Error("Cursor is invalid.");
   return page;
 }
 function clamp(value) {
@@ -44890,8 +44869,7 @@ function frozen(value) {
   return Object.freeze(value);
 }
 function requireContext() {
-  if (context === void 0)
-    throw new Error("Source is not activated.");
+  if (context === void 0) throw new Error("Source is not activated.");
   return context;
 }
 export {

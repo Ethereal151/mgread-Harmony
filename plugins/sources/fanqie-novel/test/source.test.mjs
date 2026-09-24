@@ -102,6 +102,29 @@ test('Fanqie source migrates legacy search payloads and web detail fallback', as
   assert.equal(resources.length, 2);
 });
 
+test('Fanqie detail reuses a cover field from the same API response', async () => {
+  const resources = [];
+  let infoCalls = 0;
+  await plugin.activate({
+    log: { info() {}, warn() {} },
+    resource: { proxy(value) { resources.push(value); return 'http://127.0.0.1/resource'; } },
+    http: { async fetch(input) {
+      const url = String(input);
+      if (url.includes('/info?')) {
+        infoCalls += 1;
+        return Response.json({ data: { data: { book_name: '同响应封面', author: '作者' }, cover: 'https://img.example/reused.jpg' } });
+      }
+      throw new Error(url);
+    } },
+  });
+  const detail = await plugin.getDetail({ id: 'novel:77' });
+  assert.equal(infoCalls, 1);
+  assert.equal(detail.title, '同响应封面');
+  assert.equal(resources.length, 1);
+  assert.equal(resources[0].url, 'https://p6-novel.byteimg.com/origin/reused.jpg');
+  assert.equal(resources[0].headers.Referer, 'https://fanqienovel.com/');
+});
+
 test('Fanqie source strips legacy inline image blocks from novel text', async () => {
   await plugin.activate({
     log: { info() {} },

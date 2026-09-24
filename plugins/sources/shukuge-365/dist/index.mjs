@@ -47,7 +47,7 @@ var require_boolbase = __commonJS({
   }
 });
 
-// dist/source.js
+// src/source.ts
 import { Buffer as Buffer2 } from "node:buffer";
 
 // node_modules/cheerio/dist/esm/options.js
@@ -6495,7 +6495,7 @@ function isNode(obj) {
 // node_modules/cheerio/dist/esm/slim.js
 var load = getLoad(getParse(parseDocument), esm_default);
 
-// dist/source.js
+// src/source.ts
 var origin = "http://www.shukuge.com";
 var maxCatalogPages = 50;
 var maxChapterItems = 5e3;
@@ -6522,21 +6522,19 @@ var categories = Object.freeze([
   ["ranking", "排行榜", "/top/"]
 ]);
 var ShukugeSource = class {
-  context;
   constructor(context2) {
     this.context = context2;
   }
+  context;
   async search(query, page) {
     const url = new URL("/Search", origin);
     url.searchParams.set("wd", query);
-    if (page > 1)
-      url.searchParams.set("page", String(page));
+    if (page > 1) url.searchParams.set("page", String(page));
     return this.parseList(await this.#html(url), url);
   }
   async discover(categoryId, page) {
     const category = categories.find(([id]) => id === categoryId);
-    if (category === void 0)
-      throw new Error("Unknown category.");
+    if (category === void 0) throw new Error("Unknown category.");
     const path = page === 1 ? category[2] : `${category[2].replace(/\/+$/u, "")}/${page}`;
     const url = new URL(path, origin);
     return this.parseList(await this.#html(url), url);
@@ -6550,11 +6548,9 @@ var ShukugeSource = class {
       const link = root2.find(".bookdesc > a[href]").first();
       const href = link.attr("href");
       const title = clean(root2.find(".bookdesc h2").first().text());
-      if (href === void 0 || title === null)
-        return;
+      if (href === void 0 || title === null) return;
       const url = new URL(href, pageUrl);
-      if (!isBookUrl(url) || seen.has(url.pathname))
-        return;
+      if (!isBookUrl(url) || seen.has(url.pathname)) return;
       seen.add(url.pathname);
       const spans = root2.find(".bookdesc .sp span");
       const author = stripLabel(clean(spans.eq(0).text()), "作者");
@@ -6592,8 +6588,7 @@ var ShukugeSource = class {
     const $ = load(await this.#html(url));
     const image = $(".bookdcover img").first();
     const title = clean(image.attr("alt")) ?? clean($(".bookd-title h1").first().text())?.replace(/\s*TXT全集\s*$/u, "") ?? null;
-    if (title === null)
-      throw new Error("Detail title is missing.");
+    if (title === null) throw new Error("Detail title is missing.");
     const more = $(".bookdmore p");
     const category = clean(more.eq(0).find("a").first().text());
     const author = clean(more.eq(2).find("a").first().text());
@@ -6602,11 +6597,9 @@ var ShukugeSource = class {
     const updatedAt = parseTimestamp(stripLabel(clean(more.eq(7).text()), "最新时间"));
     const coverRaw = image.attr("src");
     const catalogRaw = $('.bookdtext a.btn-primary[href*="/index.html"]').first().attr("href");
-    if (catalogRaw === void 0)
-      throw new Error("Detail catalog link is missing.");
+    if (catalogRaw === void 0) throw new Error("Detail catalog link is missing.");
     const catalogUrl = new URL(catalogRaw, url);
-    if (!isCatalogUrl(catalogUrl, url))
-      throw new Error("Detail catalog link is invalid.");
+    if (!isCatalogUrl(catalogUrl, url)) throw new Error("Detail catalog link is invalid.");
     return Object.freeze({
       ...summary({
         url,
@@ -6631,13 +6624,11 @@ var ShukugeSource = class {
     const $ = load(firstHtml);
     const optionUrls = uniqueUrls($("option[value]").toArray().flatMap((element) => {
       const value = $(element).attr("value");
-      if (value === void 0)
-        return [];
+      if (value === void 0) return [];
       const url = new URL(value, catalogUrl);
       return isCatalogUrl(url, bookUrl) ? [url] : [];
     }));
-    if (optionUrls.length > maxCatalogPages)
-      throw new Error("Catalog page count exceeds the source limit.");
+    if (optionUrls.length > maxCatalogPages) throw new Error("Catalog page count exceeds the source limit.");
     const pages = optionUrls.length > 1 ? await Promise.all(optionUrls.map((url) => url.toString() === catalogUrl.toString() ? firstHtml : this.#html(url))) : [firstHtml];
     const seen = /* @__PURE__ */ new Set();
     const chapters = [];
@@ -6646,11 +6637,9 @@ var ShukugeSource = class {
       page("dl dd a[href]").each((_, element) => {
         const href = page(element).attr("href");
         const title = clean(page(element).text());
-        if (href === void 0 || title === null)
-          return;
+        if (href === void 0 || title === null) return;
         const chapterUrl = new URL(href, catalogUrl);
-        if (!isChapterUrl(chapterUrl, bookUrl) || seen.has(chapterUrl.pathname))
-          return;
+        if (!isChapterUrl(chapterUrl, bookUrl) || seen.has(chapterUrl.pathname)) return;
         seen.add(chapterUrl.pathname);
         chapters.push(Object.freeze({
           id: encodeChapterId(chapterUrl),
@@ -6665,10 +6654,8 @@ var ShukugeSource = class {
         }));
       });
     }
-    if (chapters.length === 0)
-      throw new Error("Catalog is empty.");
-    if (chapters.length > maxChapterItems)
-      throw new Error("Catalog exceeds the Runtime chapter limit.");
+    if (chapters.length === 0) throw new Error("Catalog is empty.");
+    if (chapters.length > maxChapterItems) throw new Error("Catalog exceeds the Runtime chapter limit.");
     return Object.freeze({ items: Object.freeze(chapters) });
   }
   async getContent(id, chapterId) {
@@ -6682,20 +6669,16 @@ var ShukugeSource = class {
       const $ = load(await this.#html(url));
       title ??= clean($(".bookd-title h1").first().text());
       const content = $("#content #content").first();
-      if (content.length === 0)
-        throw new Error("Chapter content is missing.");
+      if (content.length === 0) throw new Error("Chapter content is missing.");
       const html3 = content.html() ?? "";
       for (const fragment of html3.split(/<br\s*\/?>|<\/?p[^>]*>/iu)) {
         const line = clean(load(`<div>${fragment}</div>`)("div").text());
-        if (line !== null && !/(?:本章未完|加入书签|章节报错|365小说网|shukuge\.com)/iu.test(line))
-          paragraphs.push(line);
+        if (line !== null && !/(?:本章未完|加入书签|章节报错|365小说网|shukuge\.com)/iu.test(line)) paragraphs.push(line);
       }
       const nextHref = $("a").filter((_, element) => clean($(element).text()) === "下一页").first().attr("href");
-      if (nextHref === void 0 || nextHref.startsWith("javascript:"))
-        break;
+      if (nextHref === void 0 || nextHref.startsWith("javascript:")) break;
       const next2 = new URL(nextHref, url);
-      if (!isChapterPageContinuation(next2, bookUrl, url))
-        break;
+      if (!isChapterPageContinuation(next2, bookUrl, url)) break;
       url = next2;
     }
     return Object.freeze({
@@ -6714,13 +6697,11 @@ var ShukugeSource = class {
       referer: `${origin}/`
     } });
     const body = await response.text();
-    if (!response.ok || isChallenge(body))
-      throw new Error("Source page is unavailable.");
+    if (!response.ok || isChallenge(body)) throw new Error("Source page is unavailable.");
     return body;
   }
   #proxyImage(url, referer) {
-    if (url.origin !== origin)
-      return null;
+    if (url.origin !== origin) return null;
     return this.context.resource.proxy({ kind: "image", url: url.toString(), headers: { Accept: "image/*", Referer: referer.toString() } });
   }
 };
@@ -6763,20 +6744,16 @@ function token(value) {
 }
 function decodeBookId(id) {
   const match = /^book:([A-Za-z0-9_-]+)$/u.exec(id);
-  if (match?.[1] === void 0)
-    throw new Error("Content ID is invalid.");
+  if (match?.[1] === void 0) throw new Error("Content ID is invalid.");
   const url = new URL(Buffer2.from(match[1], "base64url").toString("utf8"), origin);
-  if (!isBookUrl(url))
-    throw new Error("Content ID is invalid.");
+  if (!isBookUrl(url)) throw new Error("Content ID is invalid.");
   return normalizeBookUrl(url);
 }
 function decodeChapterId(id, bookUrl) {
   const match = /^chapter:([A-Za-z0-9_-]+)$/u.exec(id);
-  if (match?.[1] === void 0)
-    throw new Error("Chapter ID is invalid.");
+  if (match?.[1] === void 0) throw new Error("Chapter ID is invalid.");
   const url = new URL(Buffer2.from(match[1], "base64url").toString("utf8"), origin);
-  if (!isChapterUrl(url, bookUrl))
-    throw new Error("Chapter ID is invalid.");
+  if (!isChapterUrl(url, bookUrl)) throw new Error("Chapter ID is invalid.");
   return url;
 }
 function normalizeBookUrl(url) {
@@ -6792,28 +6769,21 @@ function isChapterUrl(url, bookUrl) {
   return url.origin === origin && url.pathname.startsWith(normalizeBookUrl(bookUrl).pathname) && /^\/book\/\d+\/\d+\.html$/u.test(url.pathname);
 }
 function isChapterPageContinuation(next2, bookUrl, current) {
-  if (next2.origin !== origin || !next2.pathname.startsWith(normalizeBookUrl(bookUrl).pathname))
-    return false;
+  if (next2.origin !== origin || !next2.pathname.startsWith(normalizeBookUrl(bookUrl).pathname)) return false;
   const currentChapter = /^(\/book\/\d+\/\d+)(?:_\d+)?\.html$/u.exec(current.pathname)?.[1];
   return currentChapter !== void 0 && new RegExp(`^${currentChapter.replaceAll("/", "\\/")}(?:_\\d+)?\\.html$`, "u").test(next2.pathname);
 }
 function parseStatus(value) {
-  if (value === null)
-    return "unknown";
-  if (/(?:完结|完本|已完成)/u.test(value))
-    return "completed";
-  if (/(?:连载|在更)/u.test(value))
-    return "ongoing";
-  if (/(?:暂停|停更)/u.test(value))
-    return "hiatus";
+  if (value === null) return "unknown";
+  if (/(?:完结|完本|已完成)/u.test(value)) return "completed";
+  if (/(?:连载|在更)/u.test(value)) return "ongoing";
+  if (/(?:暂停|停更)/u.test(value)) return "hiatus";
   return "unknown";
 }
 function parseTimestamp(value) {
-  if (value === null)
-    return null;
+  if (value === null) return null;
   const match = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?$/u.exec(value);
-  if (match === null)
-    return null;
+  if (match === null) return null;
   const iso = `${match[1]}-${match[2]}-${match[3]}T${match[4]}:${match[5]}:${match[6] ?? "00"}+08:00`;
   return Number.isNaN(Date.parse(iso)) ? null : new Date(iso).toISOString();
 }
@@ -6836,8 +6806,7 @@ function uniqueUrls(values) {
   const seen = /* @__PURE__ */ new Set();
   return values.filter((url) => {
     const key = url.toString();
-    if (seen.has(key))
-      return false;
+    if (seen.has(key)) return false;
     seen.add(key);
     return true;
   });
@@ -6846,7 +6815,7 @@ function isChallenge(body) {
   return /(?:cf-challenge|cf-turnstile|Just a moment|Checking your browser|challenge-platform)/iu.test(body);
 }
 
-// dist/index.mjs
+// src/index.mts
 var context;
 var source;
 async function activate(next2) {
@@ -6866,14 +6835,12 @@ async function search(request) {
 }
 async function discover(request) {
   if (request.target === null) {
-    if (request.cursor !== null || request.collectionId !== null)
-      throw new Error("Initial discovery request is invalid.");
+    if (request.cursor !== null || request.collectionId !== null) throw new Error("Initial discovery request is invalid.");
     const result2 = await invoke("discover_home", (active) => active.discover("new", 1));
     return categoriesDocument(result2.items.slice(0, Math.min(request.pageSize, 10)));
   }
   const match = /^category:([a-z-]+)$/u.exec(request.target);
-  if (match?.[1] === void 0)
-    throw new Error("Discovery target is invalid.");
+  if (match?.[1] === void 0) throw new Error("Discovery target is invalid.");
   const categoryId = match[1];
   const page = cursorPage(request.cursor, `category:${categoryId}`);
   const result = await invoke("discover", (active) => active.discover(categoryId, page));
@@ -6886,8 +6853,7 @@ async function discover(request) {
   const collectionId = `category-books:${categoryId}`;
   const continuation = result.hasNext ? Object.freeze({ target: request.target, cursor: `category:${categoryId}:${page + 1}` }) : null;
   if (request.collectionId !== null) {
-    if (request.collectionId !== collectionId)
-      throw new Error("Discovery collection is invalid.");
+    if (request.collectionId !== collectionId) throw new Error("Discovery collection is invalid.");
     return Object.freeze({ kind: "append", collectionId, items, continuation });
   }
   const title = categories.find(([id]) => id === categoryId)?.[1] ?? "分类";
@@ -6947,13 +6913,11 @@ function categoryIcon(id) {
   return { fantasy: "fantasy", romance: "romance", wuxia: "wuxia", xianxia: "wuxia", urban: "urban", military: "military", game: "game", mystery: "mystery", "science-fiction": "scienceFiction", history: "history", new: "newRelease", ranking: "ranking" }[id] ?? "category";
 }
 function requireSource() {
-  if (context === void 0)
-    throw new Error("Source is not activated.");
+  if (context === void 0) throw new Error("Source is not activated.");
   return source ??= new ShukugeSource(context);
 }
 async function invoke(operation, action) {
-  if (context === void 0)
-    throw new Error("Source is not activated.");
+  if (context === void 0) throw new Error("Source is not activated.");
   context.log.info(`source_${operation}_started`);
   try {
     const result = await action(requireSource());
@@ -6965,12 +6929,10 @@ async function invoke(operation, action) {
   }
 }
 function cursorPage(cursor, scope) {
-  if (cursor === null)
-    return 1;
+  if (cursor === null) return 1;
   const escaped = scope.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
   const page = Number(new RegExp(`^${escaped}:(\\d+)$`, "u").exec(cursor)?.[1]);
-  if (!Number.isSafeInteger(page) || page < 2)
-    throw new Error("Cursor is invalid.");
+  if (!Number.isSafeInteger(page) || page < 2) throw new Error("Cursor is invalid.");
   return page;
 }
 export {

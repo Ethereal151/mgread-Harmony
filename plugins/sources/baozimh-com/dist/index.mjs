@@ -47,7 +47,7 @@ var require_boolbase = __commonJS({
   }
 });
 
-// dist/source.js
+// src/source.ts
 import { Buffer as Buffer2 } from "node:buffer";
 import { createHash } from "node:crypto";
 
@@ -6496,22 +6496,19 @@ function isNode(obj) {
 // node_modules/cheerio/dist/esm/slim.js
 var load = getLoad(getParse(parseDocument), esm_default);
 
-// dist/projection-cache.js
+// src/projection-cache.ts
 var ProjectionCache = class {
+  constructor(policy, now = Date.now) {
+    this.policy = policy;
+    this.now = now;
+    if (!Number.isSafeInteger(policy.capacity) || policy.capacity < 1) throw new Error("Cache capacity is invalid.");
+    if (!Number.isFinite(policy.freshTtlMs) || policy.freshTtlMs < 0) throw new Error("Cache fresh TTL is invalid.");
+    if (!Number.isFinite(policy.staleTtlMs) || policy.staleTtlMs <= policy.freshTtlMs) throw new Error("Cache stale TTL is invalid.");
+  }
   policy;
   now;
   #entries = /* @__PURE__ */ new Map();
   #flights = /* @__PURE__ */ new Map();
-  constructor(policy, now = Date.now) {
-    this.policy = policy;
-    this.now = now;
-    if (!Number.isSafeInteger(policy.capacity) || policy.capacity < 1)
-      throw new Error("Cache capacity is invalid.");
-    if (!Number.isFinite(policy.freshTtlMs) || policy.freshTtlMs < 0)
-      throw new Error("Cache fresh TTL is invalid.");
-    if (!Number.isFinite(policy.staleTtlMs) || policy.staleTtlMs <= policy.freshTtlMs)
-      throw new Error("Cache stale TTL is invalid.");
-  }
   async get(key, load2) {
     const current = this.now();
     const entry = this.#entries.get(key);
@@ -6524,20 +6521,17 @@ var ProjectionCache = class {
       void this.#refresh(key, load2).catch(() => void 0);
       return entry.value;
     }
-    if (entry !== void 0)
-      this.#entries.delete(key);
+    if (entry !== void 0) this.#entries.delete(key);
     return this.#refresh(key, load2);
   }
   #refresh(key, load2) {
     const active = this.#flights.get(key);
-    if (active !== void 0)
-      return active;
+    if (active !== void 0) return active;
     const flight = Promise.resolve().then(load2).then((value) => {
       this.#store(key, value);
       return value;
     }).finally(() => {
-      if (this.#flights.get(key) === flight)
-        this.#flights.delete(key);
+      if (this.#flights.get(key) === flight) this.#flights.delete(key);
     });
     this.#flights.set(key, flight);
     return flight;
@@ -6556,14 +6550,13 @@ var ProjectionCache = class {
     });
     while (this.#entries.size > this.policy.capacity) {
       const oldest = this.#entries.keys().next().value;
-      if (oldest === void 0)
-        break;
+      if (oldest === void 0) break;
       this.#entries.delete(oldest);
     }
   }
 };
 
-// dist/source.js
+// src/source.ts
 var entryUrl = "https://cn.bzmgcn.com";
 var categories = Object.freeze([
   ["china", "國漫", "/classify?type=all&region=cn&state=all&filter=*"],
@@ -6580,14 +6573,14 @@ var projectionCachePolicy = Object.freeze({
   books: Object.freeze({ capacity: 64, freshTtlMs: 10 * 6e4, staleTtlMs: 60 * 6e4 })
 });
 var BaozimhSource = class {
-  context;
-  #listCache;
-  #bookCache;
   constructor(context2, options = {}) {
     this.context = context2;
     this.#listCache = new ProjectionCache(projectionCachePolicy.lists, options.now);
     this.#bookCache = new ProjectionCache(projectionCachePolicy.books, options.now);
   }
+  context;
+  #listCache;
+  #bookCache;
   async search(query) {
     const url = new URL("/search", entryUrl);
     url.searchParams.set("q", query);
@@ -6598,8 +6591,7 @@ var BaozimhSource = class {
   }
   async discover(categoryId) {
     const category = categories.find(([id]) => id === categoryId);
-    if (category === void 0)
-      throw new Error("Unknown category.");
+    if (category === void 0) throw new Error("Unknown category.");
     const url = new URL(category[2], entryUrl);
     return this.#listCache.get(`discover:${categoryId}`, async () => {
       const response = await this.#html(url);
@@ -6615,11 +6607,9 @@ var BaozimhSource = class {
       const poster = card.find("a.comics-card__poster[href]").first();
       const href = poster.attr("href");
       const title = clean(poster.attr("title")) ?? clean(card.find("h3").first().text());
-      if (href === void 0 || title === null)
-        return;
+      if (href === void 0 || title === null) return;
       const url = new URL(href, pageUrl);
-      if (!isBookUrl(url) || seen.has(url.toString()))
-        return;
+      if (!isBookUrl(url) || seen.has(url.toString())) return;
       seen.add(url.toString());
       const image = poster.find("amp-img[src]").first().attr("src");
       const tags = unique(card.find(".tab").toArray().map((node) => $(node).text()));
@@ -6653,11 +6643,9 @@ var BaozimhSource = class {
     $("amp-img.comic-contain__item[src]").each((_, element) => {
       const image = $(element);
       const raw = image.attr("src");
-      if (raw === void 0)
-        return;
+      if (raw === void 0) return;
       const url = new URL(decodeEntities(raw), response.url);
-      if (/default_cover/iu.test(url.pathname) || seen.has(url.toString()))
-        return;
+      if (/default_cover/iu.test(url.pathname) || seen.has(url.toString())) return;
       seen.add(url.toString());
       const index2 = pages.length;
       pages.push(Object.freeze({
@@ -6669,8 +6657,7 @@ var BaozimhSource = class {
         height: dimension(image.attr("height"))
       }));
     });
-    if (pages.length === 0)
-      throw new Error("Chapter images are missing.");
+    if (pages.length === 0) throw new Error("Chapter images are missing.");
     return Object.freeze({
       chapterId,
       contentKind: "manga",
@@ -6687,8 +6674,7 @@ var BaozimhSource = class {
       const finalUrl = response.url;
       const $ = load(response.body);
       const title = meta($, "og:novel:book_name") ?? clean($("title").text())?.replace(new RegExp("^\\P{L}+", "u"), "").replace(/\s+-\s+包子漫畫.*$/u, "") ?? null;
-      if (title === null)
-        throw new Error("Detail title is missing.");
+      if (title === null) throw new Error("Detail title is missing.");
       const categories2 = splitTags(meta($, "og:novel:category"));
       const coverRaw = meta($, "og:image");
       const latestTitle = meta($, "og:novel:latest_chapter_name");
@@ -6715,11 +6701,9 @@ var BaozimhSource = class {
         const link = $(element);
         const href = link.attr("href");
         const chapterTitle = clean(link.find("span").first().text()) ?? clean(link.text());
-        if (href === void 0 || chapterTitle === null)
-          return;
+        if (href === void 0 || chapterTitle === null) return;
         const direct = directChapterUrl(new URL(decodeEntities(href), finalUrl));
-        if (direct === null || seen.has(direct.toString()))
-          return;
+        if (direct === null || seen.has(direct.toString())) return;
         seen.add(direct.toString());
         chapters.push(Object.freeze({
           id: encodeChapterId(id, direct),
@@ -6733,18 +6717,15 @@ var BaozimhSource = class {
           attributes: Object.freeze([])
         }));
       });
-      if (chapters.length === 0)
-        throw new Error("Catalog is empty.");
-      if (chapters.length > 5e3)
-        throw new Error("Catalog exceeds the Runtime chapter limit.");
+      if (chapters.length === 0) throw new Error("Catalog is empty.");
+      if (chapters.length > 5e3) throw new Error("Catalog exceeds the Runtime chapter limit.");
       return Object.freeze({ detail, chapters: Object.freeze({ items: Object.freeze(chapters) }) });
     });
   }
   async #html(url) {
     const response = await this.context.http.fetch(url, { redirect: "follow", headers: { accept: "text/html,application/xhtml+xml", "accept-language": "zh-TW,zh;q=0.9", referer: new URL("/", url).toString() } });
     const body = await response.text();
-    if (!response.ok || isChallenge(body))
-      throw new Error("Source page is unavailable.");
+    if (!response.ok || isChallenge(body)) throw new Error("Source page is unavailable.");
     return Object.freeze({ body, url: new URL(response.url || url.toString()) });
   }
   #proxyImage(url, referer) {
@@ -6786,11 +6767,9 @@ function encodeBookId(url) {
 }
 function decodeBookId(id) {
   const value = /^comic:([A-Za-z0-9_-]+)$/u.exec(id)?.[1];
-  if (value === void 0)
-    throw new Error("Content ID is invalid.");
+  if (value === void 0) throw new Error("Content ID is invalid.");
   const url = new URL(Buffer2.from(value, "base64url").toString("utf8"), entryUrl);
-  if (!isBookUrl(url))
-    throw new Error("Content ID is invalid.");
+  if (!isBookUrl(url)) throw new Error("Content ID is invalid.");
   return url;
 }
 function encodeChapterId(bookId, url) {
@@ -6798,11 +6777,9 @@ function encodeChapterId(bookId, url) {
 }
 function decodeChapterId(id, bookId) {
   const match = /^chapter:([A-Za-z0-9_-]+):([A-Za-z0-9_-]+)$/u.exec(id);
-  if (match?.[1] === void 0 || match[2] === void 0 || Buffer2.from(match[1], "base64url").toString("utf8") !== bookId)
-    throw new Error("Chapter ID is invalid.");
+  if (match?.[1] === void 0 || match[2] === void 0 || Buffer2.from(match[1], "base64url").toString("utf8") !== bookId) throw new Error("Chapter ID is invalid.");
   const url = new URL(Buffer2.from(match[2], "base64url").toString("utf8"), entryUrl);
-  if (!isChapterUrl(url))
-    throw new Error("Chapter ID is invalid.");
+  if (!isChapterUrl(url)) throw new Error("Chapter ID is invalid.");
   return url;
 }
 function token(value) {
@@ -6818,13 +6795,11 @@ function isChapterUrl(url) {
   return /^\/comic\/chapter\/[A-Za-z0-9_-]+\/\d+_\d+\.html$/u.test(url.pathname);
 }
 function directChapterUrl(url) {
-  if (url.pathname !== "/user/page_direct")
-    return isChapterUrl(url) ? url : null;
+  if (url.pathname !== "/user/page_direct") return isChapterUrl(url) ? url : null;
   const comicId = url.searchParams.get("comic_id");
   const section = url.searchParams.get("section_slot");
   const chapter = url.searchParams.get("chapter_slot");
-  if (comicId === null || !/^[A-Za-z0-9_-]+$/u.test(comicId) || !/^\d+$/u.test(section ?? "") || !/^\d+$/u.test(chapter ?? ""))
-    return null;
+  if (comicId === null || !/^[A-Za-z0-9_-]+$/u.test(comicId) || !/^\d+$/u.test(section ?? "") || !/^\d+$/u.test(chapter ?? "")) return null;
   return new URL(`/comic/chapter/${comicId}/${section}_${chapter}.html`, url.origin);
 }
 function imageMime(url) {
@@ -6852,21 +6827,17 @@ function clean(value) {
   return result === "" ? null : result;
 }
 function parseStatus(value) {
-  if (value === null)
-    return "unknown";
-  if (/(?:完結|完本|已完結)/u.test(value))
-    return "completed";
-  if (/(?:連載|更新中)/u.test(value))
-    return "ongoing";
-  if (/(?:停更|暫停)/u.test(value))
-    return "hiatus";
+  if (value === null) return "unknown";
+  if (/(?:完結|完本|已完結)/u.test(value)) return "completed";
+  if (/(?:連載|更新中)/u.test(value)) return "ongoing";
+  if (/(?:停更|暫停)/u.test(value)) return "hiatus";
   return "unknown";
 }
 function isChallenge(body) {
   return /(?:cf-challenge|cf-turnstile|Just a moment|Checking your browser|challenge-platform)/iu.test(body);
 }
 
-// dist/index.mjs
+// src/index.mts
 var context;
 var source;
 async function activate(next2) {
@@ -6874,24 +6845,19 @@ async function activate(next2) {
   next2.log.info("source_activated");
 }
 async function search(request) {
-  if (request.cursor !== null)
-    throw new Error("Search cursor is unsupported.");
+  if (request.cursor !== null) throw new Error("Search cursor is unsupported.");
   return invoke("search", async (active) => Object.freeze({ items: Object.freeze((await active.search(request.query)).slice(0, request.pageSize)), nextCursor: null, totalCount: null }));
 }
 async function discover(request) {
   if (request.target === null) {
-    if (request.cursor !== null || request.collectionId !== null)
-      throw new Error("Initial discovery request is invalid.");
+    if (request.cursor !== null || request.collectionId !== null) throw new Error("Initial discovery request is invalid.");
     const content2 = await invoke("discover_home", (active) => active.discover("china"));
     return categoriesDocument(content2.slice(0, Math.min(request.pageSize, 10)));
   }
-  if (request.cursor !== null)
-    throw new Error("Discovery cursor is unsupported.");
+  if (request.cursor !== null) throw new Error("Discovery cursor is unsupported.");
   const categoryId = /^category:([a-z-]+)$/u.exec(request.target)?.[1];
-  if (categoryId === void 0)
-    throw new Error("Discovery target is invalid.");
-  if (request.collectionId !== null)
-    throw new Error("Discovery continuation is unsupported.");
+  if (categoryId === void 0) throw new Error("Discovery target is invalid.");
+  if (request.collectionId !== null) throw new Error("Discovery continuation is unsupported.");
   const content = await invoke("discover", (active) => active.discover(categoryId));
   const items = Object.freeze(content.slice(0, request.pageSize).map((value) => Object.freeze({ content: value, rank: null, metric: null, recommendation: null })));
   const collectionId = `category-books:${categoryId}`;
@@ -6920,13 +6886,11 @@ function categoriesDocument(content) {
   return Object.freeze({ kind: "document", document: { components: Object.freeze([...items.length === 0 ? [] : [{ type: "section", id: "featured-section", title: "国漫推荐", subtitle: "国漫频道新近作品", icon: "manga", children: Object.freeze([{ type: "contentCollection", id: "featured-manga", layout: "coverGrid", items, continuation: null }]) }], { type: "section", id: "categories-section", title: "漫画分类", subtitle: "按地区或题材继续发现", icon: "explore", children: Object.freeze([{ type: "categoryCollection", id: "categories", layout: "chips", categories: Object.freeze(categories.map(([id, title]) => Object.freeze({ id, title, target: `category:${id}`, count: null, url: null, icon: id === "romance" ? "romance" : id === "action" ? "hot" : id === "fantasy" ? "fantasy" : "manga" }))) }]) }]) } });
 }
 function requireSource() {
-  if (context === void 0)
-    throw new Error("Source is not activated.");
+  if (context === void 0) throw new Error("Source is not activated.");
   return source ??= new BaozimhSource(context);
 }
 async function invoke(operation, action) {
-  if (context === void 0)
-    throw new Error("Source is not activated.");
+  if (context === void 0) throw new Error("Source is not activated.");
   context.log.info(`source_${operation}_started`);
   try {
     const result = await action(requireSource());

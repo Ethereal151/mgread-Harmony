@@ -1,6 +1,6 @@
 import { createRequire as __mgreadCreateRequire } from 'node:module'; const require = __mgreadCreateRequire(import.meta.url);
 
-// dist/index.mjs
+// src/index.mts
 import { createHash } from "node:crypto";
 var apiBase = "https://api.midukanshu.com";
 var saasBase = "https://saasapi.midukanshu.com";
@@ -41,8 +41,7 @@ async function activate(next) {
 }
 async function search(request) {
   const query = request.query.trim();
-  if (query === "")
-    return frozen({ items: [], nextCursor: null, totalCount: 0 });
+  if (query === "") return frozen({ items: [], nextCursor: null, totalCount: 0 });
   const page = cursorPage(request.cursor, "search");
   const limit = clamp(request.pageSize);
   const values = (await searchBooks(query, page)).slice(0, limit);
@@ -57,8 +56,7 @@ async function searchSuggestions(_request) {
 }
 async function discover(request) {
   if (request.target === null) {
-    if (request.cursor !== null || request.collectionId !== null)
-      throw new Error("Initial discovery request is invalid.");
+    if (request.cursor !== null || request.collectionId !== null) throw new Error("Initial discovery request is invalid.");
     const recommended = (await recommendations()).slice(0, Math.min(12, clamp(request.pageSize)));
     const components = [];
     if (recommended.length > 0) {
@@ -93,8 +91,7 @@ async function discover(request) {
     return frozen({ kind: "document", document: { components } });
   }
   const category = categories.find(([id]) => request.target === `category:${id}`);
-  if (category === void 0)
-    throw new Error("Discovery target is invalid.");
+  if (category === void 0) throw new Error("Discovery target is invalid.");
   const page = cursorPage(request.cursor, request.target);
   const limit = clamp(request.pageSize);
   const [, title] = category;
@@ -103,8 +100,7 @@ async function discover(request) {
   const items = values.map((book) => frozen({ content: summary(book), rank: null, metric: null, recommendation: null }));
   const continuation = values.length >= limit && page < 100 ? frozen({ target: request.target, cursor: `${request.target}:${page + 1}` }) : null;
   if (request.collectionId !== null) {
-    if (request.collectionId !== collectionId)
-      throw new Error("Discovery collection is invalid.");
+    if (request.collectionId !== collectionId) throw new Error("Discovery collection is invalid.");
     return frozen({ kind: "append", collectionId, items, continuation });
   }
   return frozen({
@@ -146,8 +142,7 @@ async function getChapters(request) {
   const items = catalog.rows.flatMap((row, index) => {
     const nativeId = text(row.chapterId ?? row.chapter_id);
     const title = clean(text(row.title ?? row.chapterTitle ?? row.name)) || (row.no === void 0 ? "" : `第${String(row.no)}章`);
-    if (nativeId === "" || title === "")
-      return [];
+    if (nativeId === "" || title === "") return [];
     return [frozen({
       id: chapterId(book, nativeId),
       title,
@@ -160,8 +155,7 @@ async function getChapters(request) {
       attributes: []
     })];
   });
-  if (items.length === 0)
-    throw new Error("No chapters found.");
+  if (items.length === 0) throw new Error("No chapters found.");
   const group = frozen({ id: `group:${book}:default`, title: "正文", order: 0, episodes: items });
   return frozen({ items, groups: [group] });
 }
@@ -169,8 +163,7 @@ async function getContent(request) {
   const book = contentId(request.id);
   const nativeId = nativeChapterId(request.chapterId, book);
   const value = (await fetchText(contentUrl(book, nativeId), { headers: commonHeaders })).replaceAll("\r", "").trim();
-  if (value === "")
-    throw new Error("Chapter content is empty.");
+  if (value === "") throw new Error("Chapter content is empty.");
   return frozen({
     chapterId: request.chapterId,
     contentKind: "novel",
@@ -186,8 +179,7 @@ async function searchBooks(query, page) {
   const rows = Array.isArray(payload.data) ? payload.data : [];
   return rows.flatMap((value) => {
     const projection = projectBook(value);
-    if (projection === null)
-      return [];
+    if (projection === null) return [];
     books.set(projection.id, projection);
     return [projection];
   });
@@ -198,12 +190,10 @@ async function recommendations() {
   const nodes = Array.isArray(data.recommendNode) ? data.recommendNode : [];
   const result = [];
   for (const node of nodes) {
-    if (!isRecord(node) || !isRecord(node.nodeData) || !Array.isArray(node.nodeData.books))
-      continue;
+    if (!isRecord(node) || !isRecord(node.nodeData) || !Array.isArray(node.nodeData.books)) continue;
     for (const raw of node.nodeData.books) {
       const projection = projectBook(raw);
-      if (projection === null)
-        continue;
+      if (projection === null) continue;
       books.set(projection.id, projection);
       result.push(projection);
     }
@@ -211,13 +201,11 @@ async function recommendations() {
   return uniqueBooks(result);
 }
 function projectBook(raw) {
-  if (!isRecord(raw))
-    return null;
+  if (!isRecord(raw)) return null;
   const value = isRecord(raw.bookData) ? raw.bookData : raw;
   const id = text(value.book_id ?? value.id);
   const title = clean(text(value.title)) || clean(stripHtml(text(raw.emTitle ?? value.emTitle)));
-  if (!/^[0-9a-f]{32}$/iu.test(id) || title === "")
-    return null;
+  if (!/^[0-9a-f]{32}$/iu.test(id) || title === "") return null;
   const tags = Array.isArray(value.tags) ? value.tags.map((tag) => clean(isRecord(tag) ? text(tag.name ?? tag.title) : text(tag))).filter(Boolean) : [];
   const chapterCount = finiteNumber(value.chapterNum ?? value.chapter_num);
   return frozen({
@@ -258,8 +246,7 @@ function summary(book) {
 }
 async function fetchCatalog(book) {
   const cached = catalogs.get(book);
-  if (cached !== void 0)
-    return cached;
+  if (cached !== void 0) return cached;
   const pending = loadCatalog(book).catch((error) => {
     catalogs.delete(book);
     throw error;
@@ -269,8 +256,7 @@ async function fetchCatalog(book) {
 }
 async function loadCatalog(book) {
   const payload = await signedPost("/content/chapterList", { hash_id: book });
-  if (Number(payload.code) !== 0)
-    throw new Error(`Catalog request failed: ${clean(text(payload.message ?? payload.msg)) || "unknown error"}.`);
+  if (Number(payload.code) !== 0) throw new Error(`Catalog request failed: ${clean(text(payload.message ?? payload.msg)) || "unknown error"}.`);
   const data = isRecord(payload.data) ? payload.data : {};
   const title = clean(text(data.title)) || books.get(book)?.title || "";
   const url = safeUrl(text(data.url));
@@ -279,8 +265,7 @@ async function loadCatalog(book) {
     const cdn = parseLooseJson(await fetchText(url, { headers: commonHeaders }));
     rows = extractRows(cdn);
   }
-  if (title === "" || rows.length === 0)
-    throw new Error("Catalog response is incomplete.");
+  if (title === "" || rows.length === 0) throw new Error("Catalog response is incomplete.");
   return frozen({ title, rows: Object.freeze(rows) });
 }
 async function signedPost(path, specific) {
@@ -295,8 +280,7 @@ async function signedPost(path, specific) {
     app_source: ""
   };
   for (const [key, value2] of Object.entries(specific)) {
-    if (value2 !== void 0 && value2 !== null && String(value2) !== "undefined" && String(value2) !== "null")
-      merged[key] = String(value2);
+    if (value2 !== void 0 && value2 !== null && String(value2) !== "undefined" && String(value2) !== "null") merged[key] = String(value2);
   }
   const canonical = `${Object.keys(merged).sort().map((key) => `${key}=${merged[key]}`).join("&")}&key=${signKey}`;
   const md5 = createHash("md5").update(canonical, "utf8").digest("hex");
@@ -308,8 +292,7 @@ async function signedPost(path, specific) {
     body: body.toString()
   });
   const value = parseLooseJson(response);
-  if (!isRecord(value))
-    throw new Error("Signed response is invalid.");
+  if (!isRecord(value)) throw new Error("Signed response is invalid.");
   return value;
 }
 async function postForm(url, body, referer) {
@@ -319,33 +302,26 @@ async function postForm(url, body, referer) {
     body: body.toString()
   });
   const parsed = parseLooseJson(raw);
-  if (!isRecord(parsed))
-    throw new Error("Source response is invalid.");
+  if (!isRecord(parsed)) throw new Error("Source response is invalid.");
   return parsed;
 }
 async function fetchText(url, init) {
   const response = await requireContext().http.fetch(url, { ...init, signal: AbortSignal.timeout(2e4) });
-  if (!response.ok)
-    throw new Error(`Source request failed with status ${response.status}.`);
+  if (!response.ok) throw new Error(`Source request failed with status ${response.status}.`);
   return response.text();
 }
 function extractRows(value) {
-  if (Array.isArray(value))
-    return value.filter(isRecord);
-  if (!isRecord(value))
-    return [];
+  if (Array.isArray(value)) return value.filter(isRecord);
+  if (!isRecord(value)) return [];
   for (const key of ["list", "chapters", "chapterList", "chapter_list", "rows"]) {
-    if (Array.isArray(value[key]))
-      return value[key].filter(isRecord);
+    if (Array.isArray(value[key])) return value[key].filter(isRecord);
   }
   if (value.data !== void 0) {
     const nested = extractRows(value.data);
-    if (nested.length > 0)
-      return nested;
+    if (nested.length > 0) return nested;
   }
   const volumes = value.volumeList ?? value.volumes ?? value.volume_list;
-  if (Array.isArray(volumes))
-    return volumes.flatMap(extractRows);
+  if (Array.isArray(volumes)) return volumes.flatMap(extractRows);
   return [];
 }
 function parseLooseJson(raw) {
@@ -354,8 +330,7 @@ function parseLooseJson(raw) {
     return JSON.parse(textValue);
   } catch {
     const start = [...textValue].findIndex((character) => character === "{" || character === "[");
-    if (start < 0)
-      throw new Error("Source response is invalid.");
+    if (start < 0) throw new Error("Source response is invalid.");
     for (let end = textValue.length; end > start; end -= 1) {
       try {
         return JSON.parse(textValue.slice(start, end));
@@ -367,8 +342,7 @@ function parseLooseJson(raw) {
 }
 function contentId(id) {
   const value = /^midu:([0-9a-f]{32})$/iu.exec(id)?.[1];
-  if (value === void 0)
-    throw new Error("Content ID is invalid.");
+  if (value === void 0) throw new Error("Content ID is invalid.");
   return value.toLowerCase();
 }
 function chapterId(book, nativeId) {
@@ -376,11 +350,9 @@ function chapterId(book, nativeId) {
 }
 function nativeChapterId(id, book) {
   const raw = new RegExp(`^midu:${book}:([^:]+)$`, "u").exec(id)?.[1];
-  if (raw === void 0)
-    throw new Error("Chapter ID is invalid.");
+  if (raw === void 0) throw new Error("Chapter ID is invalid.");
   const value = decodeURIComponent(raw);
-  if (!/^[A-Za-z0-9._-]+$/u.test(value))
-    throw new Error("Chapter ID is invalid.");
+  if (!/^[A-Za-z0-9._-]+$/u.test(value)) throw new Error("Chapter ID is invalid.");
   return value;
 }
 function readerUrl(book) {
@@ -390,14 +362,12 @@ function contentUrl(book, chapter) {
   return `${staticBase}/book/chapter/master/${book}_${encodeURIComponent(chapter)}.txt`;
 }
 function proxyImage(value) {
-  if (value === "")
-    return null;
+  if (value === "") return null;
   return requireContext().resource.proxy({ kind: "image", url: value, headers: { Referer: `${h5Base}/` } });
 }
 function coverUrl(value) {
   const normalized = safeUrl(value);
-  if (normalized === "")
-    return "";
+  if (normalized === "") return "";
   const url = new URL(normalized);
   if (url.hostname === "static.midureader.com" && !url.searchParams.has("x-oss-process")) {
     url.searchParams.set("x-oss-process", "image/format,webp");
@@ -409,33 +379,22 @@ function uniqueBooks(values) {
   return values.filter((value) => !seen.has(value.id) && seen.add(value.id));
 }
 function categoryIcon(id) {
-  if (id.includes("romance"))
-    return "romance";
-  if (id === "fantasy")
-    return "fantasy";
-  if (id === "xianxia" || id === "wuxia")
-    return "wuxia";
-  if (id === "urban")
-    return "urban";
-  if (id === "history")
-    return "history";
-  if (id === "military")
-    return "military";
-  if (id === "science-fiction")
-    return "scienceFiction";
-  if (id === "game")
-    return "game";
-  if (id === "mystery")
-    return "mystery";
+  if (id.includes("romance")) return "romance";
+  if (id === "fantasy") return "fantasy";
+  if (id === "xianxia" || id === "wuxia") return "wuxia";
+  if (id === "urban") return "urban";
+  if (id === "history") return "history";
+  if (id === "military") return "military";
+  if (id === "science-fiction") return "scienceFiction";
+  if (id === "game") return "game";
+  if (id === "mystery") return "mystery";
   return "book";
 }
 function cursorPage(cursor, scope) {
-  if (cursor === null)
-    return 1;
+  if (cursor === null) return 1;
   const raw = cursor.startsWith(`${scope}:`) ? cursor.slice(scope.length + 1) : "";
   const page = Number(raw);
-  if (!Number.isSafeInteger(page) || page < 2 || page > 100)
-    throw new Error("Cursor is invalid.");
+  if (!Number.isSafeInteger(page) || page < 2 || page > 100) throw new Error("Cursor is invalid.");
   return page;
 }
 function clamp(value) {
@@ -469,8 +428,7 @@ function frozen(value) {
   return Object.freeze(value);
 }
 function requireContext() {
-  if (context === void 0)
-    throw new Error("Source is not activated.");
+  if (context === void 0) throw new Error("Source is not activated.");
   return context;
 }
 export {

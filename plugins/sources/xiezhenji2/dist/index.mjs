@@ -47,7 +47,7 @@ var require_boolbase = __commonJS({
   }
 });
 
-// dist/source.js
+// src/source.ts
 import { Buffer as Buffer2 } from "node:buffer";
 
 // node_modules/cheerio/dist/esm/options.js
@@ -6699,7 +6699,7 @@ function byteLength(value) {
   }
 }
 
-// dist/source.js
+// src/source.ts
 var origin = "https://cosplaytele.com";
 var listingPolicy = Object.freeze({ namespace: "listing", staleAfterMs: 10 * 60 * 1e3, serveStaleWhileRevalidate: true });
 var detailPolicy = Object.freeze({ namespace: "detail", staleAfterMs: 60 * 60 * 1e3, allowStaleOnError: false });
@@ -6715,12 +6715,12 @@ var categories = Object.freeze([
   ["best", "Best Cosplayer", "/best-cosplayer/"]
 ]);
 var Xiezhenji2Source = class {
-  context;
-  #cache;
   constructor(context2) {
     this.context = context2;
     this.#cache = new PluginCache(context2.cacheDir, { logger: context2.log });
   }
+  context;
+  #cache;
   async search(query, page) {
     const url = new URL(page === 1 ? "/" : `/page/${page}/`, origin);
     url.searchParams.set("s", query);
@@ -6728,8 +6728,7 @@ var Xiezhenji2Source = class {
   }
   async discover(categoryId, page) {
     const category = categories.find(([id]) => id === categoryId);
-    if (category === void 0)
-      throw new Error("Unknown category.");
+    if (category === void 0) throw new Error("Unknown category.");
     const base = new URL(category[2], origin);
     const url = page === 1 ? base : new URL(`${base.pathname.replace(/\/?$/u, "/")}page/${page}/`, origin);
     return this.parseList(await this.#cachedHtml(url, listingPolicy), url);
@@ -6739,8 +6738,7 @@ var Xiezhenji2Source = class {
     const html3 = await this.#cachedHtml(url, detailPolicy);
     const $ = load(html3);
     const title = text3($("h1.entry-title").first().text()) ?? text3($('meta[property="og:title"]').attr("content"));
-    if (title === null)
-      throw new Error("Detail title is missing.");
+    if (title === null) throw new Error("Detail title is missing.");
     const cleanTitle = title.replace(/\s*-\s*Cosplaytele\s*$/iu, "").trim();
     const description = text3($(".entry-content blockquote").first().text()) ?? text3($('meta[name="description"]').attr("content")) ?? text3($('meta[property="og:description"]').attr("content"));
     const rawCover = text3($('meta[property="og:image"]').attr("content")) ?? text3($(".entry-content .gallery a[href]").first().attr("href")) ?? text3($(".entry-content .gallery img").first().attr("src"));
@@ -6756,16 +6754,14 @@ var Xiezhenji2Source = class {
   }
   async getContent(id, chapterId) {
     const url = decodeId(id);
-    if (chapterId !== `gallery:${token(url)}`)
-      throw new Error("Chapter ID is invalid.");
+    if (chapterId !== `gallery:${token(url)}`) throw new Error("Chapter ID is invalid.");
     const firstHtml = await this.#html(url);
     const pageUrls = collectPageUrls(firstHtml, url).slice(0, 80);
     const pages = uniqueUrls([
       ...parseImages(firstHtml, url),
       ...(await Promise.all(pageUrls.map(async (pageUrl) => parseImages(await this.#html(pageUrl), pageUrl)))).flat()
     ]).map((image, index2) => Object.freeze({ id: `image:${index2 + 1}`, index: index2, url: this.#proxyImage(image, url), mimeType: imageMime(image), width: null, height: null }));
-    if (pages.length === 0)
-      throw new Error("Gallery images are missing.");
+    if (pages.length === 0) throw new Error("Gallery images are missing.");
     return Object.freeze({ chapterId, contentKind: "manga", title: "全部图片", updatedAt: null, text: null, pages: Object.freeze(pages) });
   }
   parseList(html3, pageUrl) {
@@ -6777,11 +6773,9 @@ var Xiezhenji2Source = class {
       const link = root2.find("h5.post-title a[href], a.plain[href], a[href]").first();
       const href = link.attr("href");
       const title = text3(link.text()) ?? text3(root2.find("a[aria-label]").attr("aria-label"));
-      if (href === void 0 || title === null)
-        return;
+      if (href === void 0 || title === null) return;
       const url = new URL(href, pageUrl);
-      if (!isPostUrl(url) || seen.has(url.pathname))
-        return;
+      if (!isPostUrl(url) || seen.has(url.pathname)) return;
       seen.add(url.pathname);
       const image = root2.find("img.wp-post-image, img").first();
       const coverImage = firstListingImageUrl([
@@ -6804,13 +6798,11 @@ var Xiezhenji2Source = class {
   async #html(url) {
     const response = await this.context.http.fetch(url, { headers: { accept: "text/html,application/xhtml+xml", "accept-language": "zh-CN,zh;q=0.9", referer: `${origin}/` } });
     const body = await response.text();
-    if (!response.ok)
-      throw new Error("Source request failed.");
+    if (!response.ok) throw new Error("Source request failed.");
     return body;
   }
   #proxyImage(url, referer) {
-    if (url.protocol !== "https:" || url.hostname !== "cosplaytele.com" || referer.origin !== origin)
-      throw new Error("Image request is invalid.");
+    if (url.protocol !== "https:" || url.hostname !== "cosplaytele.com" || referer.origin !== origin) throw new Error("Image request is invalid.");
     return this.context.resource.proxy({ kind: "image", url: url.toString(), headers: { Accept: "image/*", Referer: referer.toString() } });
   }
 };
@@ -6822,12 +6814,10 @@ function encodeId(url) {
 }
 function decodeId(id) {
   const match = /^post:([A-Za-z0-9_-]+)$/u.exec(id);
-  if (match?.[1] === void 0)
-    throw new Error("Content ID is invalid.");
+  if (match?.[1] === void 0) throw new Error("Content ID is invalid.");
   const path = Buffer2.from(match[1], "base64url").toString("utf8");
   const url = new URL(path, origin);
-  if (!isPostUrl(url))
-    throw new Error("Content ID is invalid.");
+  if (!isPostUrl(url)) throw new Error("Content ID is invalid.");
   return url;
 }
 function token(url) {
@@ -6847,20 +6837,17 @@ function uniqueUrls(values) {
   const seen = /* @__PURE__ */ new Set();
   return values.filter((url) => {
     const key = `${url.origin}${url.pathname}`;
-    if (seen.has(key))
-      return false;
+    if (seen.has(key)) return false;
     seen.add(key);
     return true;
   });
 }
 function firstListingImageUrl(values, base) {
   for (const value of values) {
-    if (value === void 0)
-      continue;
+    if (value === void 0) continue;
     try {
       const url = new URL(value.trim(), base);
-      if (url.origin === origin && /\/wp-content\/uploads\//u.test(url.pathname) && /\.(?:jpe?g|png|webp|gif)$/iu.test(url.pathname))
-        return url;
+      if (url.origin === origin && /\/wp-content\/uploads\//u.test(url.pathname) && /\.(?:jpe?g|png|webp|gif)$/iu.test(url.pathname)) return url;
     } catch {
     }
   }
@@ -6878,8 +6865,7 @@ function collectPageUrls(html3, base) {
   const $ = load(html3);
   return uniqueUrls($(".entry-content a[href], .page-links a[href], .nav-links a[href]").toArray().flatMap((element) => {
     const href = $(element).attr("href");
-    if (href === void 0)
-      return [];
+    if (href === void 0) return [];
     const url = new URL(href, base);
     return url.origin === origin && /\/(?:page\/)?\d+\/?$/u.test(url.pathname) ? [url] : [];
   }));
@@ -6901,7 +6887,7 @@ function imageMime(url) {
   return extension === "jpg" || extension === "jpeg" ? "image/jpeg" : extension === "png" ? "image/png" : extension === "webp" ? "image/webp" : extension === "gif" ? "image/gif" : null;
 }
 
-// dist/index.mjs
+// src/index.mts
 var context;
 var source;
 async function activate(next2) {
@@ -6917,20 +6903,17 @@ async function search(request) {
 }
 async function discover(request) {
   if (request.target === null) {
-    if (request.cursor !== null || request.collectionId !== null)
-      throw new Error("Initial discovery request is invalid.");
+    if (request.cursor !== null || request.collectionId !== null) throw new Error("Initial discovery request is invalid.");
     const content = (await invoke("discover_home", (active) => active.discover("home", 1))).slice(0, Math.min(request.pageSize, 10));
     return homeDocument(content);
   }
   const match = /^category:([a-z-]+)$/u.exec(request.target);
-  if (match?.[1] === void 0)
-    throw new Error("Discovery target is invalid.");
+  if (match?.[1] === void 0) throw new Error("Discovery target is invalid.");
   const page = cursorPage(request.cursor, `category:${match[1]}`);
   const items = (await requireSource().discover(match[1], page)).slice(0, request.pageSize).map((content) => Object.freeze({ content, rank: null, metric: null, recommendation: null }));
   const collectionId = `category-books:${match[1]}`;
   const continuation = items.length === request.pageSize ? Object.freeze({ target: request.target, cursor: `category:${match[1]}:${page + 1}` }) : null;
-  if (request.collectionId !== null)
-    return Object.freeze({ kind: "append", collectionId, items: Object.freeze(items), continuation });
+  if (request.collectionId !== null) return Object.freeze({ kind: "append", collectionId, items: Object.freeze(items), continuation });
   return Object.freeze({ kind: "document", document: { components: Object.freeze([{ type: "section", id: `${collectionId}-section`, title: categories.find(([id]) => id === match[1])?.[1] ?? "分类", subtitle: null, children: Object.freeze([{ type: "contentCollection", id: collectionId, layout: "coverGrid", items: Object.freeze(items), continuation }]) }]) } });
 }
 async function searchSuggestions(_request) {
@@ -6950,13 +6933,11 @@ function homeDocument(content) {
   return Object.freeze({ kind: "document", document: { components: Object.freeze([...items.length === 0 ? [] : [{ type: "section", id: "latest-section", title: "Cosplay 精选", subtitle: "首页新近发布图集", icon: "newRelease", children: Object.freeze([{ type: "contentCollection", id: "latest-galleries", layout: "coverGrid", items, continuation: null }]) }], { type: "section", id: "categories-section", title: "写真分类", subtitle: "按主题或时段继续发现", icon: "explore", children: Object.freeze([{ type: "categoryCollection", id: "categories", layout: "chips", categories: Object.freeze(categories.map(([id, title]) => Object.freeze({ id, title, target: `category:${id}`, count: null, url: null, icon: id === "day" ? "dailyRanking" : id === "three-day" ? "trending" : id === "week" ? "weeklyRanking" : id === "best" ? "star" : "manga" }))) }]) }]) } });
 }
 function requireSource() {
-  if (context === void 0)
-    throw new Error("Source is not activated.");
+  if (context === void 0) throw new Error("Source is not activated.");
   return source ??= new Xiezhenji2Source(context);
 }
 async function invoke(operation, action) {
-  if (context === void 0)
-    throw new Error("Source is not activated.");
+  if (context === void 0) throw new Error("Source is not activated.");
   context.log.info(`source_${operation}_started`);
   try {
     const result = await action(requireSource());
@@ -6968,12 +6949,10 @@ async function invoke(operation, action) {
   }
 }
 function cursorPage(cursor, scope) {
-  if (cursor === null)
-    return 1;
+  if (cursor === null) return 1;
   const match = new RegExp(`^${scope.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}:(\\d+)$`, "u").exec(cursor);
   const page = Number(match?.[1]);
-  if (!Number.isSafeInteger(page) || page < 2)
-    throw new Error("Cursor is invalid.");
+  if (!Number.isSafeInteger(page) || page < 2) throw new Error("Cursor is invalid.");
   return page;
 }
 export {

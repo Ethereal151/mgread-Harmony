@@ -47,7 +47,7 @@ var require_boolbase = __commonJS({
   }
 });
 
-// dist/source.js
+// src/source.ts
 import { Buffer as Buffer2 } from "node:buffer";
 
 // node_modules/cheerio/dist/esm/options.js
@@ -6495,9 +6495,18 @@ function isNode(obj) {
 // node_modules/cheerio/dist/esm/slim.js
 var load = getLoad(getParse(parseDocument), esm_default);
 
-// dist/cache.js
+// src/cache.ts
 import { createHash, randomUUID } from "node:crypto";
-import { mkdir, readdir, readFile, rename, rm, stat, utimes, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  readdir,
+  readFile,
+  rename,
+  rm,
+  stat,
+  utimes,
+  writeFile
+} from "node:fs/promises";
 import { isAbsolute, resolve } from "node:path";
 var schemaVersion = 1;
 var maximumCacheBytes = 100 * 1024 * 1024;
@@ -6511,16 +6520,17 @@ var BoundedTextCache = class {
     this.#root = isAbsolute(cacheDir) ? resolve(cacheDir, "source-text-cache-v1") : void 0;
   }
   getOrFetchText(url, policy, fetcher) {
-    if (this.#root === void 0)
-      return fetcher();
+    if (this.#root === void 0) return fetcher();
     const key = createHash("sha256").update(`${policy.namespace}
 ${url.toString()}`, "utf8").digest("hex");
     const existing = this.#inflight.get(key);
-    if (existing !== void 0)
-      return existing;
+    if (existing !== void 0) return existing;
     const pending = this.#readOrFetch(key, policy, fetcher);
     this.#inflight.set(key, pending);
-    void pending.then(() => this.#inflight.delete(key), () => this.#inflight.delete(key));
+    void pending.then(
+      () => this.#inflight.delete(key),
+      () => this.#inflight.delete(key)
+    );
     return pending;
   }
   async #readOrFetch(key, policy, fetcher) {
@@ -6547,8 +6557,7 @@ ${url.toString()}`, "utf8").digest("hex");
   }
   #refreshInBackground(key, fetcher) {
     const existing = this.#backgroundRefreshes.get(key);
-    if (existing !== void 0)
-      return existing;
+    if (existing !== void 0) return existing;
     const refresh = (async () => {
       try {
         await this.#write(key, await fetcher(), Date.now());
@@ -6556,7 +6565,10 @@ ${url.toString()}`, "utf8").digest("hex");
       }
     })();
     this.#backgroundRefreshes.set(key, refresh);
-    void refresh.then(() => this.#backgroundRefreshes.delete(key), () => this.#backgroundRefreshes.delete(key));
+    void refresh.then(
+      () => this.#backgroundRefreshes.delete(key),
+      () => this.#backgroundRefreshes.delete(key)
+    );
     return refresh;
   }
   async #read(key) {
@@ -6582,16 +6594,17 @@ ${url.toString()}`, "utf8").digest("hex");
     }
   }
   async #write(key, body, storedAtMs) {
-    if (this.#root === void 0)
-      return;
+    if (this.#root === void 0) return;
     const encoded = JSON.stringify({
       schemaVersion,
       storedAtMs,
       body
     });
-    if (Buffer.byteLength(encoded, "utf8") > maximumEntryBytes)
-      return;
-    const temporary = resolve(this.#root, `.${key}.${randomUUID()}.partial`);
+    if (Buffer.byteLength(encoded, "utf8") > maximumEntryBytes) return;
+    const temporary = resolve(
+      this.#root,
+      `.${key}.${randomUUID()}.partial`
+    );
     try {
       await mkdir(this.#root, { recursive: true });
       await writeFile(temporary, encoded, "utf8");
@@ -6611,23 +6624,27 @@ ${url.toString()}`, "utf8").digest("hex");
     }
   }
   async #enforceCapacity() {
-    if (this.#root === void 0)
-      return;
+    if (this.#root === void 0) return;
     try {
       const entries = await readdir(this.#root, { withFileTypes: true });
-      const candidates = await Promise.all(entries.filter((entry) => entry.isFile() && cacheFilePattern.test(entry.name)).map(async (entry) => {
-        const path = resolve(this.#root, entry.name);
-        const metadata2 = await stat(path);
-        return {
-          path,
-          size: metadata2.size,
-          accessedAtMs: metadata2.mtimeMs
-        };
-      }));
+      const candidates = await Promise.all(
+        entries.filter(
+          (entry) => entry.isFile() && cacheFilePattern.test(entry.name)
+        ).map(async (entry) => {
+          const path = resolve(this.#root, entry.name);
+          const metadata2 = await stat(path);
+          return {
+            path,
+            size: metadata2.size,
+            accessedAtMs: metadata2.mtimeMs
+          };
+        })
+      );
       let total = candidates.reduce((sum, entry) => sum + entry.size, 0);
-      for (const entry of candidates.sort((left, right) => left.accessedAtMs - right.accessedAtMs)) {
-        if (total <= maximumCacheBytes)
-          break;
+      for (const entry of candidates.sort(
+        (left, right) => left.accessedAtMs - right.accessedAtMs
+      )) {
+        if (total <= maximumCacheBytes) break;
         await rm(entry.path, { force: true });
         total -= entry.size;
       }
@@ -6645,7 +6662,7 @@ function isRecord(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-// dist/source.js
+// src/source.ts
 var origin = "https://m.douyinxs.com";
 var imageHosts = /* @__PURE__ */ new Set(["m.douyinxs.com", "img.douyinxs.com"]);
 var listingPolicy = Object.freeze({
@@ -6678,16 +6695,15 @@ var categories = Object.freeze([
   ["female", "女生", "11"]
 ]);
 var DouyinXiaoshuoSource = class {
-  context;
-  #cache;
   constructor(context2) {
     this.context = context2;
     this.#cache = new BoundedTextCache(context2.cacheDir);
   }
+  context;
+  #cache;
   async search(query) {
     const normalized = clean(query);
-    if (normalized === null)
-      return Object.freeze([]);
+    if (normalized === null) return Object.freeze([]);
     const url = new URL("/search/", origin);
     const html3 = await this.#fetchHtml(url, {
       method: "POST",
@@ -6703,24 +6719,39 @@ var DouyinXiaoshuoSource = class {
   }
   async discover(categoryId, page) {
     const category = categories.find(([id]) => id === categoryId);
-    if (category === void 0)
-      throw new Error("Unknown category.");
+    if (category === void 0) throw new Error("Unknown category.");
     const categoryNumber = category[2];
     const path = categoryNumber === "0" ? page === 1 ? "/fenlei/" : `/fenlei/${page}/` : `/fenlei/${categoryNumber}/${page}/`;
     const url = new URL(path, origin);
-    const html3 = await this.#cache.getOrFetchText(url, listingPolicy, () => this.#fetchHtml(url));
-    return this.#hydrateMissingCovers(this.#parseListing(html3, url, categoryNumber === "0" ? null : category[1]));
+    const html3 = await this.#cache.getOrFetchText(
+      url,
+      listingPolicy,
+      () => this.#fetchHtml(url)
+    );
+    return this.#hydrateMissingCovers(
+      this.#parseListing(
+        html3,
+        url,
+        categoryNumber === "0" ? null : category[1]
+      )
+    );
   }
   async getDetail(id) {
     const url = decodeOpaqueId(id, "book");
-    const html3 = await this.#cache.getOrFetchText(url, detailPolicy, () => this.#fetchHtml(url));
+    const html3 = await this.#cache.getOrFetchText(
+      url,
+      detailPolicy,
+      () => this.#fetchHtml(url)
+    );
     const $ = load(html3);
     const title = metadata($, "og:title") ?? clean($(".channelHeader .title").first().text());
-    if (title === null)
-      throw new Error("Detail title is missing.");
+    if (title === null) throw new Error("Detail title is missing.");
     const author = metadata($, "og:novel:author") ?? stripLabel($(".synopsisArea_detail .author").first().text(), "作者");
     const category = metadata($, "og:novel:category") ?? stripLabel($(".synopsisArea_detail .sort").first().text(), "类别");
-    const statusText = metadata($, "og:novel:status") ?? stripLabel($(".synopsisArea_detail p").eq(1).text(), "状态");
+    const statusText = metadata($, "og:novel:status") ?? stripLabel(
+      $(".synopsisArea_detail p").eq(1).text(),
+      "状态"
+    );
     const status = statusFrom(statusText);
     const description = clean($(".synopsisArea .review").first().text());
     const latest = metadata($, "og:novel:latest_chapter_name");
@@ -6735,7 +6766,16 @@ var DouyinXiaoshuoSource = class {
       })
     ]);
     return Object.freeze({
-      ...summary(url, title, author, coverUrl, description, latest, category === null ? [] : [category], status),
+      ...summary(
+        url,
+        title,
+        author,
+        coverUrl,
+        description,
+        latest,
+        category === null ? [] : [category],
+        status
+      ),
       aliases: Object.freeze([]),
       catalogUrl: url.toString(),
       attributes: attributes2
@@ -6743,13 +6783,29 @@ var DouyinXiaoshuoSource = class {
   }
   async getChapters(id) {
     const bookUrl = decodeOpaqueId(id, "book");
-    const firstHtml = await this.#cache.getOrFetchText(bookUrl, catalogPolicy, () => this.#fetchHtml(bookUrl));
+    const firstHtml = await this.#cache.getOrFetchText(
+      bookUrl,
+      catalogPolicy,
+      () => this.#fetchHtml(bookUrl)
+    );
     const catalogUrls = catalogPageUrls(firstHtml, bookUrl).slice(0, 200);
     const htmlPages = [firstHtml];
-    const remaining = catalogUrls.filter((url) => url.toString() !== bookUrl.toString());
+    const remaining = catalogUrls.filter(
+      (url) => url.toString() !== bookUrl.toString()
+    );
     for (let offset = 0; offset < remaining.length; offset += 8) {
       const batch = remaining.slice(offset, offset + 8);
-      htmlPages.push(...await Promise.all(batch.map((url) => this.#cache.getOrFetchText(url, catalogPolicy, () => this.#fetchHtml(url)))));
+      htmlPages.push(
+        ...await Promise.all(
+          batch.map(
+            (url) => this.#cache.getOrFetchText(
+              url,
+              catalogPolicy,
+              () => this.#fetchHtml(url)
+            )
+          )
+        )
+      );
     }
     const seen = /* @__PURE__ */ new Set();
     const items = [];
@@ -6758,8 +6814,7 @@ var DouyinXiaoshuoSource = class {
       $(".directoryArea a[href]").each((_, element) => {
         const href = $(element).attr("href");
         const title = clean($(element).text());
-        if (href === void 0 || title === null)
-          return;
+        if (href === void 0 || title === null) return;
         const chapterUrl = normalizeChapterUrl(new URL(href, bookUrl));
         if (!isChapterUrl(chapterUrl) || seen.has(chapterUrl.toString())) {
           return;
@@ -6778,13 +6833,14 @@ var DouyinXiaoshuoSource = class {
         });
       });
     }
-    if (items.length === 0)
-      throw new Error("Catalog is empty.");
+    if (items.length === 0) throw new Error("Catalog is empty.");
     return Object.freeze({ items: Object.freeze(items) });
   }
   async getContent(id, chapterId) {
     const bookUrl = decodeOpaqueId(id, "book");
-    const firstUrl = normalizeChapterUrl(decodeOpaqueId(chapterId, "chapter"));
+    const firstUrl = normalizeChapterUrl(
+      decodeOpaqueId(chapterId, "chapter")
+    );
     const bookId = /^\/bqg\/(\d+)\/$/u.exec(bookUrl.pathname)?.[1];
     const chapterBookId = /^\/bqg\/(\d+)\//u.exec(firstUrl.pathname)?.[1];
     if (bookId === void 0 || chapterBookId !== bookId) {
@@ -6794,12 +6850,14 @@ var DouyinXiaoshuoSource = class {
     const pageCount = chapterPageCount(firstHtml);
     const htmlPages = [firstHtml];
     if (pageCount > 1) {
-      const urls = Array.from({ length: pageCount - 1 }, (_, index2) => chapterPageUrl(firstUrl, index2 + 2));
+      const urls = Array.from(
+        { length: pageCount - 1 },
+        (_, index2) => chapterPageUrl(firstUrl, index2 + 2)
+      );
       htmlPages.push(...await Promise.all(urls.map((url) => this.#fetchHtml(url))));
     }
     const text3 = htmlPages.map(parseChapterText).filter((value) => value !== "").join("\n\n");
-    if (text3 === "")
-      throw new Error("Chapter text is empty.");
+    if (text3 === "") throw new Error("Chapter text is empty.");
     return Object.freeze({
       chapterId,
       contentKind: "novel",
@@ -6816,8 +6874,7 @@ var DouyinXiaoshuoSource = class {
     $(".bookbox,.recommend .hot_sale").each((_, element) => {
       const root2 = $(element);
       let link = root2.find("h4 a").first();
-      if (link.length === 0)
-        link = root2.find(".bookname a").first();
+      if (link.length === 0) link = root2.find(".bookname a").first();
       if (link.length === 0) {
         link = root2.find('a[href*="/bqg/"]').filter((_2, candidate) => clean($(candidate).text()) !== null).first();
       }
@@ -6826,11 +6883,9 @@ var DouyinXiaoshuoSource = class {
       }
       const href = link.attr("href");
       const title = clean(root2.find(".title").first().text()) ?? clean(link.text()) ?? clean(root2.find("h4").first().text());
-      if (href === void 0 || title === null)
-        return;
+      if (href === void 0 || title === null) return;
       const bookUrl = normalizeBookUrl(new URL(href, baseUrl));
-      if (!isBookUrl(bookUrl) || seen.has(bookUrl.toString()))
-        return;
+      if (!isBookUrl(bookUrl) || seen.has(bookUrl.toString())) return;
       seen.add(bookUrl.toString());
       const authorElements = root2.find(".author");
       const author = stripLabel(authorElements.first().text(), "作者");
@@ -6840,7 +6895,18 @@ var DouyinXiaoshuoSource = class {
       const coverRaw = root2.find(".bookimg img").first().attr("src") ?? root2.find("img").first().attr("src");
       const coverUrl = coverRaw === void 0 ? null : this.#proxyImage(new URL(coverRaw, baseUrl), baseUrl);
       const category = parsedCategory ?? fallbackCategory;
-      items.push(summary(bookUrl, title, author, coverUrl, description, latest, category === null ? [] : [category], "unknown"));
+      items.push(
+        summary(
+          bookUrl,
+          title,
+          author,
+          coverUrl,
+          description,
+          latest,
+          category === null ? [] : [category],
+          "unknown"
+        )
+      );
     });
     const hasNext = $("a").toArray().some((element) => clean($(element).text()) === "下一页");
     return Object.freeze({ items: Object.freeze(items), hasNext });
@@ -6849,16 +6915,19 @@ var DouyinXiaoshuoSource = class {
     const items = [];
     for (let offset = 0; offset < listing.items.length; offset += 4) {
       const batch = listing.items.slice(offset, offset + 4);
-      items.push(...await Promise.all(batch.map(async (item) => {
-        if (item.coverUrl !== null)
-          return item;
-        try {
-          const detail = await this.getDetail(item.id);
-          return detail.coverUrl === null ? item : Object.freeze({ ...item, coverUrl: detail.coverUrl });
-        } catch {
-          return item;
-        }
-      })));
+      items.push(
+        ...await Promise.all(
+          batch.map(async (item) => {
+            if (item.coverUrl !== null) return item;
+            try {
+              const detail = await this.getDetail(item.id);
+              return detail.coverUrl === null ? item : Object.freeze({ ...item, coverUrl: detail.coverUrl });
+            } catch {
+              return item;
+            }
+          })
+        )
+      );
     }
     return Object.freeze({
       items: Object.freeze(items),
@@ -6866,11 +6935,12 @@ var DouyinXiaoshuoSource = class {
     });
   }
   async #fetchHtml(url, init) {
-    if (url.origin !== origin)
-      throw new Error("Source URL is invalid.");
-    const response = await this.context.http.fetch(url, init ?? { headers: { accept: "text/html", referer: `${origin}/` } });
-    if (!response.ok)
-      throw new Error("Source request failed.");
+    if (url.origin !== origin) throw new Error("Source URL is invalid.");
+    const response = await this.context.http.fetch(
+      url,
+      init ?? { headers: { accept: "text/html", referer: `${origin}/` } }
+    );
+    if (!response.ok) throw new Error("Source request failed.");
     const body = await response.text();
     if (body === "" || isChallenge(body)) {
       throw new Error("Source response is unavailable.");
@@ -6878,8 +6948,7 @@ var DouyinXiaoshuoSource = class {
     return body;
   }
   #proxyImage(url, referer) {
-    if (url.protocol !== "https:" || !imageHosts.has(url.hostname))
-      return null;
+    if (url.protocol !== "https:" || !imageHosts.has(url.hostname)) return null;
     return this.context.resource.proxy({
       kind: "image",
       url: url.toString(),
@@ -6919,34 +6988,43 @@ function normalizeBookUrl(url) {
   return match?.[1] === void 0 ? url : new URL(`/bqg/${match[1]}/`, origin);
 }
 function normalizeChapterUrl(url) {
-  const match = /^\/bqg\/(\d+)\/(\d+)(?:_\d+)?\.html$/u.exec(url.pathname);
+  const match = /^\/bqg\/(\d+)\/(\d+)(?:_\d+)?\.html$/u.exec(
+    url.pathname
+  );
   return match?.[1] === void 0 || match[2] === void 0 ? url : new URL(`/bqg/${match[1]}/${match[2]}.html`, origin);
 }
 function catalogPageUrls(html3, bookUrl) {
   const bookId = /^\/bqg\/(\d+)\/$/u.exec(bookUrl.pathname)?.[1];
-  if (bookId === void 0)
-    throw new Error("Book URL is invalid.");
+  if (bookId === void 0) throw new Error("Book URL is invalid.");
   const $ = load(html3);
   const unique = /* @__PURE__ */ new Map([[1, bookUrl]]);
   $("option[value]").each((_, element) => {
     const value = $(element).attr("value");
-    if (value === void 0)
-      return;
+    if (value === void 0) return;
     const candidate = new URL(value, bookUrl);
-    const match = new RegExp(`^/bqg/${bookId}(?:_(\\d+))?/$`, "u").exec(candidate.pathname);
+    const match = new RegExp(`^/bqg/${bookId}(?:_(\\d+))?/$`, "u").exec(
+      candidate.pathname
+    );
     const page = Number(match?.[1] ?? (match === null ? Number.NaN : 1));
     if (candidate.origin === origin && Number.isSafeInteger(page) && page >= 1) {
       unique.set(page, candidate);
     }
   });
-  return Object.freeze([...unique.entries()].sort(([left], [right]) => left - right).map(([, url]) => url));
+  return Object.freeze(
+    [...unique.entries()].sort(([left], [right]) => left - right).map(([, url]) => url)
+  );
 }
 function chapterPageCount(html3) {
-  const parsed = Number(/\((\d+)\s*\/\s*(\d+)\)/u.exec(html3)?.[2] ?? "1");
+  const parsed = Number(
+    /\((\d+)\s*\/\s*(\d+)\)/u.exec(html3)?.[2] ?? "1"
+  );
   return Number.isSafeInteger(parsed) && parsed > 1 ? Math.min(parsed, 15) : 1;
 }
 function chapterPageUrl(firstUrl, page) {
-  return new URL(firstUrl.pathname.replace(/\.html$/u, `_${page}.html`), origin);
+  return new URL(
+    firstUrl.pathname.replace(/\.html$/u, `_${page}.html`),
+    origin
+  );
 }
 function parseChapterText(html3) {
   const $ = load(html3);
@@ -6964,24 +7042,26 @@ function metadata($, property) {
 }
 function stripLabel(value, label) {
   const normalized = clean(value);
-  if (normalized === null)
-    return null;
-  return clean(normalized.replace(new RegExp(`^${label}[：:]\\s*`, "u"), "").replace(/\s*\([^)]*\)\s*$/u, ""));
+  if (normalized === null) return null;
+  return clean(
+    normalized.replace(new RegExp(`^${label}[：:]\\s*`, "u"), "").replace(/\s*\([^)]*\)\s*$/u, "")
+  );
 }
 function statusFrom(value) {
-  if (value?.includes("完结") === true)
-    return "completed";
-  if (value?.includes("连载") === true)
-    return "ongoing";
+  if (value?.includes("完结") === true) return "completed";
+  if (value?.includes("连载") === true) return "ongoing";
   return "unknown";
 }
 function opaqueToken(url) {
-  return Buffer2.from(`${url.pathname}${url.search}`, "utf8").toString("base64url");
+  return Buffer2.from(`${url.pathname}${url.search}`, "utf8").toString(
+    "base64url"
+  );
 }
 function decodeOpaqueId(value, prefix) {
-  const token = new RegExp(`^${prefix}:([A-Za-z0-9_-]+)$`, "u").exec(value)?.[1];
-  if (token === void 0)
-    throw new Error("Opaque ID is invalid.");
+  const token = new RegExp(`^${prefix}:([A-Za-z0-9_-]+)$`, "u").exec(
+    value
+  )?.[1];
+  if (token === void 0) throw new Error("Opaque ID is invalid.");
   const url = new URL(Buffer2.from(token, "base64url").toString("utf8"), origin);
   if (prefix === "book" ? !isBookUrl(url) : !isChapterUrl(url)) {
     throw new Error("Opaque ID is invalid.");
@@ -6999,13 +7079,18 @@ function clean(value) {
   return normalized === "" ? null : normalized;
 }
 function escapeFormDelimiter(value) {
-  return value.replace(/[%&+=\r\n]/gu, (character) => encodeURIComponent(character));
+  return value.replace(
+    /[%&+=\r\n]/gu,
+    (character) => encodeURIComponent(character)
+  );
 }
 function isChallenge(body) {
-  return /(?:cf-challenge|cf-turnstile|Just a moment|Checking your browser|challenge-platform)/iu.test(body);
+  return /(?:cf-challenge|cf-turnstile|Just a moment|Checking your browser|challenge-platform)/iu.test(
+    body
+  );
 }
 
-// dist/index.mjs
+// src/index.mts
 var context;
 var source;
 async function activate(nextContext) {
@@ -7032,7 +7117,9 @@ async function discover(request) {
         throw new Error("Initial discovery request is invalid.");
       }
       const listing2 = await requireSource().discover("all", 1);
-      return categoriesDocument(listing2.items.slice(0, Math.min(request.pageSize, 10)));
+      return categoriesDocument(
+        listing2.items.slice(0, Math.min(request.pageSize, 10))
+      );
     }
     const target = /^category:([a-z-]+)$/u.exec(request.target)?.[1];
     if (target === void 0 || !categories.some(([id]) => id === target)) {
@@ -7045,12 +7132,16 @@ async function discover(request) {
     const { page, offset } = decodeDiscoveryCursor(request.cursor, target);
     const listing = await requireSource().discover(target, page);
     const contents2 = listing.items.slice(offset, offset + request.pageSize);
-    const items = Object.freeze(contents2.map((content) => Object.freeze({
-      content,
-      rank: null,
-      metric: null,
-      recommendation: null
-    })));
+    const items = Object.freeze(
+      contents2.map(
+        (content) => Object.freeze({
+          content,
+          rank: null,
+          metric: null,
+          recommendation: null
+        })
+      )
+    );
     const nextOffset = offset + contents2.length;
     const continuation = nextOffset < listing.items.length ? Object.freeze({
       target: request.target,
@@ -7102,20 +7193,26 @@ async function getChapters(request) {
   return invoke("chapters", () => requireSource().getChapters(request.id));
 }
 async function getContent(request) {
-  return invoke("content", () => requireSource().getContent(request.id, request.chapterId));
+  return invoke(
+    "content",
+    () => requireSource().getContent(request.id, request.chapterId)
+  );
 }
 function requireSource() {
-  if (context === void 0)
-    throw new Error("Source is not activated.");
+  if (context === void 0) throw new Error("Source is not activated.");
   return source ??= new DouyinXiaoshuoSource(context);
 }
 function categoriesDocument(content) {
-  const items = Object.freeze(content.map((value) => Object.freeze({
-    content: value,
-    rank: null,
-    metric: null,
-    recommendation: null
-  })));
+  const items = Object.freeze(
+    content.map(
+      (value) => Object.freeze({
+        content: value,
+        rank: null,
+        metric: null,
+        recommendation: null
+      })
+    )
+  );
   return Object.freeze({
     kind: "document",
     document: {
@@ -7149,14 +7246,18 @@ function categoriesDocument(content) {
               type: "categoryCollection",
               id: "categories",
               layout: "chips",
-              categories: Object.freeze(categories.map(([id, title]) => Object.freeze({
-                id,
-                title,
-                target: `category:${id}`,
-                count: null,
-                url: null,
-                icon: categoryIcon(id)
-              })))
+              categories: Object.freeze(
+                categories.map(
+                  ([id, title]) => Object.freeze({
+                    id,
+                    title,
+                    target: `category:${id}`,
+                    count: null,
+                    url: null,
+                    icon: categoryIcon(id)
+                  })
+                )
+              )
             }
           ])
         }
@@ -7181,8 +7282,7 @@ function categoryIcon(id) {
   }[id] ?? "category";
 }
 async function invoke(stage, action) {
-  if (context === void 0)
-    throw new Error("Source is not activated.");
+  if (context === void 0) throw new Error("Source is not activated.");
   context.log.info(`source_${stage}_started`);
   try {
     const result = await action();
@@ -7195,8 +7295,7 @@ async function invoke(stage, action) {
   }
 }
 function decodeSearchCursor(value) {
-  if (value === null)
-    return 0;
+  if (value === null) return 0;
   const offset = Number(/^search:(\d+)$/u.exec(value)?.[1]);
   if (!Number.isSafeInteger(offset) || offset < 1) {
     throw new Error("Search cursor is invalid.");
@@ -7204,8 +7303,7 @@ function decodeSearchCursor(value) {
   return offset;
 }
 function decodeDiscoveryCursor(value, categoryId) {
-  if (value === null)
-    return Object.freeze({ page: 1, offset: 0 });
+  if (value === null) return Object.freeze({ page: 1, offset: 0 });
   const match = /^category:([a-z-]+):(\d+):(\d+)$/u.exec(value);
   const page = Number(match?.[2]);
   const offset = Number(match?.[3]);

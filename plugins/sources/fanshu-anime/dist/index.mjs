@@ -1,6 +1,6 @@
 import { createRequire as __mgreadCreateRequire } from 'node:module'; const require = __mgreadCreateRequire(import.meta.url);
 
-// dist/index.mjs
+// src/index.mts
 import { createDecipheriv, createHash, createHmac, randomBytes } from "node:crypto";
 var hosts = Object.freeze([
   "https://yoapp-cf.fsapi.shop",
@@ -41,8 +41,7 @@ async function activate(next) {
 }
 async function search(request) {
   const query = clean(request.query).toLocaleLowerCase("zh-CN");
-  if (query === "")
-    return frozen({ items: [], nextCursor: null, totalCount: 0 });
+  if (query === "") return frozen({ items: [], nextCursor: null, totalCount: 0 });
   const page = cursorPage(request.cursor, "search");
   const limit = clamp(request.pageSize);
   const settled = await Promise.allSettled(searchTypes.map((typeId) => apiGet("category_videos", {
@@ -55,11 +54,9 @@ async function search(request) {
   const unique = /* @__PURE__ */ new Map();
   for (const row of rows) {
     const item = projectVideo(row);
-    if (item === null || !searchable(row).includes(query))
-      continue;
+    if (item === null || !searchable(row).includes(query)) continue;
     unique.set(item.id, item);
-    if (unique.size >= limit)
-      break;
+    if (unique.size >= limit) break;
   }
   const values = [...unique.values()].filter((value) => value !== null);
   const hasNext = rows.length >= limit && page < 50;
@@ -70,8 +67,7 @@ async function searchSuggestions(_request) {
 }
 async function discover(request) {
   if (request.target === null) {
-    if (request.cursor !== null || request.collectionId !== null)
-      throw new Error("Initial discovery request is invalid.");
+    if (request.cursor !== null || request.collectionId !== null) throw new Error("Initial discovery request is invalid.");
     const latest = await listCategory(categories[0], 1, Math.min(12, clamp(request.pageSize)));
     const components = [];
     if (latest.length > 0) {
@@ -106,8 +102,7 @@ async function discover(request) {
     return frozen({ kind: "document", document: { components } });
   }
   const category = categories.find(([id]) => request.target === `category:${id}`);
-  if (category === void 0)
-    throw new Error("Discovery target is invalid.");
+  if (category === void 0) throw new Error("Discovery target is invalid.");
   const page = cursorPage(request.cursor, request.target);
   const limit = clamp(request.pageSize);
   const values = await listCategory(category, page, limit);
@@ -115,8 +110,7 @@ async function discover(request) {
   const items = values.map((content) => frozen({ content, rank: null, metric: null, recommendation: null }));
   const continuation = values.length >= limit && page < 50 ? frozen({ target: request.target, cursor: `${request.target}:${page + 1}` }) : null;
   if (request.collectionId !== null) {
-    if (request.collectionId !== collectionId)
-      throw new Error("Discovery collection is invalid.");
+    if (request.collectionId !== collectionId) throw new Error("Discovery collection is invalid.");
     return frozen({ kind: "append", collectionId, items, continuation });
   }
   return frozen({
@@ -135,8 +129,7 @@ async function getDetail(request) {
   const id = contentId(request.id);
   const value = await detail(id);
   const item = projectVideo(value);
-  if (item === null)
-    throw new Error("Video detail is incomplete.");
+  if (item === null) throw new Error("Video detail is incomplete.");
   return frozen({ ...item, aliases: [], catalogUrl: item.url });
 }
 async function getChapters(request) {
@@ -145,8 +138,7 @@ async function getChapters(request) {
   const sources = orderedSources(array(value.play_sources ?? value.playSources).filter(isRecord));
   const groups = sources.flatMap((source, groupOrder) => {
     const sourceId = text(source.from ?? source.source ?? source.id);
-    if (sourceId === "")
-      return [];
+    if (sourceId === "") return [];
     const title = clean(text(source.display_name ?? source.name ?? source.from)) || `线路 ${groupOrder + 1}`;
     const episodes = array(source.episodes).filter(isRecord).flatMap((episode, order) => {
       const episodeIndex = text(episode.episode_index ?? episode.index) || String(order + 1);
@@ -164,13 +156,11 @@ async function getChapters(request) {
         attributes: []
       })];
     });
-    if (episodes.length === 0)
-      return [];
+    if (episodes.length === 0) return [];
     return [frozen({ id: `group:${id}:${encodeURIComponent(sourceId)}`, title, order: groupOrder, episodes })];
   });
   const items = groups.flatMap((group) => group.episodes).map((episode, order) => frozen({ ...episode, order }));
-  if (items.length === 0)
-    throw new Error("No playable episodes found.");
+  if (items.length === 0) throw new Error("No playable episodes found.");
   return frozen({ items, groups });
 }
 async function getContent(request) {
@@ -183,8 +173,7 @@ async function getContent(request) {
   for (const source of candidates) {
     const sourceId = text(source.from ?? source.source ?? source.id);
     const episode = matchingEpisode(source, selected);
-    if (sourceId === "" || episode === null)
-      continue;
+    if (sourceId === "" || episode === null) continue;
     try {
       const play = await apiGet("video_play", {
         vod_id: id,
@@ -193,8 +182,7 @@ async function getContent(request) {
         episode_id: text(episode.episode_id ?? episode.id) || selected.episodeId
       });
       const url = safeUrl(text(play.play_url ?? play.url));
-      if (url === "" || incompatiblePlaylist(url))
-        continue;
+      if (url === "" || incompatiblePlaylist(url)) continue;
       const resourceType = /\.m3u8(?:$|[?#])/iu.test(url) ? "hls" : "video";
       const headers = playbackHeaders(play.headers);
       const proxied = requireContext().resource.proxy({ kind: resourceType, url, headers });
@@ -230,21 +218,17 @@ async function listCategory(category, page, pageSize) {
 }
 async function detail(id) {
   const cached = details.get(id);
-  if (cached !== void 0 && array(cached.play_sources ?? cached.playSources).length > 0)
-    return cached;
+  if (cached !== void 0 && array(cached.play_sources ?? cached.playSources).length > 0) return cached;
   const value = await apiGet("video_detail", { vod_id: id });
-  if (clean(text(value.vod_name ?? value.name ?? value.title)) === "")
-    throw new Error("Video detail is incomplete.");
+  if (clean(text(value.vod_name ?? value.name ?? value.title)) === "") throw new Error("Video detail is incomplete.");
   details.set(id, value);
   return value;
 }
 function projectVideo(value) {
   const nativeId = text(value.vod_id ?? value.id);
   const title = clean(text(value.vod_name ?? value.name ?? value.title));
-  if (!/^\d+$/u.test(nativeId) || title === "")
-    return null;
-  if (!details.has(nativeId))
-    details.set(nativeId, value);
+  if (!/^\d+$/u.test(nativeId) || title === "") return null;
+  if (!details.has(nativeId)) details.set(nativeId, value);
   const cover = safeUrl(text(value.vod_pic ?? value.cover));
   const categoriesValue = uniqueText([value.vod_class, value.type_name, value.vod_area, value.vod_lang].map(text));
   const latest = clean(text(value.vod_remarks ?? value.latest));
@@ -275,8 +259,7 @@ async function apiGet(action, params) {
   try {
     return await apiGetWithKey(action, params, active.deviceId, active.signKey, active.guards);
   } catch (error) {
-    if (!authError(error))
-      throw error;
+    if (!authError(error)) throw error;
     auth = void 0;
     authPromise = void 0;
     active = await ensureAuth();
@@ -284,10 +267,8 @@ async function apiGet(action, params) {
   }
 }
 async function ensureAuth() {
-  if (auth !== void 0 && auth.expiresAt - Date.now() > 10 * 6e4)
-    return auth;
-  if (authPromise !== void 0)
-    return authPromise;
+  if (auth !== void 0 && auth.expiresAt - Date.now() > 10 * 6e4) return auth;
+  if (authPromise !== void 0) return authPromise;
   authPromise = loadAuth().then((value) => {
     auth = value;
     authPromise = void 0;
@@ -306,11 +287,9 @@ async function loadAuth() {
   for (const header of array(validation.headers).filter(isRecord)) {
     const name = text(header.name);
     const value = text(header.value);
-    if (/^X-App-[A-Za-z0-9-]+$/u.test(name) && value !== "")
-      guards[name] = value;
+    if (/^X-App-[A-Za-z0-9-]+$/u.test(name) && value !== "") guards[name] = value;
   }
-  if (Object.keys(guards).length === 0)
-    throw new Error("Yoapp request validation is unavailable.");
+  if (Object.keys(guards).length === 0) throw new Error("Yoapp request validation is unavailable.");
   const verify = isRecord(config.system_verify) ? config.system_verify : {};
   const appSignature = text(verify.app_signature_sha256) || fallbackAppSignature;
   const body = JSON.stringify({ device_id: clientDeviceId, ip: Buffer.from("124.165.51.5").toString("base64") });
@@ -328,8 +307,7 @@ async function loadAuth() {
   const shell = await fetchShell(new URLSearchParams({ action: "device_secret" }), { method: "POST", headers, body });
   const payload = decodeShell(shell);
   const deviceSecret = text(payload.device_secret ?? payload.sign_key ?? payload.secret ?? payload.key);
-  if (deviceSecret === "")
-    throw new Error("Yoapp device handshake is incomplete.");
+  if (deviceSecret === "") throw new Error("Yoapp device handshake is incomplete.");
   const rawExpiry = Number(payload.expires_at);
   const expiresAt = Number.isFinite(rawExpiry) && rawExpiry > 0 ? rawExpiry < 1e12 ? rawExpiry * 1e3 : rawExpiry : Date.now() + Math.max(3600, Number(payload.ttl) || 43200) * 1e3;
   return frozen({
@@ -353,8 +331,7 @@ async function apiGetWithKey(action, params, deviceId, activeSignKey, guards) {
     "X-Yoapp-Sign": hmacBase64Url(message, activeSignKey)
   });
   const payload = decodeShell(await fetchShell(new URLSearchParams(all), { headers }));
-  if (payload.success === false)
-    throw new Error(clean(text(payload.message)) || "Yoapp request failed.");
+  if (payload.success === false) throw new Error(clean(text(payload.message)) || "Yoapp request failed.");
   return payload;
 }
 async function fetchShell(query, init) {
@@ -366,11 +343,9 @@ async function fetchShell(query, init) {
         signal: AbortSignal.timeout(15e3)
       });
       const raw = await response.text();
-      if (!response.ok)
-        throw new Error(`${response.status} ${raw.slice(0, 180)}`);
+      if (!response.ok) throw new Error(`${response.status} ${raw.slice(0, 180)}`);
       const parsed = JSON.parse(raw);
-      if (!isRecord(parsed))
-        throw new Error("Yoapp response is invalid.");
+      if (!isRecord(parsed)) throw new Error("Yoapp response is invalid.");
       return parsed;
     } catch (error) {
       lastError = error;
@@ -379,31 +354,25 @@ async function fetchShell(query, init) {
   throw lastError instanceof Error ? lastError : new Error("Yoapp request failed.");
 }
 function decodeShell(shell) {
-  if (typeof shell.data !== "string")
-    return shell;
+  if (typeof shell.data !== "string") return shell;
   const raw = shell.data.trim();
   if (raw.startsWith("{")) {
     const parsed2 = JSON.parse(raw);
-    if (isRecord(parsed2))
-      return parsed2;
+    if (isRecord(parsed2)) return parsed2;
   }
   const encryptedKey = text(shell.ek);
-  if (encryptedKey === "")
-    throw new Error("Yoapp encrypted response has no key.");
+  if (encryptedKey === "") throw new Error("Yoapp encrypted response has no key.");
   const keyDecipher = createDecipheriv("aes-128-ecb", sha(bootstrapSalt).subarray(0, 16), null);
   const seed = Buffer.concat([keyDecipher.update(Buffer.from(encryptedKey, "base64")), keyDecipher.final()]).toString("utf8");
   const dataDecipher = createDecipheriv("aes-256-cbc", sha(`${seed}${bootstrapSalt}`), sha(`${bootstrapSalt}${seed}`).subarray(0, 16));
   const plaintext = Buffer.concat([dataDecipher.update(Buffer.from(raw, "base64")), dataDecipher.final()]).toString("utf8");
   const parsed = JSON.parse(plaintext);
-  if (!isRecord(parsed))
-    throw new Error("Yoapp decrypted response is invalid.");
+  if (!isRecord(parsed)) throw new Error("Yoapp decrypted response is invalid.");
   return parsed;
 }
 function indexedList(value) {
-  if (Array.isArray(value.list))
-    return value.list.filter(isRecord);
-  if (isRecord(value.data) && Array.isArray(value.data.list))
-    return value.data.list.filter(isRecord);
+  if (Array.isArray(value.list)) return value.list.filter(isRecord);
+  if (isRecord(value.data) && Array.isArray(value.data.list)) return value.data.list.filter(isRecord);
   return Object.keys(value).filter((key) => /^\d+$/u.test(key)).sort((left, right) => Number(left) - Number(right)).map((key) => value[key]).filter(isRecord);
 }
 function orderedSources(values) {
@@ -422,8 +391,7 @@ function playbackHeaders(value) {
   const result = {};
   const referer = text(raw.referer ?? raw.Referer);
   const agent = text(raw.user_agent ?? raw["User-Agent"]);
-  if (referer !== "")
-    result.Referer = referer;
+  if (referer !== "") result.Referer = referer;
   result["User-Agent"] = agent || playerUserAgent;
   return result;
 }
@@ -433,8 +401,7 @@ function incompatiblePlaylist(url) {
 }
 function contentId(id) {
   const value = /^video:(\d+)$/u.exec(id)?.[1];
-  if (value === void 0)
-    throw new Error("Content ID is invalid.");
+  if (value === void 0) throw new Error("Content ID is invalid.");
   return value;
 }
 function chapterId(book, source, episodeId, episodeIndex) {
@@ -442,13 +409,11 @@ function chapterId(book, source, episodeId, episodeIndex) {
 }
 function parseChapterId(id, book) {
   const match = new RegExp(`^video:${book}:([^:]+):([^:]+):([^:]+)$`, "u").exec(id);
-  if (match?.[1] === void 0 || match[2] === void 0 || match[3] === void 0)
-    throw new Error("Chapter ID is invalid.");
+  if (match?.[1] === void 0 || match[2] === void 0 || match[3] === void 0) throw new Error("Chapter ID is invalid.");
   const source = decodeURIComponent(match[1]);
   const episodeId = decodeURIComponent(match[2]);
   const episodeIndex = decodeURIComponent(match[3]);
-  if ([source, episodeId, episodeIndex].some((value) => value === "" || value.length > 160))
-    throw new Error("Chapter ID is invalid.");
+  if ([source, episodeId, episodeIndex].some((value) => value === "" || value.length > 160)) throw new Error("Chapter ID is invalid.");
   return frozen({ source, episodeId, episodeIndex });
 }
 function searchable(value) {
@@ -478,19 +443,15 @@ function safeUrl(value) {
   }
 }
 function cursorPage(cursor, scope) {
-  if (cursor === null)
-    return 1;
+  if (cursor === null) return 1;
   const raw = cursor.startsWith(`${scope}:`) ? cursor.slice(scope.length + 1) : "";
   const page = Number(raw);
-  if (!Number.isSafeInteger(page) || page < 2 || page > 50)
-    throw new Error("Cursor is invalid.");
+  if (!Number.isSafeInteger(page) || page < 2 || page > 50) throw new Error("Cursor is invalid.");
   return page;
 }
 function uniqueText(values) {
   const result = [];
-  for (const value of values.map(clean))
-    if (value !== "" && !result.includes(value))
-      result.push(value);
+  for (const value of values.map(clean)) if (value !== "" && !result.includes(value)) result.push(value);
   return result;
 }
 function clean(value) {
@@ -512,8 +473,7 @@ function frozen(value) {
   return Object.freeze(value);
 }
 function requireContext() {
-  if (context === void 0)
-    throw new Error("Source is not activated.");
+  if (context === void 0) throw new Error("Source is not activated.");
   return context;
 }
 export {

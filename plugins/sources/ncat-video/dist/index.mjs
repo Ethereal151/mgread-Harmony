@@ -1,6 +1,6 @@
 import { createRequire as __mgreadCreateRequire } from 'node:module'; const require = __mgreadCreateRequire(import.meta.url);
 
-// dist/index.mjs
+// src/index.mts
 var base = "https://www.ncat21.com";
 var coverBase = "https://vres.bavdxfg.cn";
 var userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36";
@@ -20,8 +20,7 @@ async function activate(next) {
 }
 async function search(request) {
   const query = clean(request.query);
-  if (query === "")
-    return frozen({ items: [], nextCursor: null, totalCount: 0 });
+  if (query === "") return frozen({ items: [], nextCursor: null, totalCount: 0 });
   const page = cursorPage(request.cursor, "search");
   const limit = clamp(request.pageSize);
   const values = await withPage(async (browser) => {
@@ -39,8 +38,7 @@ async function searchSuggestions(_request) {
 }
 async function discover(request) {
   if (request.target === null) {
-    if (request.cursor !== null || request.collectionId !== null)
-      throw new Error("Initial discovery request is invalid.");
+    if (request.cursor !== null || request.collectionId !== null) throw new Error("Initial discovery request is invalid.");
     return frozen({
       kind: "document",
       document: { components: [{
@@ -59,8 +57,7 @@ async function discover(request) {
     });
   }
   const category = categories.find(([id]) => request.target === `category:${id}`);
-  if (category === void 0)
-    throw new Error("Discovery target is invalid.");
+  if (category === void 0) throw new Error("Discovery target is invalid.");
   const page = cursorPage(request.cursor, request.target);
   const limit = clamp(request.pageSize);
   const values = await withPage(async (browser) => {
@@ -71,8 +68,7 @@ async function discover(request) {
   const items = values.slice(0, limit).map((content) => frozen({ content: summary(content), rank: null, metric: null, recommendation: null }));
   const continuation = values.length >= limit && page < 50 ? frozen({ target: request.target, cursor: `${request.target}:${page + 1}` }) : null;
   if (request.collectionId !== null) {
-    if (request.collectionId !== collectionId)
-      throw new Error("Discovery collection is invalid.");
+    if (request.collectionId !== collectionId) throw new Error("Discovery collection is invalid.");
     return frozen({ kind: "append", collectionId, items, continuation });
   }
   return frozen({
@@ -109,11 +105,9 @@ async function getChapters(request) {
     await browser.navigate(detailUrl(id), { timeoutMs: 35e3 });
     return readEpisodes(browser, id);
   });
-  if (episodes.length === 0)
-    throw new Error("No playable episodes found.");
+  if (episodes.length === 0) throw new Error("No playable episodes found.");
   const grouped = /* @__PURE__ */ new Map();
-  for (const episode of episodes)
-    grouped.set(episode.line, [...grouped.get(episode.line) ?? [], episode]);
+  for (const episode of episodes) grouped.set(episode.line, [...grouped.get(episode.line) ?? [], episode]);
   const groups = [...grouped.entries()].map(([line, rows], groupOrder) => {
     const title = rows[0]?.group || `线路 ${groupOrder + 1}`;
     const projected = rows.map((episode, order) => frozen({
@@ -154,11 +148,9 @@ async function getContent(request) {
       return typeof value === "string" ? value : "";
     });
     const candidate = safeUrl(mediaUrl);
-    if (candidate !== "" && await probePlaylist(candidate, headers))
-      upstream = candidate;
+    if (candidate !== "" && await probePlaylist(candidate, headers)) upstream = candidate;
   }
-  if (upstream === "")
-    throw new Error("Playback address is unavailable.");
+  if (upstream === "") throw new Error("Playback address is unavailable.");
   return frozen({
     chapterId: request.chapterId,
     contentKind: "video",
@@ -180,8 +172,7 @@ async function probePlaylist(url, headers) {
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
       const response = await requireContext().http.fetch(url, { headers, signal: AbortSignal.timeout(15e3) });
-      if (response.ok && (await response.text()).trimStart().startsWith("#EXTM3U"))
-        return true;
+      if (response.ok && (await response.text()).trimStart().startsWith("#EXTM3U")) return true;
     } catch {
     }
   }
@@ -206,8 +197,7 @@ async function readDetail(browser) {
     const image=document.querySelector('.detail-box-side img');
     return{title:(document.querySelector('.detail-title')?.textContent||'').trim(),cover:image?(image.getAttribute('data-original')||image.getAttribute('data-src')||image.src||''):'',author:rowValue(['导演','主演','作者']),latest:rowValue(['备注']),updatedAt:rowValue(['首映']),description:(document.querySelector('.detail-desc,.detail-intro,.detail-content')?.textContent||'').trim()};
   })()`, { timeoutMs: 15e3 });
-  if (!isRecord(raw))
-    throw new Error("Video detail is unavailable.");
+  if (!isRecord(raw)) throw new Error("Video detail is unavailable.");
   const value = {
     title: clean(text(raw.title)),
     cover: normalizeCover(text(raw.cover)),
@@ -216,8 +206,7 @@ async function readDetail(browser) {
     updatedAt: clean(text(raw.updatedAt)),
     description: clean(text(raw.description))
   };
-  if (value.title === "")
-    throw new Error("Video detail is unavailable.");
+  if (value.title === "") throw new Error("Video detail is unavailable.");
   return value;
 }
 async function readEpisodes(browser, book) {
@@ -227,23 +216,19 @@ async function readEpisodes(browser, book) {
     return Array.from(box.querySelectorAll('.episode-list')).flatMap((list,lineIndex)=>Array.from(list.querySelectorAll('a.episode-item')).map(anchor=>({href:anchor.href,title:(anchor.textContent||'').replace(/\\s+/g,' ').trim(),group:(tabs[lineIndex]?.textContent||('线路 '+(lineIndex+1))).replace(/\\s+/g,' ').trim()})));
   })()`, { timeoutMs: 15e3 });
   return array(raw).flatMap((value) => {
-    if (!isRecord(value))
-      return [];
+    if (!isRecord(value)) return [];
     const href = text(value.href);
     const match = new RegExp(`/play/${book}-(\\d+)-(\\d+)\\.html`, "u").exec(href);
     const title = clean(text(value.title));
-    if (match?.[1] === void 0 || match[2] === void 0 || title === "")
-      return [];
+    if (match?.[1] === void 0 || match[2] === void 0 || title === "") return [];
     return [{ line: match[1], episode: match[2], title, group: clean(text(value.group)) }];
   });
 }
 function projectListing(value) {
-  if (!isRecord(value))
-    return [];
+  if (!isRecord(value)) return [];
   const id = text(value.id);
   const title = clean(text(value.title));
-  if (!/^\d+$/u.test(id) || title === "")
-    return [];
+  if (!/^\d+$/u.test(id) || title === "") return [];
   return [{ id, title, cover: normalizeCover(text(value.cover)), latest: clean(text(value.latest)) }];
 }
 function summary(value) {
@@ -276,14 +261,12 @@ function withPage(action) {
 }
 function contentId(id) {
   const value = /^video:(\d+)$/u.exec(id)?.[1];
-  if (value === void 0)
-    throw new Error("Content ID is invalid.");
+  if (value === void 0) throw new Error("Content ID is invalid.");
   return value;
 }
 function parseChapterId(id, book) {
   const match = new RegExp(`^ncat:${book}:(\\d+):(\\d+)$`, "u").exec(id);
-  if (match?.[1] === void 0 || match[2] === void 0)
-    throw new Error("Chapter ID is invalid.");
+  if (match?.[1] === void 0 || match[2] === void 0) throw new Error("Chapter ID is invalid.");
   return { line: match[1], episode: match[2] };
 }
 function detailUrl(id) {
@@ -293,10 +276,8 @@ function playUrl(id, line, episode) {
   return `${base}/play/${id}-${line}-${episode}.html`;
 }
 function normalizeCover(value) {
-  if (value === "")
-    return "";
-  if (/^https?:\/\//iu.test(value))
-    return safeUrl(value);
+  if (value === "") return "";
+  if (/^https?:\/\//iu.test(value)) return safeUrl(value);
   return safeUrl(`${coverBase}${value.startsWith("/") ? "" : "/"}${value}`);
 }
 function safeUrl(value) {
@@ -308,12 +289,10 @@ function safeUrl(value) {
   }
 }
 function cursorPage(cursor, scope) {
-  if (cursor === null)
-    return 1;
+  if (cursor === null) return 1;
   const raw = cursor.startsWith(`${scope}:`) ? cursor.slice(scope.length + 1) : "";
   const page = Number(raw);
-  if (!Number.isSafeInteger(page) || page < 2 || page > 50)
-    throw new Error("Cursor is invalid.");
+  if (!Number.isSafeInteger(page) || page < 2 || page > 50) throw new Error("Cursor is invalid.");
   return page;
 }
 function clean(value) {
@@ -335,8 +314,7 @@ function frozen(value) {
   return Object.freeze(value);
 }
 function requireContext() {
-  if (context === void 0)
-    throw new Error("Source is not activated.");
+  if (context === void 0) throw new Error("Source is not activated.");
   return context;
 }
 export {

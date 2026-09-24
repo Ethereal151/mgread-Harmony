@@ -485,7 +485,7 @@ var require_lz_string = __commonJS({
   }
 });
 
-// dist/source.js
+// src/source.ts
 var import_lz_string = __toESM(require_lz_string(), 1);
 var desktopOrigin = "https://www.manhuagui.com";
 var mobileOrigin = "https://m.manhuagui.com";
@@ -505,10 +505,10 @@ var categories = Object.freeze([
   { id: "china", title: "内地漫画", path: "/list/china/" }
 ]);
 var ManhuaguiSource = class {
-  context;
   constructor(context2) {
     this.context = context2;
   }
+  context;
   async home(pageSize) {
     const url = new URL("/update/", mobileOrigin);
     return { items: this.#parseCards(await this.#html(url, mobileOrigin), url).slice(0, boundedPageSize(pageSize)) };
@@ -534,8 +534,7 @@ var ManhuaguiSource = class {
   }
   async search(query, pageSize) {
     const normalized = query.trim();
-    if (normalized === "")
-      return [];
+    if (normalized === "") return [];
     const url = new URL(`/s/${encodeURIComponent(normalized)}.html`, mobileOrigin);
     return this.#parseCards(await this.#html(url, mobileOrigin), url).slice(0, boundedPageSize(pageSize));
   }
@@ -544,8 +543,7 @@ var ManhuaguiSource = class {
     const url = bookUrl(key);
     const html = await this.#html(url, desktopOrigin);
     const title = textFromMatch(html, /<h1[^>]*>([\s\S]*?)<\/h1>/iu);
-    if (title === null)
-      throw new Error("Source detail title is missing.");
+    if (title === null) throw new Error("Source detail title is missing.");
     const author = textFromMatch(html, /漫画作者：<\/strong>([\s\S]*?)<\/span>/iu);
     const categoryText = textFromMatch(html, /漫画剧情：<\/strong>([\s\S]*?)<\/span>/iu);
     const statusText = textFromMatch(html, /漫画状态：<\/strong>\s*<span[^>]*>([\s\S]*?)<\/span>/iu);
@@ -587,14 +585,12 @@ var ManhuaguiSource = class {
   async content(id, idForChapter) {
     const book = decodeBookId(id);
     const chapter = decodeChapterId(idForChapter);
-    if (book.book !== chapter.book)
-      throw new Error("Chapter does not belong to the requested manga.");
+    if (book.book !== chapter.book) throw new Error("Chapter does not belong to the requested manga.");
     const url = chapterUrl(chapter);
     const html = await this.#html(url, desktopOrigin);
     const data = parsePackedImageData(html);
     const images = buildImageUrls(data);
-    if (images.length === 0)
-      throw new Error("Source chapter images are missing.");
+    if (images.length === 0) throw new Error("Source chapter images are missing.");
     const title = titleWithoutSuffix(textFromMatch(html, /<title[^>]*>([\s\S]*?)<\/title>/iu));
     return {
       chapterId: idForChapter,
@@ -618,18 +614,14 @@ var ManhuaguiSource = class {
     const seen = /* @__PURE__ */ new Set();
     for (const item of captures(list, /<li\b[^>]*>([\s\S]*?)<\/li>/giu)) {
       const link = firstLink(item, /\/comic\/\d+\/?$/u);
-      if (link === void 0)
-        continue;
+      if (link === void 0) continue;
       const contentUrl = normalizePageUrl(link.href, pageUrl);
-      if (contentUrl === null)
-        continue;
+      if (contentUrl === null) continue;
       const key = bookKeyFromUrl(contentUrl);
-      if (seen.has(key.book))
-        continue;
+      if (seen.has(key.book)) continue;
       seen.add(key.book);
       const title = textFromMatch(item, /<h3[^>]*>([\s\S]*?)<\/h3>/iu) ?? link.title;
-      if (title === null)
-        continue;
+      if (title === null) continue;
       const imageTag = firstCapture(item, /(<img\b[^>]*>)/iu);
       const cover = normalizeImageUrl(imageTag === null ? void 0 : attribute(imageTag, "data-src") ?? attribute(imageTag, "src"), pageUrl);
       const status = textFromMatch(item, /<i[^>]*>([\s\S]*?)<\/i>/iu);
@@ -652,17 +644,14 @@ var ManhuaguiSource = class {
     return output;
   }
   async #html(url, refererOrigin) {
-    if (!allowedPage(url))
-      throw new Error("Source page URL is invalid.");
+    if (!allowedPage(url)) throw new Error("Source page URL is invalid.");
     const response = await this.context.http.fetch(url, { headers: { accept: "text/html,application/xhtml+xml", referer: `${refererOrigin}/` } });
     if (!response.ok) {
-      if (response.status === 403 || response.status === 429)
-        this.context.errors.raise({ code: "source_access_blocked", message: "访问异常，请稍后再试。", annotation: `HTTP ${response.status}` });
+      if (response.status === 403 || response.status === 429) this.context.errors.raise({ code: "source_access_blocked", message: "访问异常，请稍后再试。", annotation: `HTTP ${response.status}` });
       throw new Error("Source page request failed.");
     }
     const html = await response.text();
-    if (/cf-challenge|cf-turnstile|正在检查您的浏览器|人机验证/iu.test(html))
-      throw new Error("Source interaction is required.");
+    if (/cf-challenge|cf-turnstile|正在检查您的浏览器|人机验证/iu.test(html)) throw new Error("Source interaction is required.");
     return html;
   }
   #proxyImage(url, referer) {
@@ -678,11 +667,9 @@ function parsePackedImageData(html) {
   } catch {
     throw new Error("Source image data JSON is invalid.");
   }
-  if (!isRecord(raw) || !Array.isArray(raw.files))
-    throw new Error("Source image data shape is invalid.");
+  if (!isRecord(raw) || !Array.isArray(raw.files)) throw new Error("Source image data shape is invalid.");
   const files = raw.files.flatMap((value) => typeof value === "string" && value !== "" ? [value] : []);
-  if (files.length === 0 || files.length > 5e3)
-    throw new Error("Source image count is invalid.");
+  if (files.length === 0 || files.length > 5e3) throw new Error("Source image count is invalid.");
   const sl = isRecord(raw.sl) ? raw.sl : void 0;
   return {
     files,
@@ -695,32 +682,24 @@ function parsePackedImageData(html) {
   };
 }
 function unpackPackedImageCode(html) {
-  if (html.length > unpackedLimit)
-    throw new Error("Source chapter page is too large.");
+  if (html.length > unpackedLimit) throw new Error("Source chapter page is too large.");
   const marker = html.includes("}('") ? html.indexOf("}('") + 2 : html.indexOf('}("') + 2;
-  if (marker < 2)
-    throw new Error("Source packed image data is missing.");
+  if (marker < 2) throw new Error("Source packed image data is missing.");
   const args = readPackedArgs(html, marker);
-  if (args.packed.length > packedLimit || args.count > 4096 || args.radix < 2 || args.radix > 62)
-    throw new Error("Source packed image data exceeds limits.");
+  if (args.packed.length > packedLimit || args.count > 4096 || args.radix < 2 || args.radix > 62) throw new Error("Source packed image data exceeds limits.");
   const dictionaryText = args.dictionary.includes("|") ? args.dictionary : import_lz_string.default.decompressFromBase64(args.dictionary);
-  if (dictionaryText === null || dictionaryText.length > unpackedLimit)
-    throw new Error("Source packed dictionary is invalid.");
+  if (dictionaryText === null || dictionaryText.length > unpackedLimit) throw new Error("Source packed dictionary is invalid.");
   const code = unpackCode(args.packed, args.radix, args.count, dictionaryText.split("|"));
-  if (code.length > unpackedLimit)
-    throw new Error("Source unpacked image data exceeds limits.");
+  if (code.length > unpackedLimit) throw new Error("Source unpacked image data exceeds limits.");
   return code;
 }
 function buildImageUrls(data) {
   const host = normalizeHost(data.host);
   return data.files.map((file) => {
     const url = /^https?:\/\//iu.test(file) ? new URL(file) : new URL(joinPath(data.path, file), host);
-    if (!allowedImage(url))
-      throw new Error("Source image URL is outside the allowed hosts.");
-    if (data.e !== null)
-      url.searchParams.set("e", data.e);
-    if (data.m !== null)
-      url.searchParams.set("m", data.m);
+    if (!allowedImage(url)) throw new Error("Source image URL is outside the allowed hosts.");
+    if (data.e !== null) url.searchParams.set("e", data.e);
+    if (data.m !== null) url.searchParams.set("m", data.m);
     if (data.e === null && data.m === null && data.cid !== null && data.md5 !== null) {
       url.searchParams.set("cid", data.cid);
       url.searchParams.set("md5", data.md5);
@@ -737,11 +716,9 @@ function parseChapters(html, key) {
   const output = [];
   for (const link of links(section)) {
     const url = normalizePageUrl(link.href, new URL("/", desktopOrigin));
-    if (url === null || !new RegExp(`^/comic/${key.book}/\\d+\\.html$`, "u").test(url.pathname))
-      continue;
+    if (url === null || !new RegExp(`^/comic/${key.book}/\\d+\\.html$`, "u").test(url.pathname)) continue;
     const chapter = chapterKeyFromUrl(url);
-    if (seen.has(chapter.chapter))
-      continue;
+    if (seen.has(chapter.chapter)) continue;
     seen.add(chapter.chapter);
     output.push({ id: encodeChapterId(chapter), title: attribute(link.tag, "title") ?? link.title ?? "章节", order: Number(chapter.chapter), url: url.toString(), volumeTitle: null, wordCount: null, updatedAt: null, isLocked: false, attributes: [] });
   }
@@ -774,30 +751,24 @@ function toDiscoveryItem(content) {
   return { content, rank: null, metric: null, recommendation: null };
 }
 function boundedPageSize(value) {
-  if (!Number.isSafeInteger(value) || value <= 0)
-    throw new Error("Page size is invalid.");
+  if (!Number.isSafeInteger(value) || value <= 0) throw new Error("Page size is invalid.");
   return Math.min(value, 50);
 }
 function decodeCategory(target) {
   const id = target.startsWith("category:") ? target.slice(9) : "";
   const value = categories.find((item) => item.id === id);
-  if (value === void 0)
-    throw new Error("Category target is invalid.");
+  if (value === void 0) throw new Error("Category target is invalid.");
   return value;
 }
 function decodeCursor(value) {
-  if (value === null)
-    return 1;
-  if (!/^\d+$/u.test(value))
-    throw new Error("Category cursor is invalid.");
+  if (value === null) return 1;
+  if (!/^\d+$/u.test(value)) throw new Error("Category cursor is invalid.");
   const page = Number(value);
-  if (!Number.isSafeInteger(page) || page < 1 || page > 1e4)
-    throw new Error("Category cursor is invalid.");
+  if (!Number.isSafeInteger(page) || page < 1 || page > 1e4) throw new Error("Category cursor is invalid.");
   return page;
 }
 function categoryUrl(path, page) {
-  if (page === 1)
-    return new URL(path, mobileOrigin);
+  if (page === 1) return new URL(path, mobileOrigin);
   return new URL(`${path.endsWith("/") ? path : `${path}/`}index_p${page}.html`, mobileOrigin);
 }
 function findNextPage(html, path, page) {
@@ -810,14 +781,10 @@ function definition(input, label) {
   return textFromMatch(input, new RegExp(`<dt>\\s*${label}\\s*[：:]?\\s*<\\/dt>\\s*<dd>([\\s\\S]*?)<\\/dd>`, "iu"));
 }
 function parseStatus(value) {
-  if (value === null)
-    return "unknown";
-  if (/完结|完本/iu.test(value))
-    return "completed";
-  if (/连载/iu.test(value))
-    return "ongoing";
-  if (/停更|暂停/iu.test(value))
-    return "hiatus";
+  if (value === null) return "unknown";
+  if (/完结|完本/iu.test(value)) return "completed";
+  if (/连载/iu.test(value)) return "ongoing";
+  if (/停更|暂停/iu.test(value)) return "hiatus";
   return "unknown";
 }
 function titleWithoutSuffix(value) {
@@ -828,14 +795,12 @@ function encodeBookId(key) {
 }
 function decodeBookId(id) {
   const match = /^manga:(\d+)$/u.exec(id);
-  if (match?.[1] === void 0)
-    throw new Error("Content ID is invalid.");
+  if (match?.[1] === void 0) throw new Error("Content ID is invalid.");
   return { book: match[1] };
 }
 function bookKeyFromUrl(url) {
   const match = /^\/comic\/(\d+)\/?$/u.exec(url.pathname);
-  if (match?.[1] === void 0)
-    throw new Error("Source manga URL is invalid.");
+  if (match?.[1] === void 0) throw new Error("Source manga URL is invalid.");
   return { book: match[1] };
 }
 function encodeChapterId(key) {
@@ -843,8 +808,7 @@ function encodeChapterId(key) {
 }
 function decodeChapterId(id) {
   const match = /^chapter:(\d+):(\d+)$/u.exec(id);
-  if (match?.[1] === void 0 || match[2] === void 0)
-    throw new Error("Chapter ID is invalid.");
+  if (match?.[1] === void 0 || match[2] === void 0) throw new Error("Chapter ID is invalid.");
   return { book: match[1], chapter: match[2] };
 }
 function chapterIdFromUrl(url) {
@@ -852,8 +816,7 @@ function chapterIdFromUrl(url) {
 }
 function chapterKeyFromUrl(url) {
   const match = /^\/comic\/(\d+)\/(\d+)\.html$/u.exec(url.pathname);
-  if (match?.[1] === void 0 || match[2] === void 0)
-    throw new Error("Source chapter URL is invalid.");
+  if (match?.[1] === void 0 || match[2] === void 0) throw new Error("Source chapter URL is invalid.");
   return { book: match[1], chapter: match[2] };
 }
 function bookUrl(key) {
@@ -872,22 +835,19 @@ function allowedImage(url) {
   return url.protocol === "https:" && (url.hostname === "cf.mhgui.com" || url.hostname === "i.hamreus.com") && url.pathname.length > 1;
 }
 function normalizePageUrl(value, base) {
-  if (value === void 0 || value === "")
-    return null;
+  if (value === void 0 || value === "") return null;
   const url = new URL(value, base);
   return allowedPage(url) ? new URL(url.pathname + url.search, desktopOrigin) : null;
 }
 function normalizeImageUrl(value, base) {
-  if (value === void 0 || value === "")
-    return null;
+  if (value === void 0 || value === "") return null;
   const url = value.startsWith("//") ? new URL(`https:${value}`) : new URL(value, base);
   return allowedImage(url) ? url : null;
 }
 function normalizeHost(value) {
   const normalized = value.startsWith("//") ? `https:${value}` : /^https?:\/\//iu.test(value) ? value : `https://${value}`;
   const url = new URL(normalized);
-  if (!allowedImage(new URL("/placeholder.jpg", url)))
-    throw new Error("Source image host is invalid.");
+  if (!allowedImage(new URL("/placeholder.jpg", url))) throw new Error("Source image host is invalid.");
   return url;
 }
 function joinPath(path, file) {
@@ -899,23 +859,18 @@ function mimeType(url) {
 }
 function readPackedArgs(input, offset) {
   const packed = readQuoted(input, offset);
-  if (packed === null)
-    throw new Error("Packed source argument is invalid.");
+  if (packed === null) throw new Error("Packed source argument is invalid.");
   const radix = readNumber(input, skipComma(input, packed.end));
-  if (radix === null)
-    throw new Error("Packed radix is invalid.");
+  if (radix === null) throw new Error("Packed radix is invalid.");
   const count = readNumber(input, skipComma(input, radix.end));
-  if (count === null)
-    throw new Error("Packed count is invalid.");
+  if (count === null) throw new Error("Packed count is invalid.");
   const dictionary = readQuoted(input, skipComma(input, count.end));
-  if (dictionary === null)
-    throw new Error("Packed dictionary is invalid.");
+  if (dictionary === null) throw new Error("Packed dictionary is invalid.");
   return { packed: packed.value, radix: radix.value, count: count.value, dictionary: dictionary.value };
 }
 function skipComma(input, offset) {
   let index = offset;
-  while (/[\s,]/u.test(input[index] ?? ""))
-    index += 1;
+  while (/[\s,]/u.test(input[index] ?? "")) index += 1;
   return index;
 }
 function readNumber(input, offset) {
@@ -924,22 +879,19 @@ function readNumber(input, offset) {
 }
 function readQuoted(input, offset) {
   const quote = input[offset];
-  if (quote !== "'" && quote !== '"')
-    return null;
+  if (quote !== "'" && quote !== '"') return null;
   let value = "";
   let index = offset + 1;
   while (index < input.length) {
     const character = input[index];
-    if (character === quote)
-      return { value, end: index + 1 };
+    if (character === quote) return { value, end: index + 1 };
     if (character !== "\\") {
       value += character;
       index += 1;
       continue;
     }
     const escaped = input[index + 1];
-    if (escaped === void 0)
-      return null;
+    if (escaped === void 0) return null;
     if (escaped === "x") {
       value += String.fromCharCode(Number.parseInt(input.slice(index + 2, index + 4), 16));
       index += 4;
@@ -964,8 +916,7 @@ function unpackCode(packed, radix, count, words) {
 }
 function baseEncode(value, radix) {
   const characters = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
-  if (value === 0)
-    return "0";
+  if (value === 0) return "0";
   let output = "";
   let remaining = value;
   while (remaining > 0) {
@@ -977,32 +928,26 @@ function baseEncode(value, radix) {
 function extractJsonObject(code, marker) {
   const markerIndex = code.indexOf(marker);
   const start = code.indexOf("{", markerIndex + marker.length);
-  if (markerIndex < 0 || start < 0)
-    throw new Error("Source image object is missing.");
+  if (markerIndex < 0 || start < 0) throw new Error("Source image object is missing.");
   let depth = 0;
   let quote = "";
   let escaped = false;
   for (let index = start; index < code.length; index += 1) {
     const character = code[index];
     if (quote !== "") {
-      if (escaped)
-        escaped = false;
-      else if (character === "\\")
-        escaped = true;
-      else if (character === quote)
-        quote = "";
+      if (escaped) escaped = false;
+      else if (character === "\\") escaped = true;
+      else if (character === quote) quote = "";
       continue;
     }
     if (character === '"' || character === "'") {
       quote = character;
       continue;
     }
-    if (character === "{")
-      depth += 1;
+    if (character === "{") depth += 1;
     if (character === "}") {
       depth -= 1;
-      if (depth === 0)
-        return code.slice(start, index + 1);
+      if (depth === 0) return code.slice(start, index + 1);
     }
   }
   throw new Error("Source image object is incomplete.");
@@ -1042,10 +987,8 @@ function decodeHtml(input) {
   const named = { amp: "&", apos: "'", gt: ">", lt: "<", nbsp: " ", quot: '"' };
   return input.replace(/&(#(?:x[0-9a-f]+|\d+)|[a-z]+);/giu, (entity, body) => {
     const value = body.toLowerCase();
-    if (value.startsWith("#x"))
-      return String.fromCodePoint(Number.parseInt(value.slice(2), 16));
-    if (value.startsWith("#"))
-      return String.fromCodePoint(Number.parseInt(value.slice(1), 10));
+    if (value.startsWith("#x")) return String.fromCodePoint(Number.parseInt(value.slice(2), 16));
+    if (value.startsWith("#")) return String.fromCodePoint(Number.parseInt(value.slice(1), 10));
     return named[value] ?? entity;
   });
 }
@@ -1056,7 +999,7 @@ function stringValue(value) {
   return typeof value === "string" && value !== "" ? value : typeof value === "number" && Number.isFinite(value) ? String(value) : null;
 }
 
-// dist/index.mjs
+// src/index.mts
 var context;
 var source;
 async function activate(nextContext) {
@@ -1067,8 +1010,7 @@ async function activate(nextContext) {
 async function discover(request) {
   return invoke("discover", async (active) => {
     if (request.target === null) {
-      if (request.cursor !== null || request.collectionId !== null)
-        throw new Error("Initial discovery request is invalid.");
+      if (request.cursor !== null || request.collectionId !== null) throw new Error("Initial discovery request is invalid.");
       const home = await active.home(request.pageSize);
       return { kind: "document", document: { components: [
         { type: "section", id: "manhuagui-latest-section", title: "最新更新", subtitle: null, icon: "newRelease", children: [
@@ -1080,10 +1022,8 @@ async function discover(request) {
       ] } };
     }
     const result = await active.category(request.target, request.cursor, request.pageSize);
-    if (request.collectionId !== null && request.collectionId !== result.collectionId)
-      throw new Error("Discovery collection is invalid.");
-    if (request.collectionId !== null)
-      return { kind: "append", collectionId: result.collectionId, items: result.items, continuation: result.continuation };
+    if (request.collectionId !== null && request.collectionId !== result.collectionId) throw new Error("Discovery collection is invalid.");
+    if (request.collectionId !== null) return { kind: "append", collectionId: result.collectionId, items: result.items, continuation: result.continuation };
     return { kind: "document", document: { components: [
       { type: "section", id: `${result.collectionId}-section`, title: result.title, subtitle: null, children: [
         { type: "contentCollection", id: result.collectionId, layout: "coverGrid", items: result.items, continuation: result.continuation }
@@ -1093,8 +1033,7 @@ async function discover(request) {
 }
 async function search(request) {
   return invoke("search", async (active) => {
-    if (request.cursor !== null)
-      throw new Error("Search cursor is not supported.");
+    if (request.cursor !== null) throw new Error("Search cursor is not supported.");
     const items = await active.search(request.query, request.pageSize);
     return { items, nextCursor: null, totalCount: null };
   });
@@ -1121,20 +1060,17 @@ async function invoke(operation, action) {
     return result;
   } catch (error) {
     activeContext.log.warn(`source_${operation}_failed`);
-    if (isRuntimeRaisedError(error))
-      throw error;
+    if (isRuntimeRaisedError(error)) throw error;
     throw new Error("Source operation failed.");
   }
 }
 function isRuntimeRaisedError(error) {
-  if (error === null || typeof error !== "object")
-    return false;
+  if (error === null || typeof error !== "object") return false;
   const candidate = error;
   return candidate.name === "PluginManagerError" && typeof candidate.code === "string";
 }
 function requireValue(value) {
-  if (value === void 0)
-    throw new Error("Source is not activated.");
+  if (value === void 0) throw new Error("Source is not activated.");
   return value;
 }
 export {

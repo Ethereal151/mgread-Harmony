@@ -1,6 +1,6 @@
 import { createRequire as __mgreadCreateRequire } from 'node:module'; const require = __mgreadCreateRequire(import.meta.url);
 
-// dist/index.mjs
+// src/index.mts
 var base = "https://api.drama.9ddm.com/drama/home";
 var clientInfo = "0123456789abcdef0123456789abcdef";
 var requestHeaders = Object.freeze({ "Content-Type": "application/json; charset=utf-8", "User-Agent": "okhttp/5.1.0" });
@@ -11,8 +11,7 @@ async function activate(next) {
 }
 async function search(request) {
   const query = request.query.trim();
-  if (query === "")
-    return frozen({ items: [], nextCursor: null, totalCount: 0 });
+  if (query === "") return frozen({ items: [], nextCursor: null, totalCount: 0 });
   const page = pageCursor(request.cursor, "search"), limit = clamp(request.pageSize);
   const json = await fetchJson("/search", { audience: "", order: "", page, pageSize: limit, searchWord: query, subject: "" });
   const values = pickList(json).slice(0, limit);
@@ -23,15 +22,13 @@ async function searchSuggestions(_request) {
 }
 async function discover(request) {
   if (request.target === null) {
-    if (request.cursor !== null || request.collectionId !== null)
-      throw new Error("Initial discovery request is invalid.");
+    if (request.cursor !== null || request.collectionId !== null) throw new Error("Initial discovery request is invalid.");
     const tagJson = await fetchJson("/shortVideoTags");
     const tags = unique(object(tagJson.data).tags ?? tagJson.tags);
     return frozen({ kind: "document", document: { components: [{ type: "section", id: "drama-tags", title: "短剧分类", subtitle: "按题材浏览", icon: "video", children: [{ type: "categoryCollection", id: "drama-tags-list", layout: "chips", categories: tags.map((title) => ({ id: encodeKey(title), title, target: `tag:${encodeKey(title)}`, count: null, url: null, icon: "video" })) }] }] } });
   }
   const encoded = /^tag:(.+)$/u.exec(request.target)?.[1];
-  if (encoded === void 0)
-    throw new Error("Discovery target is invalid.");
+  if (encoded === void 0) throw new Error("Discovery target is invalid.");
   const subject = decodeKey(encoded);
   const page = pageCursor(request.cursor, request.target);
   const limit = clamp(request.pageSize);
@@ -41,8 +38,7 @@ async function discover(request) {
   const items = values.map((item) => frozen({ content: summaryFrom(item), rank: null, metric: null, recommendation: null }));
   const continuation = values.length >= limit ? frozen({ target: request.target, cursor: `${request.target}:${page + 1}` }) : null;
   if (request.collectionId !== null) {
-    if (request.collectionId !== collectionId)
-      throw new Error("Discovery collection is invalid.");
+    if (request.collectionId !== collectionId) throw new Error("Discovery collection is invalid.");
     return frozen({ kind: "append", collectionId, items, continuation });
   }
   return frozen({ kind: "document", document: { components: [{ type: "section", id: `${collectionId}:section`, title: subject, subtitle: null, icon: "video", children: [{ type: "contentCollection", id: collectionId, layout: "coverGrid", items, continuation }] }] } });
@@ -59,8 +55,7 @@ async function getChapters(request) {
   const id = contentId(request.id);
   const episodes = detailEpisodes(await detailJson(id));
   const items = episodes.map((episode, index) => chapter(id, episode, index));
-  if (items.length === 0)
-    throw new Error("No playable episodes found.");
+  if (items.length === 0) throw new Error("No playable episodes found.");
   const group = frozen({ id: `group:${encodeKey(id)}:default`, title: "默认线路", order: 0, episodes: items });
   return frozen({ items, groups: [group] });
 }
@@ -69,14 +64,12 @@ async function getContent(request) {
   const key = chapterKey(request.chapterId, id);
   const episodes = detailEpisodes(await detailJson(id));
   const selectedIndex = episodes.findIndex((episode2, index) => episodeKey(episode2, index) === key);
-  if (selectedIndex < 0)
-    throw new Error("Chapter ID is invalid.");
+  if (selectedIndex < 0) throw new Error("Chapter ID is invalid.");
   const episode = episodes[selectedIndex] ?? {};
   const choices = records(episode.videoClarityList);
   const best = pickBest(choices);
   const upstream = text(best.url) || playSettingUrl(episode.playSetting);
-  if (!safeUrl(upstream))
-    throw new Error("Playback address is unavailable.");
+  if (!safeUrl(upstream)) throw new Error("Playback address is unavailable.");
   const resourceType = /\.m3u8(?:$|[?#])/iu.test(upstream) ? "hls" : "video";
   const mediaHeaders = { "User-Agent": requestHeaders["User-Agent"] };
   return frozen({ chapterId: request.chapterId, contentKind: "video", title: `第${text(episode.playOrder) || selectedIndex + 1}集`, updatedAt: null, text: null, pages: [], media: { url: requireContext().resource.proxy({ kind: resourceType, url: upstream, headers: mediaHeaders }), resourceType, resourcePolicy: "sessionOnly", expiresAt: null, mimeType: resourceType === "hls" ? "application/vnd.apple.mpegurl" : "video/mp4", headers: mediaHeaders } });
@@ -88,14 +81,11 @@ async function fetchJson(path, body) {
   const url = `${base}${path}${path.includes("?") ? "&" : "?"}${commonQuery()}`;
   const init = body === void 0 ? { method: "GET", headers: requestHeaders } : { method: "POST", headers: requestHeaders, body: JSON.stringify(body) };
   const response = await requireContext().http.fetch(url, init);
-  if (!response.ok)
-    throw new Error(`Source request failed (${response.status}).`);
+  if (!response.ok) throw new Error(`Source request failed (${response.status}).`);
   const value = await response.json();
-  if (!isObject(value))
-    throw new Error("Source response is invalid.");
+  if (!isObject(value)) throw new Error("Source response is invalid.");
   const code = Number(value.code);
-  if (Number.isFinite(code) && code !== 200)
-    throw new Error(`Source API rejected the request (${code}${text(value.msg) === "" ? "" : `: ${text(value.msg)}`}).`);
+  if (Number.isFinite(code) && code !== 200) throw new Error(`Source API rejected the request (${code}${text(value.msg) === "" ? "" : `: ${text(value.msg)}`}).`);
   return value;
 }
 function commonQuery() {
@@ -110,15 +100,13 @@ function detailEpisodes(json) {
 }
 function pickList(json) {
   const direct = records(json.data);
-  if (direct.length > 0)
-    return direct;
+  if (direct.length > 0) return direct;
   const nested = records(object(json.data).list);
   return nested.length > 0 ? nested : records(json.list);
 }
 function summaryFrom(item) {
   const native = text(item.oneId) || text(item.id);
-  if (native === "")
-    throw new Error("Source item has no ID.");
+  if (native === "") throw new Error("Source item has no ID.");
   const id = encodeKey(native);
   const total = integer(item.episodeCount ?? item.totalEpisodeCount ?? item.totalEpisode);
   return frozen({ id: `drama:${id}`, title: text(item.title) || text(item.name) || native, contentKind: "video", coverOrientation: text(item.horzPoster) !== "" ? "landscape" : "portrait", author: null, url: detailUrl(native), coverUrl: proxyImage(first(item.horzPoster, item.vertPoster, item.cover)), description: nullable(item.description), language: "zh-CN", status: "unknown", access: "unknown", wordCount: null, chapterCount: total, publishedAt: null, updatedAt: null, latestChapter: null, categories: [], tags: [], attributes: [] });
@@ -130,43 +118,36 @@ function chapter(id, episode, index) {
 }
 function episodeKey(episode, index) {
   const key = text(episode.episodeOneId) || text(episode.id) || text(episode.videoId) || text(episode.playOrder) || text(episode.episode);
-  if (key === "")
-    throw new Error(`Episode ${index + 1} has no stable ID.`);
+  if (key === "") throw new Error(`Episode ${index + 1} has no stable ID.`);
   return key;
 }
 function contentId(id) {
   const encoded = /^drama:([^:]+)$/u.exec(id)?.[1];
-  if (encoded === void 0)
-    throw new Error("Content ID is invalid.");
+  if (encoded === void 0) throw new Error("Content ID is invalid.");
   return decodeKey(encoded);
 }
 function chapterKey(id, content) {
   const prefix = `drama:${encodeKey(content)}:`;
-  if (!id.startsWith(prefix))
-    throw new Error("Chapter ID is invalid.");
+  if (!id.startsWith(prefix)) throw new Error("Chapter ID is invalid.");
   return decodeKey(id.slice(prefix.length));
 }
 function pickBest(list) {
   return list.find((item) => /1080/iu.test(text(item.name))) ?? list[0] ?? {};
 }
 function playSettingUrl(value) {
-  if (typeof value !== "string" || value.trim() === "")
-    return "";
+  if (typeof value !== "string" || value.trim() === "") return "";
   try {
     const setting = JSON.parse(value);
-    if (!isObject(setting))
-      return "";
+    if (!isObject(setting)) return "";
     return text(first(setting.super, setting.high, setting.normal));
   } catch {
     return "";
   }
 }
 function pageCursor(cursor, scope) {
-  if (cursor === null)
-    return 1;
+  if (cursor === null) return 1;
   const value = Number(new RegExp(`^${escape(scope)}:(\\d+)$`, "u").exec(cursor)?.[1]);
-  if (!Number.isSafeInteger(value) || value < 2 || value > 1e3)
-    throw new Error("Cursor is invalid.");
+  if (!Number.isSafeInteger(value) || value < 2 || value > 1e3) throw new Error("Cursor is invalid.");
   return value;
 }
 function safeUrl(value) {
@@ -185,8 +166,7 @@ function encodeKey(value) {
   return Buffer.from(value, "utf8").toString("base64url");
 }
 function decodeKey(value) {
-  if (!/^[A-Za-z0-9_-]+$/u.test(value))
-    throw new Error("Source key is invalid.");
+  if (!/^[A-Za-z0-9_-]+$/u.test(value)) throw new Error("Source key is invalid.");
   return Buffer.from(value, "base64url").toString("utf8");
 }
 function unique(value) {
@@ -228,8 +208,7 @@ function frozen(value) {
   return Object.freeze(value);
 }
 function requireContext() {
-  if (context === void 0)
-    throw new Error("Source is not activated.");
+  if (context === void 0) throw new Error("Source is not activated.");
   return context;
 }
 export {

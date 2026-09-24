@@ -44720,7 +44720,7 @@ var undici = __toESM(require_undici(), 1);
 var import_whatwg_mimetype = __toESM(require_mime_type(), 1);
 import { Writable as Writable2, finished } from "node:stream";
 
-// dist/index.mjs
+// src/index.mts
 var base = "https://xchina001.online";
 var headers = { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126.0.0.0 Safari/537.36", Accept: "text/html,application/xhtml+xml,*/*;q=0.8", Referer: `${base}/photos.html` };
 var channels = [["latest", "最新", "/photos/"], ["hot", "热门", "/photos/sort-hot/"], ["comment", "评论最多", "/photos/sort-comment/"], ["recent", "最近评论", "/photos/sort-recent/"]];
@@ -44731,8 +44731,7 @@ async function activate(next2) {
 }
 async function search(request) {
   const query = clean(request.query).replaceAll(/[\\*"?&<>]/gu, "").replaceAll(/\s+/gu, "+");
-  if (query.length < 2)
-    return frozen({ items: [], nextCursor: null, totalCount: 0 });
+  if (query.length < 2) return frozen({ items: [], nextCursor: null, totalCount: 0 });
   const page = cursorPage(request.cursor, "search"), path = page === 1 ? `/photos/keyword-${encodeURIComponent(query)}.html` : `/photos/keyword-${encodeURIComponent(query)}/${page}.html`, values = parseList(await get2(path)), size = clamp(request.pageSize), items = values.map(summary).slice(0, size);
   return frozen({ items, nextCursor: values.length >= size ? `search:${page + 1}` : null, totalCount: null });
 }
@@ -44740,15 +44739,12 @@ async function searchSuggestions(_request) {
   return frozen({ items: [], nextCursor: null });
 }
 async function discover(request) {
-  if (request.target === null)
-    return frozen({ kind: "document", document: { components: [{ type: "section", id: "xchina-channels", title: "小黄书套图", subtitle: "xChina 写真分类", icon: "manga", children: [{ type: "categoryCollection", id: "xchina-channel-list", layout: "chips", categories: channels.map(([id, title]) => ({ id, title, target: `channel:${id}`, count: null, url: null, icon: "manga" })) }] }] } });
+  if (request.target === null) return frozen({ kind: "document", document: { components: [{ type: "section", id: "xchina-channels", title: "小黄书套图", subtitle: "xChina 写真分类", icon: "manga", children: [{ type: "categoryCollection", id: "xchina-channel-list", layout: "chips", categories: channels.map(([id, title]) => ({ id, title, target: `channel:${id}`, count: null, url: null, icon: "manga" })) }] }] } });
   const channel = channels.find(([id]) => request.target === `channel:${id}`);
-  if (!channel)
-    throw new Error("Discovery target is invalid.");
+  if (!channel) throw new Error("Discovery target is invalid.");
   const page = cursorPage(request.cursor, request.target), values = parseList(await get2(`${channel[2]}${page}.html`)), size = clamp(request.pageSize), contents2 = values.map(summary).slice(0, size), collectionId = `xchina:${channel[0]}`, items = contents2.map((content) => frozen({ content, rank: null, metric: null, recommendation: null })), continuation = values.length >= size ? frozen({ target: request.target, cursor: `${request.target}:${page + 1}` }) : null;
   if (request.collectionId !== null) {
-    if (request.collectionId !== collectionId)
-      throw new Error("Discovery collection is invalid.");
+    if (request.collectionId !== collectionId) throw new Error("Discovery collection is invalid.");
     return frozen({ kind: "append", collectionId, items, continuation });
   }
   return frozen({ kind: "document", document: { components: [{ type: "section", id: `${collectionId}:section`, title: channel[1], subtitle: null, icon: "manga", children: [{ type: "contentCollection", id: collectionId, layout: "coverGrid", items, continuation }] }] } });
@@ -44763,49 +44759,40 @@ async function getChapters(request) {
 }
 async function getContent(request) {
   const path = contentPath(request.id);
-  if (request.chapterId !== `manga:${encode(path)}:main`)
-    throw new Error("Chapter ID is invalid.");
+  if (request.chapterId !== `manga:${encode(path)}:main`) throw new Error("Chapter ID is invalid.");
   const first2 = await get2(path), seen = /* @__PURE__ */ new Set(), images = [];
   let firstImages = parseImages(first2), count = Number(clean(load(first2)(".photo-detail").text()).match(/(\d+)\s*P/iu)?.[1] ?? 0);
   if (firstImages.length && count > 1 && count <= 2e3) {
     const generated = sequential(firstImages[0] ?? "", count);
-    if (generated.length)
-      firstImages = generated;
+    if (generated.length) firstImages = generated;
   }
-  for (const value of firstImages)
-    if (!seen.has(value)) {
+  for (const value of firstImages) if (!seen.has(value)) {
+    seen.add(value);
+    images.push(value);
+  }
+  if (images.length === firstImages.length && sequential(firstImages[0] ?? "", count).length === 0) {
+    const max = maxPage(first2);
+    for (let page = 2; page <= max && page <= 30; page += 1) for (const value of parseImages(await get2(paged(path, page)))) if (!seen.has(value)) {
       seen.add(value);
       images.push(value);
     }
-  if (images.length === firstImages.length && sequential(firstImages[0] ?? "", count).length === 0) {
-    const max = maxPage(first2);
-    for (let page = 2; page <= max && page <= 30; page += 1)
-      for (const value of parseImages(await get2(paged(path, page))))
-        if (!seen.has(value)) {
-          seen.add(value);
-          images.push(value);
-        }
   }
-  if (!images.length)
-    throw new Error("Album images are unavailable.");
+  if (!images.length) throw new Error("Album images are unavailable.");
   const referer = new URL(path, base).toString(), pages = images.map((url, index2) => frozen({ id: `page:${index2 + 1}`, index: index2, url: requireContext().resource.proxy({ kind: "image", url, headers: { ...headers, Referer: referer } }), mimeType: imageMime(url), width: null, height: null }));
   return frozen({ chapterId: request.chapterId, contentKind: "manga", title: null, updatedAt: null, text: null, pages: Object.freeze(pages) });
 }
 async function get2(path) {
   const url = new URL(path, base).toString(), response = await requireContext().http.fetch(url, { headers });
-  if (!response.ok)
-    throw new Error("Source request failed.");
+  if (!response.ok) throw new Error("Source request failed.");
   return response.text();
 }
 function parseList(html3) {
   const $2 = load(html3), values = /* @__PURE__ */ new Map();
   for (const node of $2(".list .item.photo").toArray()) {
     const card = $2(node), link = card.find('a[href^="/photo/"]').first(), href = link.attr("href") ?? "";
-    if (!href)
-      continue;
+    if (!href) continue;
     const path = new URL(href, base).pathname, title = clean(link.attr("title") ?? card.find(".title").text());
-    if (!title)
-      continue;
+    if (!title) continue;
     const style = card.find(".img").attr("style") ?? "", cover = /background-image\s*:\s*url\(["']?([^"')]+)/iu.exec(style)?.[1] ?? "", subs = clean(card.find(".subs").text());
     values.set(path, { path, title, cover, author: clean(card.find(".model-item").text()), category: clean(card.find(".subs a").first().text()), remark: clean(card.find(".tags div").first().text()), date: subs.match(/\d{4}\.\d{2}\.\d{2}/u)?.[0] ?? "" });
   }
@@ -44815,22 +44802,19 @@ function parseImages(html3) {
   const $2 = load(html3), values = [];
   for (const node of $2(".photo-items .item.photo-image .img").toArray()) {
     const style = $2(node).attr("style") ?? "", raw = /background-image\s*:\s*url\(["']?([^"')]+)/iu.exec(style)?.[1] ?? "";
-    if (raw)
-      values.push(absolute(raw).replace(/\/(\d{4,5})_600x0\.webp(?:[?#].*)?$/iu, "/$1.jpg"));
+    if (raw) values.push(absolute(raw).replace(/\/(\d{4,5})_600x0\.webp(?:[?#].*)?$/iu, "/$1.jpg"));
   }
   return values;
 }
 function sequential(first2, count) {
   const match = /^(.*\/)(\d+)(\.jpg(?:[?#].*)?)$/iu.exec(first2);
-  if (!match || count < 2 || count > 2e3)
-    return [];
+  if (!match || count < 2 || count > 2e3) return [];
   const width = (match[2] ?? "").length;
   return Array.from({ length: count }, (_, index2) => `${match[1]}${String(index2 + 1).padStart(width, "0")}${match[3]}`);
 }
 function maxPage(html3) {
   let max = 1;
-  for (const match of html3.matchAll(/\/photo\/id-[^"']+\/(\d+)\.html/gu))
-    max = Math.max(max, Number(match[1] ?? 1));
+  for (const match of html3.matchAll(/\/photo\/id-[^"']+\/(\d+)\.html/gu)) max = Math.max(max, Number(match[1] ?? 1));
   return max;
 }
 function paged(path, page) {
@@ -44840,8 +44824,7 @@ function summary(value) {
   return frozen({ id: `manga:${encode(value.path)}`, title: value.title, contentKind: "manga", coverOrientation: "portrait", author: value.author || null, url: new URL(value.path, base).toString(), coverUrl: proxyImage(value.cover, value.path), description: null, language: "zh-CN", status: "completed", access: "free", wordCount: null, chapterCount: 1, publishedAt: null, updatedAt: value.date || null, latestChapter: { id: `manga:${encode(value.path)}:main`, title: value.remark || "全部", url: null, updatedAt: null }, categories: value.category ? [value.category] : [], tags: ["写真", "套图"], attributes: [] });
 }
 function proxyImage(value, path) {
-  if (!value)
-    return null;
+  if (!value) return null;
   const url = absolute(value);
   return requireContext().resource.proxy({ kind: "image", url, headers: { ...headers, Referer: new URL(path, base).toString() } });
 }
@@ -44854,8 +44837,7 @@ function imageMime(url) {
 }
 function contentPath(id) {
   const value = /^manga:([A-Za-z0-9_-]+)$/u.exec(id)?.[1], path = value ? decode(value) : "";
-  if (!/^\/photo\/id-[^/]+\.html$/u.test(path))
-    throw new Error("Content ID is invalid.");
+  if (!/^\/photo\/id-[^/]+\.html$/u.test(path)) throw new Error("Content ID is invalid.");
   return path;
 }
 function encode(value) {
@@ -44868,11 +44850,9 @@ function clean(value) {
   return value.replaceAll(/<[^>]+>/gu, " ").replaceAll(/\s+/gu, " ").trim();
 }
 function cursorPage(cursor, target) {
-  if (cursor === null)
-    return 1;
+  if (cursor === null) return 1;
   const page = Number(cursor.startsWith(`${target}:`) ? cursor.slice(target.length + 1) : "");
-  if (!Number.isSafeInteger(page) || page < 2)
-    throw new Error("Cursor is invalid.");
+  if (!Number.isSafeInteger(page) || page < 2) throw new Error("Cursor is invalid.");
   return page;
 }
 function clamp(value) {
@@ -44882,8 +44862,7 @@ function frozen(value) {
   return Object.freeze(value);
 }
 function requireContext() {
-  if (!context)
-    throw new Error("Source is not activated.");
+  if (!context) throw new Error("Source is not activated.");
   return context;
 }
 export {

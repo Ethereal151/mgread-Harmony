@@ -93,7 +93,10 @@ export async function getChapters(request: { id: string }) {
       // a share. It never claims that a file or playback URL was discovered.
       files = [{ id: 'login', name: loginHint(share.provider), path: '', size: 0, token: null }];
     }
-    const episodes = files.map((file, order) => chapterItem(share, file, order));
+    // `items` is the flattened public catalog, so its order must remain
+    // strictly increasing across share groups. Keep the same global order in
+    // each group's episode references instead of resetting at every share.
+    const episodes = files.map((file, order) => chapterItem(share, file, items.length + order));
     const title = providerLabel(share.provider) + (shares.length > 1 ? ` ${index + 1}` : '');
     groups.push(frozen({ id: `cloud:${share.provider}:${share.id}:${index}`, title, order: index, episodes }));
     items.push(...episodes);

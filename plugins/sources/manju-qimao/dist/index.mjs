@@ -1,6 +1,6 @@
 import { createRequire as __mgreadCreateRequire } from 'node:module'; const require = __mgreadCreateRequire(import.meta.url);
 
-// dist/index.mjs
+// src/index.mts
 import { createDecipheriv } from "node:crypto";
 var root = "https://api.999888456.xyz/api/qimao/";
 var headers = { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/116.0.0.0 Safari/537.36", Accept: "application/json, text/plain, */*" };
@@ -11,8 +11,7 @@ async function activate(next) {
 }
 async function search(request) {
   const query = request.query.trim();
-  if (query === "")
-    return frozen({ items: [], nextCursor: null, totalCount: 0 });
+  if (query === "") return frozen({ items: [], nextCursor: null, totalCount: 0 });
   const page = cursorPage(request.cursor, "search"), values = list(await api(`search?wd=${encodeURIComponent(query)}&pg=${page}`)), items = summaries(values).slice(0, clamp(request.pageSize));
   return frozen({ items, nextCursor: values.length >= clamp(request.pageSize) ? `search:${page + 1}` : null, totalCount: null });
 }
@@ -20,13 +19,10 @@ async function searchSuggestions(_request) {
   return frozen({ items: [], nextCursor: null });
 }
 async function discover(request) {
-  if (request.target === null)
-    return frozen({ kind: "document", document: { components: [{ type: "section", id: "qimao-channels", title: "漫剧小猫", subtitle: "七猫漫剧", icon: "video", children: [{ type: "categoryCollection", id: "qimao-channel-list", layout: "chips", categories: [{ id: "manju", title: "漫剧", target: "channel:manju", count: null, url: null, icon: "video" }] }] }] } });
-  if (request.target !== "channel:manju")
-    throw new Error("Discovery target is invalid.");
+  if (request.target === null) return frozen({ kind: "document", document: { components: [{ type: "section", id: "qimao-channels", title: "漫剧小猫", subtitle: "七猫漫剧", icon: "video", children: [{ type: "categoryCollection", id: "qimao-channel-list", layout: "chips", categories: [{ id: "manju", title: "漫剧", target: "channel:manju", count: null, url: null, icon: "video" }] }] }] } });
+  if (request.target !== "channel:manju") throw new Error("Discovery target is invalid.");
   const page = cursorPage(request.cursor, request.target), size = clamp(request.pageSize), values = list(await api(`category?tid=manju&pg=${page}`)), contents = summaries(values).slice(0, size), collectionId = "qimao:manju", items = contents.map((content) => frozen({ content, rank: null, metric: null, recommendation: null })), continuation = values.length >= size ? frozen({ target: request.target, cursor: `channel:manju:${page + 1}` }) : null;
-  if (request.collectionId !== null)
-    return request.collectionId === collectionId ? frozen({ kind: "append", collectionId, items, continuation }) : Promise.reject(new Error("Discovery collection is invalid."));
+  if (request.collectionId !== null) return request.collectionId === collectionId ? frozen({ kind: "append", collectionId, items, continuation }) : Promise.reject(new Error("Discovery collection is invalid."));
   return frozen({ kind: "document", document: { components: [{ type: "section", id: "qimao:section", title: "漫剧", subtitle: null, icon: "video", children: [{ type: "contentCollection", id: collectionId, layout: "coverGrid", items, continuation }] }] } });
 }
 async function getDetail(request) {
@@ -39,21 +35,18 @@ async function getChapters(request) {
 }
 async function getContent(request) {
   const id = contentId(request.id), index = chapterIndex(request.chapterId, id), episodes = split(text(first((await detail(id)).vod_play_url))), episode = episodes[index];
-  if (episode === void 0 || !safeUrl(episode.url))
-    throw new Error("Video address is unavailable.");
+  if (episode === void 0 || !safeUrl(episode.url)) throw new Error("Video address is unavailable.");
   const mediaHeaders = { Referer: "https://api.999888456.xyz/", "User-Agent": headers["User-Agent"] };
   return frozen({ chapterId: request.chapterId, contentKind: "video", title: episode.title, updatedAt: null, text: null, pages: [], media: { url: requireContext().resource.proxy({ kind: "video", url: episode.url, headers: mediaHeaders }), resourceType: "video", resourcePolicy: "sessionOnly", expiresAt: null, mimeType: /\.m3u8(?:$|[?#])/iu.test(episode.url) ? "application/vnd.apple.mpegurl" : "video/mp4", headers: mediaHeaders } });
 }
 async function detail(id) {
   const values = list(await api(`detail?id=${encodeURIComponent(id)}`));
-  if (values[0] === void 0)
-    throw new Error("Video detail is unavailable.");
+  if (values[0] === void 0) throw new Error("Video detail is unavailable.");
   return values[0];
 }
 async function api(path) {
   const response = await requireContext().http.fetch(new URL(path, root).toString(), { headers });
-  if (!response.ok)
-    throw new Error("Source request failed.");
+  if (!response.ok) throw new Error("Source request failed.");
   const raw = (await response.text()).trim(), plain = decrypt(raw);
   let value;
   try {
@@ -65,11 +58,9 @@ async function api(path) {
   return value;
 }
 function decrypt(raw) {
-  if (raw.startsWith("{") || raw.startsWith("["))
-    return raw;
+  if (raw.startsWith("{") || raw.startsWith("[")) return raw;
   const parts = raw.split(".");
-  if (parts.length < 3)
-    throw new Error("Encrypted response is invalid.");
+  if (parts.length < 3) throw new Error("Encrypted response is invalid.");
   const keyIv = derive(parts[1] ?? ""), decipher = createDecipheriv("aes-128-cbc", keyIv.subarray(0, 16), keyIv.subarray(16, 32));
   return Buffer.concat([decipher.update(Buffer.from(parts[2] ?? "", "base64")), decipher.final()]).toString("utf8");
 }
@@ -79,34 +70,27 @@ function derive(token) {
     const r = i % mask.length, r0 = bytes[i] ?? 0, r1 = i === 0 ? 109 : bytes[i - 1] ?? 0, r2 = ((mask[r] ?? 0) ^ 90 + r * 13 & 255 ^ 85) & 255, r3 = r0 + 215 - 11 * i & 255, r4 = (r3 << 3 | r3 >>> 5) & 255, r5 = ~(r2 ^ r1) & 255, r6 = r5 & 54 | ~r5 & 255 & 201, r7 = ~r4 & 255 & 54 | r4 & 201;
     out[i] = (r6 ^ r7) & 255;
   }
-  if (out.length < 32)
-    throw new Error("Encrypted response key is invalid.");
+  if (out.length < 32) throw new Error("Encrypted response key is invalid.");
   return out;
 }
 function list(value) {
-  if (Array.isArray(value))
-    return value.filter(isObject);
-  if (!isObject(value))
-    return [];
-  if (Array.isArray(value.list))
-    return value.list.filter(isObject);
+  if (Array.isArray(value)) return value.filter(isObject);
+  if (!isObject(value)) return [];
+  if (Array.isArray(value.list)) return value.list.filter(isObject);
   const data = isObject(value.data) ? value.data : null;
-  if (data && Array.isArray(data.list))
-    return data.list.filter(isObject);
+  if (data && Array.isArray(data.list)) return data.list.filter(isObject);
   return [];
 }
 function raiseUpgradeRequired(value) {
   const notice = list(value).find((item) => text(item.vod_id) === "upgrade_required");
-  if (notice === void 0)
-    return;
+  if (notice === void 0) return;
   requireContext().errors.raise({ code: "source_access_blocked", message: "漫剧小猫上游接口当前要求更新客户端，暂时没有可用内容。", annotation: text(first(notice.vod_name, notice.vod_remarks)) || "upgrade_required" });
 }
 function summaries(values) {
   const result = /* @__PURE__ */ new Map();
   for (const value of values) {
     const id = nativeId(first(value.vod_id, value.id));
-    if (id !== null && text(first(value.vod_name, value.title)) !== "")
-      result.set(id, summary(value, id));
+    if (id !== null && text(first(value.vod_name, value.title)) !== "") result.set(id, summary(value, id));
   }
   return [...result.values()];
 }
@@ -126,14 +110,12 @@ function nativeId(value) {
 }
 function contentId(id) {
   const value = /^video:(\d+)$/u.exec(id)?.[1];
-  if (!value)
-    throw new Error("Content ID is invalid.");
+  if (!value) throw new Error("Content ID is invalid.");
   return value;
 }
 function chapterIndex(id, content) {
   const value = new RegExp(`^video:${content}:(\\d+)$`, "u").exec(id)?.[1], index = Number(value);
-  if (value === void 0 || !Number.isSafeInteger(index))
-    throw new Error("Chapter ID is invalid.");
+  if (value === void 0 || !Number.isSafeInteger(index)) throw new Error("Chapter ID is invalid.");
   return index;
 }
 function proxyImage(url) {
@@ -151,11 +133,9 @@ function countHint(value) {
   return Number.isSafeInteger(count) ? count : null;
 }
 function cursorPage(cursor, target) {
-  if (cursor === null)
-    return 1;
+  if (cursor === null) return 1;
   const page = Number(cursor.startsWith(`${target}:`) ? cursor.slice(target.length + 1) : "");
-  if (!Number.isSafeInteger(page) || page < 2)
-    throw new Error("Cursor is invalid.");
+  if (!Number.isSafeInteger(page) || page < 2) throw new Error("Cursor is invalid.");
   return page;
 }
 function stringList(value) {
@@ -182,8 +162,7 @@ function frozen(v) {
   return Object.freeze(v);
 }
 function requireContext() {
-  if (!context)
-    throw new Error("Source is not activated.");
+  if (!context) throw new Error("Source is not activated.");
   return context;
 }
 export {

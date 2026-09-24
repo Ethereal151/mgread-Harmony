@@ -1,6 +1,6 @@
 import { createRequire as __mgreadCreateRequire } from 'node:module'; const require = __mgreadCreateRequire(import.meta.url);
 
-// dist/index.mjs
+// src/index.mts
 import { createHash, randomUUID } from "node:crypto";
 var hosts = ["https://yz1018.ln2tn3kf2.com", "https://yz260605.z5fl9630.com", "https://yz260324.z2g1uoqy.com", "https://yz260324.c628uthq.com", "https://yz260324.nv153kfl.com", "https://cfvip.eiq9rzoe.com", "https://yz260605.jpknq5ju.com"];
 var appKey = "f384b87cc9ef41e4842dda977bae2c7f";
@@ -19,10 +19,8 @@ async function activate(next) {
 }
 async function search(request) {
   const query = request.query.trim();
-  if (query === "")
-    return frozen({ items: [], nextCursor: null, totalCount: 0 });
-  if (request.cursor !== null)
-    throw new Error("Cursor is invalid.");
+  if (query === "") return frozen({ items: [], nextCursor: null, totalCount: 0 });
+  if (request.cursor !== null) throw new Error("Cursor is invalid.");
   const response = await post("/v1/api/search/search", { keyword: query, nextVal: "" }), items = summaries(records(object(response.data).items)).slice(0, clamp(request.pageSize));
   return frozen({ items, nextCursor: null, totalCount: items.length });
 }
@@ -31,17 +29,14 @@ async function searchSuggestions(_request) {
 }
 async function discover(request) {
   if (request.target === null) {
-    if (request.cursor !== null || request.collectionId !== null)
-      throw new Error("Home discovery continuation is invalid.");
+    if (request.cursor !== null || request.collectionId !== null) throw new Error("Home discovery continuation is invalid.");
     const size2 = Math.min(clamp(request.pageSize), 8), collections = [];
     for (const spec of homeSections) {
       const channel2 = channels.find((value) => value.id === spec.channelId);
-      if (!channel2)
-        continue;
+      if (!channel2) continue;
       try {
         const response2 = await post("/v1/api/vodTopic/getVodList", { vodTopicId: channel2.topicId, pageIndex: 1, pageSize: size2 }), data2 = object(response2.data), contents2 = summaries(records(first(data2.items, data2.vodList, data2.list))).slice(0, size2);
-        if (contents2.length !== 0)
-          collections.push({ spec, contents: contents2 });
+        if (contents2.length !== 0) collections.push({ spec, contents: contents2 });
       } catch {
         requireContext().log.warn(`source_discovery_home_${spec.channelId}_unavailable`);
       }
@@ -49,12 +44,10 @@ async function discover(request) {
     return frozen({ kind: "document", document: { components: homeComponents(collections) } });
   }
   const channel = channels.find((value) => request.target === `channel:${value.id}`);
-  if (!channel)
-    throw new Error("Discovery target is invalid.");
+  if (!channel) throw new Error("Discovery target is invalid.");
   const page = cursorPage(request.cursor, request.target), size = clamp(request.pageSize), response = await post("/v1/api/vodTopic/getVodList", { vodTopicId: channel.topicId, pageIndex: page, pageSize: size }), data = object(response.data), values = records(first(data.items, data.vodList, data.list)), contents = summaries(values).slice(0, size), collectionId = `juzi:${channel.id}`, items = contents.map((content) => frozen({ content, rank: null, metric: null, recommendation: null })), totalPages = Number(data.totalPages), continuation = (Number.isSafeInteger(totalPages) ? page < totalPages : values.length >= size) ? frozen({ target: request.target, cursor: `channel:${channel.id}:${page + 1}` }) : null;
   if (request.collectionId !== null) {
-    if (request.collectionId !== collectionId)
-      throw new Error("Discovery collection is invalid.");
+    if (request.collectionId !== collectionId) throw new Error("Discovery collection is invalid.");
     return frozen({ kind: "append", collectionId, items, continuation });
   }
   return frozen({ kind: "document", document: { components: [{ type: "section", id: `${collectionId}:section`, title: channel.title, subtitle: null, icon: channelIcon(channel.id), children: [{ type: "contentCollection", id: collectionId, layout: "coverGrid", items, continuation }] }] } });
@@ -74,14 +67,12 @@ async function getContent(request) {
     try {
       const data = object((await post("/v2/api/vodInfo/playUrl", { epId: Number(epId), vodResolution: resolution })).data);
       upstream = text(data.playUrl);
-      if (safeUrl(upstream))
-        break;
+      if (safeUrl(upstream)) break;
     } catch {
       continue;
     }
   }
-  if (!safeUrl(upstream))
-    throw new Error("Video address is unavailable.");
+  if (!safeUrl(upstream)) throw new Error("Video address is unavailable.");
   const resourceType = /\.m3u8(?:$|[?#])/iu.test(upstream) ? "hls" : "video", mediaHeaders = { "User-Agent": "Mozilla/5.0", Referer: "https://55.app/" };
   return frozen({ chapterId: request.chapterId, contentKind: "video", title: null, updatedAt: null, text: null, pages: [], media: { url: requireContext().resource.proxy({ kind: resourceType, url: upstream, headers: mediaHeaders }), resourceType, resourcePolicy: "sessionOnly", expiresAt: null, mimeType: resourceType === "hls" ? "application/vnd.apple.mpegurl" : "video/mp4", headers: mediaHeaders } });
 }
@@ -91,8 +82,7 @@ async function post(path, extra) {
   for (const host of ordered) {
     try {
       const response = await requireContext().http.fetch(`${host}${path}`, { method: "POST", headers, body: payload });
-      if (!response.ok)
-        throw new Error(`HTTP ${response.status}`);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const value = object(JSON.parse(await response.text()));
       if (value.result) {
         activeHost = host;
@@ -112,12 +102,10 @@ function sign(value) {
 function homeComponents(collections) {
   const components = [];
   const first2 = collections.find((value) => value.spec.channelId === "short");
-  if (first2)
-    components.push(homeSection(first2.spec, first2.contents));
+  if (first2) components.push(homeSection(first2.spec, first2.contents));
   components.push(frozen({ type: "group", id: "juzi-home-navigation", layout: "vertical", children: [frozen({ type: "section", id: "juzi-home-channels-section", title: "频道漫游", subtitle: "短剧、电影、动漫与综艺，一键直达", icon: "category", children: [frozen({ type: "categoryCollection", id: "juzi-channel-list", layout: "grid", categories: channels.map((channel) => frozen({ id: `channel:${channel.id}`, title: channel.title, target: `channel:${channel.id}`, count: null, url: null, icon: channelIcon(channel.id) })) })] })] }));
   for (const collection of collections) {
-    if (collection !== first2)
-      components.push(homeSection(collection.spec, collection.contents));
+    if (collection !== first2) components.push(homeSection(collection.spec, collection.contents));
   }
   return components;
 }
@@ -129,24 +117,18 @@ function homeItem(content) {
   return frozen({ content, rank: null, metric: update === null ? null : frozen({ label: "更新", value: update }), recommendation: null });
 }
 function channelIcon(id) {
-  if (id === "netflix" || id === "korea")
-    return "globe";
-  if (id === "series")
-    return "ongoing";
-  if (id === "anime")
-    return "manga";
-  if (id === "variety")
-    return "star";
-  if (id === "sports")
-    return "sports";
+  if (id === "netflix" || id === "korea") return "globe";
+  if (id === "series") return "ongoing";
+  if (id === "anime") return "manga";
+  if (id === "variety") return "star";
+  if (id === "sports") return "sports";
   return "video";
 }
 function summaries(values) {
   const result = /* @__PURE__ */ new Map();
   for (const value of values) {
     const id = sourceId(first(value.vodId, value.id));
-    if (id && text(first(value.vodName, value.name)))
-      result.set(id, summary(value, id));
+    if (id && text(first(value.vodName, value.name))) result.set(id, summary(value, id));
   }
   return [...result.values()];
 }
@@ -160,8 +142,7 @@ function episodes(data) {
     const group = text(player.playerName) || `线路 ${playerIndex + 1}`;
     for (const [episodeIndex, episode] of records(player.epList).entries()) {
       const id = sourceId(episode.epId);
-      if (id)
-        result.push({ id, title: text(episode.epName) || `第 ${episodeIndex + 1} 集`, group });
+      if (id) result.push({ id, title: text(episode.epName) || `第 ${episodeIndex + 1} 集`, group });
     }
   }
   return result;
@@ -172,14 +153,12 @@ function sourceId(value) {
 }
 function contentId(id) {
   const value = /^vod:(\d+)$/u.exec(id)?.[1];
-  if (!value)
-    throw new Error("Content ID is invalid.");
+  if (!value) throw new Error("Content ID is invalid.");
   return value;
 }
 function chapterNative(id, content) {
   const value = new RegExp(`^vod:${content}:(\\d+)$`, "u").exec(id)?.[1];
-  if (!value)
-    throw new Error("Chapter ID is invalid.");
+  if (!value) throw new Error("Chapter ID is invalid.");
   return value;
 }
 function proxyImage(url) {
@@ -193,11 +172,9 @@ function safeUrl(value) {
   }
 }
 function cursorPage(cursor, target) {
-  if (cursor === null)
-    return 1;
+  if (cursor === null) return 1;
   const page = Number(cursor.startsWith(`${target}:`) ? cursor.slice(target.length + 1) : "");
-  if (!Number.isSafeInteger(page) || page < 2)
-    throw new Error("Cursor is invalid.");
+  if (!Number.isSafeInteger(page) || page < 2) throw new Error("Cursor is invalid.");
   return page;
 }
 function stringList(values) {
@@ -228,8 +205,7 @@ function frozen(value) {
   return Object.freeze(value);
 }
 function requireContext() {
-  if (!context)
-    throw new Error("Source is not activated.");
+  if (!context) throw new Error("Source is not activated.");
   return context;
 }
 export {

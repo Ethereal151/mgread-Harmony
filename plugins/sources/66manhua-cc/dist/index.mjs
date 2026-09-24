@@ -47,7 +47,7 @@ var require_boolbase = __commonJS({
   }
 });
 
-// dist/source.js
+// src/source.ts
 import { Buffer as Buffer2 } from "node:buffer";
 
 // node_modules/cheerio/dist/esm/options.js
@@ -6495,16 +6495,16 @@ function isNode(obj) {
 // node_modules/cheerio/dist/esm/slim.js
 var load = getLoad(getParse(parseDocument), esm_default);
 
-// dist/source.js
+// src/source.ts
 var origin = "https://66manhua.ua";
 var legacyOrigin = "https://66manhua.cc";
 var siteOrigins = /* @__PURE__ */ new Set([origin, legacyOrigin]);
 var imageOrigins = /* @__PURE__ */ new Set([...siteOrigins, "https://mh.aikanhanman.top"]);
 var ManhuaSource = class {
-  context;
   constructor(context2) {
     this.context = context2;
   }
+  context;
   async search(query) {
     const url = new URL(`/index.php/search/${encodeURIComponent(query)}`, origin);
     return prioritizeSearchResults(this.parseList(await this.#html(url), url), query);
@@ -6521,8 +6521,7 @@ var ManhuaSource = class {
       const root2 = $(element);
       const title = clean(root2.find(".head span").first().text());
       const identity = rankingIdentity(title);
-      if (identity === null)
-        return;
+      if (identity === null) return;
       rankings.push(Object.freeze({ id: identity.id, title: identity.title, items: this.#rankedItems($, root2.find(".rank-item"), url, identity.metric) }));
     });
     return Object.freeze({
@@ -6543,8 +6542,7 @@ var ManhuaSource = class {
     const html3 = await this.#html(url);
     const $ = load(html3);
     const title = clean($(".de-info__box .comic-title, h1.comic-title, .comic-detail h1").first().text()) ?? clean($('meta[property="og:title"]').attr("content"));
-    if (title === null)
-      throw new Error("Detail title is missing.");
+    if (title === null) throw new Error("Detail title is missing.");
     const rawCover = $(".de-info__cover img, .comic-cover img, .de-info__box img").first().attr("data-original") ?? $(".de-info__cover img, .comic-cover img, .de-info__box img").first().attr("src") ?? $('meta[property="og:image"]').attr("content");
     const author = clean($(".de-info__box .comic-author .name a, .comic-detail .comic-author").first().text());
     const description = clean($(".de-info__box .comic-intro .intro-total").first().text()) ?? clean($(".de-info__box .comic-intro .intro, .de-info__desc, .comic-detail__desc, .de-info__intro").first().text()) ?? clean($('meta[name="description"]').attr("content"));
@@ -6561,17 +6559,14 @@ var ManhuaSource = class {
       const link = $(element);
       const href = link.attr("href");
       const title = clean(link.text());
-      if (href === void 0 || title === null)
-        return;
+      if (href === void 0 || title === null) return;
       const url = new URL(href, comic);
-      if (!isChapter(url) || seen.has(url.pathname))
-        return;
+      if (!isChapter(url) || seen.has(url.pathname)) return;
       seen.add(url.pathname);
       const locked = hasAccessMarker(link.closest(".chapter__item"));
       items.push(Object.freeze({ id: encodeChapter(url), title, order: items.length, url: url.toString(), volumeTitle: null, wordCount: null, updatedAt: null, isLocked: locked, attributes: Object.freeze([]) }));
     });
-    if (items.length === 0)
-      throw new Error("Catalog is empty.");
+    if (items.length === 0) throw new Error("Catalog is empty.");
     return Object.freeze({ items: Object.freeze(items) });
   }
   async content(id, chapterId) {
@@ -6580,45 +6575,37 @@ var ManhuaSource = class {
     const html3 = await this.#html(chapter);
     const $ = load(html3);
     const reader = $(".rd-article-wr").first();
-    if (reader.length === 0 || hasAccessMarker(reader))
-      throw new Error("Chapter requires public access.");
+    if (reader.length === 0 || hasAccessMarker(reader)) throw new Error("Chapter requires public access.");
     const seen = /* @__PURE__ */ new Set();
     const pages = [];
     reader.find(".rd-article__pic .lazy-read[data-original], .rd-article__pic img[data-original]").each((index2, element) => {
       const raw = $(element).attr("data-original");
-      if (raw === void 0)
-        return;
+      if (raw === void 0) return;
       const url = new URL(raw, chapter);
-      if (!isImage(url) || seen.has(url.toString()))
-        return;
+      if (!isImage(url) || seen.has(url.toString())) return;
       seen.add(url.toString());
       pages.push(Object.freeze({ id: `image:${index2 + 1}`, index: pages.length, url: this.#proxyImage(url, chapter), mimeType: imageMime(url), width: null, height: null }));
     });
-    if (pages.length === 0)
-      throw new Error("Chapter images are unavailable or protected.");
+    if (pages.length === 0) throw new Error("Chapter images are unavailable or protected.");
     return Object.freeze({ chapterId, contentKind: "manga", title: null, updatedAt: null, text: null, pages: Object.freeze(pages) });
   }
   async #html(url) {
-    if (!isSite(url))
-      throw new Error("Source URL is invalid.");
+    if (!isSite(url)) throw new Error("Source URL is invalid.");
     let response;
     try {
       response = await this.context.http.fetch(url, { headers: { accept: "text/html,application/xhtml+xml", referer: `${origin}/` } });
     } catch (error) {
-      if (url.origin !== origin)
-        throw error;
+      if (url.origin !== origin) throw error;
       const legacyUrl = new URL(`${url.pathname}${url.search}`, legacyOrigin);
       try {
         const legacyResponse = await this.context.http.fetch(legacyUrl, { headers: { accept: "text/html,application/xhtml+xml", referer: `${legacyOrigin}/` } });
-        if (!legacyResponse.ok)
-          throw error;
+        if (!legacyResponse.ok) throw error;
         return legacyResponse.text();
       } catch {
         throw error;
       }
     }
-    if (!response.ok)
-      throw new Error("Public page is unavailable.");
+    if (!response.ok) throw new Error("Public page is unavailable.");
     return response.text();
   }
   #cards($, roots, base) {
@@ -6626,8 +6613,7 @@ var ManhuaSource = class {
     const seen = /* @__PURE__ */ new Set();
     roots.each((_, element) => {
       const value = this.#card($, $(element), base);
-      if (value === null || seen.has(value.url))
-        return;
+      if (value === null || seen.has(value.url)) return;
       seen.add(value.url);
       values.push(value);
     });
@@ -6639,8 +6625,7 @@ var ManhuaSource = class {
     roots.each((index2, element) => {
       const root2 = $(element);
       const content = this.#card($, root2, base);
-      if (content === null || seen.has(content.url))
-        return;
+      if (content === null || seen.has(content.url)) return;
       seen.add(content.url);
       const parsedRank = Number.parseInt(clean(root2.find(".num").first().text()) ?? "", 10);
       const metricText = clean(root2.find(".count").first().text());
@@ -6657,11 +6642,9 @@ var ManhuaSource = class {
     const link = root2.find('a[href*="/index.php/comic/"]').first();
     const href = link.attr("href");
     const title = clean(root2.find(".comic__title a, .comic-name a").first().text()) ?? clean(link.attr("title")) ?? clean(root2.find("img").first().attr("alt"));
-    if (href === void 0 || title === null)
-      return null;
+    if (href === void 0 || title === null) return null;
     const url = new URL(href, base);
-    if (!isComic(url))
-      return null;
+    if (!isComic(url)) return null;
     const image = root2.find("img").first();
     const rawCover = image.attr("data-original") ?? image.attr("data-src") ?? image.attr("src");
     const info = root2.find(".in-fine__info .text");
@@ -6672,8 +6655,7 @@ var ManhuaSource = class {
     return summary(url, title, this.#cover(rawCover, base), description, author, latestChapterTitle);
   }
   #cover(raw, referer) {
-    if (raw === void 0 || /\/bg_loadimg_[^/]+\.(?:png|webp)$/iu.test(raw))
-      return null;
+    if (raw === void 0 || /\/bg_loadimg_[^/]+\.(?:png|webp)$/iu.test(raw)) return null;
     try {
       const url = new URL(raw, referer);
       return isImage(url) ? this.#proxyImage(url, referer) : null;
@@ -6682,8 +6664,7 @@ var ManhuaSource = class {
     }
   }
   #proxyImage(url, referer) {
-    if (!isImage(url) || !isSite(referer))
-      throw new Error("Image URL is invalid.");
+    if (!isImage(url) || !isSite(referer)) throw new Error("Image URL is invalid.");
     return this.context.resource.proxy({ kind: "image", url: url.toString(), headers: { Accept: "image/*", Referer: referer.toString() } });
   }
 };
@@ -6694,12 +6675,9 @@ function sectionByTitle($, title) {
   return $(".in-sec-wr").filter((_, element) => clean($(element).find(".in-sec__head span").first().text()) === title).first();
 }
 function rankingIdentity(title) {
-  if (title === "收藏榜")
-    return Object.freeze({ id: "favorites", title, metric: "收藏" });
-  if (title === "打赏榜")
-    return Object.freeze({ id: "rewards", title, metric: "打赏" });
-  if (title === "月票榜")
-    return Object.freeze({ id: "monthly-tickets", title, metric: "月票" });
+  if (title === "收藏榜") return Object.freeze({ id: "favorites", title, metric: "收藏" });
+  if (title === "打赏榜") return Object.freeze({ id: "rewards", title, metric: "打赏" });
+  if (title === "月票榜") return Object.freeze({ id: "monthly-tickets", title, metric: "月票" });
   return null;
 }
 function token(url) {
@@ -6713,11 +6691,9 @@ function encodeChapter(url) {
 }
 function decode(id, prefix) {
   const match = new RegExp(`^${prefix}:([A-Za-z0-9_-]+)$`, "u").exec(id);
-  if (match?.[1] === void 0)
-    throw new Error("Opaque ID is invalid.");
+  if (match?.[1] === void 0) throw new Error("Opaque ID is invalid.");
   const url = new URL(Buffer2.from(match[1], "base64url").toString("utf8"), origin);
-  if (prefix === "comic" ? !isComic(url) : !isChapter(url))
-    throw new Error("Opaque ID is invalid.");
+  if (prefix === "comic" ? !isComic(url) : !isChapter(url)) throw new Error("Opaque ID is invalid.");
   return url;
 }
 function decodeComic(id) {
@@ -6757,7 +6733,7 @@ function hasAccessMarker(root2) {
   return root2.is('[class*="vip" i], [class*="pay" i], [class*="lock" i]') || root2.find('[class*="vip" i], [class*="pay" i], [class*="lock" i]').length > 0;
 }
 
-// dist/index.mjs
+// src/index.mts
 var context;
 var source;
 var discoveryItemLimits = Object.freeze({
@@ -6778,8 +6754,7 @@ async function search(request) {
   return Object.freeze({ items, nextCursor: null, totalCount: null });
 }
 async function discover(request) {
-  if (request.target !== null || request.collectionId !== null)
-    throw new Error("Discovery target is invalid.");
+  if (request.target !== null || request.collectionId !== null) throw new Error("Discovery target is invalid.");
   rejectCursor(request.cursor);
   const home = await requireSource().discover();
   const components = [];
@@ -6788,14 +6763,11 @@ async function discover(request) {
   const trendSections = [];
   addRankedCollection(trendSections, home.rising, request.pageSize, discoveryItemLimits.rising, "rising", "上升最快", "近期热度增长最快", "trending", "compact");
   addRankedCollection(trendSections, home.popular, request.pageSize, discoveryItemLimits.popular, "popular", "人气排行榜", "站内人气作品", "hot", "compact");
-  if (trendSections.length !== 0)
-    components.push(Object.freeze({ type: "group", id: "trend-group", layout: "vertical", children: Object.freeze(trendSections) }));
+  if (trendSections.length !== 0) components.push(Object.freeze({ type: "group", id: "trend-group", layout: "vertical", children: Object.freeze(trendSections) }));
   addCollection(components, home.completed, request.pageSize, discoveryItemLimits.completed, "completed", "完结大作", "一次读到结局", "completed", "shelf");
   const rankingSections = [];
-  for (const ranking of home.rankings)
-    addRankedCollection(rankingSections, ranking.items, request.pageSize, discoveryItemLimits.ranking, ranking.id, ranking.title, null, "ranking", "compact");
-  if (rankingSections.length !== 0)
-    components.push(Object.freeze({ type: "group", id: "ranking-group", layout: "vertical", children: Object.freeze(rankingSections) }));
+  for (const ranking of home.rankings) addRankedCollection(rankingSections, ranking.items, request.pageSize, discoveryItemLimits.ranking, ranking.id, ranking.title, null, "ranking", "compact");
+  if (rankingSections.length !== 0) components.push(Object.freeze({ type: "group", id: "ranking-group", layout: "vertical", children: Object.freeze(rankingSections) }));
   return Object.freeze({ kind: "document", document: Object.freeze({ components: Object.freeze(components) }) });
 }
 async function searchSuggestions() {
@@ -6811,23 +6783,19 @@ async function getContent(request) {
   return requireSource().content(request.id, request.chapterId);
 }
 function requireSource() {
-  if (context === void 0)
-    throw new Error("Source is not activated.");
+  if (context === void 0) throw new Error("Source is not activated.");
   return source ??= new ManhuaSource(context);
 }
 function rejectCursor(cursor) {
-  if (cursor !== null)
-    throw new Error("Cursor is invalid.");
+  if (cursor !== null) throw new Error("Cursor is invalid.");
 }
 function addCollection(components, contents2, pageSize, maximumItems, id, title, subtitle, icon, layout) {
-  if (contents2.length === 0)
-    return;
+  if (contents2.length === 0) return;
   const items = contents2.slice(0, Math.min(pageSize, maximumItems)).map((content) => Object.freeze({ content, rank: null, metric: null, recommendation: null }));
   components.push(section(id, title, subtitle, icon, layout, items));
 }
 function addRankedCollection(components, contents2, pageSize, maximumItems, id, title, subtitle, icon, layout) {
-  if (contents2.length === 0)
-    return;
+  if (contents2.length === 0) return;
   const items = contents2.slice(0, Math.min(pageSize, maximumItems)).map((item) => Object.freeze({ ...item, recommendation: null }));
   components.push(section(id, title, subtitle, icon, layout, items));
 }
