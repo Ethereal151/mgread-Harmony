@@ -2,8 +2,8 @@
   "app": {
     "bundleName": "com.ohos.mgread",
     "vendor": "MgRead",
-    "versionCode": 317,
-    "versionName": "0.9.199",
+    "versionCode": 377,
+    "versionName": "0.9.259",
     "icon": "$media:app_icon",
     "label": "$string:app_name"
   }
