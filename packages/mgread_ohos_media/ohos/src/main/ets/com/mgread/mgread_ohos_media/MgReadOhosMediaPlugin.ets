@@ -18,7 +18,6 @@ import avSession from '@ohos.multimedia.avsession'
 import http from '@ohos.net.http'
 import { SurfaceTextureEntry, TextureRegistry } from '@ohos/flutter_ohos'
 import OhosMediaEventStreamHandler from './OhosMediaEventStreamHandler'
-import { OhosHlsVideoHost, VIEW_TYPE as HLS_VIDEO_VIEW_TYPE } from './OhosHlsVideoPlatformView'
 
 interface MediaSession {
   player: media.AVPlayer
@@ -48,7 +47,6 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
   private methodChannel?: MethodChannel
   private eventChannel?: EventChannel
   private readonly events = new OhosMediaEventStreamHandler()
-  private readonly hlsVideoHost = new OhosHlsVideoHost()
   private sessions: Map<string, MediaSession> = new Map()
   private textures?: TextureRegistry
   private context?: common.UIAbilityContext
@@ -69,7 +67,6 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
 
   onAttachedToEngine(binding: FlutterPluginBinding): void {
     this.textures = binding.getTextureRegistry()
-    binding.getPlatformViewRegistry().registerViewFactory(HLS_VIDEO_VIEW_TYPE, this.hlsVideoHost.factory())
     this.methodChannel = new MethodChannel(binding.getBinaryMessenger(), 'mgread/ohos_media')
     this.methodChannel.setMethodCallHandler(this)
     this.eventChannel = new EventChannel(binding.getBinaryMessenger(), 'mgread/ohos_media/events')
@@ -135,9 +132,6 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
           return Promise.resolve()
         }, result)
         break
-      case 'video.webCommand':
-        this.hlsVideoHost.command(args, result)
-        break
       case 'disposeAll':
         this.disposeAll()
         result.success(null)
@@ -191,7 +185,10 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
       // for legacy loopback callers; direct HLS URLs use MediaKit's native
       // network path with the original request headers.
       const runtimeLoopback = this.isRuntimeLoopbackUrl(url)
-      const sourceUrl = hls && runtimeLoopback ? 'http://xxx/runtime.m3u8' : url
+      // Keep a non-routable HLS root for the AVPlayer parser. The custom
+      // loader replaces this sentinel with the Runtime loopback URL while
+      // allowing child playlist and segment URLs to resolve normally.
+      const sourceUrl = hls && runtimeLoopback ? 'http://mgread.invalid/runtime.m3u8' : url
       const source = media.createMediaSourceWithUrl(sourceUrl, headers)
       session.source = source
       if (hls && runtimeLoopback) {

@@ -2,12 +2,8 @@
 library;
 
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/gestures.dart';
-import 'package:flutter/rendering.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:mgread_ohos_media/mgread_ohos_media.dart';
 
@@ -32,8 +28,6 @@ final class OhosVideoPlaybackBackend implements VideoPlaybackBackend {
   StreamSubscription<OhosMediaEvent>? _events;
   String? _sessionId;
   int? _textureId;
-  Map<String, Object?>? _webViewParams;
-  bool _webViewPlayback = false;
   int _generation = 0;
   // ignore: prefer_final_fields
   double _rate = 1;
@@ -46,16 +40,6 @@ final class OhosVideoPlaybackBackend implements VideoPlaybackBackend {
 
   @override
   Widget buildSurface({required BoxFit fit, Key? key}) {
-    final webViewParams = _webViewParams;
-    if (webViewParams != null) {
-      return _NativeOhosView(
-        key: key,
-        viewType: 'mgread_ohos_hls_video',
-        creationParams: webViewParams,
-        creationParamsCodec: const StandardMessageCodec(),
-        hitTestBehavior: PlatformViewHitTestBehavior.opaque,
-      );
-    }
     final textureId = _textureId;
     return textureId == null
         ? SizedBox.expand(key: key)
@@ -89,20 +73,6 @@ final class OhosVideoPlaybackBackend implements VideoPlaybackBackend {
     if (!_isGenerationCurrent(generation)) return;
     final sessionId = _newSessionId();
     _sessionId = sessionId;
-    if (Platform.operatingSystem == 'ohos' &&
-        episode.resourceType == VideoEpisodeResourceType.hls) {
-      _webViewPlayback = true;
-      _webViewParams = <String, Object?>{'sessionId': sessionId, 'url': uri};
-      _emit(
-        _state.value.copyWith(
-          buffering: false,
-          firstFrameReady: true,
-          playing: play,
-          clearError: true,
-        ),
-      );
-      return;
-    }
     _events = _client.events
         .where((event) => event.sessionId == sessionId)
         .listen((event) => _handleEvent(event, generation));
@@ -184,9 +154,6 @@ final class OhosVideoPlaybackBackend implements VideoPlaybackBackend {
     _ensureActive();
     final sessionId = _sessionId;
     if (sessionId == null) throw StateError('No video episode is open.');
-    if (_webViewPlayback) {
-      return _client.webCommand(method, sessionId, arguments: arguments);
-    }
     return _client.command(method, sessionId, arguments: arguments);
   }
 
@@ -266,14 +233,9 @@ final class OhosVideoPlaybackBackend implements VideoPlaybackBackend {
     final sessionId = _sessionId;
     _sessionId = null;
     _textureId = null;
-    final webSessionId = _webViewPlayback ? sessionId : null;
-    _webViewPlayback = false;
-    _webViewParams = null;
     await _events?.cancel();
     _events = null;
-    if (webSessionId != null) {
-      await _client.webCommand('dispose', webSessionId);
-    } else if (sessionId != null) {
+    if (sessionId != null) {
       await _client.command('dispose', sessionId);
     }
   }
@@ -304,91 +266,11 @@ final class OhosVideoPlaybackBackend implements VideoPlaybackBackend {
     final sessionId = _sessionId;
     _sessionId = null;
     _textureId = null;
-    final webSessionId = _webViewPlayback ? sessionId : null;
-    _webViewPlayback = false;
-    _webViewParams = null;
     await _events?.cancel();
     _events = null;
-    if (webSessionId != null) {
-      await _client.webCommand('dispose', webSessionId);
-    } else if (sessionId != null) {
+    if (sessionId != null) {
       await _client.command('dispose', sessionId);
     }
     _state.dispose();
-  }
-}
-
-/// Embeds the HLS ArkWeb view through OHOS native view composition.
-///
-/// The regular [OhosView] uses the texture path. On the affected API 26
-/// devices that path leaves the native Web node below Flutter's main
-/// XComponent, even though ArkWeb is decoding frames successfully. Surface
-/// composition lets the system place the video view in the visible native
-/// hierarchy instead of placing it behind Flutter's XComponent.
-final class _NativeOhosView extends StatefulWidget {
-  const _NativeOhosView({
-    super.key,
-    required this.viewType,
-    required this.creationParams,
-    required this.creationParamsCodec,
-    required this.hitTestBehavior,
-  });
-
-  final String viewType;
-  final Object? creationParams;
-  final MessageCodec<Object?> creationParamsCodec;
-  final PlatformViewHitTestBehavior hitTestBehavior;
-
-  @override
-  State<_NativeOhosView> createState() => _NativeOhosViewState();
-}
-
-final class _NativeOhosViewState extends State<_NativeOhosView> {
-  ExpensiveOhosViewController? _controller;
-  TextDirection? _layoutDirection;
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final direction = Directionality.of(context);
-    if (_controller == null) {
-      _layoutDirection = direction;
-      _controller = PlatformViewsService.initExpensiveOhosView(
-        id: platformViewsRegistry.getNextPlatformViewId(),
-        viewType: widget.viewType,
-        layoutDirection: direction,
-        creationParams: widget.creationParams,
-        creationParamsCodec: widget.creationParamsCodec,
-      );
-      // Expensive OHOS views do not wait for a size like texture views do.
-      // OhosViewSurface only supplies the compositor surface; the controller
-      // still has to be explicitly created before the native ArkWeb factory
-      // can mount its Web component.
-      unawaited(_controller!.create());
-    } else if (_layoutDirection != direction) {
-      _layoutDirection = direction;
-      _controller!.setLayoutDirection(direction);
-    }
-  }
-
-  @override
-  void dispose() {
-    _controller?.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final controller = _controller;
-    if (controller == null) {
-      return const SizedBox.expand();
-    }
-    return Focus(
-      child: OhosViewSurface(
-        controller: controller,
-        hitTestBehavior: widget.hitTestBehavior,
-        gestureRecognizers: const <Factory<OneSequenceGestureRecognizer>>{},
-      ),
-    );
   }
 }

@@ -11,6 +11,7 @@ import 'package:mgread_ohos_media/mgread_ohos_media.dart';
 // the OHOS acceptance test. Keep the define override for local codec/source
 // experiments without making the default smoke test depend on that choice.
 const _videoUrl = String.fromEnvironment('OHOS_VIDEO_SMOKE_URL', defaultValue: 'https://www.w3schools.com/html/mov_bbb.mp4');
+const _videoResourceType = String.fromEnvironment('OHOS_VIDEO_SMOKE_RESOURCE_TYPE', defaultValue: 'video');
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -47,6 +48,7 @@ void main() {
       sessionId: sessionId,
       uri: Uri.parse(_videoUrl),
       headers: const <String, String>{},
+      resourceType: _videoResourceType,
       initialPosition: Duration.zero,
       play: false,
     );

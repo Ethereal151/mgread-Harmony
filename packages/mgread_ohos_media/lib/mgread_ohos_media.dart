@@ -136,14 +136,4 @@ final class OhosMediaClient {
     'sessionId': sessionId,
     ...arguments,
   });
-
-  Future<void> webCommand(
-    String method,
-    String sessionId, {
-    Map<String, Object?> arguments = const <String, Object?>{},
-  }) => _methods.invokeMethod<void>('video.webCommand', <String, Object?>{
-    'sessionId': sessionId,
-    'command': method,
-    ...arguments,
-  });
 }

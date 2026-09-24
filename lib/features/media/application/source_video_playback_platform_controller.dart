@@ -41,7 +41,7 @@ final class SystemSourceVideoPlaybackPlatform implements SourceVideoPlaybackPlat
     if (_capabilities.isOhos) {
       // The video route owns an immersive black surface. Keeping the OHOS
       // system bars visible here would reintroduce the white gesture area
-      // below the ArkWeb surface whenever playback state changes.
+      // below the native video surface whenever playback state changes.
       return ReaderPlatform.instance.setReaderSystemUi(keepScreenOn: active, immersiveMode: true);
     }
     return WakelockPlus.toggle(enable: active);
