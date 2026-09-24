@@ -86,7 +86,8 @@ try {
   }
   $hapEntries = tar -tf $hap.FullName
   $unexpectedArchitecturePath = "libs/$unselectedArchitecture/"
-  if ($hapEntries -contains ($unexpectedArchitecturePath + 'libflutter.so')) {
+  $unexpectedArchitectureEntries = @($hapEntries | Where-Object { $_ -like "$unexpectedArchitecturePath*" })
+  if ($unexpectedArchitectureEntries.Count -gt 0) {
     throw "The generated HAP still contains the unselected architecture: $unexpectedArchitecturePath"
   }
   $unselectedRuntimePatterns = @(

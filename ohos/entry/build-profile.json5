@@ -6,7 +6,16 @@
   "targets": [
     {
       "name": "default",
-      "runtimeOS": "HarmonyOS"
+      "runtimeOS": "HarmonyOS",
+      "config": {
+        "buildOption": {
+          "nativeLib": {
+            "filter": {
+              "excludes": ["**/x86_64/*.so"]
+            }
+          }
+        }
+      }
     }
   ]
 }

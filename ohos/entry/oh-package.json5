@@ -10,10 +10,10 @@
     "flutter_native_arm64_v8a": "",
     "flutter_native_x86_64": "",
     "integration_test": "",
-    "mgread_ohos_media": "",
-    "mgread_ohos_scanner": "",
-    "mgread_ohos_system": "",
-    "novel_reader_ui": "",
+    "mgread_ohos_media": "file:../../packages/mgread_ohos_media/ohos",
+    "mgread_ohos_scanner": "file:../../packages/mgread_ohos_scanner/ohos",
+    "mgread_ohos_system": "file:../../packages/mgread_ohos_system/ohos",
+    "novel_reader_ui": "file:../../packages/mg_read_reader_ui/ohos",
     "screen_brightness_ohos": ""
   }
 }
