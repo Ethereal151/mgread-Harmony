@@ -103,7 +103,15 @@ final class OhosVideoPlaybackBackend implements VideoPlaybackBackend {
       if (play) {
         // Wait for the state emission above to rebuild Texture before AVPlayer
         // is allowed to produce the first frame.
-        await WidgetsBinding.instance.endOfFrame;
+        // API 26 may continuously report SurfaceFrame::Submit failed while
+        // the window is rotating. That must not strand AVPlayer in
+        // `initialized` forever: the texture has already been registered and
+        // the native surface binding is complete, so a bounded fallback is
+        // safe and keeps the command path progressing.
+        await WidgetsBinding.instance.endOfFrame.timeout(
+          const Duration(milliseconds: 500),
+          onTimeout: () {},
+        );
         if (!_isCurrent(generation)) return;
         await _client.command('play', sessionId);
       }

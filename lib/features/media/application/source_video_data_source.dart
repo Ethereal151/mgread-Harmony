@@ -9,6 +9,9 @@
 /// - This path is independent of the audio player and of library persistence.
 library;
 
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:mg_read_video_player/mg_read_video_player.dart';
 import 'package:mgread_plugin_runtime/mgread_plugin_runtime.dart';
 
@@ -20,6 +23,7 @@ final class SourceVideoDataSource implements VideoEpisodeDataSource {
   SourceVideoDataSource({
     required this.gateway,
     required this.pluginId,
+    this.decodeSourceResource,
     this.initialDetail,
     this.initialCatalog,
     this.playbackGate,
@@ -28,6 +32,7 @@ final class SourceVideoDataSource implements VideoEpisodeDataSource {
 
   final SourceContentGateway gateway;
   final String pluginId;
+  final Future<SourceResourceDecodeResult> Function(String url)? decodeSourceResource;
   final PluginContentDetail? initialDetail;
   final PluginChaptersResult? initialCatalog;
   final Future<void>? playbackGate;
@@ -94,8 +99,29 @@ final class SourceVideoDataSource implements VideoEpisodeDataSource {
     if (content.chapterId != selected.id || content.contentKind != PluginContentKind.video || media == null) {
       throw const VideoPlayerLoadException(code: 'video_episode_resource_missing', location: '解析所选集的播放资源', message: '数据源没有返回可播放的视频资源。');
     }
-    final playbackUrl = media.url.toString();
-    final playbackHeaders = media.headers;
+    var playbackUrl = media.url.toString();
+    var playbackHeaders = media.headers;
+    final decode = decodeSourceResource;
+    if (Platform.operatingSystem == 'ohos' && decode != null && _isRuntimeResourceUrl(media.url)) {
+      try {
+        final decoded = await decode(playbackUrl);
+        final directUrl = decoded.request['url'];
+        final directHeaders = decoded.request['headers'];
+        if (directUrl is! String || directUrl.isEmpty || directHeaders is! Map) {
+          throw const FormatException('Runtime returned an invalid direct media resource.');
+        }
+        playbackUrl = directUrl;
+        playbackHeaders = <String, String>{
+          for (final entry in directHeaders.entries)
+            if (entry.key is String && entry.value is String) entry.key as String: entry.value as String,
+        };
+        if (media.resourceType == PluginMediaResourceType.hls) {
+          playbackUrl = await _resolveOhosHlsVariant(playbackUrl, playbackHeaders);
+        }
+      } on Object catch (error) {
+        throw VideoPlayerLoadException(code: 'video_resource_decode_failed', location: '还原鸿蒙视频播放地址', message: '鸿蒙视频播放地址解析失败：$error');
+      }
+    }
     return VideoEpisode(
       id: selected.id,
       title: selected.title,
@@ -103,6 +129,36 @@ final class SourceVideoDataSource implements VideoEpisodeDataSource {
       httpHeaders: playbackHeaders,
       resourceType: media.resourceType == PluginMediaResourceType.hls ? VideoEpisodeResourceType.hls : VideoEpisodeResourceType.video,
     );
+  }
+
+  bool _isRuntimeResourceUrl(Uri url) =>
+      (url.host == '127.0.0.1' || url.host == 'localhost' || url.host == '::1') && url.path.startsWith('/v1/source-resource/');
+
+  Future<String> _resolveOhosHlsVariant(String masterUrl, Map<String, String> headers) async {
+    final client = HttpClient()..connectionTimeout = const Duration(seconds: 10);
+    try {
+      final request = await client.getUrl(Uri.parse(masterUrl)).timeout(const Duration(seconds: 15));
+      for (final entry in headers.entries) {
+        if (entry.key.toLowerCase() != 'host') request.headers.set(entry.key, entry.value);
+      }
+      final response = await request.close().timeout(const Duration(seconds: 15));
+      if (response.statusCode < 200 || response.statusCode >= 300) return masterUrl;
+      final body = await response.transform(utf8.decoder).join();
+      final lines = body.split(RegExp(r'\r?\n'));
+      for (var index = 0; index < lines.length; index++) {
+        if (!lines[index].startsWith('#EXT-X-STREAM-INF:')) continue;
+        for (var next = index + 1; next < lines.length; next++) {
+          final candidate = lines[next].trim();
+          if (candidate.isEmpty || candidate.startsWith('#')) continue;
+          return Uri.parse(masterUrl).resolve(candidate).toString();
+        }
+      }
+      return masterUrl;
+    } on Object {
+      return masterUrl;
+    } finally {
+      client.close(force: true);
+    }
   }
 
   Future<PluginContentDetail> _loadDetail(String contentId) async {

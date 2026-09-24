@@ -27,6 +27,7 @@ import 'package:mg_read/features/media/application/transient_source_video_playba
 import 'package:mg_read/features/media/presentation/media_entry_cover.dart';
 import 'package:mg_read/features/network_proxy/application/flutter_network_proxy_manager.dart';
 import 'package:mg_read/features/network_proxy/application/network_proxy_settings.dart';
+import 'package:mg_read/features/plugins/application/plugin_runtime_connection.dart';
 import 'package:mg_read/platform/platform_capabilities.dart';
 
 /// Opens one selected neutral video group/episode in the video player.
@@ -153,6 +154,8 @@ final class _SourceVideoPlayerDestinationState extends State<_SourceVideoPlayerD
           dataSource: SourceVideoDataSource(
             gateway: widget.container.read(sourceContentGatewayProvider),
             pluginId: widget.detail.pluginId,
+            decodeSourceResource: (url) =>
+                widget.container.read(pluginRuntimeFacadeProvider).invoke(SourceResourceDecodeInvocation(url: url)),
             initialDetail: widget.detail,
             // Shelf entry data may contain only the stable launch placeholder.
             // Force the player to resolve the real source catalog in that case.

@@ -106,6 +106,7 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
         })
         break
       case 'play':
+        this.log(`command_received session=${this.sessionId(args)} method=play`)
         this.run(args, (session) => this.playSession(this.sessionId(args), session), result)
         break
       case 'pause':
@@ -376,6 +377,7 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
   ): Promise<void> {
     const player = session.player
     if (player.state === 'initialized') {
+      this.log(`prepare_start session=${sessionId}`)
       await player.prepare()
       await this.waitForState(player, 'prepared')
       if (session.texture !== undefined) {
