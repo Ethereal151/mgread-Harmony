@@ -70,7 +70,7 @@ final class OhosVideoPlaybackBackend implements VideoPlaybackBackend {
       ),
     );
     await _closeNativeSession();
-    if (!_isCurrent(generation)) return;
+    if (!_isGenerationCurrent(generation)) return;
     final sessionId = _newSessionId();
     _sessionId = sessionId;
     _events = _client.events
