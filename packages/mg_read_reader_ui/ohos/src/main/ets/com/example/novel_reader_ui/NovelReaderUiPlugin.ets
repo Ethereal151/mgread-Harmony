@@ -150,6 +150,7 @@ export default class NovelReaderUiPlugin implements FlutterPlugin, MethodCallHan
       if (immersive) {
         await target.setWindowSystemBarEnable([])
       } else {
+        await target.setWindowLayoutFullScreen(false)
         await target.setWindowSystemBarEnable(['status', 'navigation'])
       }
       this.keepScreenOn = keep
@@ -174,10 +175,10 @@ export default class NovelReaderUiPlugin implements FlutterPlugin, MethodCallHan
       await target.setPreferredOrientation(
         fullscreen ? window.Orientation.LANDSCAPE : window.Orientation.PORTRAIT,
       )
-      await target.setWindowLayoutFullScreen(fullscreen)
-      // Keep the status bar in portrait playback, but hide the gesture
-      // navigation area so it cannot expose the light system background below
-      // the black video surface. The normal app chrome restores both bars.
+      await target.setWindowLayoutFullScreen(true)
+      // Keep the video surface behind the system-bar areas for both
+      // orientations. In portrait, hiding the navigation area prevents the
+      // gesture region from exposing the device-default light background.
       await target.setWindowSystemBarEnable(fullscreen ? [] : ['status'])
       await target.setWindowSystemBarProperties({
         statusBarColor: '#000000',

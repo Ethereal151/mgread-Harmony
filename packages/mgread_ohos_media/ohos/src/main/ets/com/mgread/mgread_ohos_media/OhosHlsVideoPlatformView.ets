@@ -144,10 +144,10 @@ export class OhosHlsVideoPlatformView extends PlatformView {
       await target.setPreferredOrientation(
         fullscreen ? window.Orientation.LANDSCAPE : window.Orientation.PORTRAIT,
       )
-      await target.setWindowLayoutFullScreen(fullscreen)
-      // Keep the status bar in portrait playback, but hide the gesture
-      // navigation area so it cannot expose the light system background below
-      // the black video surface.
+      // Keep the video surface behind the system-bar areas for both
+      // orientations. In portrait, hiding the navigation area prevents the
+      // gesture region from exposing the device-default light background.
+      await target.setWindowLayoutFullScreen(true)
       await target.setWindowSystemBarEnable(fullscreen ? [] : ['status'])
       await target.setWindowSystemBarProperties({
         statusBarColor: '#000000',
@@ -156,9 +156,31 @@ export class OhosHlsVideoPlatformView extends PlatformView {
         navigationBarContentColor: '#FFFFFF',
       })
       Log.w('MgReadOhosMedia', `web_fullscreen session=${this.sessionId} value=${fullscreen}`)
+      if (!fullscreen) {
+        // ArkWeb/WMS reapplies the navigation bar after the rotation
+        // animation. Reassert the portrait video chrome after that transition
+        // or the gesture area becomes white again.
+        setTimeout((): void => {
+          this.reapplyPortraitSystemBars(target).catch((error: Object) => {
+            Log.w('MgReadOhosMedia', `web_portrait_bars_error session=${this.sessionId} message=${String(error)}`)
+          })
+        }, 1000)
+      }
     } catch (error) {
       Log.w('MgReadOhosMedia', `web_fullscreen_error session=${this.sessionId} message=${String(error)}`)
     }
+  }
+
+  private async reapplyPortraitSystemBars(target: window.Window): Promise<void> {
+    await target.setWindowLayoutFullScreen(true)
+    await target.setWindowSystemBarEnable(['status'])
+    await target.setWindowSystemBarProperties({
+      statusBarColor: '#000000',
+      navigationBarColor: '#000000',
+      statusBarContentColor: '#FFFFFF',
+      navigationBarContentColor: '#FFFFFF',
+    })
+    Log.w('MgReadOhosMedia', `web_portrait_bars_reapplied session=${this.sessionId}`)
   }
 
   private stringValue(args: Map<string, Object>, key: string): string {
