@@ -99,6 +99,16 @@ void main() {
     expect(gateway.contentCalls, <String>['episode-2']);
   });
 
+  test('allows up to 2000 episodes per line without summing alternate lines', () async {
+    final gateway = _VideoGateway(failEpisodeResource: false, largeGroups: true);
+    final source = SourceVideoDataSource(gateway: gateway, pluginId: _pluginId);
+
+    final content = await source.load('video-1');
+
+    expect(content.groups, hasLength(2));
+    expect(content.groups.map((group) => group.episodes.length), <int>[2000, 2000]);
+  });
+
   test('reports a selected video resource failure with a stable location', () async {
     final gateway = _VideoGateway(failEpisodeResource: true);
     final source = SourceVideoDataSource(gateway: gateway, pluginId: _pluginId);
@@ -135,11 +145,19 @@ void main() {
 const _pluginId = 'org.example.video';
 
 final class _VideoGateway implements SourceContentGateway {
-  _VideoGateway({required this.failEpisodeResource, this.episodeFailureCode, this.grouped = false, this.detailGate, this.catalogGate});
+  _VideoGateway({
+    required this.failEpisodeResource,
+    this.episodeFailureCode,
+    this.grouped = false,
+    this.largeGroups = false,
+    this.detailGate,
+    this.catalogGate,
+  });
 
   final bool failEpisodeResource;
   final AppErrorCode? episodeFailureCode;
   final bool grouped;
+  final bool largeGroups;
   final Completer<void>? detailGate;
   final Completer<void>? catalogGate;
   final List<String> contentCalls = <String>[];
@@ -182,6 +200,24 @@ final class _VideoGateway implements SourceContentGateway {
   Future<PluginChaptersResult> getChapters({required String pluginId, required String id}) async {
     catalogCalls++;
     await catalogGate?.future;
+    if (largeGroups) {
+      final groups = <PluginMediaGroup>[];
+      final items = <PluginChapterSummary>[];
+      for (var groupIndex = 0; groupIndex < 2; groupIndex++) {
+        final episodes = <PluginChapterSummary>[
+          for (var episodeIndex = 0; episodeIndex < 2000; episodeIndex++)
+            _episode(
+              id: 'line-$groupIndex-$episodeIndex',
+              title: '第 ${episodeIndex + 1} 集',
+              order: episodeIndex,
+              group: '线路 ${groupIndex + 1}',
+            ),
+        ];
+        items.addAll(episodes);
+        groups.add(PluginMediaGroup(id: 'line-$groupIndex', title: '线路 ${groupIndex + 1}', order: groupIndex, episodes: episodes));
+      }
+      return PluginChaptersResult(pluginId: pluginId, sourceName: '示例视频源', items: items, groups: groups);
+    }
     final first = _episode(id: 'episode-1', title: '第 1 集', order: 0, group: grouped ? 'Laoz' : null);
     final second = _episode(id: 'episode-2', title: '第 2 集', order: 0, group: 'Diff');
     return PluginChaptersResult(

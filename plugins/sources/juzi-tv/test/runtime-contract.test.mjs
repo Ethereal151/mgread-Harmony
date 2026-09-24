@@ -56,6 +56,9 @@ test('fixture outputs pass the current Runtime source validators', async () => {
               playerList: [{
                 playerName: '线路',
                 epList: [{ epId: 99, epName: '第一集' }],
+              }, {
+                playerName: '备用线路',
+                epList: [{ epId: 100, epName: '第一集' }],
               }],
             },
           });
@@ -123,6 +126,7 @@ test('fixture outputs pass the current Runtime source validators', async () => {
   const chapters = await plugin.getChapters({ id: detail.id });
   assert.doesNotThrow(() =>
     validators.validateChaptersResult(pluginId, sourceName, chapters));
+  assert.deepEqual(chapters.groups.map((group) => group.episodes.map((episode) => episode.order)), [[0], [0]]);
 
   const content = await plugin.getContent({
     id: detail.id,

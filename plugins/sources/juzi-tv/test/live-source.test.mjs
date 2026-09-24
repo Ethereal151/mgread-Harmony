@@ -96,6 +96,73 @@ test('live Juzi TV home, catalog and HLS media remain reachable', { timeout: 90_
   assert.ok(segmentPrefix.bytes > 0);
 });
 
+test('live Juzi TV fixed content IDs load detail, cover, catalog and media', { timeout: 180_000 }, async () => {
+  const proxied = [];
+  await plugin.activate({
+    log: { info() {}, warn() {} },
+    resource: {
+      proxy(request) {
+        proxied.push(request);
+        return `http://127.0.0.1:9000/v1/source-resource/${String(proxied.length).padStart(16, '0')}`;
+      },
+    },
+    http: {
+      fetch: (input, init = {}) => fetch(input, { ...init, signal: AbortSignal.timeout(20_000) }),
+    },
+  });
+
+  for (const id of ['vod:458764', 'vod:35736']) {
+    const detail = await plugin.getDetail({ id });
+    assert.equal(detail.id, id);
+    assert.ok(detail.coverUrl);
+    const cover = proxied.find((request) => request.kind === 'image' && request.url);
+    assert.ok(cover, `${id} cover proxy was not registered`);
+    const coverResponse = await fetch(cover.url, {
+      headers: cover.headers,
+      redirect: 'follow',
+      signal: AbortSignal.timeout(20_000),
+    });
+    assert.ok(coverResponse.ok, `${id} cover status ${coverResponse.status}`);
+    await coverResponse.body?.cancel();
+
+    const chapters = await plugin.getChapters({ id });
+    assert.ok(chapters.items.length > 0, `${id} has no chapters`);
+    for (const group of chapters.groups) {
+      assert.deepEqual(group.episodes.map((episode) => episode.order), group.episodes.map((_, index) => index));
+      assert.ok(group.episodes.length <= 2000, `${id} has a line over 2000 episodes`);
+    }
+
+    const candidates = chapters.groups.length > 0
+      ? chapters.groups.map((group) => group.episodes[0]).filter(Boolean)
+      : [chapters.items[0]];
+    let playable = false;
+    for (const chapter of candidates) {
+      assert.ok(chapter);
+      const content = await plugin.getContent({ id, chapterId: chapter.id });
+      assert.equal(content.chapterId, chapter.id);
+      assert.equal(content.contentKind, 'video');
+      assert.ok(content.media);
+      const media = proxied.at(-1);
+      assert.ok(media && (media.kind === 'hls' || media.kind === 'video'));
+      const mediaResponse = await fetch(media.url, {
+        headers: media.headers,
+        redirect: 'follow',
+        signal: AbortSignal.timeout(20_000),
+      });
+      const prefix = await readPrefix(mediaResponse);
+      if (!mediaResponse.ok) {
+        console.warn(`${id} line ${chapter.id} returned ${mediaResponse.status}; trying another published line`);
+        continue;
+      }
+      if (media.kind === 'hls') assert.match(prefix.text, /^#EXTM3U/u);
+      else assert.ok(prefix.bytes > 0, `${id} media returned no bytes`);
+      playable = true;
+      break;
+    }
+    assert.equal(playable, true, `${id} has no currently reachable published line`);
+  }
+});
+
 function firstPlaylistUri(text) {
   const lines = text.split(/\r?\n/u).map((line) => line.trim());
   const marker = lines.findIndex((line) => line.startsWith('#EXT-X-STREAM-INF'));

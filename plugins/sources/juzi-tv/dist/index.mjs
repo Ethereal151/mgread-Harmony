@@ -57,7 +57,7 @@ async function getDetail(request) {
   return frozen({ ...item, aliases: [], catalogUrl: null, chapterCount: episodes(data).length });
 }
 async function getChapters(request) {
-  const id = contentId(request.id), data = object((await post("/v2/api/vodInfo/index", { vodId: Number(id) })).data), values = episodes(data), items = values.map((episode, index) => frozen({ id: `vod:${id}:${episode.id}`, title: episode.title, order: index, url: null, volumeTitle: episode.group, wordCount: null, updatedAt: null, isLocked: false, attributes: [] })), groups = [...new Set(values.map((value) => value.group))].map((title, index) => frozen({ id: `group:${id}:${index}`, title, order: index, episodes: items.filter((item) => item.volumeTitle === title) }));
+  const id = contentId(request.id), data = object((await post("/v2/api/vodInfo/index", { vodId: Number(id) })).data), values = episodes(data), items = values.map((episode, index) => frozen({ id: `vod:${id}:${episode.id}`, title: episode.title, order: index, url: null, volumeTitle: episode.group, wordCount: null, updatedAt: null, isLocked: false, attributes: [] })), groups = [...new Set(values.map((value) => value.group))].map((title, index) => frozen({ id: `group:${id}:${index}`, title, order: index, episodes: items.filter((item) => item.volumeTitle === title).map((item, order) => frozen({ ...item, order })) }));
   return frozen({ items, groups });
 }
 async function getContent(request) {
