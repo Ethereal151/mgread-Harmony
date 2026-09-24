@@ -355,6 +355,11 @@ final class _VideoPlayerViewState extends State<VideoPlayerView>
       return;
     }
     final playableEpisode = resolution.episode!;
+    // The metadata episode is installed before resolution so the selection
+    // UI can remain stable while the transient URL is fetched. Replace it
+    // with the resolved episode before exposing the details sheet; otherwise
+    // the sheet incorrectly reports that URL and headers are unavailable.
+    _update(() => _episode = playableEpisode);
     _notifyStartup(
       VideoStartupPhase.episodeReady,
       state: VideoStartupState.ready,

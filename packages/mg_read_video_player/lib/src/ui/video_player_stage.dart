@@ -14,6 +14,7 @@ library;
 // ignore_for_file: public_member_api_docs
 
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -28,16 +29,27 @@ import 'video_player_gestures.dart';
 import 'video_player_status_layer.dart';
 import 'video_player_visuals.dart';
 
-const _videoPlayerSystemUiStyle = SystemUiOverlayStyle(
-  statusBarColor: Colors.transparent,
-  statusBarIconBrightness: Brightness.light,
-  statusBarBrightness: Brightness.dark,
-  systemNavigationBarColor: Colors.transparent,
-  systemNavigationBarDividerColor: Colors.transparent,
-  systemNavigationBarIconBrightness: Brightness.light,
-  systemStatusBarContrastEnforced: false,
-  systemNavigationBarContrastEnforced: false,
-);
+final _videoPlayerSystemUiStyle = Platform.operatingSystem == 'ohos'
+    ? const SystemUiOverlayStyle(
+        // OHOS owns the bar backgrounds through setWindowSystemBarProperties.
+        // Leaving the colors unset prevents Flutter's transparent overlay style
+        // from replacing the black video-window bars with white system chrome.
+        statusBarIconBrightness: Brightness.light,
+        statusBarBrightness: Brightness.dark,
+        systemNavigationBarIconBrightness: Brightness.light,
+        systemStatusBarContrastEnforced: false,
+        systemNavigationBarContrastEnforced: false,
+      )
+    : const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.light,
+        statusBarBrightness: Brightness.dark,
+        systemNavigationBarColor: Colors.transparent,
+        systemNavigationBarDividerColor: Colors.transparent,
+        systemNavigationBarIconBrightness: Brightness.light,
+        systemStatusBarContrastEnforced: false,
+        systemNavigationBarContrastEnforced: false,
+      );
 
 final class VideoPlayerStage extends StatelessWidget {
   const VideoPlayerStage({

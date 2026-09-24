@@ -175,7 +175,16 @@ export default class NovelReaderUiPlugin implements FlutterPlugin, MethodCallHan
         fullscreen ? window.Orientation.LANDSCAPE : window.Orientation.PORTRAIT,
       )
       await target.setWindowLayoutFullScreen(fullscreen)
-      await target.setWindowSystemBarEnable(fullscreen ? [] : ['status', 'navigation'])
+      // Keep the status bar in portrait playback, but hide the gesture
+      // navigation area so it cannot expose the light system background below
+      // the black video surface. The normal app chrome restores both bars.
+      await target.setWindowSystemBarEnable(fullscreen ? [] : ['status'])
+      await target.setWindowSystemBarProperties({
+        statusBarColor: '#000000',
+        navigationBarColor: '#000000',
+        statusBarContentColor: '#FFFFFF',
+        navigationBarContentColor: '#FFFFFF',
+      })
       result.success(null)
     } catch (error) {
       result.error('operation_failed', this.errorMessage(error), null)

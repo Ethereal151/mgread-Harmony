@@ -35,6 +35,7 @@ final class SystemSourceMediaSystemUiPlatform implements SourceMediaSystemUiPlat
   Future<void> enterPortrait() async {
     if (Platform.operatingSystem == 'ohos') {
       await ReaderPlatform.instance.setVideoWindowMode(fullscreen: false);
+      await ReaderPlatform.instance.setReaderSystemUi(keepScreenOn: false, immersiveMode: false);
       return;
     }
     await SystemChrome.setPreferredOrientations(const <DeviceOrientation>[DeviceOrientation.portraitUp]);

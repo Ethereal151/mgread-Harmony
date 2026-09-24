@@ -15,13 +15,19 @@ import common from '@ohos.app.ability.common'
 import media from '@ohos.multimedia.media'
 import audio from '@ohos.multimedia.audio'
 import avSession from '@ohos.multimedia.avsession'
+import http from '@ohos.net.http'
 import { SurfaceTextureEntry, TextureRegistry } from '@ohos/flutter_ohos'
 import OhosMediaEventStreamHandler from './OhosMediaEventStreamHandler'
+import { OhosHlsVideoHost, VIEW_TYPE as HLS_VIDEO_VIEW_TYPE } from './OhosHlsVideoPlatformView'
 
 interface MediaSession {
   player: media.AVPlayer
+  source?: media.MediaSource
+  loader?: media.MediaSourceLoader
   texture?: SurfaceTextureEntry
   video: boolean
+  initialPositionMs: number
+  loop: boolean
 }
 
 interface OhosMediaEventPayload {
@@ -42,6 +48,7 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
   private methodChannel?: MethodChannel
   private eventChannel?: EventChannel
   private readonly events = new OhosMediaEventStreamHandler()
+  private readonly hlsVideoHost = new OhosHlsVideoHost()
   private sessions: Map<string, MediaSession> = new Map()
   private textures?: TextureRegistry
   private context?: common.UIAbilityContext
@@ -62,6 +69,7 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
 
   onAttachedToEngine(binding: FlutterPluginBinding): void {
     this.textures = binding.getTextureRegistry()
+    binding.getPlatformViewRegistry().registerViewFactory(HLS_VIDEO_VIEW_TYPE, this.hlsVideoHost.factory())
     this.methodChannel = new MethodChannel(binding.getBinaryMessenger(), 'mgread/ohos_media')
     this.methodChannel.setMethodCallHandler(this)
     this.eventChannel = new EventChannel(binding.getBinaryMessenger(), 'mgread/ohos_media/events')
@@ -127,6 +135,9 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
           return Promise.resolve()
         }, result)
         break
+      case 'video.webCommand':
+        this.hlsVideoHost.command(args, result)
+        break
       case 'disposeAll':
         this.disposeAll()
         result.success(null)
@@ -159,23 +170,48 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
         return
       }
       const headers = this.headers(args?.get('headers'))
-      const session: MediaSession = {player, texture, video}
+      const initialPositionMs = this.number(args, 'initialPositionMs')
+      const loop = this.booleanValue(args, 'loop')
+      const session: MediaSession = {player, texture, video, initialPositionMs, loop}
       this.sessions.set(sessionId, session)
       this.bind(sessionId, session)
       const resourceType = this.stringValue(args, 'resourceType')
       const hls = this.isHlsUrl(url, resourceType)
-      console.info(`[MgReadOhosMedia] open session=${sessionId} video=${video} resourceType=${resourceType} hls=${hls} urlLength=${url.length} headerCount=${Object.keys(headers).length}`)
+      this.log(`open session=${sessionId} video=${video} resourceType=${resourceType} hls=${hls} urlLength=${url.length} headerCount=${Object.keys(headers).length}`)
       // Windows MediaKit opens every resource with its request headers. Keep
       // the same invariant on OHOS: Runtime media URLs are loopback URLs and
       // intentionally do not retain the upstream .m3u8 suffix, so AVPlayer.url
       // cannot reliably infer HLS and would also discard the source headers.
       // MediaSource supports network HLS; its explicit MIME type makes the
       // extensionless Runtime resource unambiguous to AVPlayer.
-      const source = media.createMediaSourceWithUrl(url, headers)
-      if (hls) {
+      // API 26 cannot use MediaSourceLoader for the HLS root playlist: it
+      // registers the delegate and immediately closes uuid 0 before reading.
+      // OHOS source adapters decode Runtime proxy URLs to direct upstream HLS
+      // URLs before reaching this bridge. Keep the loader only as a fallback
+      // for legacy loopback callers; direct HLS URLs use MediaKit's native
+      // network path with the original request headers.
+      const runtimeLoopback = this.isRuntimeLoopbackUrl(url)
+      const sourceUrl = hls && runtimeLoopback ? 'http://xxx/runtime.m3u8' : url
+      const source = media.createMediaSourceWithUrl(sourceUrl, headers)
+      session.source = source
+      if (hls && runtimeLoopback) {
         source.setMimeType(media.AVMimeTypes.APPLICATION_M3U8)
+        // HarmonyOS media_service cannot reliably open an application-local
+        // Runtime URL (127.0.0.1) from its own process. Keep the URL visible
+        // to the player for HLS resolution, but service every media read in
+        // this application process where the Runtime loopback is reachable.
+        const loader = this.createResourceLoader(sessionId, url)
+        session.loader = loader
+        source.setMediaResourceLoaderDelegate(loader)
       }
+      if (hls && !runtimeLoopback) source.setMimeType(media.AVMimeTypes.APPLICATION_M3U8)
+      // API 26 devices expose setMediaSource(strategy) in the type surface,
+      // but the runtime does not expose preferredBufferDurationForPlaying or
+      // preferredBufferDuration. Passing a PlaybackStrategy therefore makes
+      // the native parser enter an unsupported configuration before it reads
+      // the HLS playlist. Let MediaKit use its default buffering policy.
       await player.setMediaSource(source)
+      this.log(`source_set session=${sessionId} state=${player.state}`)
       await this.waitForState(player, 'initialized')
       if (texture !== undefined) {
         this.setVideoTextureSize(texture, MgReadOhosMediaPlugin.BOOTSTRAP_VIDEO_WIDTH, MgReadOhosMediaPlugin.BOOTSTRAP_VIDEO_HEIGHT)
@@ -183,24 +219,20 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
         player.surfaceId = String(surfaceId)
         this.log(`surface_bound session=${sessionId} textureId=${texture.getTextureId()} surfaceId=${surfaceId}`)
       }
-      await player.prepare()
-      await this.waitForState(player, 'prepared')
-      if (texture !== undefined) {
-        this.setVideoTextureSize(texture, player.width, player.height)
+      // A video Texture must be mounted by Flutter before AVPlayer.prepare()
+      // can produce a frame. Returning only after prepare made the texture ID
+      // unreachable to Dart until the first frame had already been submitted,
+      // which leaves API 26 devices in `initialized` and emits
+      // SurfaceFrame::Submit failed. Audio has no external Flutter surface and
+      // keeps the original prepare-before-return flow.
+      if (!video) {
+        await this.prepareSession(sessionId, args, session)
+        if (this.booleanValue(args, 'play')) await this.playSession(sessionId, session)
       }
-      this.log(`prepared session=${sessionId} durationMs=${player.duration} videoSize=${player.width}x${player.height}`)
-      const initialPosition = this.number(args, 'initialPositionMs')
-      if (initialPosition > 0) player.seek(initialPosition)
-      if (this.booleanValue(args, 'loop')) player.loop = true
-      // Use the shared interruption unit for every AVPlayer with an audio
-      // track, including video, so another app's focus change is observable.
-      player.audioInterruptMode = audio.InterruptMode.SHARE_MODE
-      await this.prepareAudioSession(sessionId, args, player.duration, video ? 'video' : 'audio')
-      if (this.booleanValue(args, 'play')) await this.playSession(sessionId, session)
       result.success({
         sessionId,
         textureId: texture?.getTextureId(),
-        durationMs: player.duration,
+        durationMs: video ? 0 : player.duration,
       })
     } catch (error) {
       await this.disposeSession(sessionId)
@@ -348,6 +380,7 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
       this.audioWasPlayingBeforeInterrupt = false
       this.emit(sessionId, 'interrupted', false)
     }
+    await this.prepareSession(sessionId, null, session)
     await session.player.play()
     this.log(`play_requested session=${sessionId}`)
     // HarmonyOS resolves AVPlayer.play() before the asynchronous state change
@@ -355,6 +388,28 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
     // player is still in `prepared`, because OHOS rejects pause in that state.
     await this.waitForState(session.player, 'playing')
     this.log(`playing session=${sessionId}`)
+  }
+
+  private async prepareSession(
+    sessionId: string,
+    args: Map<string, Object> | null,
+    session: MediaSession,
+  ): Promise<void> {
+    const player = session.player
+    if (player.state === 'initialized') {
+      await player.prepare()
+      await this.waitForState(player, 'prepared')
+      if (session.texture !== undefined) {
+        this.setVideoTextureSize(session.texture, player.width, player.height)
+      }
+      this.log(`prepared session=${sessionId} durationMs=${player.duration} videoSize=${player.width}x${player.height}`)
+      if (session.initialPositionMs > 0) player.seek(session.initialPositionMs)
+      if (session.loop) player.loop = true
+      // Use the shared interruption unit for every AVPlayer with an audio
+      // track, including video, so another app's focus change is observable.
+      player.audioInterruptMode = audio.InterruptMode.SHARE_MODE
+      await this.prepareAudioSession(sessionId, args, player.duration, session.video ? 'video' : 'audio')
+    }
   }
 
   private log(message: string): void {
@@ -436,6 +491,115 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
     if (resourceType === 'hls') return true
     const path = url.split('?', 1)[0].split('#', 1)[0].toLowerCase()
     return path.endsWith('.m3u8')
+  }
+
+  private isRuntimeLoopbackUrl(url: string): boolean {
+    return url.startsWith('http://127.0.0.1:') || url.startsWith('http://localhost:') || url.startsWith('http://[::1]:')
+  }
+
+  private createResourceLoader(sessionId: string, fallbackUrl: string): media.MediaSourceLoader {
+    const requests = new Map<number, media.MediaSourceLoadingRequest>()
+    const inFlight = new Set<number>()
+    let nextHandle = 1
+    return {
+      open: (request: media.MediaSourceLoadingRequest): number => {
+        const handle = nextHandle++
+        requests.set(handle, request)
+        this.log(`loader_open session=${sessionId} handle=${handle} urlLength=${request.url.length}`)
+        return handle
+      },
+      read: (handle: number, offset: number, length: number): void => {
+        if (inFlight.has(handle)) return
+        const request = requests.get(handle)
+        if (request === undefined) return
+        inFlight.add(handle)
+        this.readResource(request, handle, offset, length, fallbackUrl).catch((error: Error): void => {
+          this.log(`loader_error session=${sessionId} handle=${handle} message=${this.errorMessage(error)}`)
+          try {
+            request.finishLoading(handle, media.LoadingRequestError.LOADING_ERROR_ACCESS_DENIED)
+          } catch (_) {
+            // The player may have released the request while the HTTP read
+            // was in flight. There is nothing left to notify in that case.
+          }
+        }).finally((): void => {
+          inFlight.delete(handle)
+        })
+      },
+      close: (handle: number): void => {
+        requests.delete(handle)
+        inFlight.delete(handle)
+        this.log(`loader_close session=${sessionId} handle=${handle}`)
+      },
+    }
+  }
+
+  private async readResource(
+    request: media.MediaSourceLoadingRequest,
+    handle: number,
+    offset: number,
+    length: number,
+    fallbackUrl: string,
+  ): Promise<void> {
+    const client = http.createHttp()
+    try {
+      const resourceUrl = request.url.includes('mgread.invalid') ? fallbackUrl : request.url
+      const options: http.HttpRequestOptions = {
+        method: http.RequestMethod.GET,
+        header: request.header,
+        expectDataType: http.HttpDataType.ARRAY_BUFFER,
+        usingCache: false,
+        usingProxy: false,
+        connectTimeout: 10_000,
+        readTimeout: 30_000,
+        maxLimit: 50 * 1024 * 1024,
+      }
+      if (offset > 0) options.resumeFrom = offset
+      if (length > 0 && offset <= Number.MAX_SAFE_INTEGER - length) {
+        options.resumeTo = offset + length - 1
+      }
+      const response = await client.request(resourceUrl, options)
+      const body = response.result
+      if (!(body instanceof ArrayBuffer) || response.responseCode < 200 || response.responseCode >= 400) {
+        throw new Error(`http_status_${response.responseCode}`)
+      }
+      const responseHeaders = this.httpResponseHeaders(response.header)
+      request.respondHeader(handle, responseHeaders)
+      const bytes = body.byteLength > 0 ? body : new ArrayBuffer(0)
+      let sent = 0
+      while (sent < bytes.byteLength) {
+        const end = length > 0 ? Math.min(bytes.byteLength, length) : bytes.byteLength
+        const pushed = request.respondData(handle, offset + sent, bytes.slice(sent, end))
+        if (pushed === -2) return
+        if (pushed === -3) {
+          await new Promise<void>((resolve): void => {
+            setTimeout((): void => resolve(), 20)
+          })
+          continue
+        }
+        if (pushed < 0) throw new Error(`respond_data_${pushed}`)
+        sent += Math.min(pushed, end - sent)
+      }
+      request.finishLoading(handle, media.LoadingRequestError.LOADING_ERROR_SUCCESS)
+    } finally {
+      client.destroy()
+    }
+  }
+
+  private httpResponseHeaders(value: Object): Record<string, string> {
+    let raw: Record<string, Object> = value as Record<string, Object>
+    if (typeof value === 'string') {
+      try {
+        raw = JSON.parse(value) as Record<string, Object>
+      } catch (_) {
+        raw = JSON.parse('{}') as Record<string, Object>
+      }
+    }
+    const result: Record<string, string> = {}
+    Object.keys(raw).forEach((name: string): void => {
+      const item = raw[name]
+      if (typeof item === 'string' || typeof item === 'number') result[name] = String(item)
+    })
+    return result
   }
 
   private errorMessage(error: Object): string {
