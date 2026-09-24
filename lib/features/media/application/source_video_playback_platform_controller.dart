@@ -6,6 +6,7 @@
 library;
 
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -39,10 +40,10 @@ final class SystemSourceVideoPlaybackPlatform implements SourceVideoPlaybackPlat
   Future<void> setScreenAwake(bool active) {
     if (!_capabilities.supportsKeepScreenOn) return Future<void>.value();
     if (_capabilities.isOhos) {
-      // The video route owns an immersive black surface. Keeping the OHOS
-      // system bars visible here would reintroduce the white gesture area
-      // below the native video surface whenever playback state changes.
-      return ReaderPlatform.instance.setReaderSystemUi(keepScreenOn: active, immersiveMode: true);
+      // Video window mode owns orientation and system bars. Do not reapply
+      // reader immersive mode here: doing so hides the portrait status bar
+      // underneath the top playback controls.
+      return ReaderPlatform.instance.setVideoKeepScreenOn(active);
     }
     return WakelockPlus.toggle(enable: active);
   }
@@ -118,7 +119,11 @@ final class SourceVideoPlaybackPlatformController {
       if (target && _screenAwake) return;
       if (!target && !_screenAwake && !_wakeReleaseNeeded) return;
       if (target) _wakeReleaseNeeded = true;
-      await _platform.setScreenAwake(target);
+      if (Platform.operatingSystem == 'ohos') {
+        await ReaderPlatform.instance.setVideoKeepScreenOn(target);
+      } else {
+        await _platform.setScreenAwake(target);
+      }
       _screenAwake = target;
       if (!target) _wakeReleaseNeeded = false;
     });

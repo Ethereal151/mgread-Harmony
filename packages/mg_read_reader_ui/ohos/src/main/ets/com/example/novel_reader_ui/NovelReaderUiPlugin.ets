@@ -74,6 +74,9 @@ export default class NovelReaderUiPlugin implements FlutterPlugin, MethodCallHan
       case 'setVideoWindowMode':
         this.setVideoWindowMode(call.args as Map<string, Object> | null, result)
         break
+      case 'setVideoKeepScreenOn':
+        this.setVideoKeepScreenOn(call.args as Map<string, Object> | null, result)
+        break
       case 'setVolumeKeyPageTurningEnabled':
         this.setVolumeKeyPageTurningEnabled(call.args as Map<string, Object> | null, result)
         break
@@ -186,6 +189,25 @@ export default class NovelReaderUiPlugin implements FlutterPlugin, MethodCallHan
         statusBarContentColor: '#FFFFFF',
         navigationBarContentColor: '#FFFFFF',
       })
+      result.success(null)
+    } catch (error) {
+      result.error('operation_failed', this.errorMessage(error), null)
+    }
+  }
+
+  private async setVideoKeepScreenOn(
+    args: Map<string, Object> | null,
+    result: MethodResult,
+  ): Promise<void> {
+    const enabled = args?.get('enabled')
+    if (typeof enabled !== 'boolean') {
+      result.error('invalid_argument', 'enabled must be a boolean.', null)
+      return
+    }
+    try {
+      const target = await this.applicationWindow()
+      await target.setWindowKeepScreenOn(enabled)
+      this.keepScreenOn = enabled
       result.success(null)
     } catch (error) {
       result.error('operation_failed', this.errorMessage(error), null)

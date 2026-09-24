@@ -428,7 +428,10 @@ final class _VideoPlayerViewState extends State<VideoPlayerView>
     if (previous.playing && !next.playing) {
       unawaited(_flushProgress(force: true));
     }
-    if (next.playing != previous.playing) _scheduleControlsHide();
+    if (next.playing != previous.playing ||
+        next.firstFrameReady != previous.firstFrameReady) {
+      _scheduleControlsHide();
+    }
     final error = next.errorMessage?.trim();
     final errorId = next.errorKind?.name ?? error;
     if (error != null && error.isNotEmpty && errorId != _reportedBackendError) {

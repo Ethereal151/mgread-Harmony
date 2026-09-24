@@ -23,12 +23,16 @@ final class OhosMediaEvent {
     required this.kind,
     this.value,
     this.message,
+    this.width,
+    this.height,
   });
 
   final String sessionId;
   final String kind;
   final Object? value;
   final String? message;
+  final int? width;
+  final int? height;
 }
 
 /// One process-scoped channel owner. Native AVPlayer objects never cross this
@@ -59,6 +63,8 @@ final class OhosMediaClient {
           kind: kind,
           value: map['value'],
           message: map['message'] as String?,
+          width: (map['width'] as num?)?.toInt(),
+          height: (map['height'] as num?)?.toInt(),
         );
       });
 

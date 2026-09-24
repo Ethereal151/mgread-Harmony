@@ -29,6 +29,8 @@ final class OhosVideoPlaybackBackend implements VideoPlaybackBackend {
   String? _sessionId;
   int? _textureId;
   int _generation = 0;
+  int _videoWidth = 640;
+  int _videoHeight = 360;
   // ignore: prefer_final_fields
   double _rate = 1;
   // ignore: prefer_final_fields
@@ -45,7 +47,18 @@ final class OhosVideoPlaybackBackend implements VideoPlaybackBackend {
         ? SizedBox.expand(key: key)
         : KeyedSubtree(
             key: key,
-            child: Texture(key: ValueKey<int>(textureId), textureId: textureId),
+            child: FittedBox(
+              fit: fit,
+              clipBehavior: Clip.hardEdge,
+              child: SizedBox(
+                width: _videoWidth.toDouble(),
+                height: _videoHeight.toDouble(),
+                child: Texture(
+                  key: ValueKey<int>(textureId),
+                  textureId: textureId,
+                ),
+              ),
+            ),
           );
   }
 
@@ -61,6 +74,8 @@ final class OhosVideoPlaybackBackend implements VideoPlaybackBackend {
       throw StateError('The selected video episode has no playback resource.');
     }
     final generation = ++_generation;
+    _videoWidth = 640;
+    _videoHeight = 360;
     _emit(
       VideoPlaybackBackendState(
         duration: episode.durationHint ?? Duration.zero,
@@ -170,6 +185,15 @@ final class OhosVideoPlaybackBackend implements VideoPlaybackBackend {
     final value = event.value;
     final milliseconds = value is num ? value.toInt() : 0;
     switch (event.kind) {
+      case 'videoSize':
+        final width = event.width;
+        final height = event.height;
+        if (width != null && height != null && width > 0 && height > 0) {
+          _videoWidth = width;
+          _videoHeight = height;
+          // Rebuild the FittedBox with the native stream's real aspect ratio.
+          _emit(_state.value.copyWith());
+        }
       case 'playing':
         _emit(_state.value.copyWith(playing: value == true, buffering: false));
       case 'position':

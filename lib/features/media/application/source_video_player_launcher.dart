@@ -238,6 +238,7 @@ final class _SourceVideoPlayerDestinationState extends State<_SourceVideoPlayerD
         // information. Keep the native AVPlayer session alive while it is
         // still preparing instead of pausing it at 25 seconds.
         firstFrameTimeout: platformCapabilities.isOhos ? const Duration(seconds: 90) : const Duration(seconds: 25),
+        controlsAutoHideDelay: platformCapabilities.isOhos ? const Duration(seconds: 8) : const Duration(seconds: 3),
         backendFactory: () =>
             platformCapabilities.isOhos ? createOhosVideoPlaybackBackend() : createMediaKitVideoPlaybackBackend(proxyUri: setup.proxyUri),
         supportsBufferedPosition: !platformCapabilities.isOhos || platformCapabilities.supportsOhosVideoBufferedPosition,

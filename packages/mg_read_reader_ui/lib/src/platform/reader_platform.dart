@@ -37,6 +37,9 @@ abstract class ReaderPlatform extends PlatformInterface {
   Future<void> setVideoWindowMode({required bool fullscreen}) =>
       Future<void>.value();
 
+  /// Keeps the video window awake without changing its system-bar mode.
+  Future<void> setVideoKeepScreenOn(bool enabled) => Future<void>.value();
+
   /// Enables the host's native volume-key interception while a reader is
   /// actively accepting page-turn shortcuts.
   Future<void> setVolumeKeyPageTurningEnabled(bool enabled) async {}
@@ -174,6 +177,14 @@ class MethodChannelReaderPlatform extends ReaderPlatform {
     if (!_isOhos) return Future<void>.value();
     return _channel.invokeMethod<void>('setVideoWindowMode', <String, bool>{
       'fullscreen': fullscreen,
+    });
+  }
+
+  @override
+  Future<void> setVideoKeepScreenOn(bool enabled) {
+    if (!_isOhos) return Future<void>.value();
+    return _channel.invokeMethod<void>('setVideoKeepScreenOn', <String, bool>{
+      'enabled': enabled,
     });
   }
 

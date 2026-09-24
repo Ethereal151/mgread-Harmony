@@ -31,6 +31,8 @@ interface OhosMediaEventPayload {
   kind: string
   value?: boolean | number | null
   message?: string
+  width?: number
+  height?: number
 }
 
 /** Native AVPlayer owner for OHOS audio and video sessions. */
@@ -273,6 +275,7 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
       this.log(`video_size session=${sessionId} width=${width} height=${height}`)
       if (session.texture !== undefined && width > 0 && height > 0) {
         this.setVideoTextureSize(session.texture, width, height)
+        this.emitVideoSize(sessionId, width, height)
       }
     })
     player.on('startRenderFrame', () => {
@@ -403,6 +406,11 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
     const event: OhosMediaEventPayload = {sessionId, kind}
     if (value !== undefined) event.value = value as boolean | number | null
     if (message !== undefined) event.message = message
+    this.events.emit(event)
+  }
+
+  private emitVideoSize(sessionId: string, width: number, height: number): void {
+    const event: OhosMediaEventPayload = {sessionId, kind: 'videoSize', width, height}
     this.events.emit(event)
   }
 

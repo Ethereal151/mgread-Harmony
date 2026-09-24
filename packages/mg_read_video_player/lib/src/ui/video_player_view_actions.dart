@@ -199,8 +199,18 @@ extension _VideoPlayerViewActions on _VideoPlayerViewState {
   }
 
   Future<void> _actionToggleControls() async {
-    _update(() => _controlsVisible = !_controlsVisible);
-    if (_controlsVisible) _scheduleControlsHide();
+    // A tap on the hidden gesture layer can also deliver its pointer-up to
+    // the chrome after the chrome is rebuilt. Cancel the timer before the
+    // rebuild and start a fresh one after the frame, otherwise the timer
+    // created by that same gesture can make the controls disappear at once.
+    final wasVisible = _controlsVisible;
+    _controlsTimer?.cancel();
+    _controlsTimer = null;
+    _update(() => _controlsVisible = !wasVisible);
+    if (wasVisible) return;
+    await WidgetsBinding.instance.endOfFrame;
+    if (_disposed || !_controlsVisible) return;
+    _scheduleControlsHide();
   }
 
   Future<void> _actionRequestFullscreen(bool fullscreen) async {
@@ -378,7 +388,12 @@ extension _VideoPlayerViewActions on _VideoPlayerViewState {
   void _actionScheduleControlsHide() {
     _controlsTimer?.cancel();
     _controlsTimer = null;
-    if (!_backendState.playing || !_controlsVisible || _disposed) return;
+    if (!_backendState.playing ||
+        !_backendState.firstFrameReady ||
+        !_controlsVisible ||
+        _disposed) {
+      return;
+    }
     _controlsTimer = Timer(widget.controlsAutoHideDelay, () {
       if (_disposed || !_backendState.playing) return;
       _update(() => _controlsVisible = false);
