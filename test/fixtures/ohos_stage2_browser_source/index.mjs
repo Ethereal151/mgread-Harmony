@@ -94,7 +94,7 @@ async function javascriptPage() {
   const page = await context.webview.open({ visible: false, timeoutMs: 30_000 });
   try {
     await page.navigate("https://example.com/", { timeoutMs: 30_000 });
-    const title = await page.executeJavaScript("document.title", { timeoutMs: 30_000 });
+    const title = await page.executeJavaScript("return document.title", { timeoutMs: 30_000 });
     const url = await page.getUrl({ timeoutMs: 30_000 });
     const html = await page.getHtml({ timeoutMs: 30_000 });
     return `js:${title}:${url.startsWith("https://example.com/")}:${html.includes("Example Domain")}`;
