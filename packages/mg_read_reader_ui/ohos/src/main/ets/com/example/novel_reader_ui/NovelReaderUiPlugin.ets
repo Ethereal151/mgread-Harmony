@@ -262,7 +262,6 @@ export default class NovelReaderUiPlugin implements FlutterPlugin, MethodCallHan
       return
     }
     try {
-      const generation = ++this.systemUiRequestGeneration
       this.applicationStatusBarColor = statusBarColor
       this.applicationNavigationBarColor = navigationBarColor
       this.applicationStatusBarContentColor = statusBarContentColor
@@ -273,6 +272,7 @@ export default class NovelReaderUiPlugin implements FlutterPlugin, MethodCallHan
         result.success(null)
         return
       }
+      const generation = ++this.systemUiRequestGeneration
       const target = await this.applicationWindow()
       await target.setWindowSystemBarEnable(['status', 'navigation'])
       if (generation !== this.systemUiRequestGeneration) {
