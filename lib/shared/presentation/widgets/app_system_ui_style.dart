@@ -3,6 +3,7 @@
 /// 职责：
 /// - 将 Flutter 页面实际使用的上下背景色声明给系统栏。
 /// - 在鸿蒙上同步原生窗口属性，避免媒体窗口退出后残留系统默认颜色。
+/// - 在应用进入/离开最近任务时重新同步原生窗口属性，避免系统栏回退到默认色。
 /// - 保留播放器等更深层 [AnnotatedRegion] 对沉浸式页面的覆盖能力。
 ///
 /// 注意：
@@ -28,8 +29,27 @@ final class AppSystemUiStyle extends StatefulWidget {
   State<AppSystemUiStyle> createState() => _AppSystemUiStyleState();
 }
 
-final class _AppSystemUiStyleState extends State<AppSystemUiStyle> {
+final class _AppSystemUiStyleState extends State<AppSystemUiStyle> with WidgetsBindingObserver {
   Brightness? _lastBrightness;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.detached) {
+      unawaited(_syncNative());
+    }
+  }
 
   @override
   void didUpdateWidget(covariant AppSystemUiStyle oldWidget) {

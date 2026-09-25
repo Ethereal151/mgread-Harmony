@@ -209,10 +209,8 @@ class _MgReadAppState extends ConsumerState<MgReadApp> with WidgetsBindingObserv
         final pageBackground = AppThemeTokens.of(context).pageBackground;
         final darkTheme = Theme.of(context).brightness == Brightness.dark;
         final contentBrightness = darkTheme ? Brightness.light : Brightness.dark;
-        final MediaQueryData windowMetrics = AppSpacing.normalizeWindowInsets(
-          MediaQuery.of(context),
-          isOhos: Platform.operatingSystem == 'ohos',
-        );
+        final bool isOhos = Platform.operatingSystem == 'ohos';
+        final MediaQueryData windowMetrics = AppSpacing.normalizeWindowInsets(MediaQuery.of(context), isOhos: isOhos);
         return MediaQuery(
           data: windowMetrics,
           child: AnnotatedRegion<SystemUiOverlayStyle>(
@@ -220,11 +218,14 @@ class _MgReadAppState extends ConsumerState<MgReadApp> with WidgetsBindingObserv
               // Android 15 draws the status bar edge-to-edge. Declare its
               // contrast here so a platform default color cannot flash above a
               // loading destination before that page supplies its own chrome.
-              statusBarColor: pageBackground,
+              // Page-owned AppSystemUiStyle regions provide the concrete
+              // status-bar color. Keep the root region transparent so it
+              // cannot cover that page-specific declaration.
+              statusBarColor: Colors.transparent,
               statusBarIconBrightness: contentBrightness,
               statusBarBrightness: darkTheme ? Brightness.dark : Brightness.light,
-              systemNavigationBarColor: pageBackground,
-              systemNavigationBarDividerColor: pageBackground,
+              systemNavigationBarColor: isOhos ? Colors.transparent : pageBackground,
+              systemNavigationBarDividerColor: isOhos ? Colors.transparent : pageBackground,
               systemNavigationBarIconBrightness: contentBrightness,
               systemStatusBarContrastEnforced: false,
               systemNavigationBarContrastEnforced: false,
