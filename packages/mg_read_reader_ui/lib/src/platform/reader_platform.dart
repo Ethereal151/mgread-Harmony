@@ -37,6 +37,10 @@ abstract class ReaderPlatform extends PlatformInterface {
   Future<void> setVideoWindowMode({required bool fullscreen}) =>
       Future<void>.value();
 
+  /// Releases native media system-bar ownership and restores the application
+  /// page colors after a media presentation ends.
+  Future<void> restoreApplicationSystemUi() => Future<void>.value();
+
   /// Applies host-owned application page colors to native system bars.
   ///
   /// The default is a no-op so existing platform implementations remain
@@ -190,6 +194,12 @@ class MethodChannelReaderPlatform extends ReaderPlatform {
     return _channel.invokeMethod<void>('setVideoWindowMode', <String, bool>{
       'fullscreen': fullscreen,
     });
+  }
+
+  @override
+  Future<void> restoreApplicationSystemUi() {
+    if (!_isOhos) return Future<void>.value();
+    return _channel.invokeMethod<void>('restoreApplicationSystemUi');
   }
 
   @override

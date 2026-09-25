@@ -83,6 +83,9 @@ export default class NovelReaderUiPlugin implements FlutterPlugin, MethodCallHan
       case 'setApplicationSystemUiStyle':
         this.setApplicationSystemUiStyle(call.args as Map<string, Object> | null, result)
         break
+      case 'restoreApplicationSystemUi':
+        this.restoreApplicationSystemUi(result)
+        break
       case 'setVideoKeepScreenOn':
         this.setVideoKeepScreenOn(call.args as Map<string, Object> | null, result)
         break
@@ -157,10 +160,22 @@ export default class NovelReaderUiPlugin implements FlutterPlugin, MethodCallHan
       return
     }
     try {
-      const generation = ++this.systemUiRequestGeneration
-      if (!immersive) this.mediaSystemUiOwned = false
+      // Audio playback asks this method to keep the screen awake while the
+      // media presentation still owns the system bars. Do not interpret that
+      // request as a media teardown; the explicit restore method below is the
+      // only operation that releases media ownership.
+      const preserveMediaBars = !immersive && this.mediaSystemUiOwned
+      const generation = preserveMediaBars
+        ? this.systemUiRequestGeneration
+        : ++this.systemUiRequestGeneration
       const target = await this.applicationWindow()
       await target.setWindowKeepScreenOn(keep)
+      if (preserveMediaBars) {
+        this.keepScreenOn = keep
+        this.immersiveMode = immersive
+        result.success(null)
+        return
+      }
       if (immersive) {
         await target.setWindowSystemBarEnable([])
       } else {
@@ -290,6 +305,36 @@ export default class NovelReaderUiPlugin implements FlutterPlugin, MethodCallHan
         return
       }
       await target.setWindowLayoutFullScreen(false)
+      result.success(null)
+    } catch (error) {
+      result.error('operation_failed', this.errorMessage(error), null)
+    }
+  }
+
+  private async restoreApplicationSystemUi(result: MethodResult): Promise<void> {
+    try {
+      const generation = ++this.systemUiRequestGeneration
+      this.mediaSystemUiOwned = false
+      const target = await this.applicationWindow()
+      await target.setWindowKeepScreenOn(false)
+      await target.setWindowSystemBarEnable(['status', 'navigation'])
+      if (generation !== this.systemUiRequestGeneration) {
+        result.success(null)
+        return
+      }
+      await target.setWindowSystemBarProperties({
+        statusBarColor: this.applicationStatusBarColor,
+        navigationBarColor: this.applicationNavigationBarColor,
+        statusBarContentColor: this.applicationStatusBarContentColor,
+        navigationBarContentColor: this.applicationNavigationBarContentColor,
+      })
+      if (generation !== this.systemUiRequestGeneration) {
+        result.success(null)
+        return
+      }
+      await target.setWindowLayoutFullScreen(false)
+      this.keepScreenOn = false
+      this.immersiveMode = false
       result.success(null)
     } catch (error) {
       result.error('operation_failed', this.errorMessage(error), null)

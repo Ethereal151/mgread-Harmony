@@ -58,9 +58,11 @@ final class SystemSourceMediaSystemUiPlatform implements SourceMediaSystemUiPlat
   Future<void> restore() async {
     if (Platform.operatingSystem == 'ohos') {
       // Keep the native orientation reset for landscape video. The following
-      // reader call restores the application-owned bars and clears media mode.
+      // calls release media-owned bars only after the screen-awake request has
+      // been settled; screen-awake changes must not clear media ownership.
       await ReaderPlatform.instance.setVideoWindowMode(fullscreen: false);
       await ReaderPlatform.instance.setReaderSystemUi(keepScreenOn: false, immersiveMode: false);
+      await ReaderPlatform.instance.restoreApplicationSystemUi();
       return;
     }
     await SystemChrome.setPreferredOrientations(const <DeviceOrientation>[]);
