@@ -514,10 +514,11 @@ abstract final class AppSpacing {
 
   /// HarmonyOS reports the system bars as part of the Flutter safe area.
   ///
-  /// Keep the top content aligned with the Android reference viewport and
-  /// reserve only the platform-required bottom navigation-bar distance.
-  static const double ohosTopSafeArea = 24;
-  static const double ohosBottomSafeArea = 28;
+  /// Keep the top content aligned with Android's edge-to-edge reference
+  /// viewport. The bottom value excludes the navigation widget's own visual
+  /// padding, so the rendered pill remains 28vp above the system bar.
+  static const double ohosTopSafeArea = 0;
+  static const double ohosBottomSafeArea = 20;
 
   /// Normalizes the window insets used by the shared page shells on OHOS.
   ///

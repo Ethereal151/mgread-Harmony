@@ -23,8 +23,8 @@ void main() {
 
     final MediaQueryData output = AppSpacing.normalizeWindowInsets(input, isOhos: true);
 
-    expect(output.padding, const EdgeInsets.fromLTRB(3, 24, 5, 28));
-    expect(output.viewPadding, const EdgeInsets.fromLTRB(3, 24, 5, 28));
+    expect(output.padding, const EdgeInsets.fromLTRB(3, 0, 5, 20));
+    expect(output.viewPadding, const EdgeInsets.fromLTRB(3, 0, 5, 20));
     expect(output.viewInsets, input.viewInsets);
   });
 
