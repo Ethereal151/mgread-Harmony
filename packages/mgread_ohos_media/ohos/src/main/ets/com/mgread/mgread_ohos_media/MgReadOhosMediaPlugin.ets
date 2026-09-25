@@ -173,16 +173,17 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
       const hls = this.isHlsUrl(url, resourceType)
       this.log(`open session=${sessionId} video=${video} resourceType=${resourceType} hls=${hls} urlLength=${url.length} headerCount=${Object.keys(headers).length}`)
       const runtimeLoopback = this.isRuntimeLoopbackUrl(url)
-      // Match LegadoArkTS: standard HLS starts through AVPlayer.url. On API
-      // 26, MediaSource-backed remote HLS may close its loader before the
-      // first playlist read and leave AVPlayer in initialized with
-      // "Invalid fd uri format". The decoded OHOS HLS URL already points to
-      // the signed variant playlist, so it must not be routed through the
-      // failing MediaSource path just because the source also supplied
-      // request headers. Loopback HLS follows the same URL-first path.
-      if (hls) {
+      // Match LegadoArkTS: URL-backed playback must start through
+      // AVPlayer.url. On API 26, MediaSource-backed streams may close their
+      // loader before the first bytes are read and leave AVPlayer in
+      // initialized forever. Runtime media URLs are private loopback proxy
+      // endpoints; their upstream headers are owned by Runtime and must not
+      // be replayed as headers on the local request. Use the same URL-first
+      // path for both HLS and loopback resources.
+      if (hls || runtimeLoopback) {
         player.url = url
-        this.log(`url_set session=${sessionId} mode=${runtimeLoopback ? 'loopback_hls' : 'remote_hls'}`)
+        const mode = hls ? (runtimeLoopback ? 'loopback_hls' : 'remote_hls') : 'loopback_media'
+        this.log(`url_set session=${sessionId} mode=${mode}`)
       } else {
         const source = media.createMediaSourceWithUrl(url, headers)
         // API 26 devices expose setMediaSource(strategy) in the type surface,

@@ -199,6 +199,31 @@ void main() {
     expect(track.expiresAt, expiresAt);
   });
 
+  test('decodes Runtime audio proxy URLs before handing them to the player', () async {
+    final source = SourceAudioPlaylistDataSource(
+      gateway: _AudioGateway(runtimeProxy: true),
+      pluginId: _pluginId,
+      decodeSourceResource: (url) async {
+        expect(url, 'http://127.0.0.1:9000/v1/source-resource/abcdefghijklmnop');
+        return const SourceResourceDecodeResult(
+          pluginId: _pluginId,
+          request: <String, Object?>{
+            'url': 'https://media.example/episode.mp3',
+            'headers': <String, Object?>{'Referer': 'https://example.test/'},
+          },
+        );
+      },
+      initialTrackId: 'chapter:free-2',
+      initialDetail: _detail(),
+      initialCatalog: _catalog(),
+    );
+
+    final track = (await source.loadPlaylist('audio:book-1')).tracks.single;
+
+    expect(track.resource, Uri.parse('https://media.example/episode.mp3'));
+    expect(track.httpHeaders, <String, String>{'Referer': 'https://example.test/'});
+  });
+
   test('cancels the Runtime resource scope when the session supersedes it', () async {
     final contentGate = Completer<void>();
     final gateway = _AudioGateway(contentGate: contentGate);
@@ -282,6 +307,7 @@ final class _AudioGateway implements SourceContentGateway, CancellableSourceCont
     this.failCatalog = false,
     this.resourcePolicy = PluginMediaResourcePolicy.sessionOnly,
     this.expiresAt,
+    this.runtimeProxy = false,
   });
 
   final String? failingChapterId;
@@ -291,6 +317,7 @@ final class _AudioGateway implements SourceContentGateway, CancellableSourceCont
   final bool failCatalog;
   final PluginMediaResourcePolicy resourcePolicy;
   final DateTime? expiresAt;
+  final bool runtimeProxy;
   PluginInvocationCancellation? lastCancellation;
   final List<String> contentCalls = <String>[];
   int detailCalls = 0;
@@ -311,7 +338,9 @@ final class _AudioGateway implements SourceContentGateway, CancellableSourceCont
       text: null,
       pages: const <PluginMangaPage>[],
       media: PluginMediaResource(
-        url: Uri.parse('http://127.0.0.1/source-resource/$chapterId'),
+        url: runtimeProxy
+            ? Uri.parse('http://127.0.0.1:9000/v1/source-resource/abcdefghijklmnop')
+            : Uri.parse('http://127.0.0.1/source-resource/$chapterId'),
         resourceType: PluginMediaResourceType.audio,
         resourcePolicy: resourcePolicy,
         expiresAt: expiresAt,

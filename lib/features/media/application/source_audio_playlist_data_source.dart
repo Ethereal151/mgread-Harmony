@@ -24,6 +24,7 @@ final class SourceAudioPlaylistDataSource implements AudioPlaylistQueueDataSourc
   SourceAudioPlaylistDataSource({
     required this.gateway,
     required this.pluginId,
+    this.decodeSourceResource,
     this.initialTrackId,
     this.initialDetail,
     this.initialCatalog,
@@ -31,6 +32,7 @@ final class SourceAudioPlaylistDataSource implements AudioPlaylistQueueDataSourc
 
   final SourceContentGateway gateway;
   final String pluginId;
+  final Future<SourceResourceDecodeResult> Function(String url)? decodeSourceResource;
   final String? initialTrackId;
   final PluginContentDetail? initialDetail;
   final PluginChaptersResult? initialCatalog;
@@ -263,23 +265,51 @@ final class SourceAudioPlaylistDataSource implements AudioPlaylistQueueDataSourc
     if (content.contentKind != PluginContentKind.audio || media == null) {
       throw const AudioPlayerLoadException(code: 'audio_resource_missing', location: '播放地址', message: '数据源没有返回该章节的可播放地址。');
     }
+    var resource = media.url;
+    var headers = media.headers;
+    final decode = decodeSourceResource;
+    if (decode != null && _isRuntimeResourceUrl(resource)) {
+      try {
+        final decoded = await decode(resource.toString());
+        final directUrl = decoded.request['url'];
+        final directHeaders = decoded.request['headers'];
+        if (directUrl is! String || directUrl.isEmpty || directHeaders is! Map) {
+          throw const FormatException('Runtime returned an invalid direct audio resource.');
+        }
+        resource = Uri.parse(directUrl);
+        headers = <String, String>{
+          for (final entry in directHeaders.entries)
+            if (entry.key is String && entry.value is String) entry.key as String: entry.value as String,
+        };
+      } on Object catch (error) {
+        throw AudioPlayerLoadException(
+          code: 'audio_resource_decode_failed',
+          location: '还原鸿蒙音频播放地址',
+          message: '鸿蒙音频播放地址解析失败：$error',
+          debugDetail: _sourceFailureDetail(error),
+        );
+      }
+    }
     return AudioTrack(
       id: chapter.id,
       title: chapter.title,
       collectionTitle: detail.summary.title,
       creator: detail.summary.author,
       sourceUrl: chapter.url ?? detail.catalogUrl ?? detail.summary.url,
-      resource: media.url,
+      resource: resource,
       artwork: detail.summary.coverUrl,
       artworkBytes: detail.summary.coverBytes,
       resourcePolicy: media.resourcePolicy == PluginMediaResourcePolicy.refreshable
           ? AudioResourcePolicy.refreshable
           : AudioResourcePolicy.sessionOnly,
       expiresAt: media.expiresAt,
-      httpHeaders: media.headers,
+      httpHeaders: headers,
     );
   }
 }
+
+bool _isRuntimeResourceUrl(Uri url) =>
+    (url.host == '127.0.0.1' || url.host == 'localhost' || url.host == '::1') && url.path.startsWith('/v1/source-resource/');
 
 String _sourceFailureDetail(Object error) {
   final text = error.toString().trim();

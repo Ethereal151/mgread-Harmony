@@ -27,6 +27,7 @@ import 'package:mg_read/core/settings/settings.dart';
 import 'package:mg_read/features/discovery/application/source_content_gateway.dart';
 import 'package:mg_read/features/network_proxy/application/flutter_network_proxy_manager.dart';
 import 'package:mg_read/features/network_proxy/application/network_proxy_settings.dart';
+import 'package:mg_read/features/plugins/application/plugin_runtime_connection.dart';
 import 'package:mg_read/platform/platform_capabilities.dart';
 
 import 'android_audio_background_service.dart';
@@ -243,6 +244,9 @@ final class SourceAudioPlaybackService extends Notifier<SourceAudioPlaybackState
       localDataSource = SourceAudioPlaylistDataSource(
         gateway: ref.read(sourceContentGatewayProvider),
         pluginId: request.detail.pluginId,
+        decodeSourceResource: platformCapabilities.isOhos
+            ? (url) => ref.read(pluginRuntimeFacadeProvider).invoke(SourceResourceDecodeInvocation(url: url))
+            : null,
         initialTrackId: request.chapter.id,
         initialDetail: request.detail,
         initialCatalog: request.libraryItemId == null ? request.firstCatalogPage : null,
