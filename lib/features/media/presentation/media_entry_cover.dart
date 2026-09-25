@@ -12,7 +12,6 @@
 library;
 
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -36,28 +35,18 @@ enum MediaEntryKind {
   };
 }
 
-final SystemUiOverlayStyle _mediaEntrySystemUiStyle = Platform.operatingSystem == 'ohos'
-    ? const SystemUiOverlayStyle(
-        // OHOS owns media bar backgrounds through the native window. Leave
-        // colors unset so Flutter cannot replace the native transparent bars.
-        statusBarIconBrightness: Brightness.light,
-        statusBarBrightness: Brightness.dark,
-        systemNavigationBarIconBrightness: Brightness.light,
-        systemStatusBarContrastEnforced: false,
-        systemNavigationBarContrastEnforced: false,
-      )
-    : const SystemUiOverlayStyle(
-        // Let the preparation surface paint beneath both bars on platforms
-        // where Flutter owns the overlay colors.
-        statusBarColor: Colors.transparent,
-        statusBarIconBrightness: Brightness.light,
-        statusBarBrightness: Brightness.dark,
-        systemNavigationBarColor: Colors.transparent,
-        systemNavigationBarDividerColor: Colors.transparent,
-        systemNavigationBarIconBrightness: Brightness.light,
-        systemStatusBarContrastEnforced: false,
-        systemNavigationBarContrastEnforced: false,
-      );
+const SystemUiOverlayStyle _mediaEntrySystemUiStyle = SystemUiOverlayStyle(
+  // Audio and video preparation surfaces can be transparent overlays. Clear
+  // both colors so the bars follow the media surface instead of the page below.
+  statusBarColor: Colors.transparent,
+  statusBarIconBrightness: Brightness.light,
+  statusBarBrightness: Brightness.dark,
+  systemNavigationBarColor: Colors.transparent,
+  systemNavigationBarDividerColor: Colors.transparent,
+  systemNavigationBarIconBrightness: Brightness.light,
+  systemStatusBarContrastEnforced: false,
+  systemNavigationBarContrastEnforced: false,
+);
 
 /// Keeps portrait immersive mode aligned with one mounted media presentation.
 final class SourceMediaImmersiveScope extends StatefulWidget {

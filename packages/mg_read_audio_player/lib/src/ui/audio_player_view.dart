@@ -12,7 +12,6 @@ library;
 
 import 'dart:async';
 import 'dart:math' as math;
-import 'dart:io';
 
 import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
@@ -33,27 +32,18 @@ import 'audio_player_sheets.dart';
 import 'audio_player_states.dart';
 import 'audio_player_theme.dart';
 
-final _audioPlayerSystemUiStyle = Platform.operatingSystem == 'ohos'
-    ? const SystemUiOverlayStyle(
-        // OHOS owns media bar backgrounds through the native window. Do not
-        // send transparent colors from Flutter after the native transition,
-        // or the engine can replace them with platform-default chrome.
-        statusBarIconBrightness: Brightness.light,
-        statusBarBrightness: Brightness.dark,
-        systemNavigationBarIconBrightness: Brightness.light,
-        systemStatusBarContrastEnforced: false,
-        systemNavigationBarContrastEnforced: false,
-      )
-    : const SystemUiOverlayStyle(
-        statusBarColor: Colors.transparent,
-        statusBarIconBrightness: Brightness.light,
-        statusBarBrightness: Brightness.dark,
-        systemNavigationBarColor: Colors.transparent,
-        systemNavigationBarDividerColor: Colors.transparent,
-        systemNavigationBarIconBrightness: Brightness.light,
-        systemStatusBarContrastEnforced: false,
-        systemNavigationBarContrastEnforced: false,
-      );
+const _audioPlayerSystemUiStyle = SystemUiOverlayStyle(
+  // Audio is a transparent overlay above the detail page. Explicitly clear
+  // both colors so the bars cannot inherit the page below the overlay.
+  statusBarColor: Colors.transparent,
+  statusBarIconBrightness: Brightness.light,
+  statusBarBrightness: Brightness.dark,
+  systemNavigationBarColor: Colors.transparent,
+  systemNavigationBarDividerColor: Colors.transparent,
+  systemNavigationBarIconBrightness: Brightness.light,
+  systemStatusBarContrastEnforced: false,
+  systemNavigationBarContrastEnforced: false,
+);
 
 /// A complete audio playback page with an independently owned design.
 class AudioPlayerView extends StatefulWidget {
