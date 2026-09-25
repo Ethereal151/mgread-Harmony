@@ -22,6 +22,10 @@ export default class NovelReaderUiPlugin implements FlutterPlugin, MethodCallHan
   private activeWindow?: window.Window
   private keepScreenOn: boolean = false
   private immersiveMode: boolean = false
+  private applicationStatusBarColor: string = '#FDFBFA'
+  private applicationNavigationBarColor: string = '#FDFBFA'
+  private applicationStatusBarContentColor: string = '#201C18'
+  private applicationNavigationBarContentColor: string = '#201C18'
   private volumeKeyPageTurningEnabled: boolean = false
   private readonly volumeKeyHandler = (event: KeyEvent): void => {
     const direction = event.key.code === KeyCode.KEYCODE_VOLUME_UP
@@ -73,6 +77,9 @@ export default class NovelReaderUiPlugin implements FlutterPlugin, MethodCallHan
         break
       case 'setVideoWindowMode':
         this.setVideoWindowMode(call.args as Map<string, Object> | null, result)
+        break
+      case 'setApplicationSystemUiStyle':
+        this.setApplicationSystemUiStyle(call.args as Map<string, Object> | null, result)
         break
       case 'setVideoKeepScreenOn':
         this.setVideoKeepScreenOn(call.args as Map<string, Object> | null, result)
@@ -154,14 +161,14 @@ export default class NovelReaderUiPlugin implements FlutterPlugin, MethodCallHan
         await target.setWindowSystemBarEnable([])
       } else {
         await target.setWindowSystemBarEnable(['status', 'navigation'])
-        // Media mode owns opaque black bars while it is active. Restore the
-        // application-owned transparent bars before returning to Flutter so
-        // the current page background and overlay brightness can take effect.
+        // Media mode owns its own bars while it is active. Restore the last
+        // application-owned colors before returning to Flutter so a page does
+        // not inherit a stale black or platform-default system bar.
         await target.setWindowSystemBarProperties({
-          statusBarColor: '#FDFBFA',
-          navigationBarColor: '#FDFBFA',
-          statusBarContentColor: '#201C18',
-          navigationBarContentColor: '#201C18',
+          statusBarColor: this.applicationStatusBarColor,
+          navigationBarColor: this.applicationNavigationBarColor,
+          statusBarContentColor: this.applicationStatusBarContentColor,
+          navigationBarContentColor: this.applicationNavigationBarContentColor,
         })
         await target.setWindowLayoutFullScreen(false)
       }
@@ -215,6 +222,43 @@ export default class NovelReaderUiPlugin implements FlutterPlugin, MethodCallHan
     }
   }
 
+  private async setApplicationSystemUiStyle(
+    args: Map<string, Object> | null,
+    result: MethodResult,
+  ): Promise<void> {
+    const statusBarColor = args?.get('statusBarColor')
+    const navigationBarColor = args?.get('navigationBarColor')
+    const statusBarContentColor = args?.get('statusBarContentColor')
+    const navigationBarContentColor = args?.get('navigationBarContentColor')
+    if (
+      typeof statusBarColor !== 'string' ||
+      typeof navigationBarColor !== 'string' ||
+      typeof statusBarContentColor !== 'string' ||
+      typeof navigationBarContentColor !== 'string'
+    ) {
+      result.error('invalid_argument', 'system bar colors must be strings.', null)
+      return
+    }
+    try {
+      const target = await this.applicationWindow()
+      await target.setWindowSystemBarEnable(['status', 'navigation'])
+      await target.setWindowSystemBarProperties({
+        statusBarColor: statusBarColor,
+        navigationBarColor: navigationBarColor,
+        statusBarContentColor: statusBarContentColor,
+        navigationBarContentColor: navigationBarContentColor,
+      })
+      this.applicationStatusBarColor = statusBarColor
+      this.applicationNavigationBarColor = navigationBarColor
+      this.applicationStatusBarContentColor = statusBarContentColor
+      this.applicationNavigationBarContentColor = navigationBarContentColor
+      await target.setWindowLayoutFullScreen(false)
+      result.success(null)
+    } catch (error) {
+      result.error('operation_failed', this.errorMessage(error), null)
+    }
+  }
+
   private async setVideoKeepScreenOn(
     args: Map<string, Object> | null,
     result: MethodResult,
@@ -239,10 +283,10 @@ export default class NovelReaderUiPlugin implements FlutterPlugin, MethodCallHan
     await this.activeWindow.setWindowKeepScreenOn(false)
     await this.activeWindow.setWindowSystemBarEnable(['status', 'navigation'])
     await this.activeWindow.setWindowSystemBarProperties({
-      statusBarColor: '#FDFBFA',
-      navigationBarColor: '#FDFBFA',
-      statusBarContentColor: '#201C18',
-      navigationBarContentColor: '#201C18',
+      statusBarColor: this.applicationStatusBarColor,
+      navigationBarColor: this.applicationNavigationBarColor,
+      statusBarContentColor: this.applicationStatusBarContentColor,
+      navigationBarContentColor: this.applicationNavigationBarContentColor,
     })
     await this.activeWindow.setWindowLayoutFullScreen(false)
     this.keepScreenOn = false

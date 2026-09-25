@@ -31,6 +31,7 @@ import 'package:mg_read/features/discovery/presentation/widgets/discovery_landsc
 import 'package:mg_read/shared/presentation/app_navigation_destination.dart';
 import 'package:mg_read/shared/presentation/widgets/app_bottom_navigation.dart';
 import 'package:mg_read/shared/presentation/widgets/async_book_cover_loader.dart';
+import 'package:mg_read/shared/presentation/widgets/app_system_ui_style.dart';
 
 /// Host-controlled, lossless renderer for a validated source discovery tree.
 class RuntimeDiscoveryPage extends StatelessWidget {
@@ -92,114 +93,120 @@ class RuntimeDiscoveryPage extends StatelessWidget {
     final resolvedSourceName = sourceName ?? result?.sourceName ?? '当前来源';
     final isNestedPage = navigationDepth > 0;
     final reduceMotion = MediaQuery.disableAnimationsOf(context);
-    return BookCoverSourceScope(
-      pluginId: result?.pluginId ?? 'unavailable',
-      child: CallbackShortcuts(
-        // Discovery owns an in-page navigation stack. Keep Escape on the same
-        // callback as the visible back button and PopScope; do not pop the
-        // outer GoRouter destination while a category stack still exists.
-        bindings: <ShortcutActivator, VoidCallback>{const SingleActivator(LogicalKeyboardKey.escape): onBackRequested},
-        child: Focus(
-          autofocus: true,
-          child: PopScope(
-            canPop: allowsRoutePop || !canNavigateBack,
-            onPopInvokedWithResult: (didPop, _) {
-              if (!allowsRoutePop && !didPop) onBackRequested();
-            },
-            child: Scaffold(
-              extendBody: true,
-              body: SafeArea(
-                bottom: false,
-                child: LayoutBuilder(
-                  builder: (BuildContext context, BoxConstraints constraints) {
-                    final bool useWidePagePadding = constraints.maxWidth >= AppSpacing.compactLayoutBreakpoint;
-                    final double pagePadding = useWidePagePadding ? AppSpacing.widePagePadding : AppSpacing.discoveryPagePadding;
-                    return Align(
-                      alignment: isNestedPage ? Alignment.topLeft : Alignment.topCenter,
-                      child: ConstrainedBox(
-                        constraints: BoxConstraints(maxWidth: isNestedPage ? AppSpacing.discoveryListMaxWidth : AppSpacing.contentMaxWidth),
-                        child: AnimatedSwitcher(
-                          duration: reduceMotion ? Duration.zero : const Duration(milliseconds: 180),
-                          reverseDuration: reduceMotion ? Duration.zero : const Duration(milliseconds: 150),
-                          switchInCurve: Curves.easeOutCubic,
-                          switchOutCurve: Curves.easeInCubic,
-                          transitionBuilder: (child, animation) => SlideTransition(
-                            position: Tween<Offset>(begin: const Offset(0.07, 0), end: Offset.zero).animate(animation),
-                            child: FadeTransition(opacity: animation, child: child),
+    return AppSystemUiStyle(
+      statusBarColor: AppThemeTokens.of(context).pageBackground,
+      navigationBarColor: AppThemeTokens.of(context).pageBackground,
+      child: BookCoverSourceScope(
+        pluginId: result?.pluginId ?? 'unavailable',
+        child: CallbackShortcuts(
+          // Discovery owns an in-page navigation stack. Keep Escape on the same
+          // callback as the visible back button and PopScope; do not pop the
+          // outer GoRouter destination while a category stack still exists.
+          bindings: <ShortcutActivator, VoidCallback>{const SingleActivator(LogicalKeyboardKey.escape): onBackRequested},
+          child: Focus(
+            autofocus: true,
+            child: PopScope(
+              canPop: allowsRoutePop || !canNavigateBack,
+              onPopInvokedWithResult: (didPop, _) {
+                if (!allowsRoutePop && !didPop) onBackRequested();
+              },
+              child: Scaffold(
+                extendBody: true,
+                body: SafeArea(
+                  bottom: false,
+                  child: LayoutBuilder(
+                    builder: (BuildContext context, BoxConstraints constraints) {
+                      final bool useWidePagePadding = constraints.maxWidth >= AppSpacing.compactLayoutBreakpoint;
+                      final double pagePadding = useWidePagePadding ? AppSpacing.widePagePadding : AppSpacing.discoveryPagePadding;
+                      return Align(
+                        alignment: isNestedPage ? Alignment.topLeft : Alignment.topCenter,
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(
+                            maxWidth: isNestedPage ? AppSpacing.discoveryListMaxWidth : AppSpacing.contentMaxWidth,
                           ),
-                          child: KeyedSubtree(
-                            key: ValueKey<String>('runtime-discovery-page-$navigationDepth-${result == null ? 'loading' : 'content'}'),
-                            child: ListView(
-                              key: PageStorageKey<int>(navigationDepth),
-                              padding: EdgeInsets.fromLTRB(
-                                pagePadding,
-                                AppSpacing.pageHeaderTopPaddingFor(context),
-                                pagePadding,
-                                AppSpacing.bottomNavigationContentBottomPadding + MediaQuery.viewPaddingOf(context).bottom,
-                              ),
-                              children: <Widget>[
-                                DiscoveryTopBar(
-                                  title: isNestedPage ? _nestedPageTitle(components) ?? '发现' : '发现',
-                                  sourceName: resolvedSourceName,
-                                  onSourcePressed: onSourcePressed,
-                                  onSearchPressed: onSearchRequested ?? () => onDestinationRequested(AppNavigationDestination.search),
-                                  onToggleTheme: () => AppThemeModeScope.of(context).onToggleTheme(Theme.of(context).brightness),
-                                  onRefreshPressed: onRefreshRequested,
-                                  onBackPressed: isNestedPage ? onBackRequested : null,
-                                  barKey: isNestedPage ? const Key('runtime-discovery-nested-header') : null,
-                                  backButtonKey: isNestedPage ? const Key('runtime-discovery-back') : null,
-                                  showSourceSelector: !isNestedPage,
+                          child: AnimatedSwitcher(
+                            duration: reduceMotion ? Duration.zero : const Duration(milliseconds: 180),
+                            reverseDuration: reduceMotion ? Duration.zero : const Duration(milliseconds: 150),
+                            switchInCurve: Curves.easeOutCubic,
+                            switchOutCurve: Curves.easeInCubic,
+                            transitionBuilder: (child, animation) => SlideTransition(
+                              position: Tween<Offset>(begin: const Offset(0.07, 0), end: Offset.zero).animate(animation),
+                              child: FadeTransition(opacity: animation, child: child),
+                            ),
+                            child: KeyedSubtree(
+                              key: ValueKey<String>('runtime-discovery-page-$navigationDepth-${result == null ? 'loading' : 'content'}'),
+                              child: ListView(
+                                key: PageStorageKey<int>(navigationDepth),
+                                padding: EdgeInsets.fromLTRB(
+                                  pagePadding,
+                                  AppSpacing.pageHeaderTopPaddingFor(context),
+                                  pagePadding,
+                                  AppSpacing.bottomNavigationContentBottomPadding + MediaQuery.viewPaddingOf(context).bottom,
                                 ),
-                                if (result == null)
-                                  Padding(
-                                    padding: const EdgeInsets.only(top: AppSpacing.section),
-                                    child: DiscoveryContentState(
-                                      isLoading: isContentLoading,
-                                      isEmpty: contentIsEmpty,
-                                      failureMessage: contentFailureMessage,
-                                      failureDetail: contentFailureDetail,
-                                      failureCode: contentFailureCode,
-                                      failureCopyPayload: contentFailureCopyPayload,
-                                      onCopy: onCopyFailure,
-                                      onRetry: onRefreshRequested,
-                                    ),
-                                  )
-                                else
-                                  for (var index = 0; index < components.length; index++) ...<Widget>[
-                                    _DiscoveryComponentRenderer(
-                                      component: components[index],
-                                      hideSectionTitle: canNavigateBack,
-                                      onTabSelected: onTabSelected,
-                                      onCategorySelected: onCategorySelected,
-                                      onContentPressed: onContentPressed,
-                                      onLoadMore: onLoadMore,
-                                      loadingCollectionId: loadingCollectionId,
-                                      isInBookshelf: isInBookshelf,
-                                    ),
-                                    if (index != components.length - 1) const SizedBox(height: AppSpacing.discoverySectionSpacing),
-                                  ],
-                              ],
+                                children: <Widget>[
+                                  DiscoveryTopBar(
+                                    title: isNestedPage ? _nestedPageTitle(components) ?? '发现' : '发现',
+                                    sourceName: resolvedSourceName,
+                                    onSourcePressed: onSourcePressed,
+                                    onSearchPressed: onSearchRequested ?? () => onDestinationRequested(AppNavigationDestination.search),
+                                    onToggleTheme: () => AppThemeModeScope.of(context).onToggleTheme(Theme.of(context).brightness),
+                                    onRefreshPressed: onRefreshRequested,
+                                    onBackPressed: isNestedPage ? onBackRequested : null,
+                                    barKey: isNestedPage ? const Key('runtime-discovery-nested-header') : null,
+                                    backButtonKey: isNestedPage ? const Key('runtime-discovery-back') : null,
+                                    showSourceSelector: !isNestedPage,
+                                  ),
+                                  if (result == null)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: AppSpacing.section),
+                                      child: DiscoveryContentState(
+                                        isLoading: isContentLoading,
+                                        isEmpty: contentIsEmpty,
+                                        failureMessage: contentFailureMessage,
+                                        failureDetail: contentFailureDetail,
+                                        failureCode: contentFailureCode,
+                                        failureCopyPayload: contentFailureCopyPayload,
+                                        onCopy: onCopyFailure,
+                                        onRetry: onRefreshRequested,
+                                      ),
+                                    )
+                                  else
+                                    for (var index = 0; index < components.length; index++) ...<Widget>[
+                                      _DiscoveryComponentRenderer(
+                                        component: components[index],
+                                        hideSectionTitle: canNavigateBack,
+                                        onTabSelected: onTabSelected,
+                                        onCategorySelected: onCategorySelected,
+                                        onContentPressed: onContentPressed,
+                                        onLoadMore: onLoadMore,
+                                        loadingCollectionId: loadingCollectionId,
+                                        isInBookshelf: isInBookshelf,
+                                      ),
+                                      if (index != components.length - 1) const SizedBox(height: AppSpacing.discoverySectionSpacing),
+                                    ],
+                                ],
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                    );
-                  },
+                      );
+                    },
+                  ),
                 ),
-              ),
-              bottomNavigationBar: isNestedPage
-                  ? null
-                  : SafeArea(
-                      top: false,
-                      child: AppBottomNavigation(
-                        selected: AppNavigationDestination.discover,
-                        onSelected: (destination) {
-                          if (destination != AppNavigationDestination.discover) {
-                            onDestinationRequested(destination);
-                          }
-                        },
+                bottomNavigationBar: isNestedPage
+                    ? null
+                    : SafeArea(
+                        top: false,
+                        child: AppBottomNavigation(
+                          selected: AppNavigationDestination.discover,
+                          onSelected: (destination) {
+                            if (destination != AppNavigationDestination.discover) {
+                              onDestinationRequested(destination);
+                            }
+                          },
+                        ),
                       ),
-                    ),
+              ),
             ),
           ),
         ),

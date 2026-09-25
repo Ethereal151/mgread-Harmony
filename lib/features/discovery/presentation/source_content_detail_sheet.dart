@@ -38,6 +38,7 @@ import 'package:mg_read/features/library/presentation/widgets/bookshelf_removal_
 import 'package:mg_read/platform/platform_system_actions.dart';
 import 'package:mg_read/shared/presentation/widgets/app_operation_error_dialog.dart';
 import 'package:mg_read/shared/presentation/widgets/async_book_cover_loader.dart';
+import 'package:mg_read/shared/presentation/widgets/app_system_ui_style.dart';
 
 part 'source_content_detail_sections.dart';
 part 'source_content_detail_catalog.dart';
@@ -548,7 +549,12 @@ class _SourceDetailScreenState extends State<_SourceDetailScreen> {
         ),
       ),
     );
-    return readerOwnedTheme ? Theme(data: AppTheme.novelReader(), child: detailScreen) : detailScreen;
+    final Widget themedDetailScreen = readerOwnedTheme ? Theme(data: AppTheme.novelReader(), child: detailScreen) : detailScreen;
+    return AppSystemUiStyle(
+      statusBarColor: AppThemeTokens.of(context).pageBackground,
+      navigationBarColor: AppThemeTokens.of(context).pageBackground,
+      child: themedDetailScreen,
+    );
   }
 }
 

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:mg_read/app/app_theme.dart';
+import 'package:mg_read/shared/presentation/widgets/app_system_ui_style.dart';
 
 /// Theme-colored surface behind a primary navigation page.
 ///
@@ -19,6 +20,10 @@ class AppPageBackdrop extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final AppThemeTokens tokens = AppThemeTokens.of(context);
-    return ColoredBox(key: const Key('app-page-backdrop-surface'), color: tokens.pageBackground, child: child);
+    return AppSystemUiStyle(
+      statusBarColor: style == AppPageBackdropStyle.home ? tokens.featureSurface : tokens.pageBackground,
+      navigationBarColor: tokens.pageBackground,
+      child: ColoredBox(key: const Key('app-page-backdrop-surface'), color: tokens.pageBackground, child: child),
+    );
   }
 }

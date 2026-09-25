@@ -37,6 +37,18 @@ abstract class ReaderPlatform extends PlatformInterface {
   Future<void> setVideoWindowMode({required bool fullscreen}) =>
       Future<void>.value();
 
+  /// Applies host-owned application page colors to native system bars.
+  ///
+  /// The default is a no-op so existing platform implementations remain
+  /// source-compatible; OHOS uses this to clear media-window colors when a
+  /// normal application page becomes visible again.
+  Future<void> setApplicationSystemUiStyle({
+    required String statusBarColor,
+    required String navigationBarColor,
+    required String statusBarContentColor,
+    required String navigationBarContentColor,
+  }) => Future<void>.value();
+
   /// Keeps the video window awake without changing its system-bar mode.
   Future<void> setVideoKeepScreenOn(bool enabled) => Future<void>.value();
 
@@ -178,6 +190,23 @@ class MethodChannelReaderPlatform extends ReaderPlatform {
     return _channel.invokeMethod<void>('setVideoWindowMode', <String, bool>{
       'fullscreen': fullscreen,
     });
+  }
+
+  @override
+  Future<void> setApplicationSystemUiStyle({
+    required String statusBarColor,
+    required String navigationBarColor,
+    required String statusBarContentColor,
+    required String navigationBarContentColor,
+  }) {
+    if (!_isOhos) return Future<void>.value();
+    return _channel
+        .invokeMethod<void>('setApplicationSystemUiStyle', <String, String>{
+          'statusBarColor': statusBarColor,
+          'navigationBarColor': navigationBarColor,
+          'statusBarContentColor': statusBarContentColor,
+          'navigationBarContentColor': navigationBarContentColor,
+        });
   }
 
   @override
