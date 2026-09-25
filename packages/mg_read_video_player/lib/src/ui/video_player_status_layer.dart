@@ -40,6 +40,10 @@ final class VideoSessionStatusLayer extends StatelessWidget {
     final bool empty = snapshot.status == VideoPlayerStatus.empty;
     final String? failureLocation = snapshot.failure?.location;
     final String? failureCode = snapshot.failure?.code;
+    final inheritedTopInset = MediaQuery.paddingOf(context).top;
+    final viewTopInset = MediaQueryData.fromView(
+      View.of(context),
+    ).viewPadding.top;
     return ColoredBox(
       color: videoPlayerBackground,
       child: Stack(
@@ -52,7 +56,11 @@ final class VideoSessionStatusLayer extends StatelessWidget {
               borderRadius: BorderRadius.zero,
               showBorder: false,
               showShadow: false,
-              padding: EdgeInsets.only(top: MediaQuery.paddingOf(context).top),
+              padding: EdgeInsets.only(
+                top: inheritedTopInset > viewTopInset
+                    ? inheritedTopInset
+                    : viewTopInset,
+              ),
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: IconButton(

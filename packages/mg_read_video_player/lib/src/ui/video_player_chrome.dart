@@ -78,6 +78,10 @@ final class _VideoPlayerChromeState extends State<VideoPlayerChrome> {
   @override
   Widget build(BuildContext context) {
     final snapshot = widget.snapshot;
+    final inheritedTopInset = MediaQuery.paddingOf(context).top;
+    final viewTopInset = MediaQueryData.fromView(
+      View.of(context),
+    ).viewPadding.top;
     return IgnorePointer(
       ignoring: !snapshot.controlsVisible,
       child: Listener(
@@ -104,7 +108,13 @@ final class _VideoPlayerChromeState extends State<VideoPlayerChrome> {
                     key: const Key('video-player-top-band'),
                     borderRadius: BorderRadius.zero,
                     padding: EdgeInsets.only(
-                      top: MediaQuery.paddingOf(context).top,
+                      // The host may normalize inherited MediaQuery insets on
+                      // OHOS while the video window still draws beneath the
+                      // visible status bar. Keep the larger of the inherited
+                      // and raw view inset so controls always start below it.
+                      top: inheritedTopInset > viewTopInset
+                          ? inheritedTopInset
+                          : viewTopInset,
                     ),
                     showBorder: false,
                     showShadow: false,

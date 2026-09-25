@@ -34,6 +34,24 @@ void main() {
     expect(queueSize, const Size.square(44));
   });
 
+  testWidgets('top glass actions clear a raw view status-bar inset', (
+    tester,
+  ) async {
+    // Test view padding is expressed in physical pixels; the default test
+    // device pixel ratio is 3.
+    tester.view.viewPadding = const FakeViewPadding(top: 72);
+    addTearDown(tester.view.resetViewPadding);
+
+    await tester.pumpWidget(_host(backend: _PresentationBackend()));
+    await tester.pump();
+    await tester.pump();
+
+    expect(
+      tester.getTopLeft(find.byKey(const Key('audio-back'))).dy,
+      greaterThanOrEqualTo(24),
+    );
+  });
+
   testWidgets('shows a dedicated empty queue recovery state', (tester) async {
     await tester.pumpWidget(
       _host(

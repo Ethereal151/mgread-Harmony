@@ -36,6 +36,21 @@ void main() {
     expect(find.byKey(const Key('video-player-paused-play')), findsNothing);
   });
 
+  testWidgets('top controls clear a raw view status-bar inset', (tester) async {
+    // Test view padding is expressed in physical pixels; the default test
+    // device pixel ratio is 3.
+    tester.view.viewPadding = const FakeViewPadding(top: 72);
+    addTearDown(tester.view.resetViewPadding);
+
+    await tester.pumpWidget(_playerApp(backend: _Backend()));
+    await tester.pumpAndSettle();
+
+    expect(
+      tester.getTopLeft(find.byKey(const Key('video-player-back'))).dy,
+      greaterThanOrEqualTo(24),
+    );
+  });
+
   testWidgets('paused playback shows only a translucent white play button', (
     tester,
   ) async {

@@ -286,6 +286,9 @@ class _AudioViewState extends State<AudioPlayerView>
     final disableAnimations =
         (MediaQuery.maybeOf(context)?.disableAnimations ?? false) ||
         !_motionVisible;
+    final viewTopInset = MediaQueryData.fromView(
+      View.of(context),
+    ).viewPadding.top;
     return Stack(
       fit: StackFit.expand,
       children: <Widget>[
@@ -295,6 +298,10 @@ class _AudioViewState extends State<AudioPlayerView>
           disableAnimations: disableAnimations,
         ),
         SafeArea(
+          // The host may normalize inherited MediaQuery insets on OHOS while
+          // this page remains beneath a visible status bar. Preserve the raw
+          // view inset as a minimum so the top bar stays below system chrome.
+          minimum: EdgeInsets.only(top: viewTopInset),
           child: LayoutBuilder(
             builder: (context, constraints) {
               final veryCompactHeight = constraints.maxHeight < 650;
