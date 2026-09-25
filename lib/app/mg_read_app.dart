@@ -207,14 +207,21 @@ class _MgReadAppState extends ConsumerState<MgReadApp> with WidgetsBindingObserv
       routerConfig: router,
       builder: (BuildContext context, Widget? child) {
         final pageBackground = AppThemeTokens.of(context).pageBackground;
+        final darkTheme = Theme.of(context).brightness == Brightness.dark;
+        final contentBrightness = darkTheme ? Brightness.light : Brightness.dark;
         return AnnotatedRegion<SystemUiOverlayStyle>(
-          value: (Theme.of(context).brightness == Brightness.dark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark).copyWith(
+          value: SystemUiOverlayStyle(
             // Android 15 draws the status bar edge-to-edge. Declare its
             // contrast here so a platform default color cannot flash above a
             // loading destination before that page supplies its own chrome.
-            statusBarColor: Colors.transparent,
+            statusBarColor: pageBackground,
+            statusBarIconBrightness: contentBrightness,
+            statusBarBrightness: darkTheme ? Brightness.dark : Brightness.light,
             systemNavigationBarColor: pageBackground,
             systemNavigationBarDividerColor: pageBackground,
+            systemNavigationBarIconBrightness: contentBrightness,
+            systemStatusBarContrastEnforced: false,
+            systemNavigationBarContrastEnforced: false,
           ),
           child: Stack(
             fit: StackFit.expand,

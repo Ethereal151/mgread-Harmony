@@ -153,8 +153,17 @@ export default class NovelReaderUiPlugin implements FlutterPlugin, MethodCallHan
       if (immersive) {
         await target.setWindowSystemBarEnable([])
       } else {
-        await target.setWindowLayoutFullScreen(false)
         await target.setWindowSystemBarEnable(['status', 'navigation'])
+        // Media mode owns opaque black bars while it is active. Restore the
+        // application-owned transparent bars before returning to Flutter so
+        // the current page background and overlay brightness can take effect.
+        await target.setWindowSystemBarProperties({
+          statusBarColor: '#FDFBFA',
+          navigationBarColor: '#FDFBFA',
+          statusBarContentColor: '#201C18',
+          navigationBarContentColor: '#201C18',
+        })
+        await target.setWindowLayoutFullScreen(false)
       }
       this.keepScreenOn = keep
       this.immersiveMode = immersive
@@ -179,16 +188,27 @@ export default class NovelReaderUiPlugin implements FlutterPlugin, MethodCallHan
         fullscreen ? window.Orientation.LANDSCAPE : window.Orientation.PORTRAIT,
       )
       await target.setWindowLayoutFullScreen(true)
-      // Keep the video surface behind the system-bar areas for both
-      // orientations. In portrait, hiding the navigation area prevents the
-      // gesture region from exposing the device-default light background.
-      await target.setWindowSystemBarEnable(fullscreen ? [] : ['status'])
-      await target.setWindowSystemBarProperties({
-        statusBarColor: '#000000',
-        navigationBarColor: '#000000',
-        statusBarContentColor: '#FFFFFF',
-        navigationBarContentColor: '#FFFFFF',
-      })
+      if (fullscreen) {
+        await target.setWindowSystemBarEnable([])
+        await target.setWindowSystemBarProperties({
+          statusBarColor: '#000000',
+          navigationBarColor: '#000000',
+          statusBarContentColor: '#FFFFFF',
+          navigationBarContentColor: '#FFFFFF',
+        })
+      } else {
+        // Portrait media owns the full viewport, but Flutter paints the
+        // preparation/player surface beneath both system bars. Keeping both
+        // bars visible and transparent prevents a device-default white or
+        // stale black gesture area from leaking through.
+        await target.setWindowSystemBarEnable(['status', 'navigation'])
+        await target.setWindowSystemBarProperties({
+          statusBarColor: '#00000000',
+          navigationBarColor: '#00000000',
+          statusBarContentColor: '#FFFFFF',
+          navigationBarContentColor: '#FFFFFF',
+        })
+      }
       result.success(null)
     } catch (error) {
       result.error('operation_failed', this.errorMessage(error), null)
@@ -218,6 +238,13 @@ export default class NovelReaderUiPlugin implements FlutterPlugin, MethodCallHan
     if (this.activeWindow === undefined) return
     await this.activeWindow.setWindowKeepScreenOn(false)
     await this.activeWindow.setWindowSystemBarEnable(['status', 'navigation'])
+    await this.activeWindow.setWindowSystemBarProperties({
+      statusBarColor: '#FDFBFA',
+      navigationBarColor: '#FDFBFA',
+      statusBarContentColor: '#201C18',
+      navigationBarContentColor: '#201C18',
+    })
+    await this.activeWindow.setWindowLayoutFullScreen(false)
     this.keepScreenOn = false
     this.immersiveMode = false
   }

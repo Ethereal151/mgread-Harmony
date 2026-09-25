@@ -57,6 +57,8 @@ final class SystemSourceMediaSystemUiPlatform implements SourceMediaSystemUiPlat
   @override
   Future<void> restore() async {
     if (Platform.operatingSystem == 'ohos') {
+      // Keep the native orientation reset for landscape video. The following
+      // reader call restores the application-owned bars and clears media mode.
       await ReaderPlatform.instance.setVideoWindowMode(fullscreen: false);
       await ReaderPlatform.instance.setReaderSystemUi(keepScreenOn: false, immersiveMode: false);
       return;

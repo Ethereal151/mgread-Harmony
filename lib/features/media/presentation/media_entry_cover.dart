@@ -36,13 +36,15 @@ enum MediaEntryKind {
 }
 
 const SystemUiOverlayStyle _mediaEntrySystemUiStyle = SystemUiOverlayStyle(
-  // Media fullscreen is requested asynchronously. Use the same black
-  // fallback as the cover letterbox until Android has hidden the bars.
-  statusBarColor: Colors.black,
+  // Let the preparation surface paint beneath both bars. The native window
+  // also keeps these bars transparent while portrait media is active, so a
+  // cover letterbox, gradient, or fallback artwork cannot leave a mismatched
+  // bar color behind.
+  statusBarColor: Colors.transparent,
   statusBarIconBrightness: Brightness.light,
   statusBarBrightness: Brightness.dark,
-  systemNavigationBarColor: Colors.black,
-  systemNavigationBarDividerColor: Colors.black,
+  systemNavigationBarColor: Colors.transparent,
+  systemNavigationBarDividerColor: Colors.transparent,
   systemNavigationBarIconBrightness: Brightness.light,
   systemStatusBarContrastEnforced: false,
   systemNavigationBarContrastEnforced: false,
