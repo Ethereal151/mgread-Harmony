@@ -512,6 +512,25 @@ abstract final class AppSpacing {
   static const double pageHeaderTopPadding = compact;
   static const double pageHeaderHeight = unit * 10;
 
+  /// HarmonyOS reports the system bars as part of the Flutter safe area.
+  ///
+  /// Keep the top content aligned with the Android reference viewport and
+  /// reserve only the platform-required bottom navigation-bar distance.
+  static const double ohosTopSafeArea = 24;
+  static const double ohosBottomSafeArea = 28;
+
+  /// Normalizes the window insets used by the shared page shells on OHOS.
+  ///
+  /// The native system bars remain visible; this only prevents the Flutter
+  /// layout from applying the larger embedding-reported insets twice.
+  static MediaQueryData normalizeWindowInsets(MediaQueryData data, {required bool isOhos}) {
+    if (!isOhos) return data;
+    return data.copyWith(
+      padding: _limitWindowInsets(data.padding, top: ohosTopSafeArea, bottom: ohosBottomSafeArea),
+      viewPadding: _limitWindowInsets(data.viewPadding, top: ohosTopSafeArea, bottom: ohosBottomSafeArea),
+    );
+  }
+
   /// Keeps Android page chrome flush with the status-bar safe area.
   ///
   /// Other platforms retain the existing eight-dp page rhythm.
@@ -643,6 +662,13 @@ abstract final class AppSpacing {
   static const double searchResultCoverHeight = unit * 30;
   static const double searchResultVerticalPadding = unit * 3;
   static const double searchResultMetadataGap = unit + 2;
+
+  static EdgeInsets _limitWindowInsets(EdgeInsets insets, {required double top, required double bottom}) => EdgeInsets.only(
+    left: insets.left,
+    top: insets.top > top ? top : insets.top,
+    right: insets.right,
+    bottom: insets.bottom > bottom ? bottom : insets.bottom,
+  );
 }
 
 /// Measured dimensions shared by the profile detail pages.

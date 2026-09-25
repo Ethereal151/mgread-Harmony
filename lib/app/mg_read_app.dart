@@ -209,45 +209,52 @@ class _MgReadAppState extends ConsumerState<MgReadApp> with WidgetsBindingObserv
         final pageBackground = AppThemeTokens.of(context).pageBackground;
         final darkTheme = Theme.of(context).brightness == Brightness.dark;
         final contentBrightness = darkTheme ? Brightness.light : Brightness.dark;
-        return AnnotatedRegion<SystemUiOverlayStyle>(
-          value: SystemUiOverlayStyle(
-            // Android 15 draws the status bar edge-to-edge. Declare its
-            // contrast here so a platform default color cannot flash above a
-            // loading destination before that page supplies its own chrome.
-            statusBarColor: pageBackground,
-            statusBarIconBrightness: contentBrightness,
-            statusBarBrightness: darkTheme ? Brightness.dark : Brightness.light,
-            systemNavigationBarColor: pageBackground,
-            systemNavigationBarDividerColor: pageBackground,
-            systemNavigationBarIconBrightness: contentBrightness,
-            systemStatusBarContrastEnforced: false,
-            systemNavigationBarContrastEnforced: false,
-          ),
-          child: Stack(
-            fit: StackFit.expand,
-            children: <Widget>[
-              _AppStartupGate(
-                child: DataSourceSystemErrorDialogHost(
-                  reporter: ref.watch(dataSourceSystemErrorReporterProvider),
-                  child: AppFatalErrorDialogHost(
-                    reporter: ref.watch(fatalErrorReporterProvider),
-                    child: AppBottomNavigationMotionScope(
-                      child: AppBackNavigationScope(
-                        onBackRequested: popApplicationRoute,
-                        child: AppThemeModeScope(
-                          themeMode: themeMode,
-                          onToggleTheme: _toggleTheme,
-                          child: child ?? const SizedBox.shrink(),
+        final MediaQueryData windowMetrics = AppSpacing.normalizeWindowInsets(
+          MediaQuery.of(context),
+          isOhos: Platform.operatingSystem == 'ohos',
+        );
+        return MediaQuery(
+          data: windowMetrics,
+          child: AnnotatedRegion<SystemUiOverlayStyle>(
+            value: SystemUiOverlayStyle(
+              // Android 15 draws the status bar edge-to-edge. Declare its
+              // contrast here so a platform default color cannot flash above a
+              // loading destination before that page supplies its own chrome.
+              statusBarColor: pageBackground,
+              statusBarIconBrightness: contentBrightness,
+              statusBarBrightness: darkTheme ? Brightness.dark : Brightness.light,
+              systemNavigationBarColor: pageBackground,
+              systemNavigationBarDividerColor: pageBackground,
+              systemNavigationBarIconBrightness: contentBrightness,
+              systemStatusBarContrastEnforced: false,
+              systemNavigationBarContrastEnforced: false,
+            ),
+            child: Stack(
+              fit: StackFit.expand,
+              children: <Widget>[
+                _AppStartupGate(
+                  child: DataSourceSystemErrorDialogHost(
+                    reporter: ref.watch(dataSourceSystemErrorReporterProvider),
+                    child: AppFatalErrorDialogHost(
+                      reporter: ref.watch(fatalErrorReporterProvider),
+                      child: AppBottomNavigationMotionScope(
+                        child: AppBackNavigationScope(
+                          onBackRequested: popApplicationRoute,
+                          child: AppThemeModeScope(
+                            themeMode: themeMode,
+                            onToggleTheme: _toggleTheme,
+                            child: child ?? const SizedBox.shrink(),
+                          ),
                         ),
                       ),
                     ),
                   ),
                 ),
-              ),
-              const ChapterCacheTaskBar(),
-              SourceAudioPlaybackNavigator(backButtonDispatcher: router.backButtonDispatcher),
-              const OhosBrowserSessionSurface(),
-            ],
+                const ChapterCacheTaskBar(),
+                SourceAudioPlaybackNavigator(backButtonDispatcher: router.backButtonDispatcher),
+                const OhosBrowserSessionSurface(),
+              ],
+            ),
           ),
         );
       },
