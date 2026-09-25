@@ -26,6 +26,8 @@ export default class NovelReaderUiPlugin implements FlutterPlugin, MethodCallHan
   private applicationNavigationBarColor: string = '#FDFBFA'
   private applicationStatusBarContentColor: string = '#201C18'
   private applicationNavigationBarContentColor: string = '#201C18'
+  private mediaSystemUiOwned: boolean = false
+  private systemUiRequestGeneration: number = 0
   private volumeKeyPageTurningEnabled: boolean = false
   private readonly volumeKeyHandler = (event: KeyEvent): void => {
     const direction = event.key.code === KeyCode.KEYCODE_VOLUME_UP
@@ -155,21 +157,35 @@ export default class NovelReaderUiPlugin implements FlutterPlugin, MethodCallHan
       return
     }
     try {
+      const generation = ++this.systemUiRequestGeneration
+      if (!immersive) this.mediaSystemUiOwned = false
       const target = await this.applicationWindow()
       await target.setWindowKeepScreenOn(keep)
       if (immersive) {
         await target.setWindowSystemBarEnable([])
       } else {
+        if (generation !== this.systemUiRequestGeneration) {
+          result.success(null)
+          return
+        }
         await target.setWindowSystemBarEnable(['status', 'navigation'])
         // Media mode owns its own bars while it is active. Restore the last
         // application-owned colors before returning to Flutter so a page does
         // not inherit a stale black or platform-default system bar.
+        if (generation !== this.systemUiRequestGeneration) {
+          result.success(null)
+          return
+        }
         await target.setWindowSystemBarProperties({
           statusBarColor: this.applicationStatusBarColor,
           navigationBarColor: this.applicationNavigationBarColor,
           statusBarContentColor: this.applicationStatusBarContentColor,
           navigationBarContentColor: this.applicationNavigationBarContentColor,
         })
+        if (generation !== this.systemUiRequestGeneration) {
+          result.success(null)
+          return
+        }
         await target.setWindowLayoutFullScreen(false)
       }
       this.keepScreenOn = keep
@@ -190,11 +206,17 @@ export default class NovelReaderUiPlugin implements FlutterPlugin, MethodCallHan
       return
     }
     try {
+      const generation = ++this.systemUiRequestGeneration
+      this.mediaSystemUiOwned = true
       const target = await this.applicationWindow()
       await target.setPreferredOrientation(
         fullscreen ? window.Orientation.LANDSCAPE : window.Orientation.PORTRAIT,
       )
       await target.setWindowLayoutFullScreen(true)
+      if (generation !== this.systemUiRequestGeneration) {
+        result.success(null)
+        return
+      }
       if (fullscreen) {
         await target.setWindowSystemBarEnable([])
         await target.setWindowSystemBarProperties({
@@ -240,18 +262,33 @@ export default class NovelReaderUiPlugin implements FlutterPlugin, MethodCallHan
       return
     }
     try {
+      const generation = ++this.systemUiRequestGeneration
+      this.applicationStatusBarColor = statusBarColor
+      this.applicationNavigationBarColor = navigationBarColor
+      this.applicationStatusBarContentColor = statusBarContentColor
+      this.applicationNavigationBarContentColor = navigationBarContentColor
+      if (this.mediaSystemUiOwned) {
+        // The page remains mounted below the player during the transition.
+        // Cache its colors, but never let it overwrite media-owned bars.
+        result.success(null)
+        return
+      }
       const target = await this.applicationWindow()
       await target.setWindowSystemBarEnable(['status', 'navigation'])
+      if (generation !== this.systemUiRequestGeneration) {
+        result.success(null)
+        return
+      }
       await target.setWindowSystemBarProperties({
         statusBarColor: statusBarColor,
         navigationBarColor: navigationBarColor,
         statusBarContentColor: statusBarContentColor,
         navigationBarContentColor: navigationBarContentColor,
       })
-      this.applicationStatusBarColor = statusBarColor
-      this.applicationNavigationBarColor = navigationBarColor
-      this.applicationStatusBarContentColor = statusBarContentColor
-      this.applicationNavigationBarContentColor = navigationBarContentColor
+      if (generation !== this.systemUiRequestGeneration) {
+        result.success(null)
+        return
+      }
       await target.setWindowLayoutFullScreen(false)
       result.success(null)
     } catch (error) {
@@ -280,6 +317,8 @@ export default class NovelReaderUiPlugin implements FlutterPlugin, MethodCallHan
 
   private async restoreWindow(): Promise<void> {
     if (this.activeWindow === undefined) return
+    ++this.systemUiRequestGeneration
+    this.mediaSystemUiOwned = false
     await this.activeWindow.setWindowKeepScreenOn(false)
     await this.activeWindow.setWindowSystemBarEnable(['status', 'navigation'])
     await this.activeWindow.setWindowSystemBarProperties({
