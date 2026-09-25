@@ -8,7 +8,6 @@
   "dependencies": {
     "@ohos/flutter_ohos": "",
     "flutter_native_arm64_v8a": "",
-    "flutter_native_x86_64": "",
     "integration_test": "",
     "mgread_ohos_media": "file:../../packages/mgread_ohos_media/ohos",
     "mgread_ohos_scanner": "file:../../packages/mgread_ohos_scanner/ohos",
