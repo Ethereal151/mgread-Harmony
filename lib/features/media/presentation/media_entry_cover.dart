@@ -12,6 +12,7 @@
 library;
 
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -35,20 +36,28 @@ enum MediaEntryKind {
   };
 }
 
-const SystemUiOverlayStyle _mediaEntrySystemUiStyle = SystemUiOverlayStyle(
-  // Let the preparation surface paint beneath both bars. The native window
-  // also keeps these bars transparent while portrait media is active, so a
-  // cover letterbox, gradient, or fallback artwork cannot leave a mismatched
-  // bar color behind.
-  statusBarColor: Colors.transparent,
-  statusBarIconBrightness: Brightness.light,
-  statusBarBrightness: Brightness.dark,
-  systemNavigationBarColor: Colors.transparent,
-  systemNavigationBarDividerColor: Colors.transparent,
-  systemNavigationBarIconBrightness: Brightness.light,
-  systemStatusBarContrastEnforced: false,
-  systemNavigationBarContrastEnforced: false,
-);
+final SystemUiOverlayStyle _mediaEntrySystemUiStyle = Platform.operatingSystem == 'ohos'
+    ? const SystemUiOverlayStyle(
+        // OHOS owns media bar backgrounds through the native window. Leave
+        // colors unset so Flutter cannot replace the native transparent bars.
+        statusBarIconBrightness: Brightness.light,
+        statusBarBrightness: Brightness.dark,
+        systemNavigationBarIconBrightness: Brightness.light,
+        systemStatusBarContrastEnforced: false,
+        systemNavigationBarContrastEnforced: false,
+      )
+    : const SystemUiOverlayStyle(
+        // Let the preparation surface paint beneath both bars on platforms
+        // where Flutter owns the overlay colors.
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.light,
+        statusBarBrightness: Brightness.dark,
+        systemNavigationBarColor: Colors.transparent,
+        systemNavigationBarDividerColor: Colors.transparent,
+        systemNavigationBarIconBrightness: Brightness.light,
+        systemStatusBarContrastEnforced: false,
+        systemNavigationBarContrastEnforced: false,
+      );
 
 /// Keeps portrait immersive mode aligned with one mounted media presentation.
 final class SourceMediaImmersiveScope extends StatefulWidget {
