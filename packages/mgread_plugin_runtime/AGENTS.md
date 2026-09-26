@@ -20,6 +20,9 @@
 
 ## 验证
 
+- OHOS：Node 宿主空闲时仍须驱动 libuv；队列通过 async handle 唤醒，不能在 libuv callback 内执行
+  会再次驱动事件循环的 bridge 任务。运行 `integration_test/ohos_comic_resource_idle_test.dart`，验证
+  getContent 返回后无额外 Runtime 调用的并发图片下载、请求头透传、分块响应及重启后的恢复。
 - Dart/Facade：运行目标 Flutter 测试；桌面 transport 变化时追加 Node package 的 `test:flutter-desktop`。
 - Android：增加相邻 Kotlin 单测和目标 Gradle 编译；真实流程仍需用户明确授权的 Integration Test。
 - Windows：增加 reverse-broker、Dart fake-platform/HTTP 和 Facade reverse-wire fixture；原生修改再构建

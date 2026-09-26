@@ -1,3 +1,7 @@
+// Owns the process-scoped embedded Node VM and its dedicated thread. The
+// libuv loop must keep serving source-resource HTTP after a bridge invocation
+// returns. Queue wakeups only interrupt the poll: tasks run outside libuv
+// callbacks because Call/Await may themselves drive the non-reentrant loop.
 #include <condition_variable>
 #include <chrono>
 #include <deque>
@@ -180,12 +184,11 @@ class NodeHost {
       if (disposed_) return;
       disposed_ = true;
       if (thread_.joinable()) {
-        queue_.emplace_back([this] {
+        EnqueueLocked([this] {
           if (initialized_) {
             try { Call("__mgreadStopJson", {}, 0); } catch (...) {}
           }
         });
-        condition_.notify_one();
       }
     }
     if (thread_.joinable()) thread_.join();
@@ -330,6 +333,8 @@ class NodeHost {
 
   void EnqueueLocked(std::function<void()> task) {
     queue_.emplace_back(std::move(task));
+    // mutex_ protects publication/closure of this cross-thread wakeup handle.
+    if (task_async_initialized_) uv_async_send(&task_async_);
     condition_.notify_one();
   }
 
@@ -338,14 +343,33 @@ class NodeHost {
       std::function<void()> task;
       {
         std::unique_lock<std::mutex> lock(mutex_);
-        condition_.wait(lock, [this] { return !queue_.empty() || disposed_; });
+        // Before startup there is no libuv loop to wait on. Once initialized,
+        // wait in libuv instead so HTTP, timers and stream callbacks stay live.
+        if (!initialized_) {
+          condition_.wait(lock, [this] { return !queue_.empty() || disposed_; });
+        }
         if (queue_.empty() && disposed_) break;
-        task = std::move(queue_.front());
-        queue_.pop_front();
+        if (!queue_.empty()) {
+          task = std::move(queue_.front());
+          queue_.pop_front();
+        }
       }
-      task();
+      if (task) task();
+      // Give I/O a turn even when bridge work is queued; otherwise block until
+      // I/O, a timer, or EnqueueLocked wakes the loop, without idle polling.
+      if (initialized_) PumpEvents(task ? UV_RUN_NOWAIT : UV_RUN_ONCE);
     }
     if (initialized_) Stop();
+  }
+
+  void PumpEvents(uv_run_mode mode) {
+    v8::Locker locker(isolate_);
+    v8::Isolate::Scope isolate_scope(isolate_);
+    v8::HandleScope handle_scope(isolate_);
+    v8::Context::Scope context_scope(setup_->context());
+    uv_run(setup_->event_loop(), mode);
+    platform_->DrainTasks(isolate_);
+    isolate_->PerformMicrotaskCheckpoint();
   }
 
   void Start(const std::string& runtime_root, const std::string& data_root,
@@ -387,6 +411,13 @@ class NodeHost {
     v8::HandleScope handle_scope(isolate_);
     v8::Context::Scope context_scope(setup_->context());
     node::SetProcessExitHandler(env_, [](node::Environment* environment, int) { node::Stop(environment); });
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      if (uv_async_init(setup_->event_loop(), &task_async_, [](uv_async_t*) {}) != 0) {
+        throw std::runtime_error("node_task_async_init_failed");
+      }
+      task_async_initialized_ = true;
+    }
     if (uv_async_init(setup_->event_loop(), &browser_async_, &NodeHost::BrowserAsync) != 0) {
       throw std::runtime_error("node_browser_async_init_failed");
     }
@@ -635,6 +666,13 @@ class NodeHost {
       v8::Context::Scope context_scope(setup_->context());
       for (auto& entry : browser_resolvers_) entry.second.Reset();
       browser_resolvers_.clear();
+      {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (task_async_initialized_) {
+          task_async_initialized_ = false;
+          uv_close(reinterpret_cast<uv_handle_t*>(&task_async_), nullptr);
+        }
+      }
       if (browser_async_initialized_) {
         uv_close(reinterpret_cast<uv_handle_t*>(&browser_async_), nullptr);
         uv_run(setup_->event_loop(), UV_RUN_NOWAIT);
@@ -658,6 +696,8 @@ class NodeHost {
 
   std::mutex mutex_;
   std::condition_variable condition_;
+  uv_async_t task_async_{};
+  bool task_async_initialized_ = false;
   std::deque<std::function<void()>> queue_;
   std::thread thread_;
   bool disposed_ = false;
