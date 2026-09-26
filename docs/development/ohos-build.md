@@ -24,7 +24,7 @@ origin    https://github.com/Ethereal151/mgread-Harmony.git
 
 - Flutter OHOS：`3.44.9+ohos-0.0.1-canary1`
 - Dart：`3.12.2`
-- Node.js：`24.16.0`
+- Node.js（OHOS）：`26.10.0`；桌面/Android Runtime 仍固定 `24.16.0`
 - DevEco Studio：`26.0.0.821`（计划固定版本 `26.0.0`，build `261.23567.138.36.2600821`）
 - HarmonyOS SDK：API `26`
 - ohpm：`26.0.0.630`
@@ -139,7 +139,7 @@ Release 包约为 175 MiB。旧的 `build/ohos/hap/entry-default-signed.hap` 可
 
 2026-09-21 使用 DevEco IP 设备 `192.168.3.48:45975`（`PLA-AL10`、HarmonyOS `7.0.0.105`、API 26、`arm64-v8a`）完成以下直接验收：
 
-- `integration_test/ohos_runtime_smoke_test.dart`：Node 24.16.0 arm64 host、Runtime ping、Network Kit 地址和 9 项 OHOS 产品能力状态断言通过；
+- `integration_test/ohos_runtime_smoke_test.dart`：此前以 Node 24.16.0 arm64 host 完成 Runtime ping、Network Kit 地址和 9 项 OHOS 产品能力状态断言；切换 Node 26.10.0 后待重跑；
 - `integration_test/ohos_runtime_lifecycle_test.dart`：同一 arm64 真机完成原生 Runtime `restart` 后的 Facade 恢复 ping，并校验两轮生命周期诊断；测试专用 `debugDispose()` 不作为真机证据，因为它会关闭 Flutter 调试通道；
 - `integration_test/ohos_browser_session_smoke_test.dart`：ArkWeb 页面打开、导航和 HTML 获取通过；
 - `integration_test/ohos_stage2_runtime_arkweb_test.dart`：5 个本地 fixture 的安装、发现、搜索、详情、目录、正文、资源代理、Cookie/JS、`interaction_required` 恢复、受控长耗时调用取消后的 `cancelled`/后续调用恢复和卸载后列表确认通过；这不是 5 个真实外部数据源的替代证据；
@@ -168,13 +168,13 @@ Release 包约为 175 MiB。旧的 `build/ohos/hap/entry-default-signed.hap` 可
 
 ## 已知限制
 
-上游 commit 使用 Git LFS 管理 Node Runtime。当前远端对 Darwin arm64 和 Windows x64 runtime 二进制返回缺失对象（404），因此拉取基线时使用了 `GIT_LFS_SKIP_SMUDGE=1`。OHOS arm64 Node 24.16.0 宿主已在当前受控设备完成 ping 和 fixture 链路验证；x86_64 仍保留明确 stub，真实外部数据源验收前不能把 OHOS 在线能力标为发布完成。
+上游 commit 使用 Git LFS 管理 Node Runtime。当前远端对 Darwin arm64 和 Windows x64 runtime 二进制返回缺失对象（404），因此拉取基线时使用了 `GIT_LFS_SKIP_SMUDGE=1`。OHOS arm64 Node 24.16.0 宿主已在当前受控设备完成 ping 和 fixture 链路验证；现行 OHOS 版本已切换为 Node 26.10.0，升级后的真机证据待重跑；x86_64 仍保留明确 stub，真实外部数据源验收前不能把 OHOS 在线能力标为发布完成。
 
 ## 阶段 2～4 代码适配记录
 
 - 阶段 2：主应用的 metadata/content/file 三类持久化继续由 `AppPersistence`/`ContentLibrary` 拥有；OHOS 使用 EL2 `files/persistence` 沙箱目录，HAP 内置由 OHOS clang 编译的 `libsqlite3.so`（`x86_64` 与 `arm64-v8a`），避免 Linux 动态库和后台 isolate 假设。启动、路由、书架、历史、小说/漫画进度恢复仍复用现有业务实现。
 - 阶段 3：新增 `lib/platform/platform_capabilities.dart`，集中描述 OHOS 文件选择、分享、包信息、外部链接、亮度、常亮、窗口和 Runtime 宿主能力；导入导出、版本展示、视频亮度/常亮和窗口初始化均按能力降级。
-- 阶段 4：`mgread_plugin_runtime` 增加 OHOS 插件声明、MethodChannel、进度 EventChannel 和单例 supervisor；x86_64 返回稳定 `runtime_architecture_unavailable`，arm64 已接入 Node 24.16.0 native host，Dart Facade/wire protocol 不变。
+- 阶段 4：`mgread_plugin_runtime` 增加 OHOS 插件声明、MethodChannel、进度 EventChannel 和单例 supervisor；x86_64 返回稳定 `runtime_architecture_unavailable`，arm64 已接入 OHOS Node native host（当前版本 26.10.0），Dart Facade/wire protocol 不变。
 - 阶段 4/5：新增 `mgread_ohos_media` 包，以 OHOS `AVPlayer` 承载音频和视频；音频、视频 package 仅通过 backend adapter 使用它，视频通过 Flutter Texture 输出 Surface。阶段 3 的 `screen_brightness_ohos` 已改为 `@ohos.window` 应用窗口亮度控制；全局系统亮度仍返回明确错误。
 - 阶段 6：新增 `mgread_ohos_scanner` 包，使用 HMS ScanKit 默认系统 UI；Dart 页面只负责调用、取消/错误反馈和现有四类载荷校验路由，原生层不复制同步业务。真机已确认系统扫码 UI、后置相机预览和取消返回；有效同步二维码到“接收临时数据”的业务路由回归已通过。
 

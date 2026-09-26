@@ -18,7 +18,7 @@ function contextFor(pluginId, overrides = {}) {
   return {
     calls,
     context: {
-      app: { nodeVersion: "24.16.0", pluginApi: 1, runtimeVersion: "fixture" },
+      app: { nodeVersion: "26.10.0", pluginApi: 1, runtimeVersion: "fixture" },
       cacheDir: ".cache",
       dataDir: ".data",
       errors: { raise() { throw new Error("unexpected public error"); } },

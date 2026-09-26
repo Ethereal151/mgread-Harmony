@@ -24,7 +24,7 @@
 
 namespace {
 
-constexpr char kNodeVersion[] = "24.16.0";
+constexpr char kNodeVersion[] = "26.10.0";
 
 std::string Utf8(napi_env env, napi_value value) {
   size_t length = 0;

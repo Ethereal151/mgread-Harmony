@@ -2,7 +2,7 @@
 """Rewrite the DT_SONAME of an ELF shared library in place.
 
 The OHOS Node shared build names its library ``libnode.so`` but records the
-ABI-suffixed SONAME ``libnode.so.137``. hvigor only packs native libraries
+ABI-suffixed SONAME ``libnode.so.147``. hvigor only packs native libraries
 whose file name ends in ``.so``, so the shipped file stays ``libnode.so`` and
 the host would otherwise record an unloadable ``DT_NEEDED`` entry. This tool
 normalizes the staged library's SONAME so the link name matches the packed

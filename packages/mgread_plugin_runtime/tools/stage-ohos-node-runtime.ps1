@@ -1,7 +1,7 @@
 param(
   [string]$Distro = 'Ubuntu-24.04',
-  [string]$BuildRoot = '\\wsl.localhost\Ubuntu-24.04\root\mgread-node-ohos-build\node-v24.16.0-openharmony-arm64',
-  [string]$SourceRoot = '\\wsl.localhost\Ubuntu-24.04\root\mgread-node-ohos-build\node-v24.16.0'
+  [string]$BuildRoot = '\\wsl.localhost\Ubuntu-24.04\root\mgread-node-ohos-build\node-v26.10.0-openharmony-arm64',
+  [string]$SourceRoot = '\\wsl.localhost\Ubuntu-24.04\root\mgread-node-ohos-build\node-v26.10.0'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -9,7 +9,7 @@ $packageRoot = Split-Path -Parent $PSScriptRoot
 $nodeDestination = Join-Path $packageRoot 'ohos\src\main\cpp\node-runtime'
 $sourceDestination = Join-Path $packageRoot 'ohos\src\main\cpp\node-source'
 $nodeLibrary = Join-Path $BuildRoot 'lib\libnode.so'
-$versionedNodeLibrary = Join-Path $BuildRoot 'lib\libnode.so.137'
+$versionedNodeLibrary = Join-Path $BuildRoot 'lib\libnode.so.147'
 $nodeHeaders = Join-Path $BuildRoot 'include\node'
 $nodeSourceHeader = Join-Path $SourceRoot 'src\node.h'
 $v8Headers = Join-Path $SourceRoot 'deps\v8\include'
@@ -37,7 +37,7 @@ New-Item -ItemType Directory -Force -Path $nodeLibraryDestination | Out-Null
 $nodeLibraryFile = Join-Path $nodeLibraryDestination 'libnode.so'
 Copy-Item -LiteralPath $nodeLibrary -Destination $nodeLibraryFile -Force
 
-# The shared Node build records the ABI-suffixed SONAME libnode.so.137 while
+# The shared Node build records the ABI-suffixed SONAME libnode.so.147 while
 # hvigor only packs libraries whose file name ends in .so. Normalize the SONAME
 # so the host's DT_NEEDED matches the packaged libnode.so.
 $python = Get-Command python -ErrorAction SilentlyContinue
@@ -53,4 +53,4 @@ Copy-Item -LiteralPath (Join-Path $SourceRoot 'src') -Destination $sourceDestina
 New-Item -ItemType Directory -Force -Path (Join-Path $sourceDestination 'deps\v8') | Out-Null
 Copy-Item -LiteralPath $v8Headers -Destination (Join-Path $sourceDestination 'deps\v8\include') -Recurse -Force
 
-Write-Host "Staged Node 24.16.0 OpenHarmony arm64 runtime into $nodeDestination"
+Write-Host "Staged Node 26.10.0 OpenHarmony arm64 runtime into $nodeDestination"

@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.16)
 project(mgread_node_host)
 
-# MGREAD_NODE_ROOT is an extracted Node v24.16.0 OpenHarmony arm64 install
+# MGREAD_NODE_ROOT is an extracted Node v26.10.0 OpenHarmony arm64 install
 # produced by tools/build-ohos-node.sh. It is deliberately supplied as a
 # build input instead of checked into this package.
 set(MGREAD_NODE_ROOT "$ENV{MGREAD_NODE_ROOT}" CACHE PATH "Node OpenHarmony install root")
@@ -30,10 +30,10 @@ if(OHOS_ARCH STREQUAL "x86_64")
   target_link_libraries(mgread_node_host PRIVATE ace_napi.z)
 else()
   if(NOT EXISTS "${MGREAD_NODE_ROOT}/lib/libnode.so")
-    message(FATAL_ERROR "MGREAD_NODE_ROOT must contain lib/libnode.so from the v24.16.0 shared build")
+    message(FATAL_ERROR "MGREAD_NODE_ROOT must contain lib/libnode.so from the v26.10.0 shared build")
   endif()
   if(NOT EXISTS "${MGREAD_NODE_SOURCE_ROOT}/src/node.h")
-    message(FATAL_ERROR "MGREAD_NODE_SOURCE_ROOT must point at the matching Node v24.16.0 source tree")
+    message(FATAL_ERROR "MGREAD_NODE_SOURCE_ROOT must point at the matching Node v26.10.0 source tree")
   endif()
   add_library(mgread_node_host SHARED mgread_node_host.cpp)
   target_include_directories(mgread_node_host PRIVATE

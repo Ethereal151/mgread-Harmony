@@ -30,7 +30,7 @@ void main() {
               'ok': true,
               'result': <String, Object?>{
                 'ok': true,
-                'nodeVersion': 'v24.16.0',
+                'nodeVersion': 'v26.10.0',
                 'runtimeVersion': 'test',
               },
             });

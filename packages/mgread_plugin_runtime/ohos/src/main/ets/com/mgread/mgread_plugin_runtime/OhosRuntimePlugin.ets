@@ -271,7 +271,7 @@ export default class OhosRuntimePlugin implements FlutterPlugin, MethodCallHandl
     if (context === undefined || assets === undefined) throw new Error('The OHOS Runtime context is not ready.')
     const runtimeRoot = `${context.filesDir}/${RUNTIME_DIRECTORY}`
     this.copyRuntimeAssets(assets.getAssetFilePathBySubpath(RUNTIME_ASSET_PATH), runtimeRoot)
-    if (mgreadNodeHost.runtimeVersion() !== '24.16.0') {
+    if (mgreadNodeHost.runtimeVersion() !== '26.10.0') {
       throw new Error('The OHOS Node host version is not supported.')
     }
     const dataRoot = `${context.filesDir}/mgread-runtime/data`

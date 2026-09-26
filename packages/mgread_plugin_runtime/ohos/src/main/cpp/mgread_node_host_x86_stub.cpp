@@ -56,7 +56,7 @@ napi_value Dispose(napi_env env, napi_callback_info) {
 
 napi_value RuntimeVersion(napi_env env, napi_callback_info) {
   napi_value result;
-  napi_create_string_utf8(env, "24.16.0", NAPI_AUTO_LENGTH, &result);
+  napi_create_string_utf8(env, "26.10.0", NAPI_AUTO_LENGTH, &result);
   return result;
 }
 
