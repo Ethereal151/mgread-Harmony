@@ -15,7 +15,12 @@ import inputConsumer from '@ohos.multimodalInput.inputConsumer'
 import { KeyCode } from '@ohos.multimodalInput.keyCode'
 import { KeyEvent } from '@ohos.multimodalInput.keyEvent'
 
-/** Owns reader/video window state for the current OHOS application window. */
+/**
+ * Owns reader/video window state for the current OHOS application window.
+ * All modes use edge-to-edge layout; Flutter SafeArea owns content avoidance.
+ * Serialize asynchronous window calls so a late page restore cannot undo a
+ * newer immersive request. Page styles only update the cache while immersed.
+ */
 export default class NovelReaderUiPlugin implements FlutterPlugin, MethodCallHandler, AbilityAware {
   private channel?: MethodChannel
   private context?: common.Context
@@ -28,6 +33,7 @@ export default class NovelReaderUiPlugin implements FlutterPlugin, MethodCallHan
   private applicationNavigationBarContentColor: string = '#201C18'
   private mediaSystemUiOwned: boolean = false
   private systemUiRequestGeneration: number = 0
+  private windowOperations: Promise<void> = Promise.resolve()
   private volumeKeyPageTurningEnabled: boolean = false
   private readonly volumeKeyHandler = (event: KeyEvent): void => {
     const direction = event.key.code === KeyCode.KEYCODE_VOLUME_UP
@@ -75,19 +81,19 @@ export default class NovelReaderUiPlugin implements FlutterPlugin, MethodCallHan
         result.success({ keepScreenOn: true, immersiveMode: true, volumeKeyPageTurning: true })
         break
       case 'setReaderSystemUi':
-        this.setReaderSystemUi(call.args as Map<string, Object> | null, result)
+        this.enqueueWindowOperation(() => this.setReaderSystemUi(call.args as Map<string, Object> | null, result))
         break
       case 'setVideoWindowMode':
-        this.setVideoWindowMode(call.args as Map<string, Object> | null, result)
+        this.enqueueWindowOperation(() => this.setVideoWindowMode(call.args as Map<string, Object> | null, result))
         break
       case 'setApplicationSystemUiStyle':
-        this.setApplicationSystemUiStyle(call.args as Map<string, Object> | null, result)
+        this.enqueueWindowOperation(() => this.setApplicationSystemUiStyle(call.args as Map<string, Object> | null, result))
         break
       case 'restoreApplicationSystemUi':
-        this.restoreApplicationSystemUi(result)
+        this.enqueueWindowOperation(() => this.restoreApplicationSystemUi(result))
         break
       case 'setVideoKeepScreenOn':
-        this.setVideoKeepScreenOn(call.args as Map<string, Object> | null, result)
+        this.enqueueWindowOperation(() => this.setVideoKeepScreenOn(call.args as Map<string, Object> | null, result))
         break
       case 'setVolumeKeyPageTurningEnabled':
         this.setVolumeKeyPageTurningEnabled(call.args as Map<string, Object> | null, result)
@@ -96,6 +102,10 @@ export default class NovelReaderUiPlugin implements FlutterPlugin, MethodCallHan
         result.notImplemented()
         break
     }
+  }
+
+  private enqueueWindowOperation(operation: () => Promise<void>): void {
+    this.windowOperations = this.windowOperations.then(operation, operation)
   }
 
   private setVolumeKeyPageTurningEnabled(
@@ -176,6 +186,7 @@ export default class NovelReaderUiPlugin implements FlutterPlugin, MethodCallHan
         result.success(null)
         return
       }
+      await target.setWindowLayoutFullScreen(true)
       if (immersive) {
         await target.setWindowSystemBarEnable([])
       } else {
@@ -184,24 +195,21 @@ export default class NovelReaderUiPlugin implements FlutterPlugin, MethodCallHan
           return
         }
         await target.setWindowSystemBarEnable(['status', 'navigation'])
-        // Media mode owns its own bars while it is active. Restore the last
-        // application-owned colors before returning to Flutter so a page does
-        // not inherit a stale black or platform-default system bar.
+        // Reader palettes own icon contrast through AnnotatedRegion. Keep
+        // backgrounds transparent instead of painting the cached app theme
+        // over the reader's paper/night surface.
         if (generation !== this.systemUiRequestGeneration) {
           result.success(null)
           return
         }
         await target.setWindowSystemBarProperties({
-          statusBarColor: this.applicationStatusBarColor,
-          navigationBarColor: this.applicationNavigationBarColor,
-          statusBarContentColor: this.applicationStatusBarContentColor,
-          navigationBarContentColor: this.applicationNavigationBarContentColor,
+          statusBarColor: '#00000000',
+          navigationBarColor: '#00000000',
         })
         if (generation !== this.systemUiRequestGeneration) {
           result.success(null)
           return
         }
-        await target.setWindowLayoutFullScreen(false)
       }
       this.keepScreenOn = keep
       this.immersiveMode = immersive
@@ -281,9 +289,10 @@ export default class NovelReaderUiPlugin implements FlutterPlugin, MethodCallHan
       this.applicationNavigationBarColor = navigationBarColor
       this.applicationStatusBarContentColor = statusBarContentColor
       this.applicationNavigationBarContentColor = navigationBarContentColor
-      if (this.mediaSystemUiOwned) {
+      if (this.mediaSystemUiOwned || this.immersiveMode) {
         // The page remains mounted below the player during the transition.
-        // Cache its colors, but never let it overwrite media-owned bars.
+        // Cache its colors, but never reveal bars hidden by the active reader
+        // or overwrite media-owned bars.
         result.success(null)
         return
       }
@@ -304,7 +313,7 @@ export default class NovelReaderUiPlugin implements FlutterPlugin, MethodCallHan
         result.success(null)
         return
       }
-      await target.setWindowLayoutFullScreen(false)
+      await target.setWindowLayoutFullScreen(true)
       result.success(null)
     } catch (error) {
       result.error('operation_failed', this.errorMessage(error), null)
@@ -332,7 +341,7 @@ export default class NovelReaderUiPlugin implements FlutterPlugin, MethodCallHan
         result.success(null)
         return
       }
-      await target.setWindowLayoutFullScreen(false)
+      await target.setWindowLayoutFullScreen(true)
       this.keepScreenOn = false
       this.immersiveMode = false
       result.success(null)
@@ -361,18 +370,19 @@ export default class NovelReaderUiPlugin implements FlutterPlugin, MethodCallHan
   }
 
   private async restoreWindow(): Promise<void> {
-    if (this.activeWindow === undefined) return
+    const target = this.activeWindow
+    if (target === undefined) return
     ++this.systemUiRequestGeneration
     this.mediaSystemUiOwned = false
-    await this.activeWindow.setWindowKeepScreenOn(false)
-    await this.activeWindow.setWindowSystemBarEnable(['status', 'navigation'])
-    await this.activeWindow.setWindowSystemBarProperties({
+    await target.setWindowKeepScreenOn(false)
+    await target.setWindowSystemBarEnable(['status', 'navigation'])
+    await target.setWindowSystemBarProperties({
       statusBarColor: this.applicationStatusBarColor,
       navigationBarColor: this.applicationNavigationBarColor,
       statusBarContentColor: this.applicationStatusBarContentColor,
       navigationBarContentColor: this.applicationNavigationBarContentColor,
     })
-    await this.activeWindow.setWindowLayoutFullScreen(false)
+    await target.setWindowLayoutFullScreen(true)
     this.keepScreenOn = false
     this.immersiveMode = false
   }

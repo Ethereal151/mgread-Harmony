@@ -512,25 +512,12 @@ abstract final class AppSpacing {
   static const double pageHeaderTopPadding = compact;
   static const double pageHeaderHeight = unit * 10;
 
-  /// HarmonyOS reports the system bars as part of the Flutter safe area.
+  /// Preserves engine-reported insets on every platform, including HarmonyOS.
   ///
-  /// Keep the top content aligned with Android's edge-to-edge reference
-  /// viewport. The bottom layout is edge-to-edge so the floating navigation
-  /// surface can sit at the same visual baseline as the system navigation UI.
-  static const double ohosTopSafeArea = 0;
-  static const double ohosBottomSafeArea = 0;
-
-  /// Normalizes the window insets used by the shared page shells on OHOS.
-  ///
-  /// The native system bars remain visible; this only prevents the Flutter
-  /// layout from applying the larger embedding-reported insets twice.
-  static MediaQueryData normalizeWindowInsets(MediaQueryData data, {required bool isOhos}) {
-    if (!isOhos) return data;
-    return data.copyWith(
-      padding: _limitWindowInsets(data.padding, top: ohosTopSafeArea, bottom: ohosBottomSafeArea),
-      viewPadding: _limitWindowInsets(data.viewPadding, top: ohosTopSafeArea, bottom: ohosBottomSafeArea),
-    );
-  }
+  /// The OHOS host keeps the window edge-to-edge in normal and media modes.
+  /// Each page's SafeArea consumes these insets exactly once; clearing them
+  /// here would place headers beneath the status bar and display cutouts.
+  static MediaQueryData normalizeWindowInsets(MediaQueryData data, {required bool isOhos}) => data;
 
   /// Keeps Android page chrome flush with the status-bar safe area.
   ///
@@ -664,13 +651,6 @@ abstract final class AppSpacing {
   static const double searchResultCoverHeight = unit * 30;
   static const double searchResultVerticalPadding = unit * 3;
   static const double searchResultMetadataGap = unit + 2;
-
-  static EdgeInsets _limitWindowInsets(EdgeInsets insets, {required double top, required double bottom}) => EdgeInsets.only(
-    left: insets.left,
-    top: insets.top > top ? top : insets.top,
-    right: insets.right,
-    bottom: insets.bottom > bottom ? bottom : insets.bottom,
-  );
 }
 
 /// Measured dimensions shared by the profile detail pages.

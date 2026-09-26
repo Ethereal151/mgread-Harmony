@@ -31,3 +31,6 @@ Android 验收规则。
 - 只格式化和分析本次拥有的 Dart 文件，运行直接受影响的 package 测试。
 - package 公共边界变化时再运行 package `flutter analyze`；example 变化时单独检查 example。
 - UI 变化运行最近的 widget/golden 测试并查看渲染结果；Golden 不替代用户授权的 Android 真实验收。
+
+- OHOS 窗口所有模式统一使用 edge-to-edge，Flutter 安全区负责内容避让；系统栏原生操作必须串行，后台页面不得覆盖阅读器沉浸状态。
+- OHOS 窗口状态与竞态回归：在本目录运行 `node --test test/ohos_system_ui_test.mjs`（Node 24+）；该测试不替代 ArkTS 编译及真机验收。

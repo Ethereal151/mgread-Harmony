@@ -17,3 +17,5 @@
   发布 `playing=true` 才结束启动状态；超时或后端错误要形成用户可见的分阶段失败。
 - 每个源码文件保持低于 700 个非空行。修改后在本目录执行格式化、`flutter analyze` 和
   `flutter test`。
+
+- 系统栏与挖孔避让只消费宿主传入的 `MediaQuery` / `SafeArea`；禁止重新读取原始 View 安全区，避免嵌套后重复留白。

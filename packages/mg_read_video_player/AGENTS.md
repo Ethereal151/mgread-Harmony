@@ -17,3 +17,5 @@ dart format --output=none --set-exit-if-changed .
 flutter analyze
 flutter test
 ```
+
+- 系统栏与挖孔避让只消费宿主传入的 `MediaQuery` / `SafeArea`；禁止重新读取原始 View 安全区，避免嵌套后重复留白。

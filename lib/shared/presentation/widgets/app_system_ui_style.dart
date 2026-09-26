@@ -3,7 +3,7 @@
 /// 职责：
 /// - 将 Flutter 页面实际使用的上下背景色声明给系统栏。
 /// - 在鸿蒙上同步原生窗口属性，避免媒体窗口退出后残留系统默认颜色。
-/// - 在应用进入/离开最近任务时重新同步原生窗口属性，避免系统栏回退到默认色。
+/// - 在应用恢复前台时重新同步当前页面的原生窗口属性，避免系统栏回退到默认色。
 /// - 保留播放器等更深层 [AnnotatedRegion] 对沉浸式页面的覆盖能力。
 ///
 /// 注意：
@@ -30,7 +30,7 @@ final class AppSystemUiStyle extends StatefulWidget {
 }
 
 final class _AppSystemUiStyleState extends State<AppSystemUiStyle> with WidgetsBindingObserver {
-  Brightness? _lastBrightness;
+  bool _syncScheduled = false;
 
   @override
   void initState() {
@@ -46,8 +46,8 @@ final class _AppSystemUiStyleState extends State<AppSystemUiStyle> with WidgetsB
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state != AppLifecycleState.detached) {
-      unawaited(_syncNative());
+    if (state == AppLifecycleState.resumed) {
+      _scheduleNativeSync();
     }
   }
 
@@ -55,18 +55,31 @@ final class _AppSystemUiStyleState extends State<AppSystemUiStyle> with WidgetsB
   void didUpdateWidget(covariant AppSystemUiStyle oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.statusBarColor != widget.statusBarColor || oldWidget.navigationBarColor != widget.navigationBarColor) {
-      unawaited(_syncNative());
+      _scheduleNativeSync();
     }
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final brightness = Theme.of(context).brightness;
-    if (_lastBrightness != brightness) {
-      _lastBrightness = brightness;
+    // Subscribe to route and tab visibility as well as theme changes. A page
+    // kept alive behind a reader/player must not change the foreground bars.
+    ModalRoute.of(context);
+    TickerMode.of(context);
+    Theme.of(context);
+    _scheduleNativeSync();
+  }
+
+  void _scheduleNativeSync() {
+    if (_syncScheduled) return;
+    _syncScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _syncScheduled = false;
+      if (!mounted || !TickerMode.of(context) || ModalRoute.of(context)?.isCurrent == false) return;
+      final lifecycle = WidgetsBinding.instance.lifecycleState;
+      if (lifecycle != null && lifecycle != AppLifecycleState.resumed) return;
       unawaited(_syncNative());
-    }
+    });
   }
 
   Future<void> _syncNative() async {

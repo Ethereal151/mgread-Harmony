@@ -36,19 +36,34 @@ void main() {
     expect(find.byKey(const Key('video-player-paused-play')), findsNothing);
   });
 
-  testWidgets('top controls clear a raw view status-bar inset', (tester) async {
-    // Test view padding is expressed in physical pixels; the default test
-    // device pixel ratio is 3.
-    tester.view.viewPadding = const FakeViewPadding(top: 72);
+  testWidgets('top controls consume the status-bar inset exactly once', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.padding = const FakeViewPadding(top: 24);
+    tester.view.viewPadding = const FakeViewPadding(top: 24);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPadding);
     addTearDown(tester.view.resetViewPadding);
 
-    await tester.pumpWidget(_playerApp(backend: _Backend()));
-    await tester.pumpAndSettle();
-
-    expect(
-      tester.getTopLeft(find.byKey(const Key('video-player-back'))).dy,
-      greaterThanOrEqualTo(24),
-    );
+    double? directTop;
+    for (final consumeSafeArea in <bool>[false, true]) {
+      await tester.pumpWidget(
+        _playerApp(backend: _Backend(), consumeSafeArea: consumeSafeArea),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      final top = tester
+          .getTopLeft(find.byKey(const Key('video-player-back')))
+          .dy;
+      expect(top, greaterThanOrEqualTo(24));
+      directTop ??= top;
+      expect(
+        top,
+        directTop,
+        reason: 'A host SafeArea must not add a second status-bar gap',
+      );
+    }
   });
 
   testWidgets('paused playback shows only a translucent white play button', (
@@ -420,16 +435,23 @@ Widget _playerApp({
   VideoPlayerObserver? observer,
   VideoPlayerController? controller,
   bool supportsSystemVolume = true,
+  bool consumeSafeArea = false,
 }) => MaterialApp(
-  home: VideoPlayerView(
-    contentId: 'show',
-    dataSource: const _Source(),
-    stateStore: const _Store(),
-    controller: controller,
-    observer: observer,
-    supportsSystemVolume: supportsSystemVolume,
-    backendFactory: () => backend,
-    controlsAutoHideDelay: const Duration(hours: 1),
+  home: SafeArea(
+    top: consumeSafeArea,
+    bottom: consumeSafeArea,
+    left: consumeSafeArea,
+    right: consumeSafeArea,
+    child: VideoPlayerView(
+      contentId: 'show',
+      dataSource: const _Source(),
+      stateStore: const _Store(),
+      controller: controller,
+      observer: observer,
+      supportsSystemVolume: supportsSystemVolume,
+      backendFactory: () => backend,
+      controlsAutoHideDelay: const Duration(hours: 1),
+    ),
   ),
 );
 

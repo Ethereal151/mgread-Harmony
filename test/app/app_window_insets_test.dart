@@ -1,36 +1,50 @@
-///
-/// 职责：
-/// - 验证鸿蒙系统栏安全区被收敛到共享手机布局契约。
-/// - 确认非鸿蒙窗口指标和键盘 inset 不受影响。
-///
-/// 注意：
-/// - 这里只验证纯布局指标变换，不替代真实鸿蒙设备验收。
-///
+/// Verifies window metrics survive the root and nested SafeAreas consume them once.
+/// These widget checks do not replace HarmonyOS device validation.
 library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
 import 'package:mg_read/app/app_theme.dart';
 
 void main() {
-  test('limits OHOS system insets to the shared phone layout contract', () {
-    const MediaQueryData input = MediaQueryData(
-      padding: EdgeInsets.fromLTRB(3, 64, 5, 56),
-      viewPadding: EdgeInsets.fromLTRB(3, 64, 5, 56),
-      viewInsets: EdgeInsets.only(bottom: 320),
-    );
-
-    final MediaQueryData output = AppSpacing.normalizeWindowInsets(input, isOhos: true);
-
-    expect(output.padding, const EdgeInsets.fromLTRB(3, 0, 5, 0));
-    expect(output.viewPadding, const EdgeInsets.fromLTRB(3, 0, 5, 0));
-    expect(output.viewInsets, input.viewInsets);
-  });
-
-  test('keeps non-OHOS window metrics unchanged', () {
-    const MediaQueryData input = MediaQueryData(padding: EdgeInsets.fromLTRB(3, 64, 5, 56), viewPadding: EdgeInsets.fromLTRB(3, 64, 5, 56));
-
-    expect(AppSpacing.normalizeWindowInsets(input, isOhos: false), input);
-  });
+  for (final isOhos in <bool>[true, false]) {
+    testWidgets('preserves safe areas through rotation and keyboard: ohos=$isOhos', (tester) async {
+      for (final insets in <MediaQueryData>[
+        const MediaQueryData(padding: EdgeInsets.fromLTRB(3, 64, 5, 56), viewPadding: EdgeInsets.fromLTRB(3, 64, 5, 56)),
+        const MediaQueryData(padding: EdgeInsets.fromLTRB(64, 0, 24, 16), viewPadding: EdgeInsets.fromLTRB(64, 0, 24, 16)),
+        const MediaQueryData(
+          padding: EdgeInsets.fromLTRB(3, 64, 5, 0),
+          viewPadding: EdgeInsets.fromLTRB(3, 64, 5, 56),
+          viewInsets: EdgeInsets.only(bottom: 320),
+        ),
+      ]) {
+        final metrics = AppSpacing.normalizeWindowInsets(insets, isOhos: isOhos);
+        await tester.pumpWidget(
+          Directionality(
+            textDirection: TextDirection.ltr,
+            child: MediaQuery(
+              data: metrics,
+              child: SafeArea(
+                child: SafeArea(
+                  child: Builder(
+                    builder: (context) {
+                      expect(MediaQuery.paddingOf(context), EdgeInsets.zero);
+                      expect(MediaQuery.viewInsetsOf(context), insets.viewInsets);
+                      return const SizedBox.expand(key: Key('content'));
+                    },
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        expect(metrics.viewPadding, insets.viewPadding);
+        expect(tester.getTopLeft(find.byKey(const Key('content'))), Offset(insets.padding.left, insets.padding.top));
+        expect(
+          tester.getSize(find.byKey(const Key('content'))).height,
+          tester.view.physicalSize.height / tester.view.devicePixelRatio - insets.padding.vertical,
+        );
+      }
+    });
+  }
 }

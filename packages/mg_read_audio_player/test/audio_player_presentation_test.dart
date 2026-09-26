@@ -34,22 +34,36 @@ void main() {
     expect(queueSize, const Size.square(44));
   });
 
-  testWidgets('top glass actions clear a raw view status-bar inset', (
+  testWidgets('top glass actions consume the status-bar inset exactly once', (
     tester,
   ) async {
-    // Test view padding is expressed in physical pixels; the default test
-    // device pixel ratio is 3.
-    tester.view.viewPadding = const FakeViewPadding(top: 72);
+    tester.view.devicePixelRatio = 1;
+    tester.view.padding = const FakeViewPadding(top: 24);
+    tester.view.viewPadding = const FakeViewPadding(top: 24);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPadding);
     addTearDown(tester.view.resetViewPadding);
 
-    await tester.pumpWidget(_host(backend: _PresentationBackend()));
-    await tester.pump();
-    await tester.pump();
-
-    expect(
-      tester.getTopLeft(find.byKey(const Key('audio-back'))).dy,
-      greaterThanOrEqualTo(24),
-    );
+    double? directTop;
+    for (final consumeSafeArea in <bool>[false, true]) {
+      await tester.pumpWidget(
+        _host(
+          backend: _PresentationBackend(),
+          consumeSafeArea: consumeSafeArea,
+          padding: const EdgeInsets.only(top: 24),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      final top = tester.getTopLeft(find.byKey(const Key('audio-back'))).dy;
+      expect(top, greaterThanOrEqualTo(24));
+      directTop ??= top;
+      expect(
+        top,
+        directTop,
+        reason: 'A host SafeArea must not add a second status-bar gap',
+      );
+    }
   });
 
   testWidgets('shows a dedicated empty queue recovery state', (tester) async {
@@ -716,6 +730,8 @@ Widget _host({
   Size size = const Size(390, 844),
   double textScale = 1.15,
   bool disableAnimations = true,
+  bool consumeSafeArea = false,
+  EdgeInsets padding = EdgeInsets.zero,
 }) {
   return MaterialApp(
     debugShowCheckedModeBanner: false,
@@ -723,20 +739,28 @@ Widget _host({
     home: MediaQuery(
       data: const MediaQueryData().copyWith(
         size: size,
+        padding: padding,
+        viewPadding: padding,
         textScaler: TextScaler.linear(textScale),
         disableAnimations: disableAnimations,
       ),
-      child: AudioPlayerView(
-        collectionId: 'book',
-        dataSource: dataSource,
-        stateStore: const _PresentationStateStore(),
-        observer: const AudioPlayerObserver(),
-        controller: controller,
-        backend: backend,
-        artworkBuilder: artworkBuilder,
-        resourceUrlDecoder: resourceUrlDecoder,
-        autoplay: false,
-        saveInterval: const Duration(hours: 1),
+      child: SafeArea(
+        top: consumeSafeArea,
+        bottom: consumeSafeArea,
+        left: consumeSafeArea,
+        right: consumeSafeArea,
+        child: AudioPlayerView(
+          collectionId: 'book',
+          dataSource: dataSource,
+          stateStore: const _PresentationStateStore(),
+          observer: const AudioPlayerObserver(),
+          controller: controller,
+          backend: backend,
+          artworkBuilder: artworkBuilder,
+          resourceUrlDecoder: resourceUrlDecoder,
+          autoplay: false,
+          saveInterval: const Duration(hours: 1),
+        ),
       ),
     ),
   );

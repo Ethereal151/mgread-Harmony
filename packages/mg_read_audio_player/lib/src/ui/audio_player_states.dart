@@ -17,15 +17,11 @@ final class AudioLoadingView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final viewTopInset = MediaQueryData.fromView(
-      View.of(context),
-    ).viewPadding.top;
     return Stack(
       fit: StackFit.expand,
       children: <Widget>[
         const AudioPlayerAmbientBackground(),
         SafeArea(
-          minimum: EdgeInsets.only(top: viewTopInset),
           child: Padding(
             padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
             child: Column(
@@ -99,15 +95,11 @@ final class AudioErrorView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final viewTopInset = MediaQueryData.fromView(
-      View.of(context),
-    ).viewPadding.top;
     return Stack(
       fit: StackFit.expand,
       children: <Widget>[
         const AudioPlayerAmbientBackground(),
         SafeArea(
-          minimum: EdgeInsets.only(top: viewTopInset),
           child: Padding(
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
             child: Column(
