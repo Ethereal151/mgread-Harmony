@@ -82,7 +82,10 @@ final class RuntimeStatusInvocation
     if (ok is! bool ||
         nodeVersion is! String ||
         runtimeVersion is! String ||
-        (runtimeKind != 'android-javet' && runtimeKind != 'desktop-node') ||
+        (runtimeKind != 'android-javet' &&
+            runtimeKind != 'android-node-process' &&
+            runtimeKind != 'desktop-node' &&
+            runtimeKind != 'native-rust') ||
         platform is! String ||
         arch is! String ||
         uptimeMs is! int ||
@@ -116,6 +119,36 @@ final class RuntimeStatusInvocation
   }
 }
 
+/// Resolves a saved resource descriptor against its currently enabled engine.
+/// Remote HTTP URLs pass through unchanged; applications need not parse routes.
+@immutable
+final class SourceResourceResolveInvocation extends PluginInvocation<String> {
+  const SourceResourceResolveInvocation({required this.url});
+  final String url;
+  @override
+  String get _wireMethod => 'runtime.sourceResource.resolve.v1';
+  @override
+  Map<String, Object?> get _wireParams => {'url': url};
+  @override
+  String _decodeResult(Object? value) {
+    final result = _jsonObject(value, 'Resolved source resource');
+    final resolved = result['url'];
+    final route = resolved is String
+        ? _SourceResourceUrl.parse(resolved)
+        : null;
+    final original = _SourceResourceUrl.require(url);
+    if (resolved is! String ||
+        route == null ||
+        route.pluginId != original.pluginId ||
+        route.engine != original.engine)
+      throw const PluginRuntimeException(
+        'invalid_response',
+        'Invalid resolved resource URL.',
+      );
+    return resolved;
+  }
+}
+
 /// Decodes one Runtime-generated source-resource URL for technical inspection.
 @immutable
 final class SourceResourceDecodeInvocation
@@ -128,7 +161,13 @@ final class SourceResourceDecodeInvocation
   String get _wireMethod => 'runtime.sourceResource.decode.v1';
 
   @override
-  Map<String, Object?> get _wireParams => <String, Object?>{'url': url};
+  Map<String, Object?> get _wireParams {
+    final route = _SourceResourceUrl.require(url);
+    return <String, Object?>{
+      'url': url,
+      if (route.engine == PluginEngine.native) 'pluginId': route.pluginId,
+    };
+  }
 
   @override
   SourceResourceDecodeResult _decodeResult(Object? value) {
@@ -185,6 +224,7 @@ final class RuntimeStatusResult {
     required this.runtimeVersion,
     required this.runtimeKind,
     required this.uptimeMs,
+    this.nativeStatus,
   });
 
   final String arch;
@@ -196,6 +236,9 @@ final class RuntimeStatusResult {
   final String runtimeVersion;
   final String runtimeKind;
   final int uptimeMs;
+
+  /// Independent native worker metrics in a mixed-engine application.
+  final RuntimeStatusResult? nativeStatus;
 }
 
 @immutable
@@ -804,6 +847,11 @@ final class PluginCacheClearItem {
 
 InstalledPlugin _decodeInstalledPlugin(Object? value) {
   final item = _jsonObject(value, 'Installed plugin');
+  final engine = switch (item['engine']) {
+    null || 'node' => PluginEngine.node,
+    'native' => PluginEngine.native,
+    _ => null,
+  };
   final id = item['id'];
   final name = item['name'];
   final displayName = item['displayName'];
@@ -814,7 +862,8 @@ InstalledPlugin _decodeInstalledPlugin(Object? value) {
   final enabled = item['enabled'];
   final status = item['status'];
   final kinds = item['contentKinds'];
-  if (id is! String ||
+  if (engine == null ||
+      id is! String ||
       name is! String ||
       displayName is! String ||
       (description != null && description is! String) ||
@@ -832,6 +881,7 @@ InstalledPlugin _decodeInstalledPlugin(Object? value) {
     );
   }
   return InstalledPlugin(
+    engine: engine,
     activeVersion: activeVersion as String?,
     contentKinds: List<String>.unmodifiable(kinds.cast<String>()),
     description: description as String?,
@@ -845,10 +895,14 @@ InstalledPlugin _decodeInstalledPlugin(Object? value) {
   );
 }
 
+/// Engine that owns an installed source and its private installation state.
+enum PluginEngine { node, native }
+
 /// Strong Flutter projection of one Runtime-owned plugin installation.
 @immutable
 final class InstalledPlugin {
   const InstalledPlugin({
+    this.engine = PluginEngine.node,
     required this.activeVersion,
     required this.contentKinds,
     required this.displayName,
@@ -861,6 +915,7 @@ final class InstalledPlugin {
     this.iconUrl,
   });
 
+  final PluginEngine engine;
   final String? activeVersion;
   final List<String> contentKinds;
   final String? description;

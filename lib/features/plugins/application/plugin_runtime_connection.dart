@@ -114,6 +114,7 @@ final class MgReadPluginRuntimeGateway implements PluginRuntimeGateway, PluginRu
               displayName: plugin.displayName,
               enabled: plugin.enabled,
               iconUrl: plugin.iconUrl,
+              engine: plugin.engine.name,
               id: plugin.id,
               name: plugin.name,
               pendingVersion: plugin.pendingVersion,
@@ -286,29 +287,34 @@ final class MgReadPluginRuntimeStatusGateway implements PluginRuntimeStatusGatew
   Future<PluginRuntimeStatus> inspect() async {
     try {
       final result = await _runtime.invoke(const RuntimeStatusInvocation());
-      return PluginRuntimeStatus(
-        arch: result.arch,
-        isHealthy: result.isHealthy,
-        memory: PluginRuntimeMemory(
-          arrayBuffers: result.memory.arrayBuffers,
-          external: result.memory.external,
-          heapTotal: result.memory.heapTotal,
-          heapUsed: result.memory.heapUsed,
-          rss: result.memory.rss,
-        ),
-        nodeVersion: result.nodeVersion,
-        platform: result.platform,
-        plugins: List<PluginRuntimePlugin>.unmodifiable(result.plugins.map(_toPluginRuntimePlugin)),
-        runtimeVersion: result.runtimeVersion,
-        runtimeKind: result.runtimeKind,
-        uptime: Duration(milliseconds: result.uptimeMs),
-      );
+      return _toPluginRuntimeStatus(result);
     } on PluginRuntimeException catch (error) {
       throw normalizePluginRuntimeError(error);
     } on Object catch (error) {
       throw AppError.fromUnknown(error);
     }
   }
+}
+
+PluginRuntimeStatus _toPluginRuntimeStatus(RuntimeStatusResult result) {
+  return PluginRuntimeStatus(
+    arch: result.arch,
+    isHealthy: result.isHealthy,
+    memory: PluginRuntimeMemory(
+      arrayBuffers: result.memory.arrayBuffers,
+      external: result.memory.external,
+      heapTotal: result.memory.heapTotal,
+      heapUsed: result.memory.heapUsed,
+      rss: result.memory.rss,
+    ),
+    nodeVersion: result.nodeVersion,
+    platform: result.platform,
+    plugins: List<PluginRuntimePlugin>.unmodifiable(result.plugins.map(_toPluginRuntimePlugin)),
+    runtimeVersion: result.runtimeVersion,
+    runtimeKind: result.runtimeKind,
+    uptime: Duration(milliseconds: result.uptimeMs),
+    nativeStatus: result.nativeStatus == null ? null : _toPluginRuntimeStatus(result.nativeStatus!),
+  );
 }
 
 PluginRuntimePlugin _toPluginRuntimePlugin(InstalledPlugin plugin) {
@@ -319,6 +325,7 @@ PluginRuntimePlugin _toPluginRuntimePlugin(InstalledPlugin plugin) {
     displayName: plugin.displayName,
     enabled: plugin.enabled,
     iconUrl: plugin.iconUrl,
+    engine: plugin.engine.name,
     id: plugin.id,
     name: plugin.name,
     pendingVersion: plugin.pendingVersion,
@@ -553,19 +560,21 @@ final class PluginRuntimeSourceImportController extends Notifier<PluginSourceImp
     );
   }
 
-  Future<bool> importLocalPlugin() async {
+  Future<bool> importLocalPlugin({bool native = false}) async {
     if (state.isImporting) return false;
     state = const PluginSourceImportState(isImporting: true, message: '正在打开文件选择器', logs: <String>['正在打开文件选择器']);
     final diagnostics = ref.read(diagnosticsManagerProvider);
     final span = diagnostics.startSpan(
       AppDiagnosticEvents.runtimeFacadeCall,
       attributes: () => DiagnosticObjectValue(<String, DiagnosticValue>{
-        'capability': DiagnosticValue.string('runtime.plugins.importLocal.v1'),
+        'capability': DiagnosticValue.string(native ? 'runtime.plugins.importNativeLocal.v1' : 'runtime.plugins.importLocal.v1'),
         'resultState': DiagnosticValue.string('loading'),
       }),
     );
     try {
-      final imported = await ref.read(pluginRuntimeGatewayProvider).importLocalPlugin();
+      final imported = native
+          ? await ref.read(pluginRuntimeFacadeProvider).importNativeLocalPlugin()
+          : await ref.read(pluginRuntimeGatewayProvider).importLocalPlugin();
       if (imported) {
         state = const PluginSourceImportState(isImporting: true, message: '正在刷新数据源列表', logs: <String>['正在刷新数据源列表']);
         ref.read(pluginRuntimeCatalogChangeProvider.notifier).publish();
@@ -573,7 +582,7 @@ final class PluginRuntimeSourceImportController extends Notifier<PluginSourceImp
       }
       span.complete(
         attributes: DiagnosticObjectValue(<String, DiagnosticValue>{
-          'capability': DiagnosticValue.string('runtime.plugins.importLocal.v1'),
+          'capability': DiagnosticValue.string(native ? 'runtime.plugins.importNativeLocal.v1' : 'runtime.plugins.importLocal.v1'),
           'resultState': DiagnosticValue.string(imported ? 'success' : 'cancelled'),
         }),
       );
@@ -582,7 +591,7 @@ final class PluginRuntimeSourceImportController extends Notifier<PluginSourceImp
       final appError = AppError.fromUnknown(error);
       span.fail(
         attributes: DiagnosticObjectValue(<String, DiagnosticValue>{
-          'capability': DiagnosticValue.string('runtime.plugins.importLocal.v1'),
+          'capability': DiagnosticValue.string(native ? 'runtime.plugins.importNativeLocal.v1' : 'runtime.plugins.importLocal.v1'),
           'resultState': DiagnosticValue.string('failure'),
           'errorCode': DiagnosticValue.string(appError.code.wireValue),
         }),
@@ -599,7 +608,7 @@ String _initializationMessage(RuntimeInitializationStage stage) {
     RuntimeInitializationStage.assetsCopying => '正在准备 Runtime 文件',
     RuntimeInitializationStage.assetsCopied => 'Runtime 文件准备完成',
     RuntimeInitializationStage.assetsReused => '正在复用 Runtime 文件',
-    RuntimeInitializationStage.nodeStarting => '正在启动 Node Runtime',
+    RuntimeInitializationStage.nodeStarting => const bool.fromEnvironment('MGREAD_NATIVE_RUNTIME') ? '正在启动原生数据源引擎' : '正在启动 Node Runtime',
     RuntimeInitializationStage.pluginCopying => '正在复制数据源插件文件',
     RuntimeInitializationStage.pluginCopied => '数据源插件文件复制完成',
     RuntimeInitializationStage.pluginInboxScanned => '数据源收件箱扫描完成',

@@ -28,6 +28,7 @@ export function normalizePluginModule(imported: Record<string, unknown>): Loaded
   const getDetail = imported.getDetail;
   const getChapters = imported.getChapters;
   const getContent = imported.getContent;
+  const getResource = imported.getResource;
   if (
     typeof activate !== "function" ||
     typeof discover !== "function" ||
@@ -42,6 +43,7 @@ export function normalizePluginModule(imported: Record<string, unknown>): Loaded
     activate: activate as LoadedPluginModule["activate"],
     discover: discover as PluginContentFunction,
     getChapters: getChapters as PluginContentFunction,
+    ...(imported.deferredGroups === true ? { deferredGroups: true } : {}),
     getContent: getContent as PluginContentFunction,
     getDetail: getDetail as PluginContentFunction,
     search: search as PluginContentFunction,
@@ -50,6 +52,7 @@ export function normalizePluginModule(imported: Record<string, unknown>): Loaded
     searchSuggestions: typeof searchSuggestions === "function"
       ? searchSuggestions as PluginContentFunction
       : () => ({ items: [], nextCursor: null }),
+    ...(typeof getResource === "function" ? { getResource: getResource as NonNullable<LoadedPluginModule["getResource"]> } : {}),
   });
 }
 

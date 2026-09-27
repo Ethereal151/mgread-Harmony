@@ -3,6 +3,8 @@
  *
  * This package is type-only. Runtime owns the implementation and validation;
  * source packages must import these types instead of redeclaring projections.
+ * These context APIs are Node-facing. Native initialization ABI v3 uses the same content
+ * semantics with plugin-owned HTTP/cache; see native-source-contract.md.
  */
 
 export type PluginJsonValue =
@@ -14,6 +16,19 @@ export type PluginJsonValue =
   | { readonly [key: string]: PluginJsonValue };
 
 export type PluginJsonObject = { readonly [key: string]: PluginJsonValue };
+
+/** Optional whole-group catalog loading. Export `deferredGroups = true` to opt in.
+ * Runtime negotiates support; without supportsDeferredGroups return the legacy
+ * complete catalog. groupId requests one complete group, never an episode page.
+ * A deferred group has deferred:true and episodes:[]; omitted deferred means loaded.
+ * refresh bypasses the source's catalog cache. Group IDs must survive reordering.
+ */
+export interface PluginChaptersRequest {
+  readonly id: string;
+  readonly groupId?: string;
+  readonly supportsDeferredGroups?: boolean;
+  readonly refresh?: boolean;
+}
 
 export interface PluginWebViewCallOptions {
   readonly timeoutMs?: number;
@@ -120,7 +135,19 @@ export type PluginResourceTransform =
 export type PluginResourceProxyRequest = PluginJsonObject & {
   readonly proxyMode?: "direct";
   readonly resourceTransform?: PluginResourceTransform;
+  /** Optional source-owned image handler invoked when the loopback URL is read. */
+  readonly handler?: string;
+  readonly params?: PluginJsonObject;
 };
+
+/** A decoded image returned by an optional source getResource export. */
+export interface PluginImageResourceResponse {
+  readonly bytes: Uint8Array;
+  readonly mimeType: "image/jpeg" | "image/png" | "image/webp" | "image/gif";
+}
+
+/** Optional source module export for source-specific image decoding or assembly. */
+export type PluginImageResourceHandler = (request: PluginResourceProxyRequest) => Promise<PluginImageResourceResponse> | PluginImageResourceResponse;
 
 export interface MgReadPluginContext {
   readonly app: {

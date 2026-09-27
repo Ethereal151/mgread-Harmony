@@ -147,6 +147,7 @@ final class PluginRuntime {
   static PluginRuntime? _ohosInstance;
   static PluginRuntime? _unsupportedInstance;
   static Future<bool>? _ohosNodeHostAvailability;
+  static PluginRuntime? _nativeInstance;
 
   /// Whether this platform has a Runtime host implementation.
   static bool get isPlatformSupported =>
@@ -172,15 +173,37 @@ final class PluginRuntime {
       }
     }();
   }
+  /// Whether this Facade can install and execute native binary sources.
+  bool get supportsNativeSources =>
+      _supervisor is _HybridRuntimeSupervisor ||
+      _supervisor is _NativeRuntimeSupervisor;
 
   /// Creates or returns the process-scoped production Facade.
   ///
-  /// The Runtime package resolves its own Windows or macOS bundle layout. Android uses
-  /// the package-owned Javet bridge; neither platform leaks its launcher or
-  /// file-system details to the host application.
+  /// The Runtime package resolves its own desktop bundle layout. Windows and
+  /// Android own both Node and native backends. The native-only
+  /// define remains available for isolation and package acceptance builds.
   factory PluginRuntime() {
+    if (const bool.fromEnvironment('MGREAD_NATIVE_RUNTIME')) {
+      return _nativeInstance ??= PluginRuntime._(
+        _NativeRuntimeSupervisor.forCurrentPlatform(),
+      );
+    }
     if (Platform.isAndroid) {
-      return _androidInstance ??= PluginRuntime._(_AndroidRuntimeSupervisor());
+      return _androidInstance ??= PluginRuntime._(
+        const bool.fromEnvironment('MGREAD_NODE_ONLY')
+            ? (AndroidNodeRuntimeSettings.instance.active ==
+                      AndroidNodeBackend.nodeProcess
+                  ? _AndroidNodeProcessSupervisor()
+                  : _AndroidRuntimeSupervisor())
+            : _HybridRuntimeSupervisor(
+                AndroidNodeRuntimeSettings.instance.active ==
+                        AndroidNodeBackend.nodeProcess
+                    ? _AndroidNodeProcessSupervisor()
+                    : _AndroidRuntimeSupervisor(),
+                _NativeRuntimeSupervisor.forCurrentPlatform(),
+              ),
+      );
     }
     if (Platform.operatingSystem == 'ohos') {
       return _ohosInstance ??= PluginRuntime._(_OhosRuntimeSupervisor());
@@ -191,10 +214,23 @@ final class PluginRuntime {
       );
     }
     return _bundledInstance ??= PluginRuntime._(
-      _DesktopRuntimeSupervisor(
-        _DesktopRuntimeBundle.fromApplicationPackage(),
-        useEnvironmentProxy: true,
-      ),
+      Platform.isWindows
+          ? const bool.fromEnvironment('MGREAD_NODE_ONLY')
+                ? _DesktopRuntimeSupervisor(
+                    _DesktopRuntimeBundle.fromApplicationPackage(),
+                    useEnvironmentProxy: true,
+                  )
+                : _HybridRuntimeSupervisor(
+                    _DesktopRuntimeSupervisor(
+                      _DesktopRuntimeBundle.fromApplicationPackage(),
+                      useEnvironmentProxy: true,
+                    ),
+                    _NativeRuntimeSupervisor.forCurrentPlatform(),
+                  )
+          : _DesktopRuntimeSupervisor(
+              _DesktopRuntimeBundle.fromApplicationPackage(),
+              useEnvironmentProxy: true,
+            ),
     );
   }
 
@@ -286,6 +322,21 @@ final class PluginRuntime {
       );
     }
     cancellation?._throwIfCancelled();
+    if (invocation is SourceResourceResolveInvocation) {
+      final url = (invocation as SourceResourceResolveInvocation).url;
+      if (_SourceResourceUrl.parse(url) == null) {
+        final uri = Uri.tryParse(url);
+        if (uri == null ||
+            !const {'http', 'https'}.contains(uri.scheme) ||
+            uri.host.isEmpty ||
+            uri.path.contains('/source-resource/'))
+          throw const PluginRuntimeException(
+            'invalid_request',
+            'Invalid resource URL.',
+          );
+        return Future<T>.value(url as T);
+      }
+    }
     return _supervisor.invoke(invocation, cancellation: cancellation);
   }
 
@@ -322,7 +373,9 @@ final class PluginRuntime {
       acceptedTypeGroups: <XTypeGroup>[
         XTypeGroup(
           label: 'MgRead 数据源',
-          extensions: <String>['mgplugin.js', 'mgplugin'],
+          extensions: const bool.fromEnvironment('MGREAD_NATIVE_RUNTIME')
+              ? <String>['mgplugin']
+              : <String>['mgplugin.js', 'mgplugin'],
         ),
       ],
       confirmButtonText: '导入',
@@ -330,9 +383,13 @@ final class PluginRuntime {
     if (file == null) return false;
     final path = file.path;
     final lowerPath = path.toLowerCase();
+    final nativeRuntime = const bool.fromEnvironment('MGREAD_NATIVE_RUNTIME');
     if (path.isEmpty ||
-        (!lowerPath.endsWith('.mgplugin.js') &&
-            !lowerPath.endsWith('.mgplugin'))) {
+        (nativeRuntime
+            ? !lowerPath.endsWith('.mgplugin') ||
+                  lowerPath.endsWith('.mgplugin.js')
+            : !lowerPath.endsWith('.mgplugin.js') &&
+                  !lowerPath.endsWith('.mgplugin'))) {
       throw const PluginRuntimeException(
         'invalid_request',
         'The selected file is not a MgRead plugin artifact.',
@@ -340,6 +397,42 @@ final class PluginRuntime {
     }
     await _supervisor.importLocalPlugin(path);
     return true;
+  }
+
+  /// Imports a native binary source through the selected platform picker.
+  Future<bool> importNativeLocalPlugin() {
+    final supervisor = _supervisor;
+    if (supervisor is _HybridRuntimeSupervisor) {
+      return supervisor.importNativeLocalPlugin();
+    }
+    if (supervisor is _NativeRuntimeSupervisor) {
+      return Platform.isAndroid
+          ? supervisor.pickAndImportLocalPlugin()
+          : importLocalPlugin();
+    }
+    throw const PluginRuntimeException(
+      'unsupported',
+      'Native source packages are unavailable on this platform.',
+    );
+  }
+
+  /// Imports a package-owned fixture by path for Runtime integration tests.
+  ///
+  /// Product flows keep path selection inside this package; only package
+  /// acceptance tests use this helper to exercise the production Supervisor.
+  @visibleForTesting
+  Future<void> importLocalPluginForTesting(String sourcePath) {
+    if (const bool.fromEnvironment('MGREAD_TEST_DIRECT_IMPORTS') &&
+        _supervisor is _HybridRuntimeSupervisor) {
+      return _supervisor.importLocalPluginForTesting(sourcePath);
+    }
+    if (!const bool.fromEnvironment('MGREAD_NATIVE_RUNTIME')) {
+      throw const PluginRuntimeException(
+        'unsupported',
+        'Direct-path plugin imports are available to native Runtime tests only.',
+      );
+    }
+    return _supervisor.importLocalPlugin(sourcePath);
   }
 
   /// Streams one Runtime-owned artifact without exposing a path, handle, port,
@@ -357,15 +450,22 @@ final class PluginRuntime {
     PluginTransferOffer offer,
   ) => _supervisor.materializePluginArtifact(offer);
 
-  /// Accepts a byte-bounded batch and performs bounded Runtime cold activations.
+  /// Accepts a byte-bounded batch and activates it with one restart per engine.
   ///
-  /// Android divides large selections into native-safe sub-batches; callers
-  /// still receive one ordered result list for the complete selection.
+  /// Android stages the complete selection before restarting its Node Core or
+  /// service. Callers receive one ordered result list for the selection.
   Future<List<PluginTransferImportResult>> importPluginArtifacts(
     List<({PluginTransferArtifact artifact, Stream<List<int>> bytes})>
     artifacts, {
     Set<String> forceUpgradePluginIds = const <String>{},
   }) {
+    if (!supportsNativeSources &&
+        artifacts.any((item) => item.artifact.engine == PluginEngine.native)) {
+      throw const PluginRuntimeException(
+        'unsupported',
+        'Native source packages are unavailable on this platform.',
+      );
+    }
     return _supervisor.importPluginArtifacts(
       artifacts,
       forceUpgradePluginIds: forceUpgradePluginIds,
@@ -433,6 +533,53 @@ final class PluginRuntime {
     return PluginRuntime._(_OhosRuntimeSupervisor());
   }
 
+  /// Exercises the Javet adapter with package-owned mock platform channels.
+  @visibleForTesting
+  factory PluginRuntime.androidForTesting() =>
+      PluginRuntime._(_AndroidRuntimeSupervisor());
+
+  /// Creates a native Rust Facade for package-owned tests.
+  ///
+  /// Tests may use an isolated fake control endpoint or launch a package-owned
+  /// helper executable from an isolated data root. Production applications
+  /// cannot inject either value.
+  @visibleForTesting
+  factory PluginRuntime.nativeForTesting({
+    required String executablePath,
+    required String dataRoot,
+    bool testMode = false,
+    Uri? testControlUri,
+    String? testToken,
+  }) {
+    return PluginRuntime._(
+      _NativeRuntimeSupervisor.forTesting(
+        executablePath: executablePath,
+        dataRoot: dataRoot,
+        testMode: testMode,
+        testControlUri: testControlUri,
+        testToken: testToken,
+      ),
+    );
+  }
+
+  /// Combines isolated package test Facades without exposing either transport.
+  @visibleForTesting
+  factory PluginRuntime.hybridForTesting({
+    required PluginRuntime nodeRuntime,
+    required PluginRuntime nativeRuntime,
+  }) {
+    final native = nativeRuntime._supervisor;
+    if (native is! _NativeRuntimeSupervisor ||
+        nodeRuntime._supervisor is _NativeRuntimeSupervisor) {
+      throw ArgumentError(
+        'Hybrid tests require one Node and one native Facade.',
+      );
+    }
+    return PluginRuntime._(
+      _HybridRuntimeSupervisor(nodeRuntime._supervisor, native),
+    );
+  }
+
   /// Emits bounded Runtime lifecycle diagnostics.
   ///
   /// This is intentionally not a raw stderr or transport stream. Consumers can
@@ -467,12 +614,17 @@ final class PluginRuntime {
   /// Closes the test-owned Runtime process and its internal connection.
   ///
   /// Production callers do not manage the Runtime's lifecycle: the desktop
-  /// supervisor owns its child and Android owns the embedded engine.
+  /// supervisor owns its child and Android owns the selected backend.
   @visibleForTesting
   Future<void> debugDispose() async {
+    if (const bool.fromEnvironment('MGREAD_NATIVE_RUNTIME')) {
+      await _supervisor.dispose();
+      if (identical(_nativeInstance, this)) _nativeInstance = null;
+      return;
+    }
     // The Android bridge owns the native Runtime lifecycle. Local imports use
-    // its controlled cold restart path; test disposal must not detach that
-    // engine from the Flutter plugin.
+    // its controlled cold restart path; test disposal must not detach the
+    // selected backend from the Flutter plugin.
     if (Platform.isAndroid) return;
     await _supervisor.dispose();
     if (identical(_bundledInstance, this)) {

@@ -31,6 +31,7 @@ migrate_working_dir/
 .pub-cache/
 .pub/
 /build/
+**/android/build/
 /coverage/
 /artifacts/
 /.flutter_ohos_plugins/
@@ -40,6 +41,8 @@ migrate_working_dir/
 /packages/**/ohos/build/
 /packages/**/ohos/oh_modules/
 /packages/mg_read_node_runtime/.tmp-ohos-debug-data/
+**/.gradle/
+/tmp/
 **/failures/*.png
 
 # Symbolication related

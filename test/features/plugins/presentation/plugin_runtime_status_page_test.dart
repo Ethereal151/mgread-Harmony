@@ -42,13 +42,16 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('管理数据源'), findsOneWidget);
-    expect(find.text('我的数据源'), findsOneWidget);
+    expect(find.text('数据源'), findsOneWidget);
+    expect(find.text('已添加 6 个数据源'), findsOneWidget);
     expect(find.text('阅文集团旗下原创文学平台'), findsOneWidget);
-    expect(find.text('已启用 4/6'), findsOneWidget);
+    expect(find.text('4 个已启用 · 2 个已停用'), findsOneWidget);
     expect(find.text('数据源分组'), findsNothing);
     expect(find.byKey(const Key('data-source-management-card')), findsOneWidget);
     expect(find.byKey(const Key('data-source-add')), findsOneWidget);
+    expect(find.byKey(const Key('data-source-add-native')), findsNothing);
+    expect(find.text('添加数据源'), findsOneWidget);
+    expect(find.byKey(const Key('data-source-clear-all')), findsNothing);
     expect(find.byKey(const Key('data-source-open-runtime-directory')), findsNothing);
     expect(find.byKey(const Key('data-source-add-development-directory')), findsNothing);
     expect(find.byKey(const Key('runtime-debug-http-toggle')), findsNothing);
@@ -58,7 +61,7 @@ void main() {
     expect(find.text('发现'), findsNothing);
     expect(find.text('书架'), findsNothing);
     expect(find.byIcon(Icons.arrow_back_ios_new_rounded), findsOneWidget);
-    expect(find.byIcon(Icons.help_outline), findsOneWidget);
+    expect(find.byIcon(Icons.more_horiz_rounded), findsOneWidget);
 
     final Rect topBar = tester.getRect(find.byKey(const Key('data-source-top-bar')));
     final Rect card = tester.getRect(find.byKey(const Key('data-source-management-card')));
@@ -97,8 +100,12 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('data-source-verify-all')), findsOneWidget);
+    expect(find.byKey(const Key('data-source-verify-all')), findsNothing);
+    await tester.tap(find.byKey(const Key('data-source-more')));
+    await tester.pumpAndSettle();
+    expect(find.text('检测数据源'), findsOneWidget);
     await tester.tap(find.byKey(const Key('data-source-verify-all')));
+    await tester.pumpAndSettle();
     expect(requested, isTrue);
   });
 
@@ -158,7 +165,7 @@ void main() {
   testWidgets('marks a development source as live and keeps it immutable', (WidgetTester tester) async {
     const developmentSource = PluginRuntimeConnection(
       isHealthy: true,
-      nodeVersion: '24.16.0',
+      nodeVersion: '26.10.0',
       runtimeVersion: '0.2.0-standard.2',
       plugins: <PluginRuntimePlugin>[
         PluginRuntimePlugin(
@@ -196,7 +203,7 @@ void main() {
   testWidgets('uses Runtime icon URL and keeps the brand fallback on failure', (WidgetTester tester) async {
     const connection = PluginRuntimeConnection(
       isHealthy: true,
-      nodeVersion: '24.16.0',
+      nodeVersion: '26.10.0',
       runtimeVersion: '0.2.0-standard.2',
       plugins: <PluginRuntimePlugin>[
         PluginRuntimePlugin(

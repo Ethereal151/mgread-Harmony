@@ -5,25 +5,40 @@
 ## 按任务读取
 
 - Facade 与 Supervisor：先读 `lib/mgread_plugin_runtime.dart`、目标 part 和相邻测试。
-- Android Javet/WebView：读目标 Kotlin 实现、公开 provider 类型和直接 contract。
+- Android Javet 或私有 Node 进程/WebView：读所选后端的 Kotlin、Dart Supervisor、公开 provider 类型和直接 contract。
 - Windows WebView2/Job：读目标 C++ 或 Dart host、reverse-wire fixture 和直接测试。
 - Node.js Core、安装、artifact 或内部协议变化：转到同级 `../mg_read_node_runtime/`，读取其最近
   `AGENTS.md`、公开类型与直接测试。
 
 ## Package 所有权
 
-- 本 package 独立拥有唯一 Flutter Facade、Supervisor、Android Javet 和桌面平台宿主；Node.js Core
+- 本 package 独立拥有唯一 Flutter Facade、Node/原生双 Supervisor、Android 组合后端和桌面平台宿主；Node.js Core
   位于同级 `mg_read_node_runtime`，构建后只以 package asset 形式进入本 package。
 - 主应用只调用版本化 `PluginRuntime.invoke`；不得获得 executable、PID、端口、ready、bootId、内部 URL、
   wire envelope、Runtime 数据根或平台对象。
-- 每个应用进程只有一个 Node Runtime/VM。Runtime 私有数据不得承载主应用持久化权威。
+- Android 正常包同时包含 Javet 与 arm64-v8a 私有 Service 中的 Node 24.21.0；设置页保存所选 Node 后端，
+  重启 App 进程后生效，默认 Javet。启动组合根必须先初始化 `AndroidNodeRuntimeSettings` 再创建 Facade；
+  不支持 arm64 Node 库的设备仅可选择 Javet。Rust 原生后端与所选 Node 后端并存，WebView 仍由主进程持有。Runtime 私有数据
+  不得承载主应用持久化权威。
+- Windows/Android 默认同时交付 Node 和 Rust 宿主，Facade 按来源引擎归属路由；两种来源 ID 必须全局唯一。
+  `MGREAD_NATIVE_RUNTIME=true` 只用于原生独立性验收，该包不提供 Node 切换设置。Windows 按该 define
+  裁剪 Node Runtime 资产；Android 正常包用 hybrid source set，独立性验收包用 nativeRuntime source set。
+  私有 Service 只经 Binder 引导 Rust 服务；控制 HTTP 属于 worker，资源流属于已初始化插件，不能在 Dart 内新增回环代理。
+  资源归属统一由 `source_resource_url.dart` 解析；原生结果还需验证认证 worker 登记的插件和端口，响应属于当前世代。
+  `SourceResourceResolveInvocation` 在获取资源前重建当前端口，原始 payload 跨重启保留。内容直接 HTTP 请求插件，取消关闭本连接。
+  原生启停、更新、卸载、清缓存、代理变更共用确认退出后的 worker 冷重启；未启用来源禁止加载。
+  原生测试先构建 `tools/build_native_runtime.ps1` 的产物，再执行 native Facade/Android integration；修改
+  Kotlin 停止语义必须验证 worker 真正退出后才允许下一次启动。
+- 区分宿主打包与来源装载：正常 App 预置两套宿主，来源 artifact 可在安装后导入，由归属引擎按需装载；
+  不为 Node 和原生来源分别发布正常 App 版本。Node 单文件和原生 DLL/SO 的 artifact、加载与更新规则分别由
+  `../mg_read_node_runtime/AGENTS.md` 和 `../mg_read_native_runtime/AGENTS.md` 拥有。
 
 ## 验证
 
 - OHOS：Node 宿主空闲时仍须驱动 libuv；队列通过 async handle 唤醒，不能在 libuv callback 内执行
   会再次驱动事件循环的 bridge 任务。运行 `integration_test/ohos_comic_resource_idle_test.dart`，验证
   getContent 返回后无额外 Runtime 调用的并发图片下载、请求头透传、分块响应及重启后的恢复。
-- Dart/Facade：运行目标 Flutter 测试；桌面 transport 变化时追加 Node package 的 `test:flutter-desktop`。
-- Android：增加相邻 Kotlin 单测和目标 Gradle 编译；真实流程仍需用户明确授权的 Integration Test。
+- Dart/Facade：运行目标 Flutter 测试；Node 桌面 transport 变化时追加 Node package 的 `test:flutter-desktop`。
+  共享类型需覆盖旧 decoder 测试。
 - Windows：增加 reverse-broker、Dart fake-platform/HTTP 和 Facade reverse-wire fixture；原生修改再构建
   Windows Debug，且不得结束用户正在运行的 `mg_read.exe`。

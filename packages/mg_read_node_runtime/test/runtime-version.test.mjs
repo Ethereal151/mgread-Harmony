@@ -6,6 +6,7 @@ import test from "node:test";
 
 import {
   expectedNodeVersion,
+  nodeVersionByBackend,
   protocolVersion,
   runtimeCompatibility,
 } from "../dist/index.js";
@@ -30,7 +31,7 @@ const desktopFixture = JSON.parse(
   ),
 );
 
-test("loads Runtime metadata through Node 24 ESM", () => {
+test("loads backend-specific Runtime metadata through pinned Node ESM", async () => {
   assert.equal(process.versions.node, expectedNodeVersion);
   assert.equal(process.version, "v" + expectedNodeVersion);
   assert.equal(protocolVersion, desktopFixture.protocolVersion);
@@ -39,6 +40,15 @@ test("loads Runtime metadata through Node 24 ESM", () => {
     "arm64-v8a",
     "x86_64",
   ]);
+  assert.equal(runtimeCompatibility.android.javetNode, nodeVersionByBackend.androidJavet);
+  assert.equal(runtimeCompatibility.android.processNode, nodeVersionByBackend.androidProcess);
+  assert.equal(runtimeCompatibility.desktop.windows.node, nodeVersionByBackend.windows);
+  assert.equal(runtimeCompatibility.desktop.macos.node, nodeVersionByBackend.macos);
+  const recorded = JSON.parse(await readFile(new URL("../protocol/compatibility.json", import.meta.url), "utf8"));
+  assert.equal(recorded.runtime.javetAndroid.node, nodeVersionByBackend.androidJavet);
+  assert.equal(recorded.runtime.processNode, nodeVersionByBackend.androidProcess);
+  assert.equal(recorded.desktop.windows.node, nodeVersionByBackend.windows);
+  assert.equal(recorded.desktop.macos.node, nodeVersionByBackend.macos);
 });
 
 test("Flutter package declares Runtime assets and excludes development npm", async () => {

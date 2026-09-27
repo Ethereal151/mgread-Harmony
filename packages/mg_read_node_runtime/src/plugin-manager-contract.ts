@@ -204,6 +204,7 @@ export type PluginContentFunction = (
 ) => Promise<unknown> | unknown;
 
 export interface LoadedPluginModule {
+  deferredGroups?: boolean;
   activate: (context: MgReadPluginContext) => Promise<void> | void;
   discover: PluginContentFunction;
   getChapters: PluginContentFunction;
@@ -211,6 +212,7 @@ export interface LoadedPluginModule {
   getDetail: PluginContentFunction;
   search: PluginContentFunction;
   searchSuggestions: PluginContentFunction;
+  getResource?: (request: JsonObject) => Promise<unknown> | unknown;
 }
 
 export interface LoadedPlugin {

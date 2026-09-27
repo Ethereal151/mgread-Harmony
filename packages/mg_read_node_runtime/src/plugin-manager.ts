@@ -7,7 +7,7 @@
  *
  * 注意：
  * - 不暴露路径、端口、PID 或 raw transport 给 Flutter。
- * - 已确认的 current 版本在首次调用时单飞加载；pending 仍在冷启动激活并完成提交或回滚。
+ * - current 首次调用时单飞加载；pending 冷启动有界并发激活，各自提交或回滚。
  * - 开发项目冷启动只建立元数据快照，首次调用或传输时才创建私有 generation。
  * - 取消和超时必须只有一个终态。
  * - 客户端终态可以早于插件真实结束；未结束工作继续占用每插件有界容量。
@@ -178,7 +178,10 @@ export class PluginManager {
     });
     this.#debugLogEnabled = options.debugLogEnabled ?? (() => false);
     this.#http = options.http ?? { fetch: (input, init) => fetch(input, init) };
-    this.#sourceResources = new SourceResourceCoordinator(this.#http, this.#events, this.#debugLogEnabled);
+    this.#sourceResources = new SourceResourceCoordinator(
+      this.#http, this.#events, this.#debugLogEnabled,
+      (pluginId, request, signal) => this.#resolveImageResource(pluginId, request, signal),
+    );
     this.#browserSession = options.browserSession;
     this.#cacheClearTimeoutMs = positiveMilliseconds(
       options.cacheClearTimeoutMs,
@@ -255,6 +258,42 @@ export class PluginManager {
 
   openSourceResource(token: string, requestHeaders: Readonly<Record<string, string>>, signal: AbortSignal) {
     return this.#sourceResources.open(token, requestHeaders, signal, (pluginId, request) => this.createResourceUrl(pluginId, request));
+  }
+
+  /** Invokes an optional source image handler under the same per-plugin lease and HTTP scope as content calls. */
+  async #resolveImageResource(pluginId: string, request: JsonObject, signal: AbortSignal): Promise<Response | undefined> {
+    await this.initialize();
+    if (this.#combinedSnapshots().find((snapshot) => snapshot.id === pluginId)?.enabled !== true) return undefined;
+    const deadlineUnixMs = String(Date.now() + 30_000);
+    const scopedSignal = AbortSignal.any([signal, AbortSignal.timeout(30_000)]);
+    const release = await this.#pluginOperations.acquireInvocation(pluginId, scopedSignal, deadlineUnixMs);
+    let development: DevelopmentPlugin | undefined;
+    try {
+      development = await this.#development.ensureLoaded(pluginId);
+      if (development !== undefined) this.#development.retain(development);
+      const installed = development === undefined ? await this.#ensureInstalledLoaded(pluginId) : undefined;
+      const plugin = development?.loaded ?? installed;
+      if (plugin?.module.getResource === undefined) return undefined;
+      const value: unknown = await this.#invocationScope.run(
+        Object.freeze({ deadlineUnixMs, signal: scopedSignal }),
+        () => plugin.module.getResource!(request),
+      );
+      if (scopedSignal.aborted || this.#combinedSnapshots().find((snapshot) => snapshot.id === pluginId)?.enabled !== true ||
+          (development !== undefined && this.#development.getLoaded(pluginId) !== development)) return undefined;
+      if (value === null || typeof value !== "object") return undefined;
+      const resource = value as { readonly bytes?: unknown; readonly mimeType?: unknown };
+      if (!(resource.bytes instanceof Uint8Array) || resource.bytes.byteLength === 0 || resource.bytes.byteLength > 24 * 1024 * 1024 ||
+          !["image/jpeg", "image/png", "image/webp", "image/gif"].includes(String(resource.mimeType))) return undefined;
+      return new Response(Buffer.from(resource.bytes), {
+        headers: { "content-type": String(resource.mimeType), "content-length": String(resource.bytes.byteLength), "cache-control": "no-store" },
+      });
+    } finally {
+      try {
+        if (development !== undefined) await this.#development.release(development);
+      } finally {
+        release();
+      }
+    }
   }
 
 
@@ -623,7 +662,7 @@ export class PluginManager {
       !this.#development.has(record.snapshot.id),
     );
     const pendingStartedAt = performance.now();
-    for (const record of pending) await this.#activatePending(record);
+    await mapWithConcurrency(pending, this.#embedded ? 4 : 8, (record) => this.#activatePending(record));
     this.#syncInstalledSnapshots();
     this.#startupPhase(
       "pending_activation",
@@ -724,10 +763,12 @@ export class PluginManager {
       this.#installedLoaded.set(pluginId, loaded);
     } catch {
       const current = snapshot.activeVersion;
-      if (current === null) {
+      // A forced same-version replacement has no older version tree to fall
+      // back to. Never report that failed candidate as an active source.
+      if (current === null || current === pending) {
         const quarantined = Object.freeze({
           descriptor: record.descriptor,
-          snapshot: snapshotFrom(record.descriptor, pluginId, null, null, false, "quarantined"),
+          snapshot: snapshotFrom(record.descriptor, pluginId, current, null, false, "quarantined"),
           uninstallPending: false,
         } satisfies InstalledPluginCatalogRecord);
         await this.#catalog.quarantinePending(quarantined, pending);
@@ -852,7 +893,7 @@ export class PluginManager {
       if (project.descriptor.id !== pluginId || project.descriptor.version !== version) {
         throw new PluginManagerError("plugin_load_failed");
       }
-      // Node 24 synchronously loads standard ESM projects without top-level
+      // Node synchronously loads standard ESM projects without top-level
       // await through require(). This preserves ordinary Node resolution while
       // avoiding the Javet dynamic-import callback path on Android.
       const entryPath = resolveInside(versionRoot, project.descriptor.entry);

@@ -7,6 +7,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mg_read_audio_player/mg_read_audio_player.dart';
 import 'package:mg_read_audio_player/src/core/audio_player_session.dart';
 
+part 'support/audio_continuation_regressions.dart';
+
 void main() {
   Future<void> settle() => Future<void>.delayed(Duration.zero);
 
@@ -107,7 +109,7 @@ void main() {
       expect(harness.controller.snapshot.currentTrack?.id, 'b');
       expect(harness.controller.snapshot.playing, isTrue);
       expect(harness.controller.snapshot.resourceLoading, isFalse);
-      expect(harness.backend.nextCalls, 1);
+      expect(harness.backend.jumpedIndices, <int>[1]);
       expect(
         harness.observer.operations.map((event) => event.stage),
         containsAllInOrder(<String>[
@@ -145,6 +147,8 @@ void main() {
       expect(harness.backend.playCalls, 1);
     },
   );
+
+  _continuationRegressions();
 
   test(
     'manual next explicitly plays after a background resource open',
@@ -554,10 +558,12 @@ final class _Backend implements AudioPlaybackBackend {
   final List<String> appendedTrackIds = <String>[];
   int playCalls = 0;
   int nextCalls = 0;
+  final List<int> jumpedIndices = <int>[];
   bool failNextOpen = false;
   bool failNextPlay = false;
   bool ignoreNextPlay = false;
   Duration? playingEventDelay;
+  Completer<void>? appendGate;
 
   @override
   AudioPlaybackBackendSnapshot get snapshot => _snapshot;
@@ -594,6 +600,7 @@ final class _Backend implements AudioPlaybackBackend {
 
   @override
   Future<void> append(List<AudioTrack> tracks) async {
+    await appendGate?.future;
     _tracks = <AudioTrack>[..._tracks, ...tracks];
     appendedTrackIds.addAll(tracks.map((track) => track.id));
   }
@@ -635,7 +642,9 @@ final class _Backend implements AudioPlaybackBackend {
     nextCalls++;
     emit(
       _snapshot.copyWith(
-        currentIndex: (_snapshot.currentIndex + 1).clamp(0, _tracks.length - 1),
+        // Match MediaKit: play() at EOF resets to index zero before next.
+        currentIndex: ((_snapshot.completed ? 0 : _snapshot.currentIndex) + 1)
+            .clamp(0, _tracks.length - 1),
         position: Duration.zero,
         completed: false,
       ),
@@ -652,13 +661,16 @@ final class _Backend implements AudioPlaybackBackend {
   );
 
   @override
-  Future<void> jump(int index) async => emit(
-    _snapshot.copyWith(
-      currentIndex: index,
-      position: Duration.zero,
-      completed: false,
-    ),
-  );
+  Future<void> jump(int index) async {
+    jumpedIndices.add(index);
+    emit(
+      _snapshot.copyWith(
+        currentIndex: index,
+        position: Duration.zero,
+        completed: false,
+      ),
+    );
+  }
 
   @override
   Future<void> setRate(double rate) async =>

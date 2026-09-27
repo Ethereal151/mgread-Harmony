@@ -13,7 +13,13 @@
  * Notes:
  * - the app supplies the upstream HTTP, HTTPS or SOCKS5 URL;
  * - existing requests retain the dispatcher sampled when they started.
+ * - Runtime shutdown aborts active and retiring dispatchers, including unread
+ *   response bodies; graceful proxy rebinding must not block a cold restart.
+ * - undici 7's SOCKS5 agent passes IP literals as TLS SNI; Node 26 rejects
+ *   those requests before a TLS handshake, so reject them without opening a
+ *   proxy tunnel until upstream supports omitting SNI for IP destinations.
  */
+import { isIP } from "node:net";
 import {
   Agent,
   EnvHttpProxyAgent,
@@ -58,10 +64,11 @@ export class ConfigurablePluginHttpClient implements PluginRuntimeHttpClient {
   readonly #directAgent: Dispatcher;
   readonly #systemProxyAgent: Dispatcher;
   readonly #environmentProxy: PluginHttpEnvironmentProxyOptions;
+  readonly #shutdown = new AbortController();
   #proxyAgent: Dispatcher | undefined;
   #proxyUrl: string | undefined;
   #proxyNoProxy: string | undefined;
-  readonly #retiring = new Set<Promise<void>>();
+  readonly #retiring = new Map<Dispatcher, Promise<void>>();
 
   constructor(environmentProxy: PluginHttpEnvironmentProxyOptions = {}) {
     this.#environmentProxy = environmentProxy;
@@ -97,7 +104,17 @@ export class ConfigurablePluginHttpClient implements PluginRuntimeHttpClient {
     _trace?: PluginRuntimeTraceContext,
     proxyMode?: PluginRuntimeHttpProxyMode,
   ): Promise<Response> {
-    const requestInit = withDefaultUserAgent(init);
+    if (this.#proxyUrl?.startsWith("socks5:") && process.versions.node.startsWith("26.")) {
+      const url = input instanceof URL ? input : URL.canParse(input) ? new URL(input) : undefined;
+      const hostname = url?.hostname.replace(/^\[|\]$/g, "");
+      if (url?.protocol === "https:" && hostname !== undefined && isIP(hostname) !== 0) {
+        return Promise.reject(new TypeError(
+          "SOCKS5 HTTPS requests to IP-address hosts are unavailable with the pinned Node 26 transport.",
+        ));
+      }
+    }
+    const requestInit = withDefaultUserAgent({ ...init, signal: init.signal == null
+      ? this.#shutdown.signal : AbortSignal.any([init.signal, this.#shutdown.signal]) });
     const url = new URL(input.toString());
     const bypassExplicitProxy = this.#proxyUrl !== undefined && matchesNoProxy(url, this.#proxyNoProxy);
     // HarmonyOS runs the embedded Node host with --jitless because its W^X
@@ -119,19 +136,21 @@ export class ConfigurablePluginHttpClient implements PluginRuntimeHttpClient {
   }
 
   async close(): Promise<void> {
+    // A gracefully closing Agent may already have detached its pools. The
+    // shared signal also cancels response bodies held by those retired pools.
+    this.#shutdown.abort();
     const current = this.#proxyAgent;
     this.#proxyAgent = undefined;
     this.#proxyUrl = undefined;
-    if (current !== undefined) this.#retire(current);
-    this.#retire(this.#directAgent);
-    this.#retire(this.#systemProxyAgent);
-    await Promise.allSettled([...this.#retiring]);
+    const agents = new Set([this.#directAgent, this.#systemProxyAgent, ...this.#retiring.keys()]);
+    if (current !== undefined) agents.add(current);
+    await Promise.allSettled([...agents].map((agent) => agent.destroy()));
   }
 
   #retire(agent: Dispatcher): void {
     let operation: Promise<void>;
-    operation = agent.close().catch(() => {}).finally(() => this.#retiring.delete(operation));
-    this.#retiring.add(operation);
+    operation = agent.close().catch(() => {}).finally(() => this.#retiring.delete(agent));
+    this.#retiring.set(agent, operation);
   }
 }
 

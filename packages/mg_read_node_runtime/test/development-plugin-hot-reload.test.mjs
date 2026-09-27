@@ -9,8 +9,8 @@ import { PluginManager } from "../dist/index.js";
 
 const npmCli = fileURLToPath(new URL(
   process.platform === "darwin"
-    ? "../tools/node-v24.16.0-darwin-arm64/lib/node_modules/npm/bin/npm-cli.js"
-    : "../tools/node-v24.16.0-win-x64/node_modules/npm/bin/npm-cli.js",
+    ? "../tools/node-v26.10.0-darwin-arm64/lib/node_modules/npm/bin/npm-cli.js"
+    : "../tools/node-v26.10.0-win-x64/node_modules/npm/bin/npm-cli.js",
   import.meta.url,
 ));
 
@@ -61,7 +61,7 @@ async function createProject(projectRoot, pluginId, prefix) {
     type: "module",
     main: "dist/index.mjs",
     scripts: { build: "node build.mjs" },
-    engines: { node: ">=24 <25" },
+    engines: { node: ">=24" },
     mgread: {
       schemaVersion: 1,
       id: pluginId,

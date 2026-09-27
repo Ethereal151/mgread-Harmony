@@ -1,3 +1,7 @@
+/// Runtime status projection for both source engines. Native cards show
+/// measured process RSS; V8-only counters remain specific to the Node backend.
+library;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -6,7 +10,7 @@ import 'package:mg_read/features/plugins/application/plugin_runtime_connection.d
 import 'package:mg_read/shared/presentation/widgets/app_loading_state.dart';
 import 'package:mg_read/shared/presentation/widgets/app_secondary_page_chrome.dart';
 
-/// A small, expandable Flutter-native status page for the Node Runtime.
+/// A small, expandable Flutter-native status page for the source Runtime.
 ///
 /// The page intentionally uses ordinary Flutter widgets rather than a web
 /// template engine. New Runtime fields can be added as typed sections without
@@ -28,30 +32,22 @@ class PluginRuntimeHealthPage extends ConsumerWidget {
               AppSecondaryPageTopBar(
                 headerKey: const Key('runtime-health-top-bar'),
                 backButtonKey: const Key('runtime-health-back'),
-                title: 'Node 状态',
+                title: '运行状态',
                 onBack: onBackRequested,
                 actions: <Widget>[
                   AppSecondaryPageIconButton(
                     key: const Key('runtime-health-refresh'),
                     label: '刷新状态',
                     icon: Icons.refresh_rounded,
-                    onPressed: () =>
-                        ref.invalidate(pluginRuntimeStatusProvider),
+                    onPressed: () => ref.invalidate(pluginRuntimeStatusProvider),
                   ),
                 ],
               ),
               Expanded(
                 child: status.when(
-                  loading: () => const AppLoadingState(
-                    label: '正在读取 Node 状态',
-                    message: '正在读取 Node 状态',
-                    progressKey: Key('runtime-health-loading'),
-                  ),
-                  error: (Object _, StackTrace _) => _RuntimeHealthFailure(
-                    onRetry: () => ref.invalidate(pluginRuntimeStatusProvider),
-                  ),
-                  data: (PluginRuntimeStatus value) =>
-                      _RuntimeHealthContent(status: value),
+                  loading: () => const AppLoadingState(label: '正在读取运行状态', message: '正在读取运行状态', progressKey: Key('runtime-health-loading')),
+                  error: (Object _, StackTrace _) => _RuntimeHealthFailure(onRetry: () => ref.invalidate(pluginRuntimeStatusProvider)),
+                  data: (PluginRuntimeStatus value) => _RuntimeHealthContent(status: value),
                 ),
               ),
             ],
@@ -70,11 +66,7 @@ class _RuntimeHealthFailure extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: TextButton(
-        key: const Key('runtime-health-retry'),
-        onPressed: onRetry,
-        child: const Text('Node 状态暂不可用，点击重试'),
-      ),
+      child: TextButton(key: const Key('runtime-health-retry'), onPressed: onRetry, child: const Text('运行状态暂不可用，点击重试')),
     );
   }
 }
@@ -97,10 +89,13 @@ class _RuntimeHealthContent extends StatelessWidget {
       children: <Widget>[
         _RuntimeSummaryCard(status: status),
         const SizedBox(height: AppSpacing.regular),
-        _RuntimeMemoryCard(
-          memory: status.memory,
-          runtimeKind: status.runtimeKind,
-        ),
+        _RuntimeMemoryCard(memory: status.memory, runtimeKind: status.runtimeKind),
+        if (status.nativeStatus case final native?) ...<Widget>[
+          const SizedBox(height: AppSpacing.regular),
+          _RuntimeSummaryCard(status: native),
+          const SizedBox(height: AppSpacing.regular),
+          _RuntimeMemoryCard(memory: native.memory, runtimeKind: native.runtimeKind),
+        ],
         const SizedBox(height: AppSpacing.regular),
         _RuntimePluginsCard(plugins: status.plugins),
       ],
@@ -117,8 +112,10 @@ class _RuntimeSummaryCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final tokens = AppThemeTokens.of(context);
     return _StatusCard(
-      cardKey: const Key('runtime-health-summary-card'),
-      title: status.runtimeKind == 'android-javet'
+      cardKey: Key(status.runtimeKind == 'native-rust' ? 'runtime-health-native-summary-card' : 'runtime-health-summary-card'),
+      title: status.runtimeKind == 'native-rust'
+          ? 'Rust 原生数据源引擎'
+          : status.runtimeKind == 'android-javet'
           ? 'Node/V8（Android 内嵌）'
           : 'Node.js Runtime',
       icon: Icons.memory_rounded,
@@ -128,9 +125,7 @@ class _RuntimeSummaryCard extends StatelessWidget {
           Row(
             children: <Widget>[
               Icon(
-                status.isHealthy
-                    ? Icons.check_circle_rounded
-                    : Icons.error_rounded,
+                status.isHealthy ? Icons.check_circle_rounded : Icons.error_rounded,
                 color: status.isHealthy ? tokens.success : tokens.warning,
                 size: 18,
               ),
@@ -143,18 +138,11 @@ class _RuntimeSummaryCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: AppSpacing.regular),
-          _StatusValue(
-            label: status.runtimeKind == 'android-javet'
-                ? 'Node/V8'
-                : 'Node.js',
-            value: status.nodeVersion,
-          ),
+          if (status.runtimeKind != 'native-rust')
+            _StatusValue(label: status.runtimeKind == 'android-javet' ? 'Node/V8' : 'Node.js', value: status.nodeVersion),
           _StatusValue(label: 'Runtime', value: status.runtimeVersion),
           _StatusValue(label: '运行时长', value: _formatDuration(status.uptime)),
-          _StatusValue(
-            label: '平台',
-            value: '${status.platform} · ${status.arch}',
-          ),
+          _StatusValue(label: '平台', value: '${status.platform} · ${status.arch}'),
         ],
       ),
     );
@@ -170,25 +158,17 @@ class _RuntimeMemoryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return _StatusCard(
-      cardKey: const Key('runtime-health-memory-card'),
+      cardKey: Key(runtimeKind == 'native-rust' ? 'runtime-health-native-memory-card' : 'runtime-health-memory-card'),
       title: '内存占用',
       icon: Icons.data_usage_rounded,
       child: Column(
         children: <Widget>[
-          _StatusValue(
-            label: runtimeKind == 'android-javet' ? '宿主进程 RSS' : '进程占用 RSS',
-            value: _formatBytes(memory.rss),
-          ),
-          _StatusValue(
-            label: 'V8 堆已用 / 总量',
-            value:
-                '${_formatBytes(memory.heapUsed)} / ${_formatBytes(memory.heapTotal)}',
-          ),
-          _StatusValue(label: '外部内存', value: _formatBytes(memory.external)),
-          _StatusValue(
-            label: 'ArrayBuffer',
-            value: _formatBytes(memory.arrayBuffers),
-          ),
+          _StatusValue(label: runtimeKind == 'android-javet' ? '宿主进程 RSS' : '进程占用 RSS', value: _formatBytes(memory.rss)),
+          if (runtimeKind != 'native-rust') ...<Widget>[
+            _StatusValue(label: 'V8 堆已用 / 总量', value: '${_formatBytes(memory.heapUsed)} / ${_formatBytes(memory.heapTotal)}'),
+            _StatusValue(label: '外部内存', value: _formatBytes(memory.external)),
+            _StatusValue(label: 'ArrayBuffer', value: _formatBytes(memory.arrayBuffers)),
+          ],
         ],
       ),
     );
@@ -202,9 +182,7 @@ class _RuntimePluginsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final enabled = plugins
-        .where((PluginRuntimePlugin plugin) => plugin.enabled)
-        .length;
+    final enabled = plugins.where((PluginRuntimePlugin plugin) => plugin.enabled).length;
     return _StatusCard(
       cardKey: const Key('runtime-health-plugins-card'),
       title: '数据源插件',
@@ -212,9 +190,7 @@ class _RuntimePluginsCard extends StatelessWidget {
       trailing: Text(
         '$enabled/${plugins.length} 已启用',
         key: const Key('runtime-health-plugin-count'),
-        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-          color: AppThemeTokens.of(context).mutedText,
-        ),
+        style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppThemeTokens.of(context).mutedText),
       ),
       child: plugins.isEmpty
           ? const Padding(
@@ -227,8 +203,7 @@ class _RuntimePluginsCard extends StatelessWidget {
                 return Column(
                   children: <Widget>[
                     _RuntimePluginRow(plugin: plugin),
-                    if (index < plugins.length - 1)
-                      Divider(color: AppThemeTokens.of(context).divider),
+                    if (index < plugins.length - 1) Divider(color: AppThemeTokens.of(context).divider),
                   ],
                 );
               }),
@@ -251,9 +226,7 @@ class _RuntimePluginRow extends StatelessWidget {
       child: Row(
         children: <Widget>[
           Icon(
-            plugin.enabled
-                ? Icons.check_circle_outline_rounded
-                : Icons.pause_circle_outline_rounded,
+            plugin.enabled ? Icons.check_circle_outline_rounded : Icons.pause_circle_outline_rounded,
             color: plugin.enabled ? tokens.success : tokens.mutedText,
             size: 20,
           ),
@@ -262,18 +235,11 @@ class _RuntimePluginRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                Text(
-                  plugin.displayName,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.titleSmall,
-                ),
+                Text(plugin.displayName, maxLines: 1, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.titleSmall),
                 const SizedBox(height: AppSpacing.unit / 2),
                 Text(
                   '${plugin.status} · ${plugin.activeVersion ?? '未激活'}',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodySmall?.copyWith(color: tokens.mutedText),
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(color: tokens.mutedText),
                 ),
               ],
             ),
@@ -285,13 +251,7 @@ class _RuntimePluginRow extends StatelessWidget {
 }
 
 class _StatusCard extends StatelessWidget {
-  const _StatusCard({
-    required this.cardKey,
-    required this.title,
-    required this.icon,
-    required this.child,
-    this.trailing,
-  });
+  const _StatusCard({required this.cardKey, required this.title, required this.icon, required this.child, this.trailing});
 
   final Key cardKey;
   final String title;
@@ -308,13 +268,7 @@ class _StatusCard extends StatelessWidget {
         color: tokens.surface,
         borderRadius: AppRadii.profileList,
         border: Border.all(color: tokens.divider),
-        boxShadow: <BoxShadow>[
-          BoxShadow(
-            color: tokens.shadow.withValues(alpha: 0.12),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        boxShadow: <BoxShadow>[BoxShadow(color: tokens.shadow.withValues(alpha: 0.12), blurRadius: 12, offset: const Offset(0, 4))],
       ),
       child: Padding(
         padding: const EdgeInsets.all(AppSpacing.comfortable),
@@ -326,12 +280,7 @@ class _StatusCard extends StatelessWidget {
                 Icon(icon, color: tokens.dataSourceAccent, size: 20),
                 const SizedBox(width: AppSpacing.unit),
                 Expanded(
-                  child: Text(
-                    title,
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
+                  child: Text(title, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
                 ),
                 ?trailing,
               ],
@@ -365,9 +314,7 @@ class _StatusValue extends StatelessWidget {
             child: Text(
               value,
               textAlign: TextAlign.end,
-              style: Theme.of(
-                context,
-              ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
             ),
           ),
         ],

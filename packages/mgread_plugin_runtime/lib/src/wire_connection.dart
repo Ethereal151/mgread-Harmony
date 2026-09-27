@@ -67,8 +67,9 @@ final class _WireConnection {
   /// Opens a compression-disabled WebSocket to the ready Runtime loopback port.
   static Future<_WireConnection> connect(
     _RuntimeReady ready, {
-    required Directory dataRoot,
+    Directory? dataRoot,
     required void Function(DevelopmentPluginChangeBatch) onDevelopmentChange,
+    BrowserSessionHost? browserSessionHost,
   }) async {
     final socket = await WebSocket.connect(
       Uri(
@@ -82,11 +83,12 @@ final class _WireConnection {
     return _WireConnection._(
       ready,
       socket,
-      Platform.isWindows
-          ? WindowsBrowserSessionHost(dataRoot)
-          : Platform.operatingSystem == 'ohos'
-          ? OhosBrowserSessionHost()
-          : null,
+      browserSessionHost ??
+          (Platform.isWindows && dataRoot != null
+              ? WindowsBrowserSessionHost(dataRoot)
+              : Platform.operatingSystem == 'ohos'
+              ? OhosBrowserSessionHost()
+              : null),
       onDevelopmentChange,
     );
   }
@@ -105,7 +107,7 @@ final class _WireConnection {
     final hello = _jsonObject(result, 'Runtime hello result');
     if (hello['protocolVersion'] != _protocolVersion ||
         hello['bootId'] != _ready.bootId ||
-        hello['nodeVersion'] != _expectedNodeVersion ||
+        hello['nodeVersion'] != _ready.nodeVersion ||
         hello['maxFrameBytes'] != _maxControlFrameBytes ||
         hello['maxInlineBytes'] != _maxControlFrameBytes ||
         hello['maxInFlightRequests'] != _maxInFlightRequests ||

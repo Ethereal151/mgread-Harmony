@@ -47,12 +47,19 @@ plugins/sources/                    真实数据源及其他能力参考实现
 
 ## Runtime 与平台宿主
 
-- 每个应用进程只有一个 Node Runtime 和一个 V8 VM；禁止 Worker、插件子进程、第二 VM、Engine Pool、
-  native addon 和自定义 loader。
-- Runtime 独立拥有 Node Core、Android Javet、desktop Node launcher、Supervisor、内部控制/数据面、Plugin
+- Windows/Android 默认 App 并存 Node 与原生数据源引擎，Facade 按安装来源的引擎归属路由调用、管理和传输；
+  两端使用独立宿主、安装根和资源服务。Android 正常包同时包含 Javet 与私有 Service 中的 Node 后端，
+  设置中保存选择并在 App 进程重启后启用；两者共享 Node 来源数据根，不在运行中替换 VM。
+  Node 侧一次只启动一个 Node Runtime/V8，禁止来源创建 Worker、子进程、第二 VM、native addon 或自定义 loader。
+- `MGREAD_NATIVE_RUNTIME=true` 保留为 Windows/Android 原生独立性验收构建；该构建不包含 Node/Javet/V8 和
+  Runtime JS 资产。默认并存构建中，Windows EXE 与 Android 私有 Service 的 Rust 宿主仅为已启用来源按需加载初始化 ABI v3
+  DLL/SO；宿主拥有安装和调用生命周期，插件拥有上游 HTTP、专属缓存及动态回环服务，初始化后内容和资源均走插件 HTTP。原生可信插件按目标 ABI 发布；动态库更新和卸载经
+  worker 冷重启完成。资源使用自包含描述，统一 Facade 在下载前按引擎与来源重建当前端口。macOS 当前只有 Node 引擎，不接收原生归档。
+- Runtime 独立拥有 Node Core、Android Javet/进程后端、desktop Node launcher、Supervisor、内部控制/数据面、Plugin
   API、安装、私有数据根、瞬时诊断和 Flutter Facade。
-- `packages/mg_read_source_api` 是数据源宿主上下文和 WebView 类型的唯一公开声明包；Runtime 实现与所有
-  数据源必须引用或同步它，来源不得复制 Context/WebView 子集。
+- `packages/mg_read_source_api` 拥有共享内容语义及 JS 宿主 Context/WebView 声明；来源不得复制 Context 子集。
+  原生 C ABI 由 `packages/mg_read_native_runtime/abi` 唯一定义，使用相同内容投影和强类型 Flutter Facade；
+  不用虚构 Node 版本或 JS 对象模拟原生上下文，未实现的 WebView 能力明确返回 `unsupported`。
 - Runtime 数据只包含不可变安装版本、插件私有 data/cache、Cookie、临时资源和运行状态，不包含主应用
   业务权威。installed pending 版本只在冷启动激活并提交或回滚；已确认的 current 与 development 项目启动时
   只建立元数据快照，首次能力调用或传输时在唯一 VM 内单飞加载。development 构建变化先激活候选 generation，
@@ -81,11 +88,14 @@ plugins/sources/                    真实数据源及其他能力参考实现
 
 ## 标准插件项目、artifact 与安装
 
-- 数据源是可信 Node.js 24 ESM 项目，`package.json.mgread` 是唯一 MgRead 元数据。
+- Node 数据源是可信 ESM 项目；各后端精确 Node 版本见 Runtime 版本矩阵，`package.json.mgread` 是其唯一元数据。
 - 仓库不维护空白官方模板；新数据源默认参考 `plugins/sources/aisishuwu/`，漫画、WebView、音频或视频
   按能力参考现有同类真实数据源。公共契约仍以 Runtime 类型和直接测试为准，不以某个来源副本为权威。
-- 数据源执行代码必须是一个已打包的 Node 24 ESM JS 文件。`single-file` 发布 `.mgplugin.js`；
+- Node 数据源执行代码必须是一个已打包的兼容全部固定后端版本的 ESM JS 文件。`single-file` 发布 `.mgplugin.js`；
   `archive` 发布 `.mgplugin` 压缩容器，内部同样只有单个 JS 入口及元数据、图标，不是 npm 安装包。
+- 独立原生来源参考 `plugins/sources/aisishuwu-native/`；`.mgplugin` 归档的 `manifest.json` 使用
+  `format=mgread-native`、`engine=native` 和 ABI/目标/SHA-256 元数据，承载预编译 DLL/SO。该格式与 Node
+  archive 独立识别，不含 JS 外壳、源码或设备端编译，不能把 Node 验证记录当作原生引擎证据。
 - npm 只用于开发和构建；构建必须将所有使用的第三方包内联到单个 JS，仅 Node.js 内置模块可外置。
   不发布源码、lock、本地依赖目录或 `node_modules`，也不支持发布后恢复、下载或安装外部 npm 依赖。
 - 不增加依赖引用扫描、动态导入检查或自定义模块拦截器；由构建配置落实打包要求，模块执行交给 Node。
@@ -111,12 +121,19 @@ plugins/sources/                    真实数据源及其他能力参考实现
 - 热门词必须来自来源；默认进入搜索页不触发搜索，只有用户提交或点击建议才执行。
 - 搜索页默认可在 Flutter 应用层并行调用全部启用来源，并按规范化标题与兼容作者聚合；每个聚合条目必须保留来源
   ID、内容 ID 和封面身份，详情、目录、阅读和书架操作始终回到被选中的单一来源。Runtime 与来源插件仍只处理单来源搜索。
-- 目录完整、有序且 ID 唯一。小说正文使用 `text`；漫画 `pages`、封面及音视频只登记由数据源校验过的
+- 默认目录完整、有序且 ID 唯一。视频源可显式声明 `deferredGroups = true`：Runtime 协商后允许非默认分组
+  返回 `deferred: true` 与空 `episodes`；`getChapters({id, groupId})` 一次返回目标分组完整目录，不做组内分页。
+  未声明的旧源请求和校验保持原样；扁平 `items` 只对应本次已加载分组，未加载分组不得当作删除或完整空目录。
+  小说正文使用 `text`；漫画 `pages`、封面及音视频只登记由数据源校验过的
   `kind + url + headers` Runtime proxy 请求。loopback URL 以明文可逆 Base64URL JSON 自包含该请求，不依赖
-  进程内 token 映射；此编码不提供加密或认证。Runtime 持有上游 HTTP 请求、取消和正文流，数据源不得导出
-  `resource` 字节能力或缓冲媒体正文；大资源不进入插件返回值或控制面。若上游图片响应头与有效字节签名不符，
+  进程内 token 映射；此编码不提供加密或认证。普通资源由 Runtime 持有上游 HTTP 请求、取消和正文流；
+  音视频主体不进入插件返回值或控制面。若上游图片响应头与有效字节签名不符，
   来源可显式登记 `sniff-image-content-type-v1`，Runtime 必须复用同一次响应的首块流式纠正 MIME，不得重新请求或
   整体缓冲图片。
+- 封面或漫画页图需要来源专用解码、重排或拼接时，来源登记携带 `handler + params` 的图片代理描述。
+  Flutter 仍只请求 Runtime loopback URL；Runtime 在当前来源租约和取消范围内调用可选 `getResource`，由来源
+  再次校验描述、获取单张图片、完成有界处理并返回图片字节和 MIME。代理参数可逆，不能放入会话秘密；
+  音视频不走该回调。
 - fixture 只保留选择器、分页、null/0/空集合和错误分支需要的最小结构。
 - 开发期由纯 Node.js `mg_read_source_testkit` 直接检查插件公开契约和 live 链路；正式 Windows App 内置自检
   经生产 `SourceContentGateway -> Runtime Facade -> Runtime -> 已启用插件` 验证发现、搜索、详情、完整目录、
@@ -151,7 +168,7 @@ plugins/sources/                    真实数据源及其他能力参考实现
 
 ## 诊断
 
-- App 始终保留有界的当前进程元数据日志供调试中心实时查看；文件 writer 默认关闭，显式启用后才落盘。历史文件冷存储，只在用户选择后有界读取。
+- App 默认仅在内存保留近期警告与错误（最多 200 条 / 256 KiB），不写日志文件或镜像控制台。详细记录仅显式开启，跨页面持续，手动关闭或 15 分钟后恢复；文件保存独立选择，关闭立即停止接收新记录，已接收写入完成后返回。历史文件冷存储，只在用户选择后有界读取。
 - 诊断字段和显式捕获字节按契约保存；错误终态可额外保存技术上下文。
 - 一个用户操作或长任务只有一个 owner span 和一个终态；高频事件只做有界聚合。
 - 日志、viewer、observer、磁盘或缓冲失败不得改变业务结果；生产代码不得自建日志通道。
@@ -197,6 +214,8 @@ plugins/sources/                    真实数据源及其他能力参考实现
   不可变 generation 准备并持久复用一个同步制品；App 冷启动时比较源码输入指纹，只重建关闭期间实际修改的项目。
 - 插件清单先交换不含制品字节的 offer；只有接收端计划明确选择某个缺失或升级插件后，发送端才按插件 ID
   读取已准备制品并发送真实大小与摘要，同步链路不得重复执行开发构建。书架-only 会话不得查询或准备插件制品。
+- 原生来源保留可跨平台发送的完整归档；扫码接收端声明平台，已配对同步使用设备平台。发送端只传对应平台的
+  DLL/SO 与裁剪后的 manifest，并按实际传输字节重算大小和摘要；Node 来源保持原制品。
 - 数据提交成功后只刷新现有书架与书源投影，不得销毁 Runtime 或首页 Provider；刷新期间及失败后保留之前可见
   的书架。传输成功但首页刷新失败是独立的部分成功终态，必须明确提示数据已提交并允许首页下拉重试。
 - 协议、JSON manifest、artifact、批次和会话均须版本化且有界；配对 HTTP v4 manifest 使用独立 `bookshelf`、

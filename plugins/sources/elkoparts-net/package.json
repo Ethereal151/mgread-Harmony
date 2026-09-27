@@ -1,6 +1,6 @@
 {
   "name": "@mgread-plugin/elkoparts-net",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "MgRead Node 24 source for the public Elkoparts novel site.",
   "type": "module",
@@ -8,10 +8,10 @@
   "bin": {
     "mgread": "tools/mgread.mjs"
   },
-  "packageManager": "npm@11.13.0",
+  "packageManager": "npm@11.19.1",
   "engines": {
-    "node": ">=24 <25",
-    "npm": "11.13.0"
+    "node": ">=24",
+    "npm": "11.13.0 || 11.19.1"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json && node tools/mgread.mjs build",

@@ -212,6 +212,7 @@ final class VideoEpisodeGroup {
     required this.id,
     required this.title,
     required Iterable<VideoEpisode> episodes,
+    this.deferred = false,
   }) : assert(id != ''),
        assert(title != ''),
        episodes = _uniqueEpisodes(episodes);
@@ -224,6 +225,9 @@ final class VideoEpisodeGroup {
 
   /// Ordered playable episodes in this group.
   final List<VideoEpisode> episodes;
+
+  /// True when the host must fetch this group's complete episode metadata.
+  final bool deferred;
 }
 
 /// A titled video and its ordered host-defined groups.

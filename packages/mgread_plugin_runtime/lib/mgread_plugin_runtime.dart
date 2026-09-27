@@ -27,7 +27,9 @@ import 'src/ohos_browser_session_host.dart';
 
 export 'src/ohos_browser_session_surface.dart';
 export 'src/ohos_browser_session_host.dart';
+import 'src/android_node_browser_session_host.dart';
 
+part 'src/android_node_runtime_settings.dart';
 part 'src/windows_system_proxy.dart';
 part 'src/system_proxy.dart';
 part 'src/desktop_supervisor.dart';
@@ -40,6 +42,7 @@ part 'src/desktop_supervisor_http.dart';
 part 'src/development_plugin_change.dart';
 part 'src/android_supervisor.dart';
 part 'src/ohos_supervisor.dart';
+part 'src/android_node_process_supervisor.dart';
 part 'src/plugin_content_summary.dart';
 part 'src/plugin_content_invocation.dart';
 part 'src/plugin_content_decoder.dart';
@@ -48,5 +51,10 @@ part 'src/plugin_invocation.dart';
 part 'src/plugin_invocation_cancellation.dart';
 part 'src/plugin_transfer_invocation.dart';
 part 'src/plugin_runtime.dart';
+part 'src/source_resource_url.dart';
+part 'src/native_supervisor.dart';
+part 'src/native_supervisor_transport.dart';
 part 'src/runtime_error.dart';
 part 'src/wire_connection.dart';
+part 'src/native_supervisor_artifacts.dart';
+part 'src/hybrid_supervisor.dart';

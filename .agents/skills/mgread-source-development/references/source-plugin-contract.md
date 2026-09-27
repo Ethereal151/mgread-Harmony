@@ -17,7 +17,7 @@
 
 ## 实现边界
 
-- 来源是 Node.js 24 ESM 项目，`package.json.mgread` 是唯一 MgRead 元数据。
+- Node 来源是兼容固定后端版本的 ESM 项目，`package.json.mgread` 是其唯一 MgRead 元数据。
 - 在 `.ts`/`.mts` 中从 `@mgread/source-api` 使用 `import type`；来源可以声明自己的内容结果类型，但不能复制
   `MgReadPluginContext`、`PluginWebViewPage`、`PluginWebViewApi` 或其字段子集。
 - 模块导入不得访问未注入 Context；`activate(ctx)` 只保存公开上下文，不创建 Worker、子进程、native addon、
@@ -29,7 +29,8 @@
 ## 内容与资源
 
 小说返回 `text`，漫画返回有序 `pages`，音频/视频返回资源描述。封面和内容资源先校验协议、origin、路径和
-必要 headers，再交给 `ctx.resource.proxy`；loopback URL 中的描述是可逆编码，不提供加密或认证。
+必要 headers，再交给 `ctx.resource.proxy`；loopback URL 中的描述是可逆编码，不提供加密或认证。图片若需来源
+专用解码或拼接，改读 [source-image-proxy.md](source-image-proxy.md)，通过代理 URL 和可选 `getResource` 在读取时处理。
 
 若当前来源涉及发现组合、媒体或 WebView，只增加入口中对应的一个条件参考。实现后按
 [content-validation-matrix.md](content-validation-matrix.md)选择该 `contentKind` 的验证，不把“返回非空对象”
@@ -37,8 +38,11 @@
 
 ## Artifact 与开发生命周期
 
-- 数据源代码强制构建为单个 Node 24 ESM JS。`single-file` 发布 `.mgplugin.js`；`archive` 发布 `.mgplugin`
+- Node 数据源代码强制构建为单个兼容固定后端版本的 ESM JS。`single-file` 发布 `.mgplugin.js`；`archive` 发布 `.mgplugin`
   压缩包，内部同样是单个 JS 入口及元数据、图标。压缩包没有 npm 依赖恢复语义。
+- 独立原生模式的 C ABI 由 `packages/mg_read_native_runtime/abi` 定义，`engine=native` 归档包含
+  初始化 ABI v3 manifest 与预编译 DLL/SO；来源 SDK 拥有 HTTP 内容/资源调用及断连取消，Rust 宿主拥有安装与共享 worker 生命周期。参考
+  `aisishuwu-native`，使用 Cargo 构建及真实 native-only App 验收，既有单 JS 打包要求只适用于 Node 引擎。
 - 开发项目可用 npm 管理构建工具和源码依赖，但构建必须启用 bundle、禁用 splitting，并内联所有使用的
   第三方包；仅 Node.js 内置模块可外置。不得用 external 或 packages: external 绕过打包。
 - 产物不得包含源码、lock、本地依赖目录或 `node_modules`；descriptor、图标、大小、SHA-256 和包内容必须可复核。

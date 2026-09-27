@@ -1,3 +1,5 @@
+import java.util.Base64
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android plugin.
@@ -6,6 +8,45 @@ plugins {
 
 val isReleaseBuild = gradle.startParameter.taskNames.any {
     it.contains("Release", ignoreCase = true)
+}
+val isNativeRuntimeBuild = (findProperty("dart-defines") as? String)
+    ?.split(',')
+    ?.any { encoded ->
+        runCatching {
+            String(Base64.getDecoder().decode(encoded), Charsets.UTF_8) ==
+                "MGREAD_NATIVE_RUNTIME=true"
+        }.getOrDefault(false)
+    } == true
+val isNodeOnlyRuntimeBuild = (findProperty("dart-defines") as? String)
+    ?.split(',')
+    ?.any { encoded ->
+        runCatching {
+            String(Base64.getDecoder().decode(encoded), Charsets.UTF_8) ==
+                "MGREAD_NODE_ONLY=true"
+        }.getOrDefault(false)
+    } == true
+
+check(!(isNativeRuntimeBuild && isNodeOnlyRuntimeBuild)) {
+    "Native-only and Node-only Android Runtime builds cannot be selected together."
+}
+
+val androidApplicationIdSuffix = (findProperty("dart-defines") as? String)
+    ?.split(',')
+    ?.mapNotNull { encoded ->
+        runCatching {
+            String(Base64.getDecoder().decode(encoded), Charsets.UTF_8)
+        }.getOrNull()
+    }
+    ?.firstOrNull { it.startsWith("MGREAD_APPLICATION_ID_SUFFIX=") }
+    ?.substringAfter('=')
+    ?.takeIf { it.matches(Regex("[A-Za-z][A-Za-z0-9_]*")) }
+
+val androidApplicationId = buildString {
+    append("com.mgread.mg_read")
+    if (androidApplicationIdSuffix != null) {
+        append('.')
+        append(androidApplicationIdSuffix)
+    }
 }
 
 android {
@@ -19,8 +60,8 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.mgread.mg_read"
+        // CI may append a unique install suffix so automated builds can coexist.
+        applicationId = androidApplicationId
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
@@ -28,10 +69,18 @@ android {
         versionCode = flutter.versionCode
         versionName = flutter.versionName
 
-        // The Android runtime and production devices are arm64-v8a only.
-        // Keeping this in defaultConfig applies it to both debug and release.
+        // The Runtime Android library exposes dedicated and combined variants.
+        // Normal builds include both engines.
+        missingDimensionStrategy(
+            "mgreadRuntimeBackend",
+            if (isNativeRuntimeBuild) "nativeRuntime" else if (isNodeOnlyRuntimeBuild) "javet" else "hybrid",
+        )
+
+        // The combined production runtime ships both Android ABIs so Javet and
+        // Rust sources can run together on x86_64 emulators and arm64 devices.
         ndk {
             abiFilters.add("arm64-v8a")
+            if (isNativeRuntimeBuild || !isNodeOnlyRuntimeBuild) abiFilters.add("x86_64")
         }
     }
 
@@ -45,7 +94,12 @@ android {
             excludes += buildSet {
                 add("**/armeabi-v7a/**")
                 add("**/x86/**")
-                if (isReleaseBuild) add("**/x86_64/**")
+                if (isReleaseBuild && isNodeOnlyRuntimeBuild) add("**/x86_64/**")
+                if (isNativeRuntimeBuild) {
+                    add("**/libnode.so")
+                    add("**/libmgread_node_bridge.so")
+                    add("**/libjavet*.so")
+                }
                 add("**/libVkLayer_khronos_validation.so")
             }
         }
@@ -53,8 +107,7 @@ android {
 
     buildTypes {
         debug {
-            // Keep the production APK arm64-only while allowing the x86_64
-            // Android emulator to exercise Flutter and MediaKit playback.
+            // Keep the x86_64 emulator available to exercise both source engines.
             ndk {
                 abiFilters.add("x86_64")
             }
@@ -75,6 +128,9 @@ tasks.withType<org.gradle.api.tasks.Copy>().configureEach {
         exclude(
             "flutter_assets/packages/mgread_plugin_runtime/assets/runtime/windows-x64/**",
         )
+        if (isNativeRuntimeBuild) {
+            exclude("flutter_assets/packages/mgread_plugin_runtime/assets/runtime/**")
+        }
     }
 }
 

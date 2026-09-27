@@ -39,7 +39,7 @@ async function createSingleFileProject(root) {
     version: "2.1.0",
     type: "module",
     main: "dist/index.mjs",
-    engines: { node: ">=24 <25" },
+    engines: { node: ">=24" },
     mgread: {
       schemaVersion: 1,
       id: "org.mgread.single-file-fixture",
