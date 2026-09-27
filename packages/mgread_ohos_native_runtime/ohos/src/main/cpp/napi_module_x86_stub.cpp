@@ -20,6 +20,7 @@ napi_value Init(napi_env env, napi_value exports) {
       {"start", nullptr, Unsupported, nullptr, nullptr, nullptr, napi_default, nullptr},
       {"start", nullptr, Unsupported, nullptr, nullptr, nullptr, napi_default, nullptr},
       {"invoke", nullptr, Unsupported, nullptr, nullptr, nullptr, napi_default, nullptr},
+      {"lastError", nullptr, Unsupported, nullptr, nullptr, nullptr, napi_default, nullptr},
       {"cancel", nullptr, Unsupported, nullptr, nullptr, nullptr, napi_default, nullptr},
       {"stop", nullptr, Unsupported, nullptr, nullptr, nullptr, napi_default, nullptr},
       {"restart", nullptr, Unsupported, nullptr, nullptr, nullptr, napi_default, nullptr},

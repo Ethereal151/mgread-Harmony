@@ -3,6 +3,7 @@ declare const nativeRuntime: {
   create(configJson: string): number;
   start(): number;
   invoke(requestJson: string): Promise<string>;
+  lastError(): string;
   cancel(requestId: string): number;
   stop(): number;
   restart(): number;

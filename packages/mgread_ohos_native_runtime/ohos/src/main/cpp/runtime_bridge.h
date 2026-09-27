@@ -14,6 +14,7 @@ class RuntimeBridge final {
 
   int Start();
   int Invoke(const std::string& request, std::string* response);
+  std::string LastError();
   int Cancel(const std::string& request_id);
   int Stop();
   int Restart();

@@ -20,6 +20,8 @@ final class OhosNativeRuntimeClient {
   Future<String> invoke(String requestJson) async =>
       await _channel.invokeMethod<String>('invoke', <String, Object?>{'requestJson': requestJson}) ?? '';
 
+  Future<String> lastError() async => await _channel.invokeMethod<String>('lastError') ?? '';
+
   Future<int> cancel(String requestId) async => await _channel.invokeMethod<int>('cancel', <String, Object?>{'requestId': requestId}) ?? -1;
 
   Future<int> stop() async => await _channel.invokeMethod<int>('stop') ?? -1;

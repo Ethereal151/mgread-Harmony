@@ -44,6 +44,9 @@ export default class OhosNativeRuntimePlugin implements FlutterPlugin, MethodCal
           .then((response: string): void => result.success(response))
           .catch((error: Object): void => result.error('native_runtime_invoke_failed', String(error), null))
         break
+      case 'lastError':
+        result.success(nativeRuntime.lastError())
+        break
       case 'cancel':
         result.success(nativeRuntime.cancel(String(args?.get('requestId') ?? '')))
         break

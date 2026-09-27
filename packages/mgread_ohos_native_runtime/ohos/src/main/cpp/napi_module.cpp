@@ -60,6 +60,14 @@ napi_value Cancel(napi_env env, napi_callback_info info) {
   return Code(env, g_runtime == nullptr ? MGREAD_RUNTIME_NOT_INITIALIZED : g_runtime->Cancel(ReadString(env, argv[0])));
 }
 
+napi_value LastError(napi_env env, napi_callback_info) {
+  std::lock_guard<std::mutex> lock(g_runtime_mutex);
+  const std::string error = g_runtime == nullptr ? std::string() : g_runtime->LastError();
+  napi_value result;
+  napi_create_string_utf8(env, error.c_str(), NAPI_AUTO_LENGTH, &result);
+  return result;
+}
+
 struct InvokeWork { napi_async_work work = nullptr; napi_deferred deferred = nullptr; std::shared_ptr<RuntimeBridge> runtime; std::string request; std::string response; int code = MGREAD_RUNTIME_NOT_INITIALIZED; };
 
 void ExecuteInvoke(napi_env, void* data) {
@@ -110,6 +118,7 @@ napi_value Init(napi_env env, napi_value exports) {
       {"create", nullptr, Create, nullptr, nullptr, nullptr, napi_default, nullptr},
       {"start", nullptr, Start, nullptr, nullptr, nullptr, napi_default, nullptr},
       {"invoke", nullptr, Invoke, nullptr, nullptr, nullptr, napi_default, nullptr},
+      {"lastError", nullptr, LastError, nullptr, nullptr, nullptr, napi_default, nullptr},
       {"cancel", nullptr, Cancel, nullptr, nullptr, nullptr, napi_default, nullptr},
       {"stop", nullptr, Stop, nullptr, nullptr, nullptr, napi_default, nullptr},
       {"restart", nullptr, Restart, nullptr, nullptr, nullptr, napi_default, nullptr},

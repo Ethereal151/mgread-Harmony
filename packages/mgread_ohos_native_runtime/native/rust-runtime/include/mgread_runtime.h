@@ -26,6 +26,7 @@ const char* mgread_runtime_version(void);
 mgread_runtime_handle* mgread_runtime_create(const char* config_json);
 int32_t mgread_runtime_start(mgread_runtime_handle* runtime);
 int32_t mgread_runtime_invoke(mgread_runtime_handle* runtime, const char* request_json, char** response_json);
+int32_t mgread_runtime_last_error(char** response_json);
 int32_t mgread_runtime_cancel(mgread_runtime_handle* runtime, const char* request_id);
 int32_t mgread_runtime_stop(mgread_runtime_handle* runtime);
 int32_t mgread_runtime_restart(mgread_runtime_handle* runtime);

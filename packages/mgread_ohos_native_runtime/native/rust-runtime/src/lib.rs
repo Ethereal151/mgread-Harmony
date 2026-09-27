@@ -7,7 +7,31 @@
 use std::collections::HashSet;
 use std::ffi::{CStr, CString, c_char};
 use std::ptr;
-use std::sync::Mutex;
+use std::sync::{LazyLock, Mutex};
+
+#[path = "../../../../../plugins/sources/aisishuwu-native/src/parsing.rs"]
+mod parsing;
+#[path = "../../../../../plugins/sources/aisishuwu-native/src/source.rs"]
+mod source;
+
+use serde_json::{Value, json};
+use base64::Engine;
+
+const MGREAD_RUNTIME_INVALID_ARGUMENT: i32 = 1;
+const MGREAD_RUNTIME_TIMEOUT: i32 = 3;
+const MGREAD_RUNTIME_CANCELLED: i32 = 4;
+const MGREAD_RUNTIME_NETWORK_ERROR: i32 = 5;
+const MGREAD_RUNTIME_PLUGIN_ERROR: i32 = 6;
+const MGREAD_RUNTIME_RESOURCE_ERROR: i32 = 7;
+const MGREAD_RUNTIME_UNSUPPORTED: i32 = 9;
+
+static LAST_ERROR: LazyLock<Mutex<String>> = LazyLock::new(|| Mutex::new(String::new()));
+
+fn set_last_error(value: impl Into<String>) {
+    if let Ok(mut error) = LAST_ERROR.lock() {
+        *error = value.into();
+    }
+}
 
 static VERSION: &[u8] = b"mgread-ohos-native-runtime/0.1.0 abi=1\0";
 
@@ -37,6 +61,193 @@ fn json_string(json: &str, key: &str) -> Option<String> {
     Some(rest[..rest.find('"')?].to_owned())
 }
 
+fn source_http(request: &Value, proxy: Option<&str>) -> Result<Value, i32> {
+    let url = request["url"]
+        .as_str()
+        .ok_or(MGREAD_RUNTIME_INVALID_ARGUMENT)?;
+    let parsed = url::Url::parse(url).map_err(|_| MGREAD_RUNTIME_INVALID_ARGUMENT)?;
+    if parsed.scheme() != "https" || parsed.origin().ascii_serialization() != parsing::ORIGIN {
+        return Err(MGREAD_RUNTIME_INVALID_ARGUMENT);
+    }
+    let configured_proxy = match proxy {
+        Some(value) => match ureq::Proxy::new(value) {
+            Ok(proxy) => Some(proxy),
+            Err(error) => {
+                set_last_error(format!("invalid configured proxy: {error}"));
+                return Err(MGREAD_RUNTIME_INVALID_ARGUMENT);
+            }
+        },
+        None => None,
+    };
+    let agent = ureq::Agent::config_builder()
+        .timeout_global(Some(std::time::Duration::from_secs(20)))
+        .proxy(configured_proxy)
+        .build()
+        .new_agent();
+    let mut request_builder = agent.get(url);
+    if let Some(headers) = request["headers"].as_object() {
+        for (key, value) in headers {
+            if let Some(value) = value.as_str() {
+                request_builder = request_builder.header(key, value);
+            }
+        }
+    }
+    let response = request_builder.call().map_err(|error| {
+        let message = format!("request failed for {url}: {error}");
+        eprintln!("mgread native source {message}");
+        set_last_error(message);
+        MGREAD_RUNTIME_NETWORK_ERROR
+    })?;
+    let status = response.status().as_u16();
+    eprintln!("mgread native source response: {url}: {status}");
+    if !(200..300).contains(&status) {
+        set_last_error(format!("source returned HTTP status {status} for {url}"));
+        return Err(MGREAD_RUNTIME_NETWORK_ERROR);
+    }
+    let body = response
+        .into_body()
+        .read_to_string()
+        .map_err(|error| {
+            let message = format!("body read failed for {url}: {error}");
+            eprintln!("mgread native source {message}");
+            set_last_error(message);
+            MGREAD_RUNTIME_NETWORK_ERROR
+        })?;
+    if body.len() > 4 * 1024 * 1024 {
+        set_last_error(format!("source response exceeded 4 MiB for {url}"));
+        return Err(MGREAD_RUNTIME_RESOURCE_ERROR);
+    }
+    Ok(json!({"status": status, "body": body}))
+}
+
+fn source_invoke(request_json: &str, cancelled: impl Fn() -> bool, proxy: Option<&str>) -> Result<String, i32> {
+    let request: Value = serde_json::from_str(request_json)
+        .map_err(|_| MGREAD_RUNTIME_INVALID_ARGUMENT)?;
+    let method = request["method"]
+        .as_str()
+        .ok_or(MGREAD_RUNTIME_INVALID_ARGUMENT)?;
+    if !matches!(
+        method,
+        "discover" | "search" | "searchSuggestions" | "getDetail" | "getChapters" | "getContent"
+    ) {
+        return Err(MGREAD_RUNTIME_UNSUPPORTED);
+    }
+    let source_request = request.get("request").cloned().unwrap_or(Value::Null);
+    let mut input = json!({"method": method, "request": source_request, "state": null});
+    for _ in 0..128 {
+        if cancelled() {
+            return Err(MGREAD_RUNTIME_CANCELLED);
+        }
+        let output = source::dispatch(input).map_err(|error| {
+            set_last_error(format!("source parser error: {error}"));
+            MGREAD_RUNTIME_PLUGIN_ERROR
+        })?;
+        match output["kind"].as_str() {
+            Some("result") => {
+                let value = output
+                    .get("value")
+                    .cloned()
+                    .ok_or(MGREAD_RUNTIME_PLUGIN_ERROR)?;
+                return serde_json::to_string(&json!({
+                    "ok": true,
+                    "engine": "ohos-native",
+                    "sourceId": "org.mgread.aisishuwu.native",
+                    "value": value,
+                }))
+                .map_err(|_| MGREAD_RUNTIME_RESOURCE_ERROR);
+            }
+            Some("http") => {
+                let requests = output["requests"]
+                    .as_array()
+                    .ok_or(MGREAD_RUNTIME_PLUGIN_ERROR)?;
+                let mut responses = Vec::with_capacity(requests.len());
+                for request in requests {
+                    if cancelled() {
+                        return Err(MGREAD_RUNTIME_CANCELLED);
+                    }
+                    responses.push(source_http(request, proxy)?);
+                }
+                input = json!({
+                    "method": method,
+                    "request": source_request,
+                    "state": output.get("state").cloned().unwrap_or(Value::Null),
+                    "responses": responses,
+                });
+            }
+            _ => return Err(MGREAD_RUNTIME_PLUGIN_ERROR),
+        }
+    }
+    Err(MGREAD_RUNTIME_TIMEOUT)
+}
+
+fn resource_invoke(request_json: &str, cancelled: impl Fn() -> bool, proxy: Option<&str>) -> Result<String, i32> {
+    let envelope: Value = serde_json::from_str(request_json)
+        .map_err(|_| MGREAD_RUNTIME_INVALID_ARGUMENT)?;
+    let request = envelope.get("request").cloned().unwrap_or(Value::Null);
+    if cancelled() {
+        return Err(MGREAD_RUNTIME_CANCELLED);
+    }
+    let url = request["url"]
+        .as_str()
+        .ok_or(MGREAD_RUNTIME_INVALID_ARGUMENT)?;
+    let parsed = url::Url::parse(url).map_err(|_| MGREAD_RUNTIME_INVALID_ARGUMENT)?;
+    if parsed.scheme() != "https"
+        || ![parsing::ORIGIN, "https://img.321cdn.com"].contains(&parsed.origin().ascii_serialization().as_str())
+        || !parsed.username().is_empty()
+        || parsed.password().is_some()
+    {
+        set_last_error(format!("resource URL is outside the allowed source origins: {url}"));
+        return Err(MGREAD_RUNTIME_INVALID_ARGUMENT);
+    }
+    let configured_proxy = match proxy {
+        Some(value) => Some(ureq::Proxy::new(value).map_err(|_| MGREAD_RUNTIME_INVALID_ARGUMENT)?),
+        None => None,
+    };
+    let agent = ureq::Agent::config_builder()
+        .timeout_global(Some(std::time::Duration::from_secs(20)))
+        .proxy(configured_proxy)
+        .build()
+        .new_agent();
+    let mut request_builder = agent.get(url);
+    if let Some(headers) = request["headers"].as_object() {
+        for (key, value) in headers {
+            if let Some(value) = value.as_str() {
+                request_builder = request_builder.header(key, value);
+            }
+        }
+    }
+    let response = request_builder.call().map_err(|error| {
+        set_last_error(format!("resource request failed for {url}: {error}"));
+        MGREAD_RUNTIME_NETWORK_ERROR
+    })?;
+    let status = response.status().as_u16();
+    if !(200..300).contains(&status) {
+        set_last_error(format!("resource returned HTTP status {status} for {url}"));
+        return Err(MGREAD_RUNTIME_NETWORK_ERROR);
+    }
+    let content_type = response
+        .headers()
+        .get("content-type")
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or("")
+        .to_owned();
+    let bytes = response.into_body().read_to_vec().map_err(|error| {
+        set_last_error(format!("resource body read failed for {url}: {error}"));
+        MGREAD_RUNTIME_NETWORK_ERROR
+    })?;
+    if bytes.len() > 8 * 1024 * 1024 {
+        set_last_error(format!("resource exceeded 8 MiB for {url}"));
+        return Err(MGREAD_RUNTIME_RESOURCE_ERROR);
+    }
+    serde_json::to_string(&json!({
+        "ok": true,
+        "engine": "ohos-native",
+        "kind": request["kind"].as_str().unwrap_or("resource"),
+        "contentType": content_type,
+        "bytesBase64": base64::engine::general_purpose::STANDARD.encode(bytes),
+    })).map_err(|_| MGREAD_RUNTIME_RESOURCE_ERROR)
+}
+
 #[unsafe(no_mangle)]
 pub extern "C" fn mgread_runtime_version() -> *const c_char { VERSION.as_ptr().cast() }
 
@@ -64,11 +275,55 @@ pub unsafe extern "C" fn mgread_runtime_invoke(runtime: *mut mgread_runtime_hand
     let Some(request) = (unsafe { input(request_json) }) else { return 1; };
     let request_id = json_string(request, "requestId").unwrap_or_default();
     let method = json_string(request, "method").unwrap_or_else(|| "runtime.fixed.invoke".to_owned());
-    let Ok(mut state) = runtime.runtime.state.lock() else { return 8; };
-    if !state.started { return 2; }
-    if !request_id.is_empty() && state.cancelled.remove(&request_id) { return 4; }
-    let response = format!("{{\"ok\":true,\"abiVersion\":1,\"generation\":{},\"method\":\"{}\",\"configPresent\":{}}}", state.generation, method.replace('"', ""), !runtime.runtime.config.is_empty());
+    let (generation, started) = match runtime.runtime.state.lock() {
+        Ok(state) => (state.generation, state.started),
+        Err(_) => return 8,
+    };
+    if !started { return 2; }
+    let is_cancelled = || {
+        runtime.runtime.state.lock().map(|mut state| {
+            if !request_id.is_empty() && state.cancelled.remove(&request_id) {
+                true
+            } else {
+                false
+            }
+        }).unwrap_or(true)
+    };
+    let proxy = serde_json::from_str::<Value>(&runtime.runtime.config)
+        .ok()
+        .and_then(|value| value["proxy"].as_str().map(str::to_owned));
+    if method == "resource.get" {
+        return match resource_invoke(request, is_cancelled, proxy.as_deref()) {
+            Ok(response) => output(&response, response_json),
+            Err(code) => {
+                if LAST_ERROR.lock().map(|error| error.is_empty()).unwrap_or(true) {
+                    set_last_error(format!("native resource invocation failed with code {code}"));
+                }
+                code
+            }
+        };
+    }
+    if matches!(method.as_str(), "discover" | "search" | "searchSuggestions" | "getDetail" | "getChapters" | "getContent") {
+        return match source_invoke(request, is_cancelled, proxy.as_deref()) {
+            Ok(response) => output(&response, response_json),
+            Err(code) => {
+                if LAST_ERROR.lock().map(|error| error.is_empty()).unwrap_or(true) {
+                    set_last_error(format!("native source invocation failed with code {code}"));
+                }
+                code
+            }
+        };
+    }
+    if is_cancelled() { return 4; }
+    let response = format!("{{\"ok\":true,\"abiVersion\":1,\"generation\":{},\"method\":\"{}\",\"configPresent\":{}}}", generation, method.replace('"', ""), !runtime.runtime.config.is_empty());
     output(&response, response_json)
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn mgread_runtime_last_error(response_json: *mut *mut c_char) -> i32 {
+    let Some(response_json) = (unsafe { response_json.as_mut() }) else { return 1; };
+    let error = LAST_ERROR.lock().map(|value| value.clone()).unwrap_or_default();
+    output(&error, response_json)
 }
 
 #[unsafe(no_mangle)]
