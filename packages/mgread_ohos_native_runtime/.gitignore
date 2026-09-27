@@ -1,0 +1,6 @@
+native/rust-runtime/target/
+ohos/.cxx/
+ohos/.hvigor/
+*.so
+*.dylib
+*.dll

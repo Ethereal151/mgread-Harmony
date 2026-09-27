@@ -1,0 +1,7 @@
+{
+  "module": {
+    "name": "mgread_ohos_native_runtime",
+    "type": "har",
+    "deviceTypes": ["phone", "tablet"]
+  }
+}

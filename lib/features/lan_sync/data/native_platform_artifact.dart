@@ -18,7 +18,7 @@ import 'package:mg_read/features/lan_sync/domain/lan_sync_models.dart';
 Future<LanSyncMaterializedPlugin> nativeArtifactForPlatform(LanSyncMaterializedPlugin source, String platform) async {
   final descriptor = source.descriptor;
   if (descriptor.engine != LanSyncPluginEngine.native) return source;
-  if (platform != 'windows' && platform != 'android') {
+  if (platform != 'windows' && platform != 'android' && platform != 'ohos') {
     throw const LanSyncTransportException('lan_sync_plugin_platform_unavailable');
   }
   final input = BytesBuilder(copy: false);

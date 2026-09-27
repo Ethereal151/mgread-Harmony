@@ -1,11 +1,10 @@
-/// desktop 正式 App 内置的数据源自检页面。
+/// 正式 App 内置的数据源自检页面。
 ///
 /// 职责：持有一次检测会话，展示实时阶段和结果，确认退出并取消 Runtime 请求。
 /// 生命周期：返回、停止和 dispose 共用取消令牌；完成后保留本轮报告供筛选与导出。
 library;
 
 import 'dart:async';
-import 'dart:io';
 
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
@@ -13,15 +12,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:mg_read/app/app_theme.dart';
 import 'package:mg_read/features/plugins/application/source_verification.dart';
+import 'package:mg_read/platform/platform_capabilities.dart';
 import 'package:mg_read/shared/presentation/widgets/app_secondary_page_chrome.dart';
 
 part 'source_verification_widgets.dart';
 
 class SourceVerificationPage extends ConsumerStatefulWidget {
-  const SourceVerificationPage({required this.onBackRequested, this.pluginId, super.key});
+  const SourceVerificationPage({required this.onBackRequested, this.pluginId, this.capabilities, super.key});
 
   final String? pluginId;
   final VoidCallback onBackRequested;
+  final PlatformCapabilities? capabilities;
 
   @override
   ConsumerState<SourceVerificationPage> createState() => _SourceVerificationPageState();
@@ -82,7 +83,7 @@ class _SourceVerificationPageState extends ConsumerState<SourceVerificationPage>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && _supportsDesktopVerification) _start();
+      if (mounted && _supportsVerification) _start();
     });
   }
 
@@ -193,12 +194,12 @@ class _SourceVerificationPageState extends ConsumerState<SourceVerificationPage>
   }
 
   Widget _buildBody(BuildContext context) {
-    if (!_supportsDesktopVerification) {
+    if (!_supportsVerification) {
       return const _VerificationMessage(
-        key: Key('source-verification-desktop-only'),
+        key: Key('source-verification-unsupported'),
         icon: Icons.desktop_windows_outlined,
-        title: '当前仅支持桌面端检测',
-        message: '请在 Windows 或 macOS 正式宿主中运行数据源全链路检测。',
+        title: '当前平台不支持检测',
+        message: '请在 Windows、macOS 或 OHOS 正式宿主中运行数据源全链路检测。',
       );
     }
     final report = _report;
@@ -303,8 +304,11 @@ class _SourceVerificationPageState extends ConsumerState<SourceVerificationPage>
       ],
     );
   }
+
+  PlatformCapabilities get _verificationCapabilities => widget.capabilities ?? platformCapabilities;
+
+  bool get _supportsVerification =>
+      _verificationCapabilities.isWindows || _verificationCapabilities.isMacOS || _verificationCapabilities.isOhos;
 }
 
 enum _ResultFilter { all, issues, passed }
-
-bool get _supportsDesktopVerification => Platform.isWindows || Platform.isMacOS;

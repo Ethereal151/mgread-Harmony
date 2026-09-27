@@ -21,6 +21,25 @@ import 'package:mgread_ohos_system/mgread_ohos_system.dart';
 
 typedef LanSyncPluginStreamOpener = Future<Stream<List<int>>> Function(LanSyncPluginDescriptor plugin);
 
+/// Stable platform identifiers shared by temporary QR and paired sync.
+///
+/// Keep these values aligned with [PairedDevicePlatform.name] and native
+/// artifact target prefixes. Unknown hosts must not silently masquerade as a
+/// supported receiver platform.
+const Set<String> lanSyncPlatformIdentifiers = <String>{'windows', 'macos', 'android', 'ohos'};
+
+String get lanSyncCurrentPlatformIdentifier => Platform.isWindows
+    ? 'windows'
+    : Platform.isMacOS
+    ? 'macos'
+    : Platform.isAndroid
+    ? 'android'
+    : Platform.operatingSystem == 'ohos'
+    ? 'ohos'
+    : 'unknown';
+
+bool isLanSyncPlatformIdentifier(Object? value) => value is String && lanSyncPlatformIdentifiers.contains(value);
+
 sealed class LanSyncSenderEvent {
   const LanSyncSenderEvent();
 }
@@ -141,7 +160,7 @@ final class LanSyncSenderService {
             shelf is! List ||
             raw.any((e) => e is! String) ||
             shelf.any((e) => e is! String) ||
-            platform != null && platform != 'windows' && platform != 'android' && platform != 'macos') {
+            !isLanSyncPlatformIdentifier(platform)) {
           throw const LanSyncTransportException('lan_sync_selection_invalid');
         }
         final ids = raw.cast<String>().toSet();
@@ -289,11 +308,7 @@ final class LanSyncReceiverConnection {
     final result = await _request(_client, _base.resolve('/v3/selection'), {
       'pluginIds': pluginIds.toList(),
       'shelfItemIds': shelf.toList(),
-      'platform': Platform.isAndroid
-          ? 'android'
-          : Platform.isWindows
-          ? 'windows'
-          : 'macos',
+      'platform': lanSyncCurrentPlatformIdentifier,
     }, pairingCode);
     final raw = result['plugins'];
     if (raw is! List) throw const LanSyncTransportException('lan_sync_selection_invalid');

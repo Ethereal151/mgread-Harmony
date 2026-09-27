@@ -1,0 +1,17 @@
+name: mgread_ohos_native_runtime
+description: Optional staged HarmonyOS Native/Rust Runtime bridge.
+publish_to: none
+version: 0.1.0
+environment:
+  sdk: '>=3.5.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+flutter:
+  plugin:
+    platforms:
+      ohos:
+        package: com.mgread.mgread_ohos_native_runtime
+        pluginClass: OhosNativeRuntimePlugin

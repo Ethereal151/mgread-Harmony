@@ -18,10 +18,12 @@ import 'package:mg_read/features/lan_sync/domain/lan_sync_models.dart';
 void main() {
   final windows = List<int>.filled(600, 1);
   final arm64 = List<int>.filled(700, 2);
-  final binaries = <String, List<int>>{'windows-x86_64': windows, 'android-arm64-v8a': arm64};
+  final ohos = List<int>.filled(800, 3);
+  final binaries = <String, List<int>>{'windows-x86_64': windows, 'android-arm64-v8a': arm64, 'ohos-arm64-v8a': ohos};
   final paths = <String, String>{
     'windows-x86_64': 'native/windows-x86_64/source.dll',
     'android-arm64-v8a': 'native/android-arm64-v8a/libsource.so',
+    'ohos-arm64-v8a': 'native/ohos-arm64-v8a/libsource.so',
   };
   final manifest = <String, Object?>{
     'format': 'mgread-native',
@@ -52,7 +54,7 @@ void main() {
     engine: LanSyncPluginEngine.native,
   );
 
-  for (final platform in ['windows', 'android']) {
+  for (final platform in ['windows', 'android', 'ohos']) {
     test('native $platform transfer contains only matching binaries', () async {
       final result = await nativeArtifactForPlatform(
         LanSyncMaterializedPlugin(descriptor: descriptor, bytes: Stream.value(original)),
@@ -75,6 +77,13 @@ void main() {
       expect(await alreadyFiltered.bytes.expand((chunk) => chunk).toList(), bytes);
     });
   }
+
+  test('native macOS transfer is rejected because macOS ships Node sources only', () async {
+    await expectLater(
+      nativeArtifactForPlatform(LanSyncMaterializedPlugin(descriptor: descriptor, bytes: Stream.value(original)), 'macos'),
+      throwsA(isA<LanSyncTransportException>()),
+    );
+  });
 
   test('QR selection sends the receiving Windows archive', () async {
     final sender = await LanSyncSenderService.start(

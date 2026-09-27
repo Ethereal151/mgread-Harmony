@@ -59,15 +59,19 @@ abstract interface class _RuntimeSupervisor {
 ///
 /// The application can still render local-library pages while Runtime-backed
 /// capabilities fail with a typed, user-facing error instead of throwing
-/// during provider construction. OHOS uses its own supervisor below and is
-/// therefore not routed through this fallback.
+/// during provider construction. The normal OHOS build uses its Node
+/// supervisor; the native-only OHOS build uses this same typed fallback until
+/// an OHOS Rust/ABI host is staged.
 final class _UnsupportedRuntimeSupervisor implements _RuntimeSupervisor {
-  const _UnsupportedRuntimeSupervisor();
+  const _UnsupportedRuntimeSupervisor([
+    this._message =
+        'This Runtime package currently has no launcher for this platform.',
+  ]);
 
-  PluginRuntimeException get _error => const PluginRuntimeException(
-    'unsupported',
-    'This Runtime package currently has no launcher for this platform.',
-  );
+  final String _message;
+
+  PluginRuntimeException get _error =>
+      PluginRuntimeException('unsupported', _message);
 
   @override
   Future<T> invoke<T>(
@@ -173,6 +177,7 @@ final class PluginRuntime {
       }
     }();
   }
+
   /// Whether this Facade can install and execute native binary sources.
   bool get supportsNativeSources =>
       _supervisor is _HybridRuntimeSupervisor ||
@@ -185,6 +190,16 @@ final class PluginRuntime {
   /// define remains available for isolation and package acceptance builds.
   factory PluginRuntime() {
     if (const bool.fromEnvironment('MGREAD_NATIVE_RUNTIME')) {
+      // OHOS currently ships only the Node host. Keep the native-only build
+      // constructible so callers receive the typed fallback at capability
+      // boundaries instead of failing during provider construction.
+      if (Platform.operatingSystem == 'ohos') {
+        return _nativeInstance ??= PluginRuntime._(
+          const _UnsupportedRuntimeSupervisor(
+            'The OHOS native Runtime is not staged; use the default Node Runtime.',
+          ),
+        );
+      }
       return _nativeInstance ??= PluginRuntime._(
         _NativeRuntimeSupervisor.forCurrentPlatform(),
       );
@@ -531,6 +546,19 @@ final class PluginRuntime {
   @visibleForTesting
   factory PluginRuntime.ohosForTesting() {
     return PluginRuntime._(_OhosRuntimeSupervisor());
+  }
+
+  /// Creates the OHOS native-only fallback for package-owned contract tests.
+  ///
+  /// No OHOS Rust/ABI host is present yet. This keeps the native-only facade
+  /// explicit and typed without changing the production default Node path.
+  @visibleForTesting
+  factory PluginRuntime.ohosNativeForTesting() {
+    return PluginRuntime._(
+      const _UnsupportedRuntimeSupervisor(
+        'The OHOS native Runtime is not staged; use the default Node Runtime.',
+      ),
+    );
   }
 
   /// Exercises the Javet adapter with package-owned mock platform channels.

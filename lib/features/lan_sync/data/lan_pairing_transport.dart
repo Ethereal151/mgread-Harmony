@@ -363,15 +363,13 @@ Future<void> _json(HttpResponse response, int status, Map<String, Object?> value
   await response.close();
 }
 
-PairedDevicePlatform get _localPlatform => Platform.isWindows
-    ? PairedDevicePlatform.windows
-    : Platform.isMacOS
-    ? PairedDevicePlatform.macos
-    : Platform.operatingSystem == 'ohos'
-    ? PairedDevicePlatform.ohos
-    : Platform.isAndroid
-    ? PairedDevicePlatform.android
-    : PairedDevicePlatform.unknown;
+PairedDevicePlatform get _localPlatform => switch (lanSyncCurrentPlatformIdentifier) {
+  'windows' => PairedDevicePlatform.windows,
+  'macos' => PairedDevicePlatform.macos,
+  'android' => PairedDevicePlatform.android,
+  'ohos' => PairedDevicePlatform.ohos,
+  _ => PairedDevicePlatform.unknown,
+};
 PairedDevicePlatform? _platform(Object? value) => switch (value) {
   'android' => PairedDevicePlatform.android,
   'windows' => PairedDevicePlatform.windows,

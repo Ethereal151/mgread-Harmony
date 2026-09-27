@@ -111,7 +111,7 @@ final class SourceVerificationReport {
 
   Map<String, Object?> toJson() => <String, Object?>{
     'schemaVersion': 1,
-    'platform': Platform.isMacOS ? 'macos' : 'windows',
+    'platform': sourceVerificationPlatform(),
     'mode': mode,
     'status': cancelled
         ? 'cancelled'
@@ -132,6 +132,13 @@ final class SourceVerificationReport {
     'sources': sources.map((source) => source.toJson()).toList(growable: false),
   };
 }
+
+String sourceVerificationPlatform({String? operatingSystem}) => switch (operatingSystem ?? Platform.operatingSystem) {
+  'ohos' => 'ohos',
+  'macos' => 'macos',
+  'windows' => 'windows',
+  _ => operatingSystem ?? Platform.operatingSystem,
+};
 
 @immutable
 final class SourceVerificationProgress {

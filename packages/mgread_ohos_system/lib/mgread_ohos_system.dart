@@ -1,4 +1,4 @@
-/// Small application-owned bridge for OHOS system UI and package services.
+/// Small application-owned bridge for OHOS system UI, package, and LAN services.
 library;
 
 import 'package:flutter/services.dart';
@@ -7,6 +7,9 @@ final class OhosSystemClient {
   OhosSystemClient._();
 
   static const MethodChannel _channel = MethodChannel('mgread/ohos_system');
+  static const EventChannel _networkEvents = EventChannel(
+    'mgread/network_environment/events',
+  );
 
   static Future<String?> pickImportFile() =>
       _channel.invokeMethod<String>('pickImportFile');
@@ -75,6 +78,16 @@ final class OhosSystemClient {
     if (value is! List) return const <String>[];
     return List<String>.unmodifiable(value.whereType<String>());
   }
+
+  /// Whether Network Kit currently exposes a Wi-Fi/Ethernet local address.
+  static Future<bool> isLocalNetworkAvailable() async =>
+      await _channel.invokeMethod<bool>('isLocalNetworkAvailable') ?? false;
+
+  /// Emits the current LAN availability after Network Kit transitions.
+  static Stream<bool> get localNetworkAvailabilityChanges => _networkEvents
+      .receiveBroadcastStream()
+      .where((value) => value is bool)
+      .cast<bool>();
 
   /// Returns native OHOS capability probes. The application owns the public
   /// immutable snapshot model; this package only validates the channel shape.

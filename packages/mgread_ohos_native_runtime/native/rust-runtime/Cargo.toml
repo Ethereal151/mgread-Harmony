@@ -1,0 +1,16 @@
+[package]
+name = "mgread-ohos-native-runtime"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[lib]
+name = "mgread_rust_runtime"
+crate-type = ["cdylib", "rlib"]
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

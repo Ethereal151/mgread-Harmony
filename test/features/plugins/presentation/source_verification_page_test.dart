@@ -9,6 +9,7 @@ import 'package:mgread_plugin_runtime/mgread_plugin_runtime.dart';
 import 'package:mg_read/app/app_theme.dart';
 import 'package:mg_read/features/discovery/application/source_content_gateway.dart';
 import 'package:mg_read/features/plugins/presentation/source_verification_page.dart';
+import 'package:mg_read/platform/platform_capabilities.dart';
 
 void main() {
   testWidgets('back confirmation can continue or abort the running request', (tester) async {
@@ -116,9 +117,28 @@ void main() {
     expect(find.text('暂无符合条件的结果'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('OHOS can open verification for installed sources', (tester) async {
+    final gateway = _PendingGateway();
+    await _mount(tester, gateway, capabilities: PlatformCapabilities.forOperatingSystem('ohos'));
+
+    expect(find.byKey(const Key('source-verification-content')), findsOneWidget);
+    expect(find.byKey(const Key('source-verification-unsupported')), findsNothing);
+    expect(find.text('正在检测数据源'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('source-verification-cancel')));
+    await tester.pumpAndSettle();
+    expect(gateway.cancellation!.isCancelled, isTrue);
+  });
 }
 
-Future<void> _mount(WidgetTester tester, _PendingGateway gateway, {VoidCallback? onBack, bool largeText = false}) async {
+Future<void> _mount(
+  WidgetTester tester,
+  _PendingGateway gateway, {
+  VoidCallback? onBack,
+  bool largeText = false,
+  PlatformCapabilities? capabilities,
+}) async {
   await tester.pumpWidget(
     ProviderScope(
       overrides: [sourceContentGatewayProvider.overrideWithValue(gateway)],
@@ -128,7 +148,7 @@ Future<void> _mount(WidgetTester tester, _PendingGateway gateway, {VoidCallback?
           data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(largeText ? 1.5 : 1)),
           child: child!,
         ),
-        home: SourceVerificationPage(onBackRequested: onBack ?? () {}),
+        home: SourceVerificationPage(onBackRequested: onBack ?? () {}, capabilities: capabilities),
       ),
     ),
   );

@@ -131,21 +131,51 @@ export default class MgReadOhosSystemPlugin implements FlutterPlugin, MethodCall
   }
 
   private async readLocalNetworkAddresses(): Promise<string[]> {
-    if (!(await connection.hasDefaultNet())) return []
-    const netHandle = await connection.getDefaultNet()
-    const capabilities = await connection.getNetCapabilities(netHandle)
-    const lanBearer = capabilities.bearerTypes.some(
-      (bearer: connection.NetBearType): boolean =>
-        bearer === connection.NetBearType.BEARER_WIFI || bearer === connection.NetBearType.BEARER_ETHERNET,
-    )
-    if (!lanBearer) return []
-    const properties = await connection.getConnectionProperties(netHandle)
     const addresses: string[] = []
-    for (const linkAddress of properties.linkAddresses) {
-      const address = linkAddress.address.address
-      if (linkAddress.address.family === 1 || linkAddress.address.family === undefined) addresses.push(address)
+
+    // The default network can be cellular while Wi-Fi is still up.  LAN sync
+    // must inspect every active network and select only Wi-Fi/Ethernet
+    // bearers; querying only getDefaultNet() made a connected device appear
+    // to have no local address.
+    let networkHandles: connection.NetHandle[] = []
+    try {
+      networkHandles = await connection.getAllNets()
+    } catch (_) {
+      // Keep compatibility with older Network Kit implementations where the
+      // all-networks API may be unavailable.
+      if (await connection.hasDefaultNet()) networkHandles = [await connection.getDefaultNet()]
+    }
+
+    for (const netHandle of networkHandles) {
+      const capabilities = await connection.getNetCapabilities(netHandle)
+      const lanBearer = capabilities.bearerTypes.some(
+        (bearer: connection.NetBearType): boolean =>
+          bearer === connection.NetBearType.BEARER_WIFI || bearer === connection.NetBearType.BEARER_ETHERNET,
+      )
+      if (!lanBearer) continue
+
+      const properties = await connection.getConnectionProperties(netHandle)
+      for (const linkAddress of properties.linkAddresses) {
+        const address = linkAddress.address.address
+        if (
+          (linkAddress.address.family === 1 || linkAddress.address.family === undefined) &&
+          this.isUsableIpv4(address) &&
+          !addresses.includes(address)
+        ) {
+          addresses.push(address)
+        }
+      }
     }
     return addresses
+  }
+
+  private isUsableIpv4(address: string): boolean {
+    const octets = address.split('.')
+    if (octets.length !== 4 || octets.some((octet: string): boolean => !/^\d+$/.test(octet))) return false
+    const values = octets.map((octet: string): number => Number(octet))
+    if (values.some((value: number): boolean => value < 0 || value > 255)) return false
+    const first = values[0]
+    return first !== 0 && first !== 127 && first < 224 && !(first === 169 && values[1] === 254)
   }
 
   private async getCapabilities(result: MethodResult): Promise<void> {
@@ -206,10 +236,19 @@ export default class MgReadOhosSystemPlugin implements FlutterPlugin, MethodCall
       network.on('netAvailable', (_handle: connection.NetHandle): void => {
         this.emitLocalNetworkAvailability()
       })
-      network.on('netLost', (_handle: connection.NetHandle): void => this.networkEvents.emit(false))
+      network.on('netLost', (_handle: connection.NetHandle): void => {
+        this.emitLocalNetworkAvailability()
+      })
       network.on('netUnavailable', (): void => this.networkEvents.emit(false))
-      network.register((_error: Object | undefined): void => {})
-      this.networkConnection = network
+      network.register((error: Object | undefined): void => {
+        if (error !== undefined) {
+          this.networkConnection = undefined
+          this.networkEvents.emit(false)
+          return
+        }
+        this.networkConnection = network
+        this.emitLocalNetworkAvailability()
+      })
     } catch (_) {
       this.networkConnection = undefined
     }

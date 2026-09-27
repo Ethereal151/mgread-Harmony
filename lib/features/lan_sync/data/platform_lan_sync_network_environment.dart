@@ -1,7 +1,8 @@
 /// 局域网同步的真实平台网络判定。
 ///
-/// Android 通过无运行时授权的系统网络能力查询确认 Wi-Fi；桌面以过滤后的私有 IPv4
-/// 接口作为可用局域网依据。查询失败按不可用处理，避免在移动网络上盲目广播。
+/// Android 通过无运行时授权的系统网络能力查询确认 Wi-Fi，OHOS 通过 Network Kit
+/// 确认 Wi-Fi/Ethernet 与地址变化；桌面以过滤后的私有 IPv4 接口作为可用局域网依据。
+/// 查询失败按不可用处理，避免在移动网络上盲目广播。
 library;
 
 import 'dart:io';
@@ -53,10 +54,9 @@ final class PlatformLanSyncNetworkEnvironment implements LanSyncNetworkEnvironme
 }
 
 const MethodChannel _networkEnvironmentChannel = MethodChannel('mgread/network_environment');
-const EventChannel _networkEnvironmentEvents = EventChannel('mgread/network_environment/events');
 
 Future<bool?> _readAndroidWifiStatus() => _networkEnvironmentChannel.invokeMethod<bool>('isWifiConnected');
 
-Future<bool?> _readOhosNetworkStatus() async => (await OhosSystemClient.getLocalNetworkAddresses()).isNotEmpty;
+Future<bool?> _readOhosNetworkStatus() => OhosSystemClient.isLocalNetworkAvailable();
 
-Stream<bool> get _ohosNetworkChanges => _networkEnvironmentEvents.receiveBroadcastStream().where((value) => value is bool).cast<bool>();
+Stream<bool> get _ohosNetworkChanges => OhosSystemClient.localNetworkAvailabilityChanges;

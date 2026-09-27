@@ -131,7 +131,7 @@ void main() {
     final report = await SourceVerificationEngine(gateway).run(pluginId: _VerificationGateway.pluginId);
 
     expect(report.isSuccessful, isTrue);
-    expect(report.toJson()['platform'], Platform.isMacOS ? 'macos' : 'windows');
+    expect(report.toJson()['platform'], sourceVerificationPlatform(operatingSystem: Platform.operatingSystem));
     expect(gateway.contentChapterIds, <String>['chapter:0', 'chapter:2', 'chapter:4']);
     final source = report.sources.single;
     expect(source.status, SourceVerificationResultStatus.passed);
@@ -148,6 +148,12 @@ void main() {
       'resource.content',
     ]);
     expect(source.stages.where((stage) => stage.stage == 'resource.cover').single.status, SourceVerificationStageStatus.skipped);
+  });
+
+  test('keeps OHOS as a first-class verification report platform', () {
+    expect(sourceVerificationPlatform(operatingSystem: 'ohos'), 'ohos');
+    expect(sourceVerificationPlatform(operatingSystem: 'macos'), 'macos');
+    expect(sourceVerificationPlatform(operatingSystem: 'windows'), 'windows');
   });
 
   test('reports a Runtime-visible truncated catalog with a stable stage and code', () async {

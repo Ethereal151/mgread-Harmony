@@ -637,12 +637,17 @@ export class OhosArkWebPlatformView extends PlatformView {
 
   async evaluate(source: string): Promise<Any> {
     try {
+      const trimmed = source.trim()
+      if (!trimmed.includes(';') && !/\breturn\b/.test(trimmed)) {
+        const value = await this.script(`JSON.stringify(${source})`)
+        return {value: this.parseScriptResult(value)}
+      }
       // ArkWeb's runJavaScript returns a Promise. Execute through the
       // AsyncFunction constructor so snippets with `return`, await and
       // multiple statements have the same completion-value semantics as the
       // desktop host. `eval(source)` rejects top-level `return`, which makes
       // challenge solvers such as Baozimh look like an access block on OHOS.
-      const expression = `(async()=>{try{const AsyncFunction=Object.getPrototypeOf(async function(){}).constructor;const value=await new AsyncFunction(${JSON.stringify(source)}).call(window);return JSON.stringify({value})}catch(_){return JSON.stringify({error:'plugin_execution_failed'})}})()`
+      const expression = `(async()=>{try{const AsyncFunction=Object.getPrototypeOf(async function(){}).constructor;const value=await new AsyncFunction(${JSON.stringify(source)}).call(window);return JSON.stringify({value:value===undefined?null:value})}catch(_){return JSON.stringify({error:'plugin_execution_failed'})}})()`
       const value = await this.script(expression)
       const decoded: Any = this.parseScriptResult(value)
       if (decoded !== null && typeof decoded === 'object') {

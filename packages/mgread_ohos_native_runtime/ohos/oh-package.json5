@@ -1,0 +1,8 @@
+{
+  "name": "mgread_ohos_native_runtime",
+  "version": "0.1.0",
+  "description": "MgRead optional OHOS Native/Rust Runtime bridge",
+  "main": "Index.ets",
+  "license": "Apache-2.0",
+  "dependencies": {}
+}
