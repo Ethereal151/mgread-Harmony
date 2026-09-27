@@ -13,6 +13,7 @@ $versionedNodeLibrary = Join-Path $BuildRoot 'lib\libnode.so.147'
 $nodeHeaders = Join-Path $BuildRoot 'include\node'
 $nodeSourceHeader = Join-Path $SourceRoot 'src\node.h'
 $v8Headers = Join-Path $SourceRoot 'deps\v8\include'
+$sourceLocationCompat = Join-Path $packageRoot '..\mg_read_node_runtime\tools\ohos-compat\source_location'
 
 if (-not (Test-Path -LiteralPath $nodeLibrary -PathType Leaf)) {
   if (Test-Path -LiteralPath $versionedNodeLibrary -PathType Leaf) {
@@ -29,6 +30,9 @@ if (-not (Test-Path -LiteralPath $nodeSourceHeader -PathType Leaf)) {
 }
 if (-not (Test-Path -LiteralPath $v8Headers -PathType Container)) {
   throw "V8 headers not found: $v8Headers"
+}
+if (-not (Test-Path -LiteralPath $sourceLocationCompat -PathType Leaf)) {
+  throw "OHOS source_location compatibility header not found: $sourceLocationCompat"
 }
 
 New-Item -ItemType Directory -Force -Path $nodeDestination, $sourceDestination | Out-Null
@@ -52,5 +56,6 @@ Copy-Item -LiteralPath $nodeHeaders -Destination (Join-Path $nodeDestination 'in
 Copy-Item -LiteralPath (Join-Path $SourceRoot 'src') -Destination $sourceDestination -Recurse -Force
 New-Item -ItemType Directory -Force -Path (Join-Path $sourceDestination 'deps\v8') | Out-Null
 Copy-Item -LiteralPath $v8Headers -Destination (Join-Path $sourceDestination 'deps\v8\include') -Recurse -Force
+Copy-Item -LiteralPath $sourceLocationCompat -Destination (Join-Path $sourceDestination 'source_location') -Force
 
 Write-Host "Staged Node 26.10.0 OpenHarmony arm64 runtime into $nodeDestination"

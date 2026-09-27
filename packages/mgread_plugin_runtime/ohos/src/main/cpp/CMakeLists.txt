@@ -37,7 +37,12 @@ else()
   endif()
   add_library(mgread_node_host SHARED mgread_node_host.cpp)
   target_include_directories(mgread_node_host PRIVATE
+    "${MGREAD_NODE_SOURCE_ROOT}"
     "${MGREAD_NODE_SOURCE_ROOT}/src"
+    # The Node 26.10.0 source archive keeps the matching V8 public headers
+    # under deps/v8/include/include; this must precede the compatibility copy
+    # at deps/v8/include or node.h sees the pre-Wrappable API.
+    "${MGREAD_NODE_SOURCE_ROOT}/deps/v8/include/include"
     "${MGREAD_NODE_SOURCE_ROOT}/deps/v8/include"
     "${MGREAD_NODE_ROOT}/include/node")
   target_link_libraries(mgread_node_host PRIVATE

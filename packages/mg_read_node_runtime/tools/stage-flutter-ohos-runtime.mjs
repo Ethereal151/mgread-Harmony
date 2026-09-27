@@ -41,6 +41,21 @@ await rm(defaultPluginsRoot, { force: true, recursive: true });
 await mkdir(assetRoot, { recursive: true });
 await writeFile(resolve(assetRoot, "package.json"), '{\n  "type": "module"\n}\n');
 await cp(resolve(runtimeRoot, "dist"), assetDist, { recursive: true });
+
+// The shared Runtime Core is compiled from the desktop source tree, whose
+// launcher is intentionally pinned to Node 24. OHOS ships a separate native
+// Node 26.10.0 host, so patch only the copied OHOS metadata before packaging;
+// the desktop dist remains unchanged.
+const ohosRuntimeVersionModule = resolve(assetDist, "runtime-version.js");
+const desktopRuntimeVersionSource = await readFile(ohosRuntimeVersionModule, "utf8");
+const ohosRuntimeVersionSource = desktopRuntimeVersionSource.replaceAll(
+  '"24.16.0"',
+  '"26.10.0"',
+);
+if (ohosRuntimeVersionSource === desktopRuntimeVersionSource) {
+  throw new Error("OHOS Runtime version metadata did not contain Node 24.16.0.");
+}
+await writeFile(ohosRuntimeVersionModule, ohosRuntimeVersionSource);
 const assetFingerprint = await directoryFingerprint(assetDist);
 const runtimeAssetVersion = `${packageJson.version}-${assetFingerprint}`;
 await writeFile(resolve(assetRoot, "runtime-version.txt"), `${runtimeAssetVersion}\n`);

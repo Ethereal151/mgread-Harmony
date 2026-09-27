@@ -16,6 +16,7 @@ work_root="${2:-${PWD}/.ohos-node-build}"
 ohos_sdk_root="${OHOS_SDK_ROOT:-}"
 ohos_llvm_root="${OHOS_LLVM_ROOT:-}"
 ohos_cxx_frontend="${OHOS_CXX_FRONTEND:-}"
+ohos_libcxx_include_root=""
 host_cc="${CC_host:-cc}"
 host_cxx="${CXX_host:-c++}"
 jobs="${JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 2)}"
@@ -38,6 +39,11 @@ if [[ -z "$ohos_sdk_root" || -z "$ohos_llvm_root" ]]; then
 fi
 if [[ ! -d "$ohos_sdk_root" || ! -d "$ohos_llvm_root" ]]; then
   echo "OHOS_SDK_ROOT and OHOS_LLVM_ROOT must point to existing directories." >&2
+  exit 2
+fi
+ohos_libcxx_include_root="${ohos_llvm_root}/include/libcxx-ohos/include/c++/v1"
+if [[ ! -d "$ohos_libcxx_include_root" ]]; then
+  echo "OpenHarmony libc++ headers not found: ${ohos_libcxx_include_root}" >&2
   exit 2
 fi
 
@@ -83,7 +89,7 @@ make_cxx_frontend_wrapper() {
     '    compile=1' \
     '  fi' \
     'done' \
-    "if [[ \"\$compile\" == 1 ]]; then exec \"${frontend_path}\" --target=aarch64-unknown-linux-ohos --sysroot=\"${ohos_sdk_root}/native/sysroot\" -stdlib=libc++ -D_LIBCPP_PROVIDES_DEFAULT_RUNE_TABLE -isystem /usr/include/c++/v1 \"\$@\"; fi" \
+    "if [[ \"\$compile\" == 1 ]]; then exec \"${frontend_path}\" --target=aarch64-unknown-linux-ohos --sysroot=\"${ohos_sdk_root}/native/sysroot\" -stdlib=libc++ -nostdinc++ -D_LIBCPP_PROVIDES_DEFAULT_RUNE_TABLE -isystem \"${compat_include_root}\" -isystem /usr/include/c++/v1 \"\$@\"; fi" \
     "exec \"${linker_path}\" \"\$@\"" \
     > "${toolchain_wrapper_root}/${wrapper_name}"
   chmod +x "${toolchain_wrapper_root}/${wrapper_name}"
@@ -114,12 +120,20 @@ fi
 
 mkdir -p "$install_root"
 mkdir -p "$compat_include_root"
+# Use the newer bundled libc++ headers for Node 26's ranges surface, while
+# matching the OHOS runtime's ABI inline namespace. The SDK's older headers
+# are still validated above and remain the source of the target sysroot.
+cp /usr/include/c++/v1/__config_site "${compat_include_root}/__config_site"
+sed -i 's/__1/__n1/g' "${compat_include_root}/__config_site"
 for compat_header in source_location ohos-cxx-compat.h; do
   if [[ ! -f "${compat_include_root}/${compat_header}" ]] ||
     ! cmp -s "${script_root}/ohos-compat/${compat_header}" "${compat_include_root}/${compat_header}"; then
     cp "${script_root}/ohos-compat/${compat_header}" "${compat_include_root}/${compat_header}"
   fi
 done
+mkdir -p "${compat_include_root}/__support/musl"
+cp "${script_root}/ohos-compat/__support/musl/xlocale.h" \
+  "${compat_include_root}/__support/musl/xlocale.h"
 
 # Node 26.10.0's bundled ada header has a comparator that mutates local
 # decoding state but omits the reference capture required by Clang. Keep this
@@ -135,6 +149,26 @@ if [[ -f "$ada_header" ]]; then
     exit 1
   fi
 fi
+
+# The OHOS SDK libc++ shipped with the supported DevEco toolchain does not
+# provide Node 26's ranges view aliases. Keep the compatibility change local to
+# this generated Node source tree: builtin ids are only consumed as an
+# iterable and then converted to a JavaScript array, so a vector is equivalent
+# here and avoids carrying a second ranges implementation.
+builtins_header="${source_root}/src/node_builtins.h"
+builtins_source="${source_root}/src/node_builtins.cc"
+util_header="${source_root}/src/util.h"
+util_inline="${source_root}/src/util-inl.h"
+if grep -Fq 'std::ranges::keys_view' "$builtins_header"; then
+  perl -0pi -e \
+    's/\[\[nodiscard\]\] std::ranges::keys_view<\n\s*std::ranges::ref_view<const BuiltinSourceMap>>\n\s*GetBuiltinIds\(\) const;/[[nodiscard]] std::vector<std::string> GetBuiltinIds() const;/s' \
+    "$builtins_header"
+  perl -0pi -e \
+    's/std::ranges::keys_view<std::ranges::ref_view<const BuiltinSourceMap>>\nBuiltinLoader::GetBuiltinIds\(\) const \{\n  return std::views::keys\(\*source_\.read\(\)\);\n\}/std::vector<std::string> BuiltinLoader::GetBuiltinIds() const {\n  std::vector<std::string> ids;\n  const auto\& sources = *source_.read();\n  ids.reserve(sources.size());\n  for (const auto\& entry : sources) ids.push_back(entry.first);\n  return ids;\n}/s' \
+    "$builtins_source"
+fi
+sed -i 's/std::ranges::elements_view<T, U>/std::vector<T>/g' \
+  "$util_header" "$util_inline"
 
 export PATH="${ohos_llvm_root}/bin:${PATH}"
 export CC="${clang_path} -fno-emulated-tls"

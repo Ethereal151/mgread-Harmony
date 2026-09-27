@@ -139,7 +139,7 @@ Release 包约为 175 MiB。旧的 `build/ohos/hap/entry-default-signed.hap` 可
 
 2026-09-21 使用 DevEco IP 设备 `192.168.3.48:45975`（`PLA-AL10`、HarmonyOS `7.0.0.105`、API 26、`arm64-v8a`）完成以下直接验收：
 
-- `integration_test/ohos_runtime_smoke_test.dart`：此前以 Node 24.16.0 arm64 host 完成 Runtime ping、Network Kit 地址和 9 项 OHOS 产品能力状态断言；切换 Node 26.10.0 后待重跑；
+- `integration_test/ohos_runtime_smoke_test.dart`：Node 26.10.0 arm64 host 已完成 Runtime ping、Network Kit 地址和 OHOS 产品能力状态断言；HAP 重新构建、安装和启动通过；
 - `integration_test/ohos_runtime_lifecycle_test.dart`：同一 arm64 真机完成原生 Runtime `restart` 后的 Facade 恢复 ping，并校验两轮生命周期诊断；测试专用 `debugDispose()` 不作为真机证据，因为它会关闭 Flutter 调试通道；
 - `integration_test/ohos_browser_session_smoke_test.dart`：ArkWeb 页面打开、导航和 HTML 获取通过；
 - `integration_test/ohos_stage2_runtime_arkweb_test.dart`：5 个本地 fixture 的安装、发现、搜索、详情、目录、正文、资源代理、Cookie/JS、`interaction_required` 恢复、受控长耗时调用取消后的 `cancelled`/后续调用恢复和卸载后列表确认通过；这不是 5 个真实外部数据源的替代证据；
@@ -168,7 +168,7 @@ Release 包约为 175 MiB。旧的 `build/ohos/hap/entry-default-signed.hap` 可
 
 ## 已知限制
 
-上游 commit 使用 Git LFS 管理 Node Runtime。当前远端对 Darwin arm64 和 Windows x64 runtime 二进制返回缺失对象（404），因此拉取基线时使用了 `GIT_LFS_SKIP_SMUDGE=1`。OHOS arm64 Node 24.16.0 宿主已在当前受控设备完成 ping 和 fixture 链路验证；现行 OHOS 版本已切换为 Node 26.10.0，升级后的真机证据待重跑；x86_64 仍保留明确 stub，真实外部数据源验收前不能把 OHOS 在线能力标为发布完成。
+上游 commit 使用 Git LFS 管理 Node Runtime。当前远端对 Darwin arm64 和 Windows x64 runtime 二进制返回缺失对象（404），因此拉取基线时使用了 `GIT_LFS_SKIP_SMUDGE=1`。OHOS arm64 Node 26.10.0 宿主已在当前受控设备完成 HAP 构建、安装、启动和 Runtime ping 验证；x86_64 仍保留明确 stub，真实外部数据源验收前不能把 OHOS 在线能力标为发布完成。
 
 ## 阶段 2～4 代码适配记录
 
