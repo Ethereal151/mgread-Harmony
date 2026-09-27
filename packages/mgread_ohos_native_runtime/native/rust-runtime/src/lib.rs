@@ -383,4 +383,41 @@ mod tests {
         assert_eq!(unsafe { mgread_runtime_invoke(runtime, request.as_ptr(), &mut response) }, 0);
         unsafe { mgread_runtime_free_string(response); mgread_runtime_free(runtime); }
     }
+
+    #[test]
+    #[ignore = "requires live access to www.alicesw.com"]
+    fn live_alice_source_chain_is_executable() {
+        fn call(method: &str, request: Value) -> Value {
+            let envelope = json!({"requestId":"live","method":method,"request":request});
+            let response = source_invoke(&envelope.to_string(), || false, None)
+                .expect("live Alice source request");
+            let value: Value = serde_json::from_str(&response).expect("valid source JSON");
+            assert_eq!(value["ok"], true);
+            assert_eq!(value["sourceId"], "org.mgread.aisishuwu.native");
+            value["value"].clone()
+        }
+
+        let root = call(
+            "discover",
+            json!({"target":null,"cursor":null,"collectionId":null,"pageSize":12}),
+        );
+        let items = root["document"]["components"][0]["items"]
+            .as_array()
+            .expect("discovery items");
+        let content = items[0]["content"].clone();
+        let id = content["id"].as_str().expect("content id").to_owned();
+        let title = content["title"].as_str().expect("content title").to_owned();
+        let search = call("search", json!({"query":title,"cursor":null,"pageSize":10}));
+        assert!(!search["items"].as_array().expect("search items").is_empty());
+        let detail = call("getDetail", json!({"id":id}));
+        assert_eq!(detail["id"], id);
+        let chapters = call("getChapters", json!({"id":id}));
+        let chapter = chapters["items"].as_array().expect("chapters")[0].clone();
+        let body = call(
+            "getContent",
+            json!({"id":id,"chapterId":chapter["id"].clone()}),
+        );
+        assert_eq!(body["contentKind"], "novel");
+        assert!(!body["text"].as_str().expect("novel text").trim().is_empty());
+    }
 }
