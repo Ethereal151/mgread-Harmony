@@ -22,7 +22,10 @@ fn attr(root: ElementRef<'_>, css: &str, name: &str) -> Option<String> {
         .find_map(|e| e.value().attr(name).map(str::to_string))
 }
 pub fn page(body: &str) -> Result<Html> {
-    if body.contains("访问异常，请稍后再试") {
+    if body.contains("访问异常，请稍后再试")
+        || body.contains("<title>访问验证</title>")
+        || body.contains("/home/chapter/check_code.html")
+    {
         return Err("source_access_blocked");
     }
     if body.len() > 4 * 1024 * 1024 {
@@ -415,5 +418,6 @@ mod tests {
     #[test]
     fn blocked_success_page_is_an_error() {
         assert!(page("访问异常，请稍后再试").is_err());
+        assert!(page("<title>访问验证</title><form action=\"/home/chapter/check_code.html\">").is_err());
     }
 }
