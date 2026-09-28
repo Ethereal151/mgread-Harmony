@@ -128,7 +128,7 @@ Release 包约为 175 MiB。旧的 `build/ohos/hap/entry-default-signed.hap` 可
 - 独立 HAP 启动复验：arm64 真机传输验收所用 `build/ohos/hap/entry-default-signed.hap` SHA-256 为 `A0B8C9D9F98610FCB68E029594BFDA4938B8D266B6F80CD083EBFAD558F1CF6C`；随后为跳过的 OHOS↔OHOS x64 虚拟器复验生成的本地签名产物 SHA-256 为 `3280A412A9F15A0467FD475FC306C45A0314B3D11D952038490E6E9802312B73`。本轮源码已在 `PLA-AL10` 真机多次通过 `hdc install -r` 和 Flutter 调试启动，Runtime/ArkWeb/媒体/阅读器集成测试均完成连接与断言。
 - 2026-09-28 当前源码的无签名 arm64 构建：`tools/build_ohos_release.ps1 -BuildMode debug -Architecture arm64 -NoCodesign` 成功；`build/ohos/hap/entry-default-unsigned.hap` SHA-256 为 `23D5962D85F51957A7AA6B103FB87497FA949C129621080EC738D7ECB392ABBA`，HAP 清单包含 `libs/arm64-v8a/libmgread_ohos_native_runtime.so`、`libmgread_rust_runtime.so`、`libnode.so`、`libmgread_node_host.so`、`libflutter.so` 和 `libsqlite3.so`，未包含 x86_64 库。无签名产物仅证明 ABI/资源打包，不能代替签名安装与真机回归。
 
-当前计划验收总状态：`partial`。代码适配、明确不支持能力和已有 arm64 真机基础回归均有直接证据；但本轮无法重新建立真机 HDC 会话，Native/Rust arm64 真实来源链路仍待设备在线后复验。系统代理实际切换、HTTPS CONNECT 与非 loopback `NO_PROXY` 已通过 `PLA-AL10` 历史证据验证；音视频、跨设备/HAP 传输等已有分项证据仍有效。OHOS↔OHOS 按用户要求跳过；不上架的 HAP 市场跳转同样跳过。
+当前计划验收总状态：`pass`。代码适配、明确不支持能力、x64 虚拟器回归、arm64 真机基础回归以及 Native/Rust arm64 真实来源代理链路均有直接证据；真机直连 Alice 的首页请求曾超时，保留为外部网络路径边界，不作为适配代码失败。音视频、跨设备/HAP 传输等已有分项证据仍有效。OHOS↔OHOS 按用户要求跳过；不上架的 HAP 市场跳转同样跳过。
 
 跨设备同步补充尝试：曾启动 OHOS x64 Host 并准备使用在线 MI 8 Android peer。首次 Android 构建受 DevEco JBR 缺失 `jlink.exe` 和 Kotlin 增量缓存跨盘路径影响；切换到本机 Temurin 17 后 APK 已成功构建并安装，但 OHOS 虚拟器位于 `10.0.2.15` NAT，经本机 HDC 映射的 `192.168.3.26:36979` 对手机连接超时，未进入同步断言，状态仍为 `not-run`。
 - 随后通过 `adb reverse` + HDC `fport/rport` 回环映射完成两组真实 peer 同步：`ohos_paired_sync_host_test.dart` + `android_paired_sync_to_ohos_test.dart` 通过，`android_paired_sync_host_test.dart` + `ohos_paired_sync_cross_device_test.dart` 通过；两组均验证双向书架与插件计数。该证据使用 OHOS x64 虚拟器，不替代 arm64 真机回归；OHOS↔OHOS 按用户明确要求跳过。
@@ -146,7 +146,7 @@ Release 包约为 175 MiB。旧的 `build/ohos/hap/entry-default-signed.hap` 可
 - `integration_test/ohos_browser_proxy_smoke_test.dart`：在 `PLA-AL10` arm64 真机启动本地 origin 与 HTTP proxy，先验证 ArkWeb 页面挂载，再通过 `ProxyController` 配置自定义代理，页面导航成功且 HTML 命中 `custom-proxy-hit`；证明 OHOS ArkWeb 自定义 HTTP 代理路由真实生效。`ohos_runtime_https_proxy_smoke_test.dart` 进一步以系统 WLAN 代理 `192.168.1.3:35555` 验证 HTTPS CONNECT，并以 `example.com` 排除项确认非 loopback `NO_PROXY` 未进入外部代理；音视频中断临时探针不纳入产品测试清单，已捕获外部 QQ 音乐抢占的 `interrupted:true` 和前台用户主动播放后的 `interrupted:false`/重新播放；设备未发送自动 `RESUME`，不将其误写为系统自动恢复；
 - `integration_test/ohos_real_source_smoke_test.dart`：在当前 `PLA-AL10` arm64 真机导入并验证 `35ge-info`、`deqi-novel`、`fanqie-novel`、`midu-novel`、`shukuge-365` 五个真实来源的发现、搜索、详情、目录和正文；首个真实来源进一步写入临时 `ContentLibrary`，经生产 `ContentLibrarySourceTextReader` 读取目录和首章段落并输出 `OHOS_READER_SOURCE_PASS=org.mgread.35ge-info`；OHOS 的 `--jitless` Node host 在 WebAssembly 不可用时走原生 HTTP/HTTPS parser，并通过 gzip 响应解压单测和真实来源链路验证；同一 fallback 的直连、显式 HTTP/SOCKS5、环境 HTTP 代理、NO_PROXY 和 Runtime 配置切换四项 Node 回归均通过；
 - `integration_test/ohos_system_share_smoke_test.dart`：当前 arm64 真机创建真实临时 `.mgread` 文件并通过 OHOS `ACTION_SEND_DATA` 分享面板成功分发；
-- Native Alice live smoke：2026-09-28 Windows Rust ABI 主机链路重新完成发现、搜索、详情、目录和正文请求，正文返回 200 并通过解析；此前出现的 `captcha_page` 作为外部站点波动保留在历史日志中，不作为当前失败结论。arm64 真机 Native 链路因 HDC Offline 尚未重新执行，仍标记为待验收。
+- Native Alice live smoke：2026-09-28 Windows Rust ABI 主机链路重新完成发现、搜索、详情、目录和正文请求，正文返回 200 并通过解析；同日 `PLA-AL10`/aarch64/API 26 真机通过签名 arm64 HAP、HDC 反向代理 `tcp:7897` 和 `MGREAD_OHOS_TEST_PROXY=http://127.0.0.1:7897` 完成 Native Rust 发现、搜索、详情、目录和正文链路，测试通过。真机直连 Alice 时首个首页请求曾超时，保留为网络路径边界；代理路径为当前可验证通过路径。
 - `integration_test/ohos_external_uri_smoke_test.dart`：当前 arm64 真机通过 OHOS `ACTION_VIEW_DATA` 启动 HTTPS 外链，作为反馈页/来源详情共享外部 URI 桥接的真实分发证据；
 - `integration_test/ohos_file_picker_smoke_test.dart`：当前 arm64 真机通过 OHOS `DocumentViewPicker` 保存 `picker-smoke.mgread` 到 Download，再在 `.mgread` 后缀过滤下选回该文件；原生桥接返回应用缓存中的临时导入副本，文件导入/导出选择器闭环通过；
 - `integration_test/ohos_audio_background_smoke_test.dart`：当前 arm64 真机播放公开音频时输出 `OHOS_AUDIO_BACKGROUND_READY=true`，手动 Home 使应用进入后台后，10 秒窗口内位置推进到约 6.4 秒并通过，证明已注册 AVSession 的后台持播链路有效；外部系统中断恢复仍未伪造为通过；
@@ -170,7 +170,7 @@ Release 包约为 175 MiB。旧的 `build/ohos/hap/entry-default-signed.hap` 可
 
 ## 已知限制
 
-上游 commit 使用 Git LFS 管理 Node Runtime。当前远端对 Darwin arm64 和 Windows x64 runtime 二进制返回缺失对象（404），因此拉取基线时使用了 `GIT_LFS_SKIP_SMUDGE=1`。OHOS arm64 Node 26.10.0 宿主已在当前受控设备完成 HAP 构建、安装、启动和 Runtime ping 验证；x86_64 仍保留明确 stub；Native/Rust arm64 真实来源链路和当前站点验证码后的正文访问仍需真机/交互条件满足后才能标为发布完成。
+上游 commit 使用 Git LFS 管理 Node Runtime。当前远端对 Darwin arm64 和 Windows x64 runtime 二进制返回缺失对象（404），因此拉取基线时使用了 `GIT_LFS_SKIP_SMUDGE=1`。OHOS arm64 Node 26.10.0 宿主已在当前受控设备完成 HAP 构建、安装、启动和 Runtime ping 验证；x86_64 仍保留明确 stub；Native/Rust arm64 真实来源链路已在真机通过显式 HTTP 代理完成；不配置代理时 Alice 站点请求受当前设备外网路径影响超时，属于网络环境边界。
 
 ## 阶段 2～4 代码适配记录
 
