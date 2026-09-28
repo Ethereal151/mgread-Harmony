@@ -272,7 +272,7 @@ pub unsafe extern "C" fn mgread_runtime_invoke(runtime: *mut mgread_runtime_hand
     if response_json.is_null() { return 1; }
     unsafe { *response_json = ptr::null_mut(); }
     let Some(runtime) = (unsafe { runtime.as_ref() }) else { return 1; };
-    let Some(request) = (unsafe { input(request_json) }) else { return 1; };
+    let Some(request) = input(request_json) else { return 1; };
     let request_id = json_string(request, "requestId").unwrap_or_default();
     let method = json_string(request, "method").unwrap_or_else(|| "runtime.fixed.invoke".to_owned());
     let (generation, started) = match runtime.runtime.state.lock() {
@@ -329,7 +329,7 @@ pub unsafe extern "C" fn mgread_runtime_last_error(response_json: *mut *mut c_ch
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn mgread_runtime_cancel(runtime: *mut mgread_runtime_handle, request_id: *const c_char) -> i32 {
     let Some(runtime) = (unsafe { runtime.as_ref() }) else { return 1; };
-    let Some(request_id) = (unsafe { input(request_id) }) else { return 1; };
+    let Some(request_id) = input(request_id) else { return 1; };
     if request_id.is_empty() { return 1; }
     let Ok(mut state) = runtime.runtime.state.lock() else { return 8; };
     if !state.started { return 2; }
