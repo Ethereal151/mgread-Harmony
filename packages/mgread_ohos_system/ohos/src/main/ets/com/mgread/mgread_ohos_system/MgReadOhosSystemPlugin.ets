@@ -339,7 +339,15 @@ export default class MgReadOhosSystemPlugin implements FlutterPlugin, MethodCall
       })
       result.success(true)
     } catch (error) {
-      result.error('share_failed', this.errorMessage(error), null)
+      // OpenHarmony x64 emulator images may not ship a share target. Keep the
+      // bool API predictable in that environment; HarmonyOS devices with a
+      // registered ACTION_SEND_DATA target still complete the request above.
+      const message = this.errorMessage(error)
+      if (message.includes('No matching ability')) {
+        result.success(false)
+        return
+      }
+      result.error('share_failed', message, null)
     }
   }
 

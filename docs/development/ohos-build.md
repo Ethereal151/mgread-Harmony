@@ -165,6 +165,7 @@ Release 包约为 175 MiB。旧的 `build/ohos/hap/entry-default-signed.hap` 可
 - `hdc install -r` 安装成功，`aa start -a EntryAbility -b com.ohos.mgread` 启动成功，应用进程保持存活；
 - `hdc snapshot_display` 截图显示首页正常渲染；启动日志未出现 `mgread_ohos_media` 或 `screen_brightness_ohos` 原生插件错误；
 - Dart 能力测试和局域网扫码页测试通过。模拟器只证明安装、启动和页面渲染；本机已在 `PLA-AL10`（HarmonyOS `7.0.0.105`、API 26、`arm64-v8a`）上验证 HAP 安装、启动、ScanKit 系统扫码 UI 拉起、扫码页取消回传和 ScanKit 进程退出。
+- x64 OpenHarmony 虚拟器镜像未注册 `ohos.want.action.sendData` 接收能力；分享桥接在该环境返回稳定 `false`，不会抛出未处理异常；arm64 HarmonyOS 真机仍按上面的真实分享面板证据返回 `true`。
 
 ## 已知限制
 
