@@ -65,6 +65,7 @@ final class _AppSystemUiStyleState extends State<AppSystemUiStyle> with WidgetsB
     // Subscribe to route and tab visibility as well as theme changes. A page
     // kept alive behind a reader/player must not change the foreground bars.
     ModalRoute.of(context);
+    // ignore: deprecated_member_use
     TickerMode.of(context);
     Theme.of(context);
     _scheduleNativeSync();
@@ -75,6 +76,7 @@ final class _AppSystemUiStyleState extends State<AppSystemUiStyle> with WidgetsB
     _syncScheduled = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _syncScheduled = false;
+      // ignore: deprecated_member_use
       if (!mounted || !TickerMode.of(context) || ModalRoute.of(context)?.isCurrent == false) return;
       final lifecycle = WidgetsBinding.instance.lifecycleState;
       if (lifecycle != null && lifecycle != AppLifecycleState.resumed) return;

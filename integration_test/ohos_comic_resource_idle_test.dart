@@ -1,11 +1,11 @@
 /// Exercises the native OHOS event loop after getContent has returned. All
 /// images come from a local fixture; no external source or periodic Runtime
 /// ping may keep Node alive while the reader downloads the response bodies.
+library;
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
-
 import 'package:crypto/crypto.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -20,22 +20,17 @@ const _pageCount = 4;
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('OHOS serves comic images while the Runtime bridge is idle', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('OHOS serves comic images while the Runtime bridge is idle', (WidgetTester tester) async {
     if (Platform.operatingSystem != 'ohos') return;
     await tester.runAsync(() async {
-      final png = base64Decode(
-        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aXioAAAAASUVORK5CYII=',
-      );
+      final png = base64Decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aXioAAAAASUVORK5CYII=');
       final upstream = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
       final runtime = PluginRuntime();
       final receivedPaths = <String>[];
       final upstreamErrors = <Object>[];
       upstream.listen((request) async {
         try {
-          if (request.headers.value(HttpHeaders.refererHeader) != _referer ||
-              request.headers.value('x-mgread-fixture') != 'comic-idle') {
+          if (request.headers.value(HttpHeaders.refererHeader) != _referer || request.headers.value('x-mgread-fixture') != 'comic-idle') {
             request.response.statusCode = HttpStatus.forbidden;
           } else {
             receivedPaths.add(request.uri.path);
@@ -54,9 +49,7 @@ void main() {
       });
       addTearDown(() async {
         try {
-          await runtime.invoke(
-            const UninstallPluginInvocation(pluginId: _pluginId),
-          );
+          await runtime.invoke(const UninstallPluginInvocation(pluginId: _pluginId));
         } finally {
           await upstream.close(force: true);
           await runtime.debugDispose();
@@ -64,36 +57,34 @@ void main() {
       });
 
       final bytes = _fixtureBytes(upstream.port);
-      final installed = await runtime.importPluginArtifacts([
-        (
-          artifact: PluginTransferArtifact(
-            bytes: bytes.length,
-            developmentFingerprint: null,
-            developmentRevision: null,
-            format: PluginArtifactFormat.singleFile,
-            pluginId: _pluginId,
-            provenance: PluginArtifactProvenance.installed,
-            checksum: _crc32(bytes),
-            version: '0.1.0',
+      final installed = await runtime.importPluginArtifacts(
+        [
+          (
+            artifact: PluginTransferArtifact(
+              bytes: bytes.length,
+              developmentFingerprint: null,
+              developmentRevision: null,
+              format: PluginArtifactFormat.singleFile,
+              pluginId: _pluginId,
+              provenance: PluginArtifactProvenance.installed,
+              checksum: _crc32(bytes),
+              version: '0.1.0',
+            ),
+            bytes: Stream<List<int>>.value(bytes),
           ),
-          bytes: Stream<List<int>>.value(bytes),
-        ),
-      ], forceUpgradePluginIds: <String>{_pluginId});
+        ],
+        forceUpgradePluginIds: <String>{_pluginId},
+      );
       expect(installed.single.status, PluginTransferImportStatus.installed);
 
       // Repeat after a core restart: the resource origin changes and the
       // native wakeup handle must remain usable for the same host thread.
       for (var round = 0; round < 2; round++) {
         if (round != 0) {
-          await const MethodChannel('mgread_plugin_runtime/ohos')
-              .invokeMethod<String>('restart');
+          await const MethodChannel('mgread_plugin_runtime/ohos').invokeMethod<String>('restart');
         }
         final content = await runtime.invoke(
-          const SourceContentInvocation(
-            pluginId: _pluginId,
-            id: 'comic-fixture',
-            chapterId: 'chapter-1',
-          ),
+          const SourceContentInvocation(pluginId: _pluginId, id: 'comic-fixture', chapterId: 'chapter-1'),
         );
         expect(content.contentKind, PluginContentKind.manga);
         expect(content.pages, hasLength(_pageCount));
@@ -117,9 +108,7 @@ void main() {
 
         // A new control task must also wake the idle libuv poll promptly.
         await Future<void>.delayed(const Duration(milliseconds: 100));
-        final ping = await runtime
-            .invoke(const RuntimePingInvocation())
-            .timeout(const Duration(seconds: 5));
+        final ping = await runtime.invoke(const RuntimePingInvocation()).timeout(const Duration(seconds: 5));
         expect(ping.isHealthy, isTrue);
       }
     });
@@ -171,9 +160,7 @@ export function getContent(request) {
     'descriptor': descriptor,
     'formatVersion': 1,
   };
-  final payload = base64Url
-      .encode(utf8.encode(_canonicalJson(envelope)))
-      .replaceAll('=', '');
+  final payload = base64Url.encode(utf8.encode(_canonicalJson(envelope))).replaceAll('=', '');
   final header = utf8.encode('// @mgread-plugin-v1 $payload\n');
   return Uint8List.fromList(<int>[...header, ...code]);
 }
