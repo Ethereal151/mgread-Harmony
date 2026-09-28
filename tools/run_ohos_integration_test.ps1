@@ -7,7 +7,8 @@ param(
   [string]$TestPath,
   [string]$DeviceId = '127.0.0.1:5555',
   [ValidateSet('arm64', 'x64')]
-  [string]$Architecture = 'arm64'
+  [string]$Architecture = 'arm64',
+  [string[]]$DartDefine = @()
 )
 
 $ErrorActionPreference = 'Stop'
@@ -72,7 +73,11 @@ try {
   Set-Content -LiteralPath $entryBuildProfile -Value $updatedBuildProfile -Encoding utf8
 
   Write-Host "Running OHOS $Architecture integration test on ${DeviceId}: $TestPath"
-  & flutter test $TestPath -d $DeviceId --no-pub
+  $flutterArguments = @('test', $TestPath, '-d', $DeviceId, '--no-pub')
+  foreach ($define in $DartDefine) {
+    $flutterArguments += "--dart-define=$define"
+  }
+  & flutter @flutterArguments
   if ($LASTEXITCODE -ne 0) {
     throw "Flutter integration test failed with exit code $LASTEXITCODE"
   }
