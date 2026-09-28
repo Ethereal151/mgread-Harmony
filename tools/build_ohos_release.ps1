@@ -25,6 +25,31 @@ $temporaryRoot = Join-Path ([IO.Path]::GetTempPath()) "mgread-ohos-release-$PID"
 $backupPubspec = Join-Path $temporaryRoot 'mgread_plugin_runtime.pubspec.yaml'
 $backupEntryPackage = Join-Path $temporaryRoot 'entry.oh-package.json5'
 $backupEntryBuildProfile = Join-Path $temporaryRoot 'entry.build-profile.json5'
+$backupPackageMetadata = Join-Path $temporaryRoot 'package-metadata'
+
+$packagesRoot = Join-Path $projectRoot 'packages'
+$packageMetadataFiles = @()
+if (Test-Path -LiteralPath $packagesRoot -PathType Container) {
+  $packageMetadataFiles = @(
+    Get-ChildItem -LiteralPath $packagesRoot -Recurse -File |
+      Where-Object { $_.Name -in @('BuildProfile.ets', 'oh-package-lock.json5') }
+  )
+}
+
+function Remove-StaleNativeBuildModeMetadata {
+  $packagesRoot = Join-Path $projectRoot 'packages'
+  if (-not (Test-Path -LiteralPath $packagesRoot -PathType Container)) {
+    return
+  }
+  $metadataFiles = Get-ChildItem -LiteralPath $packagesRoot -Recurse -File -Filter 'build_info.json' |
+    Where-Object {
+      $_.FullName -match '\\ohos\\build\\default\\intermediates\\build_info\\default\\meta\\build_info\.json$'
+    }
+  foreach ($metadataFile in $metadataFiles) {
+    Remove-Item -LiteralPath $metadataFile.FullName -Force
+    Write-Host "Removed stale OHOS native build-mode metadata: $($metadataFile.FullName)"
+  }
+}
 
 if (-not (Test-Path -LiteralPath $runtimePubspec -PathType Leaf)) {
   throw "Runtime pubspec not found: $runtimePubspec"
@@ -40,6 +65,12 @@ New-Item -ItemType Directory -Force -Path $temporaryRoot | Out-Null
 Copy-Item -LiteralPath $runtimePubspec -Destination $backupPubspec -Force
 Copy-Item -LiteralPath $entryPackage -Destination $backupEntryPackage -Force
 Copy-Item -LiteralPath $entryBuildProfile -Destination $backupEntryBuildProfile -Force
+foreach ($metadataFile in $packageMetadataFiles) {
+  $relativePath = $metadataFile.FullName.Substring($projectRoot.Length + 1)
+  $backupPath = Join-Path $backupPackageMetadata $relativePath
+  New-Item -ItemType Directory -Force -Path (Split-Path -Parent $backupPath) | Out-Null
+  Copy-Item -LiteralPath $metadataFile.FullName -Destination $backupPath -Force
+}
 
 try {
   $pubspec = Get-Content -LiteralPath $runtimePubspec -Raw
@@ -88,6 +119,13 @@ try {
   )
   Set-Content -LiteralPath $entryBuildProfile -Value $updatedBuildProfile -Encoding utf8
 
+  # The DevEco Hvigor version bundled with the current SDK calls
+  # fs.rmdirSync(path, { recursive: true }) when this metadata records a
+  # different build mode. Node 26 rejects that removed option. Removing the
+  # generated metadata makes Hvigor configure/build the existing CMake trees
+  # without entering that broken mode-switch cleanup path.
+  Remove-StaleNativeBuildModeMetadata
+
   $flutterArguments = 'build', 'hap', "--$BuildMode", '--target-platform', $targetPlatform, '--no-pub'
   if ($NoCodesign) {
     $flutterArguments += '--no-codesign'
@@ -135,6 +173,14 @@ try {
   Copy-Item -LiteralPath $backupPubspec -Destination $runtimePubspec -Force
   Copy-Item -LiteralPath $backupEntryPackage -Destination $entryPackage -Force
   Copy-Item -LiteralPath $backupEntryBuildProfile -Destination $entryBuildProfile -Force
+  if (Test-Path -LiteralPath $backupPackageMetadata -PathType Container) {
+    foreach ($backupFile in (Get-ChildItem -LiteralPath $backupPackageMetadata -Recurse -File)) {
+      $relativePath = $backupFile.FullName.Substring($backupPackageMetadata.Length + 1)
+      $destination = Join-Path $projectRoot $relativePath
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $destination) | Out-Null
+      Copy-Item -LiteralPath $backupFile.FullName -Destination $destination -Force
+    }
+  }
   Remove-Item -LiteralPath $temporaryRoot -Recurse -Force -ErrorAction SilentlyContinue
   Write-Host 'Restored temporary OHOS build configuration.'
 }

@@ -2,8 +2,12 @@ cmake_minimum_required(VERSION 3.16)
 project(mgread_ohos_native_runtime)
 
 find_path(OHOS_NAPI_INCLUDE napi/native_api.h
-  PATHS "$ENV{OHOS_SDK_ROOT}/native/sysroot/usr/include"
-        "$ENV{DEVECO_SDK_HOME}/native/sysroot/usr/include"
+  PATHS
+    "$ENV{OHOS_SDK_ROOT}/native/sysroot/usr/include"
+    "$ENV{HOS_SDK_HOME}/native/sysroot/usr/include"
+    "$ENV{OHOS_SDK_HOME}/native/sysroot/usr/include"
+    "$ENV{DEVECO_SDK_HOME}/native/sysroot/usr/include"
+    "${CMAKE_SYSROOT}/usr/include"
   NO_DEFAULT_PATH)
 if(NOT OHOS_NAPI_INCLUDE)
   message(FATAL_ERROR "Could not locate OpenHarmony napi/native_api.h")

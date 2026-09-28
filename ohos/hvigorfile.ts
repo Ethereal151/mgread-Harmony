@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path'
-import { appTasks, OhosAppContext, OhosHarContext, OhosHapContext, OhosPluginId } from '@ohos/hvigor-ohos-plugin';
+import { appTasks } from '@ohos/hvigor-ohos-plugin';
 import { hvigor, HvigorNode, HvigorPlugin } from '@ohos/hvigor';
 import { flutterHvigorPlugin } from 'flutter-hvigor-plugin';
 import { bridgeCrossDrivePlugins } from './flutter_ohos_plugin_bridge';
@@ -45,27 +45,8 @@ const singleArchitectureFlutterPlugin: HvigorPlugin = {
     pluginId: 'mgread-single-architecture-flutter',
     apply(rootNode: HvigorNode) {
         const selectedArchitecture = selectedFlutterNativeArchitecture();
-        const unselectedArchitecture: FlutterNativeArchitecture = selectedArchitecture === 'x86_64'
-            ? 'arm64_v8a'
-            : 'x86_64';
-        rootNode.afterNodeEvaluate(node => {
-            const appContext = node.getContext(OhosPluginId.OHOS_APP_PLUGIN) as OhosAppContext;
-            const overrides = appContext.getOverrides() ?? {};
-            delete overrides[`flutter_native_${unselectedArchitecture}`];
-            appContext.setOverrides(overrides);
-        });
         rootNode.subNodes(subNode => {
             subNode.afterNodeEvaluate(node => {
-                const hapContext = node.getContext(OhosPluginId.OHOS_HAP_PLUGIN) as OhosHapContext | undefined;
-                const harContext = node.getContext(OhosPluginId.OHOS_HAR_PLUGIN) as OhosHarContext | undefined;
-                const moduleContext = hapContext ?? harContext;
-                if (!moduleContext) {
-                    return;
-                }
-                const dependencies = moduleContext.getDependenciesOpt();
-                delete dependencies[`flutter_native_${unselectedArchitecture}`];
-                moduleContext.setDependenciesOpt(dependencies);
-
                 if (subNode.getNodeName() === 'entry') {
                     const flutterTask = node.getTaskByName('default@FlutterTask');
                     flutterTask?.afterRun(() => pruneNonOhosFlutterOutputs(
