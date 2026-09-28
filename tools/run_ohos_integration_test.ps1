@@ -21,6 +21,32 @@ $temporaryRoot = Join-Path ([IO.Path]::GetTempPath()) "mgread-ohos-integration-$
 $backupEntryPackage = Join-Path $temporaryRoot 'entry.oh-package.json5'
 $backupEntryBuildProfile = Join-Path $temporaryRoot 'entry.build-profile.json5'
 $backupEntryNativeLibraries = Join-Path $temporaryRoot 'libs'
+$backupPackageMetadata = Join-Path $temporaryRoot 'package-metadata'
+
+function Get-HdcForwardRules {
+  if (-not $hdcCommand) {
+    return @()
+  }
+  $rules = @()
+  foreach ($line in (& $hdcCommand.Source -t $DeviceId fport ls 2>$null)) {
+    $match = [regex]::Match([string]$line, '^\S+\s+(tcp:\d+)\s+(tcp:\d+)')
+    if ($match.Success) {
+      $rules += "$($match.Groups[1].Value)|$($match.Groups[2].Value)"
+    }
+  }
+  return $rules
+}
+
+$hdcCommand = Get-Command hdc -ErrorAction SilentlyContinue
+$initialHdcForwardRules = @(Get-HdcForwardRules)
+$packageMetadataFiles = @()
+$packagesRoot = Join-Path $projectRoot 'packages'
+if (Test-Path -LiteralPath $packagesRoot -PathType Container) {
+  $packageMetadataFiles = @(
+    Get-ChildItem -LiteralPath $packagesRoot -Recurse -File |
+      Where-Object { $_.Name -in @('BuildProfile.ets', 'oh-package-lock.json5') }
+  )
+}
 
 if (-not (Test-Path -LiteralPath $entryPackage -PathType Leaf)) {
   throw "OHOS entry package not found: $entryPackage"
@@ -35,6 +61,12 @@ if (-not (Test-Path -LiteralPath $TestPath -PathType Leaf)) {
 New-Item -ItemType Directory -Force -Path $temporaryRoot | Out-Null
 Copy-Item -LiteralPath $entryPackage -Destination $backupEntryPackage -Force
 Copy-Item -LiteralPath $entryBuildProfile -Destination $backupEntryBuildProfile -Force
+foreach ($metadataFile in $packageMetadataFiles) {
+  $relativePath = $metadataFile.FullName.Substring($projectRoot.Length + 1)
+  $backupPath = Join-Path $backupPackageMetadata $relativePath
+  New-Item -ItemType Directory -Force -Path (Split-Path -Parent $backupPath) | Out-Null
+  Copy-Item -LiteralPath $metadataFile.FullName -Destination $backupPath -Force
+}
 if (Test-Path -LiteralPath $entryNativeLibraries -PathType Container) {
   Copy-Item -LiteralPath $entryNativeLibraries -Destination $backupEntryNativeLibraries -Recurse -Force
 }
@@ -84,11 +116,25 @@ try {
 } finally {
   Copy-Item -LiteralPath $backupEntryPackage -Destination $entryPackage -Force
   Copy-Item -LiteralPath $backupEntryBuildProfile -Destination $entryBuildProfile -Force
+  if (Test-Path -LiteralPath $backupPackageMetadata -PathType Container) {
+    foreach ($backupFile in (Get-ChildItem -LiteralPath $backupPackageMetadata -Recurse -File)) {
+      $relativePath = $backupFile.FullName.Substring($backupPackageMetadata.Length + 1)
+      $destination = Join-Path $projectRoot $relativePath
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $destination) | Out-Null
+      Copy-Item -LiteralPath $backupFile.FullName -Destination $destination -Force
+    }
+  }
   if (Test-Path -LiteralPath $backupEntryNativeLibraries -PathType Container) {
     if (Test-Path -LiteralPath $entryNativeLibraries -PathType Container) {
       Remove-Item -LiteralPath $entryNativeLibraries -Recurse -Force
     }
     Copy-Item -LiteralPath $backupEntryNativeLibraries -Destination $entryNativeLibraries -Recurse -Force
+  }
+  foreach ($rule in (Get-HdcForwardRules)) {
+    if ($initialHdcForwardRules -notcontains $rule) {
+      $parts = $rule.Split('|')
+      & $hdcCommand.Source -t $DeviceId fport rm $parts[0] $parts[1] 2>$null | Out-Null
+    }
   }
   Remove-Item -LiteralPath $temporaryRoot -Recurse -Force -ErrorAction SilentlyContinue
   Write-Host 'Restored temporary OHOS integration-test configuration.'
