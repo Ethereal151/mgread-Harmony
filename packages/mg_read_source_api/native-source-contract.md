@@ -1,8 +1,8 @@
 # 原生来源公开边界
 
-唯一初始化入口 `mg_source_init_v3` 的固定返回布局由 `../mg_read_native_runtime/abi/lib.rs` 定义。
+唯一初始化入口 `mg_source_init_v3` 的固定返回布局由 [Alice 原生来源 ABI](../../plugins/sources/aisishuwu-native/src/lib.rs) 定义。
 新归档必须 `abi:3`；开发阶段直接替换旧版。没有 HostApi、invoke/cancel/release 或资源字节 ABI。
-完整时序见 [实现契约](../mg_read_native_runtime/IMPLEMENTATION_CONTRACT.md)。
+完整时序见 [Alice 原生来源实现](../../plugins/sources/aisishuwu-native/src/lib.rs)。
 
 - 原生插件在一个共享 worker 内按需初始化，随后以 HTTP `{method,params}` 接受六个来源方法。
   Node 与原生保持相同内容语义、稳定 id/target/cursor/chapterId 和强类型 Facade；SDK 校验预算、能力和资源归属。
