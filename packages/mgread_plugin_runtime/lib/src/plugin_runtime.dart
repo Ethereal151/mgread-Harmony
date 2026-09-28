@@ -181,7 +181,8 @@ final class PluginRuntime {
   /// Whether this Facade can install and execute native binary sources.
   bool get supportsNativeSources =>
       _supervisor is _HybridRuntimeSupervisor ||
-      _supervisor is _NativeRuntimeSupervisor;
+      _supervisor is _NativeRuntimeSupervisor ||
+      _supervisor is _OhosNativeRuntimeSupervisor;
 
   /// Creates or returns the process-scoped production Facade.
   ///
@@ -189,15 +190,19 @@ final class PluginRuntime {
   /// Android own both Node and native backends. The native-only
   /// define remains available for isolation and package acceptance builds.
   factory PluginRuntime() {
+    if (Platform.operatingSystem == 'ohos' &&
+        const bool.fromEnvironment('MGREAD_OHOS_NATIVE_RUNTIME')) {
+      return _nativeInstance ??= PluginRuntime._(
+        _OhosNativeRuntimeSupervisor(),
+      );
+    }
     if (const bool.fromEnvironment('MGREAD_NATIVE_RUNTIME')) {
       // OHOS currently ships only the Node host. Keep the native-only build
       // constructible so callers receive the typed fallback at capability
       // boundaries instead of failing during provider construction.
       if (Platform.operatingSystem == 'ohos') {
         return _nativeInstance ??= PluginRuntime._(
-          const _UnsupportedRuntimeSupervisor(
-            'The OHOS native Runtime is not staged; use the default Node Runtime.',
-          ),
+          _OhosNativeRuntimeSupervisor(),
         );
       }
       return _nativeInstance ??= PluginRuntime._(
@@ -424,6 +429,9 @@ final class PluginRuntime {
       return Platform.isAndroid
           ? supervisor.pickAndImportLocalPlugin()
           : importLocalPlugin();
+    }
+    if (supervisor is _OhosNativeRuntimeSupervisor) {
+      return supervisor.pickAndImportLocalPlugin();
     }
     throw const PluginRuntimeException(
       'unsupported',

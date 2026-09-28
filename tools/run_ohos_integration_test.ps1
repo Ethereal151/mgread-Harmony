@@ -13,6 +13,31 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+# Keep Flutter/Hvigor integration builds on the same compatible Node version
+# as the Release HAP builder. DevEco's current Hvigor still calls the removed
+# fs.rmdirSync(path, { recursive: true }) API, which fails under Node 24/26.
+$mgreadNodeRoot = 'D:\mgread-env\node-v20.19.5-win-x64'
+$mgreadNodeExecutable = Join-Path $mgreadNodeRoot 'node.exe'
+if (-not (Test-Path -LiteralPath $mgreadNodeExecutable -PathType Leaf)) {
+  throw "MgRead fixed Node toolchain is missing: $mgreadNodeExecutable"
+}
+$originalPath = $env:Path
+$env:Path = "$mgreadNodeRoot;$originalPath"
+$rustEnvironmentNames = @(
+  'CARGO_HOME',
+  'RUSTUP_HOME',
+  'OHOS_SDK_NATIVE',
+  'CARGO_TARGET_AARCH64_UNKNOWN_LINUX_OHOS_LINKER',
+  'CC_aarch64_unknown_linux_ohos',
+  'AR_aarch64_unknown_linux_ohos',
+  'MGREAD_RUST_RUNTIME_LIB',
+  'MGREAD_RUST_RUNTIME_INCLUDE'
+)
+$originalRustEnvironment = @{}
+foreach ($name in $rustEnvironmentNames) {
+  $originalRustEnvironment[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
+}
+
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $entryPackage = Join-Path $projectRoot 'ohos\entry\oh-package.json5'
 $entryBuildProfile = Join-Path $projectRoot 'ohos\entry\build-profile.json5'
@@ -22,6 +47,66 @@ $backupEntryPackage = Join-Path $temporaryRoot 'entry.oh-package.json5'
 $backupEntryBuildProfile = Join-Path $temporaryRoot 'entry.build-profile.json5'
 $backupEntryNativeLibraries = Join-Path $temporaryRoot 'libs'
 $backupPackageMetadata = Join-Path $temporaryRoot 'package-metadata'
+
+function Remove-StaleIntegrationBuildOutputs {
+  $generatedPaths = @(
+    (Join-Path $projectRoot 'ohos\entry\build'),
+    (Join-Path $projectRoot 'ohos\entry\.cxx'),
+    (Join-Path $projectRoot 'packages\mgread_ohos_native_runtime\ohos\build'),
+    (Join-Path $projectRoot 'packages\mgread_ohos_native_runtime\ohos\.cxx')
+  )
+  foreach ($generatedPath in $generatedPaths) {
+    if (Test-Path -LiteralPath $generatedPath) {
+      Remove-Item -LiteralPath $generatedPath -Recurse -Force
+      Write-Host "Removed stale OHOS integration output: $generatedPath"
+    }
+  }
+}
+
+function Build-OhosRustRuntime {
+  param([string]$TargetArchitecture)
+
+  if ($TargetArchitecture -ne 'arm64') {
+    return $null
+  }
+
+  $rustRoot = 'D:\rust'
+  $cargoExecutable = Join-Path $rustRoot 'cargo\bin\cargo.exe'
+  $rustToolchainBin = Join-Path $rustRoot 'rustup\toolchains\1.97.1-x86_64-pc-windows-msvc\bin'
+  $rustProject = Join-Path $projectRoot 'packages\mgread_ohos_native_runtime\native\rust-runtime'
+  $rustTarget = Join-Path $rustProject 'target\aarch64-unknown-linux-ohos\release\libmgread_rust_runtime.so'
+  $rustInclude = Join-Path $rustProject 'include'
+  $rustLinker = Join-Path $projectRoot 'packages\mgread_ohos_native_runtime\native\ohos-clang-linker.cmd'
+  $rustCompiler = Join-Path $projectRoot 'packages\mgread_ohos_native_runtime\native\ohos-clang-cc.cmd'
+
+  foreach ($requiredPath in @($cargoExecutable, $rustProject, $rustLinker, $rustCompiler, (Join-Path $rustInclude 'mgread_runtime.h'))) {
+    if (-not (Test-Path -LiteralPath $requiredPath)) {
+      throw "OHOS Rust runtime build input is missing: $requiredPath"
+    }
+  }
+
+  $env:CARGO_HOME = Join-Path $rustRoot 'cargo'
+  $env:RUSTUP_HOME = Join-Path $rustRoot 'rustup'
+  $env:Path = "$rustRoot\cargo\bin;$rustToolchainBin;$env:Path"
+  $env:OHOS_SDK_NATIVE = 'D:\DevEco Studio\sdk\default\openharmony\native'
+  $env:CARGO_TARGET_AARCH64_UNKNOWN_LINUX_OHOS_LINKER = $rustLinker
+  $env:CC_aarch64_unknown_linux_ohos = $rustCompiler
+  $env:AR_aarch64_unknown_linux_ohos = Join-Path $env:OHOS_SDK_NATIVE 'llvm\bin\llvm-ar.exe'
+
+  Push-Location $rustProject
+  try {
+    & $cargoExecutable build --locked --release --target aarch64-unknown-linux-ohos
+    if ($LASTEXITCODE -ne 0) {
+      throw "OHOS Rust runtime build failed with exit code $LASTEXITCODE"
+    }
+  } finally {
+    Pop-Location
+  }
+  if (-not (Test-Path -LiteralPath $rustTarget -PathType Leaf)) {
+    throw "OHOS Rust runtime build completed without producing: $rustTarget"
+  }
+  return @{ Library = $rustTarget; Include = $rustInclude }
+}
 
 function Get-HdcForwardRules {
   if (-not $hdcCommand) {
@@ -104,6 +189,14 @@ try {
   )
   Set-Content -LiteralPath $entryBuildProfile -Value $updatedBuildProfile -Encoding utf8
 
+  $rustRuntime = Build-OhosRustRuntime -TargetArchitecture $Architecture
+  if ($null -ne $rustRuntime) {
+    $env:MGREAD_RUST_RUNTIME_LIB = $rustRuntime.Library
+    $env:MGREAD_RUST_RUNTIME_INCLUDE = $rustRuntime.Include
+    Write-Host "OHOS Rust runtime: $($rustRuntime.Library)"
+  }
+  Remove-StaleIntegrationBuildOutputs
+
   Write-Host "Running OHOS $Architecture integration test on ${DeviceId}: $TestPath"
   $flutterArguments = @('test', $TestPath, '-d', $DeviceId, '--no-pub')
   foreach ($define in $DartDefine) {
@@ -114,6 +207,10 @@ try {
     throw "Flutter integration test failed with exit code $LASTEXITCODE"
   }
 } finally {
+  foreach ($name in $rustEnvironmentNames) {
+    [Environment]::SetEnvironmentVariable($name, $originalRustEnvironment[$name], 'Process')
+  }
+  $env:Path = $originalPath
   Copy-Item -LiteralPath $backupEntryPackage -Destination $entryPackage -Force
   Copy-Item -LiteralPath $backupEntryBuildProfile -Destination $entryBuildProfile -Force
   if (Test-Path -LiteralPath $backupPackageMetadata -PathType Container) {

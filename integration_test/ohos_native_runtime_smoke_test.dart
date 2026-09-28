@@ -14,9 +14,12 @@ void main() {
     final version = await channel.invokeMethod<String>('version');
     expect(version, startsWith('mgread-ohos-native-runtime/0.1.0 abi=1'));
 
-    expect(await channel.invokeMethod<int>('create', <String, Object?>{
-      'configJson': jsonEncode(<String, String>{'dataRoot': 'private'}),
-    }), 0);
+    expect(
+      await channel.invokeMethod<int>('create', <String, Object?>{
+        'configJson': jsonEncode(<String, String>{'dataRoot': 'private'}),
+      }),
+      0,
+    );
     expect(await channel.invokeMethod<int>('start'), 0);
 
     final response = await channel.invokeMethod<String>('invoke', <String, Object?>{
@@ -26,8 +29,8 @@ void main() {
     expect(response, contains('"method":"fixed"'));
 
     expect(await channel.invokeMethod<int>('cancel', <String, Object?>{'requestId': 'native-cancel'}), 0);
-    expect(
-      () => channel.invokeMethod<String>('invoke', <String, Object?>{
+    await expectLater(
+      channel.invokeMethod<String>('invoke', <String, Object?>{
         'requestJson': jsonEncode(<String, String>{'requestId': 'native-cancel', 'method': 'fixed'}),
       }),
       throwsA(isA<PlatformException>()),

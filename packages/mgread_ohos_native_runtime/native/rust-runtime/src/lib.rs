@@ -148,6 +148,7 @@ fn source_invoke(request_json: &str, cancelled: impl Fn() -> bool, proxy: Option
                     .get("value")
                     .cloned()
                     .ok_or(MGREAD_RUNTIME_PLUGIN_ERROR)?;
+                let value = strip_native_resources(value);
                 return serde_json::to_string(&json!({
                     "ok": true,
                     "engine": "ohos-native",
@@ -178,6 +179,23 @@ fn source_invoke(request_json: &str, cancelled: impl Fn() -> bool, proxy: Option
         }
     }
     Err(MGREAD_RUNTIME_TIMEOUT)
+}
+
+fn strip_native_resources(value: Value) -> Value {
+    match value {
+        Value::Object(mut object) => {
+            if object.contains_key("$resource") {
+                return Value::Null;
+            }
+            for child in object.values_mut() {
+                let current = std::mem::replace(child, Value::Null);
+                *child = strip_native_resources(current);
+            }
+            Value::Object(object)
+        }
+        Value::Array(values) => Value::Array(values.into_iter().map(strip_native_resources).collect()),
+        other => other,
+    }
 }
 
 fn resource_invoke(request_json: &str, cancelled: impl Fn() -> bool, proxy: Option<&str>) -> Result<String, i32> {

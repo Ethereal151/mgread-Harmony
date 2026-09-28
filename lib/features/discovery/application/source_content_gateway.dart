@@ -289,6 +289,10 @@ final class MgReadSourceContentGateway
     );
     final stopwatch = Stopwatch()..start();
     try {
+      // Source actions can be entered before the app-level warmup finishes.
+      // Await the same connection gate here so proxy configuration (including
+      // the OHOS native Rust handle) is applied before the first request.
+      await _loadRuntimeConnection();
       final result = await action();
       final count = resultCount(result);
       _endSpanSafely(

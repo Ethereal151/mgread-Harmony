@@ -25,6 +25,29 @@ function isInside(basePath: string, targetPath: string): boolean {
   )
 }
 
+function copyPluginTree(sourcePath: string, targetPath: string): void {
+  const sourceStat = fs.lstatSync(sourcePath)
+  if (sourceStat.isSymbolicLink()) {
+    fs.symlinkSync(fs.readlinkSync(sourcePath), targetPath)
+    return
+  }
+  if (!sourceStat.isDirectory()) {
+    fs.copyFileSync(sourcePath, targetPath)
+    return
+  }
+
+  fs.mkdirSync(targetPath, { recursive: true })
+  for (const entry of fs.readdirSync(sourcePath)) {
+    const sourceEntry = path.join(sourcePath, entry)
+    const relativeEntry = path.relative(sourcePath, sourceEntry)
+    if (relativeEntry.split(path.sep).some(part =>
+      part === 'build' || part === 'node_modules' || part === 'oh_modules')) {
+      continue
+    }
+    copyPluginTree(sourceEntry, path.join(targetPath, entry))
+  }
+}
+
 export function bridgeCrossDrivePlugins(): void {
   if (!fs.existsSync(pluginDependenciesPath)) {
     return
@@ -63,14 +86,7 @@ export function bridgeCrossDrivePlugins(): void {
           fs.rmSync(bridgePath, { recursive: true, force: true })
         }
       }
-      fs.cpSync(pluginRootPath, bridgePath, {
-        recursive: true,
-        filter: sourcePath => {
-          const relativePath = path.relative(pluginRootPath, sourcePath)
-          return !relativePath.split(path.sep).some(part =>
-            part === 'build' || part === 'node_modules' || part === 'oh_modules')
-        },
-      })
+      copyPluginTree(pluginRootPath, bridgePath)
       plugin.path = bridgePath
       changed = true
     } else if (isInside(pluginBridgePath, pluginRootPath) && plugin.path !== pluginRootPath) {

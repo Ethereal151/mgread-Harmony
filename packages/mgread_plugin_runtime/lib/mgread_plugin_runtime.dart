@@ -58,3 +58,4 @@ part 'src/runtime_error.dart';
 part 'src/wire_connection.dart';
 part 'src/native_supervisor_artifacts.dart';
 part 'src/hybrid_supervisor.dart';
+part 'src/ohos_native_supervisor.dart';

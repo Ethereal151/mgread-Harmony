@@ -64,6 +64,9 @@ class _PluginRuntimeHelpPageState extends ConsumerState<PluginRuntimeHelpPage> {
   Widget build(BuildContext context) {
     final bool canSelectDevelopmentDirectory = Platform.isWindows || Platform.isMacOS;
     final bool canOpenPrivateDirectory = Platform.isWindows || Platform.isMacOS;
+    final bool nativeRuntimeBuild =
+        const bool.fromEnvironment('MGREAD_NATIVE_RUNTIME') ||
+        (Platform.operatingSystem == 'ohos' && const bool.fromEnvironment('MGREAD_OHOS_NATIVE_RUNTIME'));
     return Scaffold(
       body: SafeArea(
         bottom: false,
@@ -89,7 +92,7 @@ class _PluginRuntimeHelpPageState extends ConsumerState<PluginRuntimeHelpPage> {
                     _HelpSection(
                       icon: Icons.auto_stories_outlined,
                       title: '管理数据源',
-                      body: const bool.fromEnvironment('MGREAD_NATIVE_RUNTIME')
+                      body: nativeRuntimeBuild
                           ? '点击“添加数据源”，选择原生 .mgplugin 文件导入；列表右侧开关控制启用状态。'
                           : Platform.isMacOS || const bool.fromEnvironment('MGREAD_NODE_ONLY')
                           ? '点击“添加数据源”，选择 Node 数据源并导入 .mgplugin.js 或 .mgplugin 文件；列表右侧开关控制启用状态。'

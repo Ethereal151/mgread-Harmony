@@ -15,6 +15,31 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+# Hvigor bundled with the installed DevEco SDK still calls the removed
+# fs.rmdirSync(path, { recursive: true }) API. Keep OHOS builds independent
+# from the user's global Node version by using the repository toolchain on D:.
+$mgreadNodeRoot = 'D:\mgread-env\node-v20.19.5-win-x64'
+$mgreadNodeExecutable = Join-Path $mgreadNodeRoot 'node.exe'
+if (-not (Test-Path -LiteralPath $mgreadNodeExecutable -PathType Leaf)) {
+  throw "MgRead fixed Node toolchain is missing: $mgreadNodeExecutable"
+}
+$originalPath = $env:Path
+$env:Path = "$mgreadNodeRoot;$originalPath"
+$rustEnvironmentNames = @(
+  'CARGO_HOME',
+  'RUSTUP_HOME',
+  'OHOS_SDK_NATIVE',
+  'CARGO_TARGET_AARCH64_UNKNOWN_LINUX_OHOS_LINKER',
+  'CC_aarch64_unknown_linux_ohos',
+  'AR_aarch64_unknown_linux_ohos',
+  'MGREAD_RUST_RUNTIME_LIB',
+  'MGREAD_RUST_RUNTIME_INCLUDE'
+)
+$originalRustEnvironment = @{}
+foreach ($name in $rustEnvironmentNames) {
+  $originalRustEnvironment[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
+}
+
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $runtimePubspec = Join-Path $projectRoot 'packages\mgread_plugin_runtime\pubspec.yaml'
 $entryPackage = Join-Path $projectRoot 'ohos\entry\oh-package.json5'
@@ -49,6 +74,67 @@ function Remove-StaleNativeBuildModeMetadata {
     Remove-Item -LiteralPath $metadataFile.FullName -Force
     Write-Host "Removed stale OHOS native build-mode metadata: $($metadataFile.FullName)"
   }
+}
+
+function Remove-StaleFlutterBuildOutputs {
+  $generatedPaths = @(
+    (Join-Path $projectRoot 'ohos\entry\build'),
+    (Join-Path $projectRoot 'ohos\entry\.cxx'),
+    (Join-Path $projectRoot 'packages\mgread_ohos_native_runtime\ohos\build'),
+    (Join-Path $projectRoot 'packages\mgread_ohos_native_runtime\ohos\.cxx'),
+    $hapDirectory
+  )
+  foreach ($generatedPath in $generatedPaths) {
+    if (Test-Path -LiteralPath $generatedPath) {
+      Remove-Item -LiteralPath $generatedPath -Recurse -Force
+      Write-Host "Removed stale OHOS Flutter output: $generatedPath"
+    }
+  }
+}
+
+function Build-OhosRustRuntime {
+  param([string]$TargetArchitecture)
+
+  if ($TargetArchitecture -ne 'arm64') {
+    return $null
+  }
+
+  $rustRoot = 'D:\rust'
+  $cargoExecutable = Join-Path $rustRoot 'cargo\bin\cargo.exe'
+  $rustToolchainBin = Join-Path $rustRoot 'rustup\toolchains\1.97.1-x86_64-pc-windows-msvc\bin'
+  $rustProject = Join-Path $projectRoot 'packages\mgread_ohos_native_runtime\native\rust-runtime'
+  $rustTarget = Join-Path $rustProject 'target\aarch64-unknown-linux-ohos\release\libmgread_rust_runtime.so'
+  $rustInclude = Join-Path $projectRoot 'packages\mgread_ohos_native_runtime\native\rust-runtime\include'
+  $rustLinker = Join-Path $projectRoot 'packages\mgread_ohos_native_runtime\native\ohos-clang-linker.cmd'
+  $rustCompiler = Join-Path $projectRoot 'packages\mgread_ohos_native_runtime\native\ohos-clang-cc.cmd'
+
+  foreach ($requiredPath in @($cargoExecutable, $rustProject, $rustLinker, $rustCompiler, (Join-Path $rustInclude 'mgread_runtime.h'))) {
+    if (-not (Test-Path -LiteralPath $requiredPath)) {
+      throw "OHOS Rust runtime build input is missing: $requiredPath"
+    }
+  }
+
+  $env:CARGO_HOME = Join-Path $rustRoot 'cargo'
+  $env:RUSTUP_HOME = Join-Path $rustRoot 'rustup'
+  $env:Path = "$rustRoot\cargo\bin;$rustToolchainBin;$env:Path"
+  $env:OHOS_SDK_NATIVE = 'D:\DevEco Studio\sdk\default\openharmony\native'
+  $env:CARGO_TARGET_AARCH64_UNKNOWN_LINUX_OHOS_LINKER = $rustLinker
+  $env:CC_aarch64_unknown_linux_ohos = $rustCompiler
+  $env:AR_aarch64_unknown_linux_ohos = Join-Path $env:OHOS_SDK_NATIVE 'llvm\bin\llvm-ar.exe'
+
+  Push-Location $rustProject
+  try {
+    & $cargoExecutable build --locked --release --target aarch64-unknown-linux-ohos
+    if ($LASTEXITCODE -ne 0) {
+      throw "OHOS Rust runtime build failed with exit code $LASTEXITCODE"
+    }
+  } finally {
+    Pop-Location
+  }
+  if (-not (Test-Path -LiteralPath $rustTarget -PathType Leaf)) {
+    throw "OHOS Rust runtime build completed without producing: $rustTarget"
+  }
+  return @{ Library = $rustTarget; Include = $rustInclude }
 }
 
 if (-not (Test-Path -LiteralPath $runtimePubspec -PathType Leaf)) {
@@ -126,7 +212,16 @@ try {
   # without entering that broken mode-switch cleanup path.
   Remove-StaleNativeBuildModeMetadata
 
-  $flutterArguments = 'build', 'hap', "--$BuildMode", '--target-platform', $targetPlatform, '--no-pub'
+  # Release HAPs use the accepted arm64 Rust source engine. The normal
+  # development build remains Node-backed unless this explicit opt-in is set.
+  $rustRuntime = Build-OhosRustRuntime -TargetArchitecture $Architecture
+  if ($null -ne $rustRuntime) {
+    $env:MGREAD_RUST_RUNTIME_LIB = $rustRuntime.Library
+    $env:MGREAD_RUST_RUNTIME_INCLUDE = $rustRuntime.Include
+    Write-Host "OHOS Rust runtime: $($rustRuntime.Library)"
+  }
+  Remove-StaleFlutterBuildOutputs
+  $flutterArguments = 'build', 'hap', "--$BuildMode", '--target-platform', $targetPlatform, '--no-pub', '--dart-define=MGREAD_OHOS_NATIVE_RUNTIME=true'
   if ($NoCodesign) {
     $flutterArguments += '--no-codesign'
   }
@@ -148,6 +243,11 @@ try {
     throw "Build completed but no HAP was found: $hapDirectory"
   }
   $hapEntries = tar -tf $hap.FullName
+  $hasAotSnapshot = @($hapEntries | Where-Object { $_ -eq 'libs/arm64-v8a/libapp.so' -or $_ -eq 'libs/x86_64/libapp.so' }).Count -gt 0
+  $hasDebugKernel = @($hapEntries | Where-Object { $_ -eq 'resources/rawfile/flutter_assets/kernel_blob.bin' }).Count -gt 0
+  if ($BuildMode -eq 'release' -and (-not $hasAotSnapshot -or $hasDebugKernel)) {
+    throw 'The generated Release HAP is not an AOT package; stale Debug Flutter artifacts were detected.'
+  }
   $selectedArchitecturePath = if ($Architecture -eq 'arm64') { 'libs/arm64-v8a/' } else { 'libs/x86_64/' }
   $selectedArchitectureEntries = @($hapEntries | Where-Object { $_ -like "$selectedArchitecturePath*" })
   if ($selectedArchitectureEntries.Count -eq 0) {
@@ -170,6 +270,10 @@ try {
   }
   Write-Host ("OHOS $BuildMode HAP: {0} ({1:N2} MB)" -f $hap.FullName, ($hap.Length / 1MB))
 } finally {
+  $env:Path = $originalPath
+  foreach ($name in $rustEnvironmentNames) {
+    [Environment]::SetEnvironmentVariable($name, $originalRustEnvironment[$name], 'Process')
+  }
   Copy-Item -LiteralPath $backupPubspec -Destination $runtimePubspec -Force
   Copy-Item -LiteralPath $backupEntryPackage -Destination $entryPackage -Force
   Copy-Item -LiteralPath $backupEntryBuildProfile -Destination $entryBuildProfile -Force
