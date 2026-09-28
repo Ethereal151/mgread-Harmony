@@ -82,6 +82,7 @@ final class _AppSystemUiStyleState extends State<AppSystemUiStyle> with WidgetsB
       if (lifecycle != null && lifecycle != AppLifecycleState.resumed) return;
       unawaited(_syncNative());
     });
+    WidgetsBinding.instance.scheduleFrame();
   }
 
   Future<void> _syncNative() async {
