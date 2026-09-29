@@ -5,6 +5,26 @@ part of 'text_reader_view.dart';
 /// 处理横向页面变化后的语义进度、边界恢复和短时提示。
 /// 横向页变化同时是相邻准备失败后的显式恢复触发点。
 extension _TextReaderProgressNavigation on _TextReaderViewState {
+  void _reconcileHorizontalPageAfterPagination() {
+    if (_preferences.navigationMode != ReaderNavigationMode.horizontalPages ||
+        !_pageController.hasClients ||
+        _restoringHorizontalAnchor) {
+      return;
+    }
+    final double? page = _pageController.page;
+    if (page == null) return;
+    final int rawIndex = page.round();
+    if ((page - rawIndex).abs() > 0.001 ||
+        rawIndex <= 0 ||
+        rawIndex > _pages.length) {
+      return;
+    }
+    final int pageIndex = rawIndex - 1;
+    if (pageIndex == _pageIndex) return;
+    _pageIndex = pageIndex;
+    _updateProgressFromPage();
+  }
+
   void _showNotice(String message) {
     _noticeTimer?.cancel();
     if (mounted) setState(() => _noticeMessage = message);

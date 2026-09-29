@@ -30,6 +30,8 @@ extension _TextReaderSession on _TextReaderViewState {
 
   Future<void> _restart({Future<void>? persistenceCheckpoint}) async {
     _stopAutoReading();
+    _progressivePaginationTimer?.cancel();
+    _progressivePaginationTimer = null;
     _cancelSlowChapterPreload(clearAttempts: true);
     _completeChapterTransition(ReaderChapterPerformanceOutcome.cancelled);
     _requestGeneration++;

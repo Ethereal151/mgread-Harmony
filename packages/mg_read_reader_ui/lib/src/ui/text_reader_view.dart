@@ -223,6 +223,7 @@ class _TextReaderViewState extends State<TextReaderView>
   Timer? _clockTimer;
   Timer? _wheelResetTimer;
   Timer? _adjacentQuietTimer;
+  Timer? _progressivePaginationTimer;
   Timer? _slowChapterPreloadTimer;
   Future<void>? _catalogCompletion;
 
@@ -618,6 +619,7 @@ class _TextReaderViewState extends State<TextReaderView>
     _sessionGeneration++;
     _navigationGeneration++;
     _saveTimer?.cancel();
+    _progressivePaginationTimer?.cancel();
     _noticeTimer?.cancel();
     _clockTimer?.cancel();
     _wheelResetTimer?.cancel();

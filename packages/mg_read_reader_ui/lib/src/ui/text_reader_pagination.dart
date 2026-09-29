@@ -315,6 +315,7 @@ extension _TextReaderPagination on _TextReaderViewState {
         // out in the background.
         if (_progressivePages.length > _pages.length) {
           _pages = _progressivePages;
+          _reconcileHorizontalPageAfterPagination();
           if (mounted) setState(() {});
         }
       }
@@ -327,7 +328,9 @@ extension _TextReaderPagination on _TextReaderViewState {
       // exactly the fifth page). A short timer yields to input and lets
       // pagination continue independently of the raster/VSync path without
       // running every batch back-to-back on the UI isolate.
-      Timer(const Duration(milliseconds: 8), () {
+      _progressivePaginationTimer?.cancel();
+      _progressivePaginationTimer = Timer(const Duration(milliseconds: 8), () {
+        _progressivePaginationTimer = null;
         if (mounted && generation == _paginationGeneration) {
           _paginateRemaining(size, fingerprint, generation);
         }
@@ -355,7 +358,13 @@ extension _TextReaderPagination on _TextReaderViewState {
   /// semantic end anchor. This prevents a previous-chapter turn from exposing
   /// that chapter's first page while its tail is still being calculated.
   void _finishHorizontalPagination() {
-    _replaceHorizontalPageController(_pageIndex + 1);
+    final int targetRawIndex = _pageIndex + 1;
+    final double? currentPage = _pageController.hasClients
+        ? _pageController.page
+        : null;
+    if (currentPage == null || (currentPage - targetRawIndex).abs() > 0.001) {
+      _replaceHorizontalPageController(targetRawIndex);
+    }
     if (!_awaitingPreviousChapterTail) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
