@@ -42,18 +42,19 @@ await mkdir(assetRoot, { recursive: true });
 await writeFile(resolve(assetRoot, "package.json"), '{\n  "type": "module"\n}\n');
 await cp(resolve(runtimeRoot, "dist"), assetDist, { recursive: true });
 
-// The shared Runtime Core is compiled from the desktop source tree, whose
-// launcher is intentionally pinned to Node 24. OHOS ships a separate native
-// Node 26.10.0 host, so patch only the copied OHOS metadata before packaging;
-// the desktop dist remains unchanged.
+// The shared Runtime Core is compiled from the desktop source tree. OHOS ships
+// a separate native Node 26.10.0 host, so patch only the copied OHOS metadata
+// when an older staged dist still carries the historical Node 24 marker; the
+// desktop dist remains unchanged. The conditional keeps staging idempotent
+// after the shared desktop launcher has itself moved to Node 26.
 const ohosRuntimeVersionModule = resolve(assetDist, "runtime-version.js");
 const desktopRuntimeVersionSource = await readFile(ohosRuntimeVersionModule, "utf8");
-const ohosRuntimeVersionSource = desktopRuntimeVersionSource.replaceAll(
-  '"24.16.0"',
-  '"26.10.0"',
-);
-if (ohosRuntimeVersionSource === desktopRuntimeVersionSource) {
-  throw new Error("OHOS Runtime version metadata did not contain Node 24.16.0.");
+const ohosNodeVersion = "26.10.0";
+const ohosRuntimeVersionSource = desktopRuntimeVersionSource.includes(`"${ohosNodeVersion}"`)
+  ? desktopRuntimeVersionSource
+  : desktopRuntimeVersionSource.replaceAll('"24.16.0"', `"${ohosNodeVersion}"`);
+if (!ohosRuntimeVersionSource.includes(`"${ohosNodeVersion}"`)) {
+  throw new Error(`OHOS Runtime version metadata does not contain Node ${ohosNodeVersion}.`);
 }
 await writeFile(ohosRuntimeVersionModule, ohosRuntimeVersionSource);
 const assetFingerprint = await directoryFingerprint(assetDist);

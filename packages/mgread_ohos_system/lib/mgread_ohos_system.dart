@@ -14,6 +14,11 @@ final class OhosSystemClient {
   static Future<String?> pickImportFile() =>
       _channel.invokeMethod<String>('pickImportFile');
 
+  /// Picks a Node data-source collection and copies it into the app cache so
+  /// Flutter can validate the archive without retaining an external URI.
+  static Future<String?> pickDataSourceCollection() =>
+      _channel.invokeMethod<String>('pickDataSourceCollection');
+
   static Future<bool> exportFile({
     required String path,
     required String suggestedName,

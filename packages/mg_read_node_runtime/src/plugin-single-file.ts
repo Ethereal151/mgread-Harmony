@@ -140,10 +140,13 @@ export async function parsePluginSingleFile(artifactFile: string): Promise<Parse
     throw new PluginSingleFileError("plugin_artifact_limit_exceeded");
   }
   const header = artifact.subarray(0, newline + 1).toString("utf8");
-  if (!header.startsWith(PLUGIN_SINGLE_FILE_PREFIX) || header.endsWith("\r\n")) {
+  if (!header.startsWith(PLUGIN_SINGLE_FILE_PREFIX)) {
     throw new PluginSingleFileError("plugin_artifact_invalid");
   }
-  const encoded = header.slice(PLUGIN_SINGLE_FILE_PREFIX.length, -1);
+  const encoded = header.slice(
+    PLUGIN_SINGLE_FILE_PREFIX.length,
+    header.endsWith("\r\n") ? -2 : -1,
+  );
   if (!/^[A-Za-z0-9_-]+$/.test(encoded)) throw new PluginSingleFileError("plugin_artifact_invalid");
   let raw: unknown;
   try {
@@ -155,8 +158,8 @@ export async function parsePluginSingleFile(artifactFile: string): Promise<Parse
     throw new PluginSingleFileError("plugin_artifact_invalid");
   }
   const envelope = parseEnvelope(raw);
-  const code = artifact.subarray(newline + 1);
-  if (code.byteLength !== envelope.codeBytes || sha256(code) !== envelope.codeSha256) {
+  const code = normalizeLegacyCodeLineEndings(artifact.subarray(newline + 1), envelope);
+  if (code === undefined) {
     throw new PluginSingleFileError("plugin_artifact_invalid");
   }
   const icon = envelope.icon === undefined ? undefined : decodeIcon(envelope.icon);
@@ -166,6 +169,26 @@ export async function parsePluginSingleFile(artifactFile: string): Promise<Parse
     envelope,
     ...(icon === undefined ? {} : { icon }),
   });
+}
+
+/**
+ * Older Windows packers calculated the envelope over LF text and then wrote
+ * the generated JavaScript with CRLF line endings. Keep accepting that
+ * artifact without weakening integrity checks: only a byte-for-byte CRLF to
+ * LF normalization that matches both declared size and digest is allowed.
+ */
+function normalizeLegacyCodeLineEndings(
+  code: Buffer,
+  envelope: SingleFilePluginEnvelope,
+): Buffer | undefined {
+  if (code.byteLength === envelope.codeBytes && sha256(code) === envelope.codeSha256) {
+    return code;
+  }
+  if (!code.includes(0x0d)) return undefined;
+  const normalized = Buffer.from(code.toString("utf8").replaceAll("\r\n", "\n"), "utf8");
+  return normalized.byteLength === envelope.codeBytes && sha256(normalized) === envelope.codeSha256
+    ? normalized
+    : undefined;
 }
 
 /** Writes a verified single-file artifact as the standard installed project tree. */

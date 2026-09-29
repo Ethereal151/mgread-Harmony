@@ -81,6 +81,9 @@ export default class MgReadOhosSystemPlugin implements FlutterPlugin, MethodCall
       case 'pickImportFile':
         this.pickImportFile(result)
         break
+      case 'pickDataSourceCollection':
+        this.pickDataSourceCollection(result)
+        break
       case 'exportFile':
         this.exportFile(call.args as Map<string, Object> | null, result)
         break
@@ -277,6 +280,37 @@ export default class MgReadOhosSystemPlugin implements FlutterPlugin, MethodCall
         return
       }
       const target = `${this.context.cacheDir}/mgread-import-${Date.now()}.mgread`
+      try {
+        this.copyFile(selected[0], target)
+        result.success(target)
+      } catch (error) {
+        try {
+          fs.unlinkSync(target)
+        } catch (_) {
+          // The destination may not have been created; preserve the copy error.
+        }
+        result.error('pick_failed', this.errorMessage(error), null)
+      }
+    } catch (error) {
+      result.error('pick_failed', this.errorMessage(error), null)
+    }
+  }
+
+  private async pickDataSourceCollection(result: MethodResult): Promise<void> {
+    if (this.context === undefined) {
+      result.error('system_unavailable', 'The OHOS UIAbility context is not ready.', null)
+      return
+    }
+    try {
+      const options = new filePicker.DocumentSelectOptions()
+      options.maxSelectNumber = 1
+      options.fileSuffixFilters = ['.mgplugins']
+      const selected = await new filePicker.DocumentViewPicker(this.context).select(options)
+      if (selected.length === 0) {
+        result.success(null)
+        return
+      }
+      const target = `${this.context.cacheDir}/mgread-source-collection-${Date.now()}.mgplugins`
       try {
         this.copyFile(selected[0], target)
         result.success(target)

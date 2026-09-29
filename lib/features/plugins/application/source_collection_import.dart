@@ -13,6 +13,7 @@ import 'package:file_selector/file_selector.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mgread_plugin_runtime/mgread_plugin_runtime.dart';
+import 'package:mgread_ohos_system/mgread_ohos_system.dart';
 
 import 'plugin_runtime_models.dart';
 
@@ -33,6 +34,9 @@ final class PlatformSourceCollectionFilePicker implements SourceCollectionFilePi
 
   @override
   Future<String?> chooseCollectionPath() async {
+    if (Platform.operatingSystem == 'ohos') {
+      return OhosSystemClient.pickDataSourceCollection();
+    }
     final file = await openFile(
       acceptedTypeGroups: const <XTypeGroup>[
         XTypeGroup(label: 'MgRead 数据源合集', extensions: <String>['mgplugins']),

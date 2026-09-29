@@ -14,14 +14,16 @@ enum DataSourceManagementAction { verify, diagnostics, help, uninstall }
 
 enum DataSourceImportChoice { node, native, collection }
 
-bool get _isNativeRuntimeBuild =>
-    const bool.fromEnvironment('MGREAD_NATIVE_RUNTIME') ||
-    (Platform.operatingSystem == 'ohos' && const bool.fromEnvironment('MGREAD_OHOS_NATIVE_RUNTIME'));
+bool get _isOhosHybridRuntimeBuild => Platform.operatingSystem == 'ohos' && const bool.fromEnvironment('MGREAD_OHOS_NATIVE_RUNTIME');
+
+bool get _isNativeOnlyRuntimeBuild => const bool.fromEnvironment('MGREAD_NATIVE_RUNTIME') && !_isOhosHybridRuntimeBuild;
 
 bool get supportsNativeSourceImport =>
-    !_isNativeRuntimeBuild && !const bool.fromEnvironment('MGREAD_NODE_ONLY') && (Platform.isWindows || Platform.isAndroid);
+    !_isNativeOnlyRuntimeBuild &&
+    !const bool.fromEnvironment('MGREAD_NODE_ONLY') &&
+    (Platform.isWindows || Platform.isAndroid || _isOhosHybridRuntimeBuild);
 
-bool get supportsSourceCollectionImport => !_isNativeRuntimeBuild;
+bool get supportsSourceCollectionImport => !_isNativeOnlyRuntimeBuild;
 
 Future<DataSourceImportChoice?> showDataSourceImportSheet(BuildContext context) => showModalBottomSheet<DataSourceImportChoice>(
   context: context,
@@ -31,13 +33,14 @@ Future<DataSourceImportChoice?> showDataSourceImportSheet(BuildContext context) 
     title: '添加数据源',
     description: '从设备选择数据源文件，按提供方注明的类型导入。',
     children: [
-      _ActionTile(
-        actionKey: Key(_isNativeRuntimeBuild ? 'data-source-add-native' : 'data-source-add-node'),
-        icon: _isNativeRuntimeBuild ? Icons.developer_board_outlined : Icons.insert_drive_file_outlined,
-        title: _isNativeRuntimeBuild ? (Platform.operatingSystem == 'ohos' ? 'Rust 原生数据源' : '原生数据源') : 'Node 数据源',
-        subtitle: _isNativeRuntimeBuild ? '启用内置 Rust 数据源引擎' : '选择 .mgplugin.js 或 .mgplugin 文件',
-        onTap: () => Navigator.pop(context, _isNativeRuntimeBuild ? DataSourceImportChoice.native : DataSourceImportChoice.node),
-      ),
+      if (!_isNativeOnlyRuntimeBuild)
+        _ActionTile(
+          actionKey: const Key('data-source-add-node'),
+          icon: Icons.insert_drive_file_outlined,
+          title: 'Node 数据源',
+          subtitle: '选择 .mgplugin.js 或 .mgplugin 文件',
+          onTap: () => Navigator.pop(context, DataSourceImportChoice.node),
+        ),
       if (supportsSourceCollectionImport)
         _ActionTile(
           actionKey: const Key('data-source-add-collection'),
@@ -46,12 +49,12 @@ Future<DataSourceImportChoice?> showDataSourceImportSheet(BuildContext context) 
           subtitle: '选择 .mgplugins 文件，勾选要新增或覆盖的 Node 数据源',
           onTap: () => Navigator.pop(context, DataSourceImportChoice.collection),
         ),
-      if (supportsNativeSourceImport)
+      if (supportsNativeSourceImport || _isNativeOnlyRuntimeBuild)
         _ActionTile(
           actionKey: const Key('data-source-add-native'),
           icon: Icons.developer_board_outlined,
-          title: '原生数据源',
-          subtitle: '选择适用于当前平台的 .mgplugin 安装包',
+          title: _isNativeOnlyRuntimeBuild && Platform.operatingSystem == 'ohos' ? 'Rust 原生数据源' : '原生数据源',
+          subtitle: _isNativeOnlyRuntimeBuild && Platform.operatingSystem == 'ohos' ? '启用内置 Rust 数据源引擎' : '选择适用于当前平台的 .mgplugin 安装包',
           onTap: () => Navigator.pop(context, DataSourceImportChoice.native),
         ),
     ],

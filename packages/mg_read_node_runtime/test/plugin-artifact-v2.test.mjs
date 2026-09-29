@@ -157,6 +157,26 @@ test("single-file artifact is canonical and installs into the shared cold-activa
   assert.equal((await parsePluginSingleFile(directStartArtifact)).code.toString("utf8"), 'const moduleName = "external-package"; await import(moduleName);\n');
 });
 
+test("accepts legacy Windows artifacts whose digest uses LF-normalized code", async (t) => {
+  const root = await temporaryDirectory(t, "mgread-single-file-crlf-");
+  const projectRoot = join(root, "project");
+  await createSingleFileProject(projectRoot);
+  const artifact = join(root, "fixture.mgplugin.js");
+  await createPluginSingleFile(projectRoot, artifact);
+
+  const original = await readFile(artifact);
+  const newline = original.indexOf(0x0a);
+  const header = Buffer.from(original.subarray(0, newline).toString("utf8") + "\r\n", "utf8");
+  const code = original.subarray(newline + 1);
+  const legacyCode = Buffer.from(code.toString("utf8").replaceAll("\n", "\r\n"), "utf8");
+  const legacyArtifact = join(root, "legacy-crlf.mgplugin.js");
+  await writeFile(legacyArtifact, Buffer.concat([header, legacyCode]));
+
+  const parsed = await parsePluginSingleFile(legacyArtifact);
+  assert.deepEqual(parsed.code, code);
+  assert.equal(parsed.envelope.codeBytes, code.byteLength);
+});
+
 test("artifact transfer v2 lists both retained formats and rejects v1-shaped items", async (t) => {
   const root = await temporaryDirectory(t, "mgread-artifact-transfer-");
   const archive = Buffer.from("legacy archive bytes");

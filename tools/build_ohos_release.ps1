@@ -23,6 +23,10 @@ $mgreadNodeExecutable = Join-Path $mgreadNodeRoot 'node.exe'
 if (-not (Test-Path -LiteralPath $mgreadNodeExecutable -PathType Leaf)) {
   throw "MgRead fixed Node toolchain is missing: $mgreadNodeExecutable"
 }
+$mgreadRuntimeNpm = 'D:\mgread-env\node-v26.10.0-win-x64\npm.cmd'
+if (-not (Test-Path -LiteralPath $mgreadRuntimeNpm -PathType Leaf)) {
+  throw "MgRead Runtime fixed Node toolchain is missing: $mgreadRuntimeNpm"
+}
 $originalPath = $env:Path
 $env:Path = "$mgreadNodeRoot;$originalPath"
 $rustEnvironmentNames = @(
@@ -159,6 +163,21 @@ foreach ($metadataFile in $packageMetadataFiles) {
 }
 
 try {
+  $nodeRuntimeRoot = Join-Path $projectRoot 'packages\mg_read_node_runtime'
+  $runtimeNodeRoot = Split-Path -Parent $mgreadRuntimeNpm
+  $runtimeStagePath = $env:Path
+  $env:Path = "$runtimeNodeRoot;$runtimeStagePath"
+  Push-Location $nodeRuntimeRoot
+  try {
+    & $mgreadRuntimeNpm run stage:flutter-ohos
+    if ($LASTEXITCODE -ne 0) {
+      throw "OHOS Node Runtime staging failed with exit code $LASTEXITCODE"
+    }
+  } finally {
+    Pop-Location
+    $env:Path = $runtimeStagePath
+  }
+
   $pubspec = Get-Content -LiteralPath $runtimePubspec -Raw
   $assetBlockPattern = '(?ms)^  assets:\r?\n(?:    - assets/runtime/[^\r\n]+\r?\n)+'
   $ohosAssetBlock = @(

@@ -186,14 +186,18 @@ final class PluginRuntime {
 
   /// Creates or returns the process-scoped production Facade.
   ///
-  /// The Runtime package resolves its own desktop bundle layout. Windows and
-  /// Android own both Node and native backends. The native-only
-  /// define remains available for isolation and package acceptance builds.
+  /// The Runtime package resolves its own desktop bundle layout. Windows,
+  /// Android, and the OHOS release build can own both Node and native
+  /// backends. The native-only define remains available for isolation and
+  /// package acceptance builds.
   factory PluginRuntime() {
     if (Platform.operatingSystem == 'ohos' &&
         const bool.fromEnvironment('MGREAD_OHOS_NATIVE_RUNTIME')) {
-      return _nativeInstance ??= PluginRuntime._(
-        _OhosNativeRuntimeSupervisor(),
+      return _ohosInstance ??= PluginRuntime._(
+        _HybridRuntimeSupervisor(
+          _OhosRuntimeSupervisor(),
+          _OhosNativeRuntimeSupervisor(),
+        ),
       );
     }
     if (const bool.fromEnvironment('MGREAD_NATIVE_RUNTIME')) {

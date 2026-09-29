@@ -14,13 +14,15 @@ import 'package:mg_read/core/errors/app_error.dart';
 
 Future<void> showPluginImportErrorDialog(BuildContext context, Object error) {
   final appError = AppError.fromUnknown(error);
+  final detail = appError.detail;
   return showDialog<void>(
     context: context,
     builder: (BuildContext dialogContext) => AlertDialog(
       title: const Text('数据源导入失败'),
       content: SelectableText(
         '${pluginImportErrorMessage(appError.code)}\n\n'
-        '错误码：${appError.code.wireValue}',
+        '错误码：${appError.code.wireValue}'
+        '${detail == null || detail.isEmpty ? '' : '\n\n详情：$detail'}',
       ),
       actions: <Widget>[TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text('知道了'))],
     ),

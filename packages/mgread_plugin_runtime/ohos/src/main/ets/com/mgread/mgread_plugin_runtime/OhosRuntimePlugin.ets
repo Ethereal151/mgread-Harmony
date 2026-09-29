@@ -206,10 +206,9 @@ export default class OhosRuntimePlugin implements FlutterPlugin, MethodCallHandl
     try {
       const options = new picker.DocumentSelectOptions()
       // HarmonyOS 7 on API 26 treats a multi-dot suffix such as
-      // ".mgplugin.js" as a plain ".js" filter and hides the artifact.
-      // Let the picker show files, then enforce the two accepted artifact
-      // names below before copying the selected document URI.
-      options.fileSuffixFilters = ['All files (.)|.*']
+      // ".mgplugin.js" as a plain ".js" filter. Request both accepted final
+      // suffixes explicitly, then enforce the complete artifact name below.
+      options.fileSuffixFilters = ['.js', '.mgplugin']
       options.maxSelectNumber = 1
       const pickerView = new picker.DocumentViewPicker(context as common.UIAbilityContext)
       let selected: Array<string>

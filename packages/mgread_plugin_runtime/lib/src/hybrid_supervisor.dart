@@ -18,7 +18,7 @@ final class _HybridRuntimeSupervisor implements _RuntimeSupervisor {
   }
 
   final _RuntimeSupervisor _node;
-  final _NativeRuntimeSupervisor _native;
+  final _RuntimeSupervisor _native;
   final Map<String, PluginEngine> _owners = <String, PluginEngine>{};
   final StreamController<RuntimeDiagnostic> _diagnostics =
       StreamController<RuntimeDiagnostic>.broadcast();
@@ -279,7 +279,7 @@ final class _HybridRuntimeSupervisor implements _RuntimeSupervisor {
 
   Future<bool> importNativeLocalPlugin() async {
     final bool imported;
-    if (Platform.isAndroid) {
+    if (Platform.isAndroid || Platform.operatingSystem == 'ohos') {
       imported = await _native.pickAndImportLocalPlugin();
     } else {
       final file = await openFile(
@@ -415,7 +415,10 @@ final class _HybridRuntimeSupervisor implements _RuntimeSupervisor {
       _node.configureNodeEnvironmentProxy(enabled);
 
   @override
-  Future<void> configurePluginHttpProxy(Uri? proxyUri, {String? noProxy}) async {
+  Future<void> configurePluginHttpProxy(
+    Uri? proxyUri, {
+    String? noProxy,
+  }) async {
     await _node.configurePluginHttpProxy(proxyUri, noProxy: noProxy);
     await _native.configurePluginHttpProxy(proxyUri, noProxy: noProxy);
   }
