@@ -84,6 +84,7 @@ extension _TextReaderPagination on _TextReaderViewState {
   void _paginateFirstPage(Size size, ReaderLayoutFingerprint fingerprint) {
     final TextChapterContent? content = _content;
     if (content == null) return;
+    _cancelCurrentPagination();
     final Stopwatch stopwatch = Stopwatch()..start();
     final List<ReaderPage>? cached = _TextReaderViewState._layoutCache.take(
       fingerprint,
@@ -153,13 +154,15 @@ extension _TextReaderPagination on _TextReaderViewState {
     _layoutFingerprint = fingerprint;
     _pages = pages;
     _currentPaginationComplete = false;
+    _showingPaginationPreview = anchorIndex > 0 || anchorOffset > 0;
     _pageIndex = _pageIndexForAnchor(
       pages,
     ).clamp(0, pages.isEmpty ? 0 : pages.length - 1);
     _firstContentPreparation = ReaderPaginationPreparation.firstPage;
     _firstContentLayoutDuration = stopwatch.elapsed;
     _restoreHorizontalPageLater();
-    final int generation = ++_paginationGeneration;
+    final int generation = _paginationGeneration;
+    _paginationCompletion = Completer<void>();
     _progressiveParagraphCursor = 0;
     _progressiveCharacterCursor = 0;
     _progressivePages = const <ReaderPage>[];
@@ -308,12 +311,11 @@ extension _TextReaderPagination on _TextReaderViewState {
             ? batch.nextCharacterOffset
             : 0;
 
-        // The first bounded batch can already produce several visible pages.
-        // Publish those pages immediately; waiting for the whole chapter to be
-        // paginated makes PageView stop at the end of the first batch (often
-        // the user's fifth page) even though more text has already been laid
-        // out in the background.
-        if (_progressivePages.length > _pages.length) {
+        // A restored preview starts at the saved semantic anchor, whereas
+        // these batches start at chapter zero. Replacing that preview with
+        // a prefix would show unrelated earlier text at the same raw index.
+        if (!_showingPaginationPreview &&
+            _progressivePages.length > _pages.length) {
           _pages = _progressivePages;
           _reconcileHorizontalPageAfterPagination();
           if (mounted) setState(() {});
@@ -321,19 +323,11 @@ extension _TextReaderPagination on _TextReaderViewState {
       }
     }
     if (_progressiveParagraphCursor < paragraphCount) {
-      // Do not couple chapter pagination to the next raster frame. On the
-      // HarmonyOS host a failed SurfaceFrame::Submit can prevent the frame
-      // callback from running even though the Dart isolate is still alive;
-      // that leaves the published PageView prefix at the first batch (often
-      // exactly the fifth page). A short timer yields to input and lets
-      // pagination continue independently of the raster/VSync path without
-      // running every batch back-to-back on the UI isolate.
+      // Yield between batches without requiring a new raster frame.
       _progressivePaginationTimer?.cancel();
       _progressivePaginationTimer = Timer(const Duration(milliseconds: 8), () {
         _progressivePaginationTimer = null;
-        if (mounted && generation == _paginationGeneration) {
-          _paginateRemaining(size, fingerprint, generation);
-        }
+        _paginateRemaining(size, fingerprint, generation);
       });
       return;
     }
@@ -345,13 +339,55 @@ extension _TextReaderPagination on _TextReaderViewState {
     _TextReaderViewState._layoutCache.put(fingerprint, pages);
     _pages = pages;
     _currentPaginationComplete = true;
-    _pageIndex = _pageIndexForAnchor(
-      pages,
-    ).clamp(0, pages.isEmpty ? 0 : pages.length - 1);
-    _finishHorizontalPagination();
+    if (_showingPaginationPreview) {
+      _pageIndex = _pageIndexForAnchor(
+        pages,
+      ).clamp(0, pages.isEmpty ? 0 : pages.length - 1);
+      _showingPaginationPreview = false;
+      _finishHorizontalPagination();
+    } else {
+      // Appending pages does not change existing page identities or their
+      // scroll offset. In particular, never snap an active drag/animation
+      // back to its last committed semantic anchor when the final batch ends.
+      _reconcileHorizontalPageAfterPagination();
+    }
     _reconcileAdjacentPreparation();
     if (mounted) setState(() {});
     _publishSnapshot();
+    final Completer<void>? completion = _paginationCompletion;
+    if (completion != null && !completion.isCompleted) completion.complete();
+  }
+
+  void _cancelCurrentPagination() {
+    _paginationGeneration++;
+    _progressivePaginationTimer?.cancel();
+    _progressivePaginationTimer = null;
+    final Completer<void>? completion = _paginationCompletion;
+    _paginationCompletion = null;
+    if (completion != null && !completion.isCompleted) completion.complete();
+    _showingPaginationPreview = false;
+  }
+
+  /// Retain one page-turn request until the pending layout is mounted.
+  /// Cancellation completes the waiter without applying it to another chapter.
+  Future<bool> _waitForCurrentPagination() async {
+    final Completer<void>? completion = _paginationCompletion;
+    if (completion == null || _waitingForPaginationTurn) return false;
+    final int generation = _paginationGeneration;
+    _waitingForPaginationTurn = true;
+    try {
+      await completion.future;
+      if (!mounted || _disposed || generation != _paginationGeneration) {
+        return false;
+      }
+      await WidgetsBinding.instance.endOfFrame;
+      return mounted &&
+          !_disposed &&
+          generation == _paginationGeneration &&
+          _currentPaginationComplete;
+    } finally {
+      _waitingForPaginationTurn = false;
+    }
   }
 
   /// Moves the page view only after the completed layout has resolved the
@@ -451,7 +487,9 @@ extension _TextReaderPagination on _TextReaderViewState {
     } else if (!_currentPaginationComplete) {
       // More pages are still being prepared. Do not interpret the temporary
       // end of the published page prefix as the end of the chapter.
-      WidgetsBinding.instance.scheduleFrame();
+      if (await _waitForCurrentPagination()) {
+        await _nextPage(userInitiated: userInitiated);
+      }
     } else if (_preparedNextHorizontalChapter() != null) {
       // The extra PageView item contains the already paginated first page of
       // the next chapter. Move to that real page sheet first; its boundary
@@ -467,6 +505,12 @@ extension _TextReaderPagination on _TextReaderViewState {
     if (_readerInteractionBlocked && userInitiated) return;
     if (_changingChapter || _pageTurnAnimating) return;
     if (userInitiated) _stopAutoReading();
+    if (_showingPaginationPreview && !_currentPaginationComplete) {
+      if (await _waitForCurrentPagination()) {
+        await _previousPage(userInitiated: userInitiated);
+      }
+      return;
+    }
     if (_preferences.navigationMode == ReaderNavigationMode.verticalScroll) {
       if (_verticalController.hasClients) {
         await _verticalController.animateTo(
@@ -763,6 +807,7 @@ extension _TextReaderPagination on _TextReaderViewState {
         navigation != _navigationGeneration) {
       return;
     }
+    _cancelCurrentPagination();
     _content = null;
     _chapterCache.clear();
     _currentChapterInfo = null;

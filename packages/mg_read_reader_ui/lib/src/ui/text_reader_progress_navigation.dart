@@ -76,6 +76,7 @@ extension _TextReaderProgressNavigation on _TextReaderViewState {
     if (rawIndex == 0) {
       unawaited(_previousChapter());
     } else if (rawIndex == _pages.length + 1) {
+      if (!_currentPaginationComplete) return;
       unawaited(_nextChapter());
     }
   }

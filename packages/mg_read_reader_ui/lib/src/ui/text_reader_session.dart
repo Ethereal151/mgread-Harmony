@@ -30,8 +30,7 @@ extension _TextReaderSession on _TextReaderViewState {
 
   Future<void> _restart({Future<void>? persistenceCheckpoint}) async {
     _stopAutoReading();
-    _progressivePaginationTimer?.cancel();
-    _progressivePaginationTimer = null;
+    _cancelCurrentPagination();
     _cancelSlowChapterPreload(clearAttempts: true);
     _completeChapterTransition(ReaderChapterPerformanceOutcome.cancelled);
     _requestGeneration++;
@@ -726,6 +725,7 @@ extension _TextReaderSession on _TextReaderViewState {
       _cancelAdjacentPreparation();
       _chapterIndex = targetInfo.index;
       _currentChapterInfo = targetInfo;
+      _cancelCurrentPagination();
       _content = chapter;
       _contentEpoch++;
       // A directory sheet can already be open while the initial chapter is

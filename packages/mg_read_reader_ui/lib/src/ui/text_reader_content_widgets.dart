@@ -372,15 +372,36 @@ extension _TextReaderContentWidgets on _TextReaderViewState {
               physics: _readerInteractionBlocked || _usesDirectPageTurns
                   ? const NeverScrollableScrollPhysics()
                   : const PageScrollPhysics(),
-              itemCount: _pages.length + 2,
+              // An unfinished prefix is not a chapter end. Only expose the
+              // next-chapter sheet once all current text has been paginated.
+              itemCount: _pages.length + (_currentPaginationComplete ? 2 : 1),
               onPageChanged: _onHorizontalPageChanged,
+              // Preserve child identity when the page prefix grows.
+              findChildIndexCallback: (Key key) {
+                if (key is! ValueKey<String>) return null;
+                return switch (key.value) {
+                  'reader-page-previous-boundary' => 0,
+                  'reader-page-next-boundary' => _pages.length + 1,
+                  final String value when value.startsWith('reader-page-') =>
+                    int.tryParse(value.substring('reader-page-'.length)),
+                  _ => null,
+                };
+              },
               itemBuilder: (BuildContext context, int index) {
                 final Widget page = index == 0
                     ? _chapterBoundary(ReaderStrings.previousChapter)
                     : index == _pages.length + 1
                     ? _buildNextChapterBoundary()
                     : _buildPage(_pages[index - 1], index - 1);
-                return _buildPageEffect(index, page);
+                final String childKey = index == 0
+                    ? 'reader-page-previous-boundary'
+                    : index == _pages.length + 1
+                    ? 'reader-page-next-boundary'
+                    : 'reader-page-$index';
+                return KeyedSubtree(
+                  key: ValueKey<String>(childKey),
+                  child: _buildPageEffect(index, page),
+                );
               },
             ),
           ),
