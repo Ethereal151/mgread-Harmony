@@ -307,6 +307,16 @@ extension _TextReaderPagination on _TextReaderViewState {
         _progressiveCharacterCursor = stoppedInsideBatch
             ? batch.nextCharacterOffset
             : 0;
+
+        // The first bounded batch can already produce several visible pages.
+        // Publish those pages immediately; waiting for the whole chapter to be
+        // paginated makes PageView stop at the end of the first batch (often
+        // the user's fifth page) even though more text has already been laid
+        // out in the background.
+        if (_progressivePages.length > _pages.length) {
+          _pages = _progressivePages;
+          if (mounted) setState(() {});
+        }
       }
     }
     if (_progressiveParagraphCursor < paragraphCount) {
@@ -423,6 +433,10 @@ extension _TextReaderPagination on _TextReaderViewState {
     }
     if (_pageIndex + 1 < _pages.length) {
       await _animateToPage(_pageIndex + 1);
+    } else if (!_currentPaginationComplete) {
+      // More pages are still being prepared. Do not interpret the temporary
+      // end of the published page prefix as the end of the chapter.
+      WidgetsBinding.instance.scheduleFrame();
     } else if (_preparedNextHorizontalChapter() != null) {
       // The extra PageView item contains the already paginated first page of
       // the next chapter. Move to that real page sheet first; its boundary
