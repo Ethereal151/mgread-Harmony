@@ -72,35 +72,48 @@ final class _OhosBrowserSessionSurfaceState
       fit: StackFit.expand,
       children: <Widget>[
         if (widget.prewarm)
-          const Opacity(
-            opacity: 0.001,
-            child: OhosView(
-              key: ValueKey<String>('mgread_ohos_arkweb_prewarm'),
-              viewType: 'mgread_ohos_arkweb',
-              creationParams: <String, Object?>{},
-              creationParamsCodec: StandardMessageCodec(),
-              hitTestBehavior: PlatformViewHitTestBehavior.opaque,
-            ),
+          _buildSessionView(
+            pluginId: 'mgread_ohos_arkweb_prewarm',
+            visible: false,
+            creationParams: const <String, Object?>{},
           ),
         for (final entry in _sessions.entries)
-          Opacity(
-            // OHOS may skip creating a platform view whose opacity is exactly
-            // zero. Keep hidden ArkWeb sessions mounted with a negligible
-            // alpha so cookie/profile state and the native controller remain
-            // available for the next Runtime request.
-            opacity: entry.value ? 1 : 0.001,
-            child: IgnorePointer(
-              ignoring: !entry.value,
-              child: OhosView(
-                key: ValueKey<String>(entry.key),
-                viewType: 'mgread_ohos_arkweb',
-                creationParams: <String, Object?>{'pluginId': entry.key},
-                creationParamsCodec: const StandardMessageCodec(),
-                hitTestBehavior: PlatformViewHitTestBehavior.opaque,
-              ),
-            ),
+          _buildSessionView(
+            pluginId: entry.key,
+            visible: entry.value,
+            creationParams: <String, Object?>{'pluginId': entry.key},
           ),
       ],
     );
+  }
+
+  Widget _buildSessionView({
+    required String pluginId,
+    required bool visible,
+    required Map<String, Object?> creationParams,
+  }) {
+    final Widget view = Opacity(
+      // OHOS may skip creating a platform view whose opacity is exactly zero.
+      // Keep hidden ArkWeb sessions mounted with a negligible alpha so their
+      // Cookie/Profile state and native controller survive between requests.
+      opacity: visible ? 1 : 0.001,
+      child: IgnorePointer(
+        ignoring: !visible,
+        child: OhosView(
+          key: ValueKey<String>(pluginId),
+          viewType: 'mgread_ohos_arkweb',
+          creationParams: creationParams,
+          creationParamsCodec: const StandardMessageCodec(),
+          hitTestBehavior: PlatformViewHitTestBehavior.opaque,
+        ),
+      ),
+    );
+    if (visible) return Positioned.fill(child: view);
+
+    // A hidden platform view must stay mounted for the browser session, but a
+    // full-screen transparent ArkWeb surface still participates in OHOS
+    // composition and can make Flutter reject later SurfaceFrames. Keep its
+    // native state alive in a tiny footprint until it is shown.
+    return Positioned(left: 0, top: 0, width: 1, height: 1, child: view);
   }
 }
