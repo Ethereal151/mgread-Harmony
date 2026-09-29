@@ -20,6 +20,11 @@ struct Index {
       FlutterPage({
         viewId: this.viewId,
         shouldPauseWhenInvisible: false,
+        // Avoid the extra frame-cache latency on the full-screen reader
+        // surface. The device log shows repeated SurfaceFrame::Submit
+        // failures while LTPO is switching VSync rates; this option is not
+        // needed for a static host and can amplify the visible stutter.
+        enableFrameCacheForSmooth: false,
       })
         .width('100%')
         .height('100%')

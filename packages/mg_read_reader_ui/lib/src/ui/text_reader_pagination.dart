@@ -320,12 +320,18 @@ extension _TextReaderPagination on _TextReaderViewState {
       }
     }
     if (_progressiveParagraphCursor < paragraphCount) {
-      WidgetsBinding.instance.scheduleFrameCallback((_) {
+      // Do not couple chapter pagination to the next raster frame. On the
+      // HarmonyOS host a failed SurfaceFrame::Submit can prevent the frame
+      // callback from running even though the Dart isolate is still alive;
+      // that leaves the published PageView prefix at the first batch (often
+      // exactly the fifth page). A short timer yields to input and lets
+      // pagination continue independently of the raster/VSync path without
+      // running every batch back-to-back on the UI isolate.
+      Timer(const Duration(milliseconds: 8), () {
         if (mounted && generation == _paginationGeneration) {
           _paginateRemaining(size, fingerprint, generation);
         }
       });
-      WidgetsBinding.instance.scheduleFrame();
       return;
     }
     final List<ReaderPage> pages = _progressivePages;
