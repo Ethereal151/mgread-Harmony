@@ -169,6 +169,43 @@ void main() {
     },
   );
 
+  testWidgets(
+    'progressive pagination keeps text after every bounded paragraph batch',
+    (WidgetTester tester) async {
+      final TextReaderController controller = TextReaderController();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: SizedBox(
+            width: 360,
+            height: 560,
+            child: TextReaderView(
+              bookId: 'progressive-batch-book',
+              controller: controller,
+              dataSource: const _ProgressiveBatchDataSource(),
+              stateStore: const _EmptyStateStore(),
+            ),
+          ),
+        ),
+      );
+      await tester.runAsync(() async {
+        await Future<void>.delayed(const Duration(milliseconds: 500));
+      });
+      await tester.pumpAndSettle();
+
+      for (var turn = 0; turn < 6; turn++) {
+        final Future<void> pageTurn = controller.nextPage();
+        await tester.pumpAndSettle();
+        await pageTurn;
+      }
+
+      expect(controller.snapshot.chapter?.id, 'chapter-1');
+      expect(controller.snapshot.progress?.paragraphId, isNot('paragraph-0'));
+      expect(find.text('开始阅读'), findsNothing);
+      await tester.pumpWidget(const SizedBox());
+      await tester.pumpAndSettle();
+    },
+  );
+
   testWidgets('presents real first text once without an intermediate loader', (
     WidgetTester tester,
   ) async {
@@ -862,6 +899,26 @@ final class _DenseChapterDataSource extends _InitialChapterDataSource {
         text: List<String>.filled(700, '正文').join(),
       ),
     ],
+  );
+}
+
+final class _ProgressiveBatchDataSource extends _InitialChapterDataSource {
+  const _ProgressiveBatchDataSource();
+
+  @override
+  Future<TextChapterContent> loadChapterContent(
+    String bookId,
+    String chapterId,
+  ) async => TextChapterContent(
+    chapterId: 'chapter-1',
+    title: '第一章',
+    paragraphs: List<TextParagraph>.generate(
+      40,
+      (int index) => TextParagraph(
+        id: 'paragraph-$index',
+        text: List<String>.filled(80, '正文').join(),
+      ),
+    ),
   );
 }
 

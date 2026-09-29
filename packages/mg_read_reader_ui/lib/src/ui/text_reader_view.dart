@@ -329,6 +329,7 @@ class _TextReaderViewState extends State<TextReaderView>
   int? _pendingChapterTransitionOperation;
   Stopwatch? _chapterTransitionStopwatch;
   int _progressiveParagraphCursor = 0;
+  int _progressiveCharacterCursor = 0;
   List<ReaderPage> _progressivePages = const <ReaderPage>[];
   ReaderPageContinuation? _progressiveContinuation;
   bool _firstContentNotificationScheduled = false;

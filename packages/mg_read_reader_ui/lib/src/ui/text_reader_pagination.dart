@@ -161,6 +161,7 @@ extension _TextReaderPagination on _TextReaderViewState {
     _restoreHorizontalPageLater();
     final int generation = ++_paginationGeneration;
     _progressiveParagraphCursor = 0;
+    _progressiveCharacterCursor = 0;
     _progressivePages = const <ReaderPage>[];
     _progressiveContinuation = null;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -272,7 +273,10 @@ extension _TextReaderPagination on _TextReaderViewState {
         firstLineIndent: _preferences.firstLineIndent,
         textDirection: Directionality.of(context),
         textScaler: _textScaler,
-        includeChapterTitle: start == 0,
+        includeChapterTitle:
+            start == 0 &&
+            _progressiveCharacterCursor == 0 &&
+            _progressiveContinuation == null,
         paragraphTrailingWidth: hasParagraphComments
             ? _TextReaderViewState._inlineCommentHitSize
             : 0,
@@ -282,6 +286,7 @@ extension _TextReaderPagination on _TextReaderViewState {
         chapterTrailingHeight: hasChapterComments && end == paragraphCount
             ? 168
             : 0,
+        firstParagraphStartOffset: _progressiveCharacterCursor,
         continuation: _progressiveContinuation,
         finish: end == paragraphCount,
       );
@@ -290,7 +295,19 @@ extension _TextReaderPagination on _TextReaderViewState {
         ...batch.pages,
       ]);
       _progressiveContinuation = batch.continuation;
-      _progressiveParagraphCursor = paragraphCount == 0 ? 0 : end;
+      if (paragraphCount == 0) {
+        _progressiveParagraphCursor = 0;
+        _progressiveCharacterCursor = 0;
+      } else {
+        final int batchLength = end - start;
+        final bool stoppedInsideBatch = batch.nextParagraphIndex < batchLength;
+        _progressiveParagraphCursor = stoppedInsideBatch
+            ? start + batch.nextParagraphIndex
+            : end;
+        _progressiveCharacterCursor = stoppedInsideBatch
+            ? batch.nextCharacterOffset
+            : 0;
+      }
     }
     if (_progressiveParagraphCursor < paragraphCount) {
       WidgetsBinding.instance.scheduleFrameCallback((_) {
