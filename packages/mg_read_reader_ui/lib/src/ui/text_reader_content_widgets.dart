@@ -412,8 +412,7 @@ extension _TextReaderContentWidgets on _TextReaderViewState {
 
   bool get _usesDirectPageTurns =>
       _preferences.pageAnimation == ReaderPageAnimation.none ||
-      MediaQuery.disableAnimationsOf(context) ||
-      _prefersDirectPageTurns;
+      MediaQuery.disableAnimationsOf(context);
 
   void _handlePointerSignal(PointerSignalEvent event) {
     _pauseAdjacentPreparationForInteraction();
