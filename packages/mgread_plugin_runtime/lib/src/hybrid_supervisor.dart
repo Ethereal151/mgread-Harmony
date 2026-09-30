@@ -79,6 +79,20 @@ final class _HybridRuntimeSupervisor implements _RuntimeSupervisor {
     if (invocation is InstalledPluginsInvocation) {
       return await _list() as T;
     }
+    if (invocation is RuntimePingInvocation) {
+      final pings = await Future.wait(<Future<RuntimePingResult>>[
+        _node.invoke(const RuntimePingInvocation()),
+        _native.invoke(const RuntimePingInvocation()),
+      ]);
+      final node = pings[0];
+      final native = pings[1];
+      return RuntimePingResult(
+            isHealthy: node.isHealthy && native.isHealthy,
+            nodeVersion: node.nodeVersion,
+            runtimeVersion: node.runtimeVersion,
+          )
+          as T;
+    }
     if (invocation is RuntimeStatusInvocation) {
       final statuses = await Future.wait(<Future<RuntimeStatusResult>>[
         _node.invoke(const RuntimeStatusInvocation()),
@@ -89,7 +103,7 @@ final class _HybridRuntimeSupervisor implements _RuntimeSupervisor {
       await _list();
       return RuntimeStatusResult(
             arch: node.arch,
-            isHealthy: node.isHealthy,
+            isHealthy: node.isHealthy && native.isHealthy,
             memory: node.memory,
             nodeVersion: node.nodeVersion,
             platform: node.platform,
