@@ -9,10 +9,10 @@ import 'text_paginator.dart';
 /// Every field that can change line breaks is part of the key. A missing
 /// content version is scoped to the current reader session, so an unknown
 /// version can never accidentally reuse a layout from another session.
-/// The device pixel ratio is retained as metadata, but is not part of the
-/// identity because pagination uses logical pixels. HarmonyOS can report
-/// transient fractional DPR changes while an XComponent is resized; treating
-/// those raster-density changes as a new layout resets the active PageView.
+/// The device pixel ratio is retained as metadata, but layout identity uses
+/// physical window metrics. HarmonyOS can report a transient fractional DPR
+/// while keeping the same physical XComponent bounds; comparing raw logical
+/// bounds in that interval resets the active PageView.
 @immutable
 class ReaderLayoutFingerprint {
   const ReaderLayoutFingerprint({
@@ -67,8 +67,18 @@ class ReaderLayoutFingerprint {
       chapterId == other.chapterId &&
       contentVersion == other.contentVersion &&
       (contentVersion != null || sessionId == other.sessionId) &&
-      viewport == other.viewport &&
-      safeArea == other.safeArea &&
+      _physicalPixels(viewport.width, devicePixelRatio) ==
+          _physicalPixels(other.viewport.width, other.devicePixelRatio) &&
+      _physicalPixels(viewport.height, devicePixelRatio) ==
+          _physicalPixels(other.viewport.height, other.devicePixelRatio) &&
+      _physicalPixels(safeArea.left, devicePixelRatio) ==
+          _physicalPixels(other.safeArea.left, other.devicePixelRatio) &&
+      _physicalPixels(safeArea.top, devicePixelRatio) ==
+          _physicalPixels(other.safeArea.top, other.devicePixelRatio) &&
+      _physicalPixels(safeArea.right, devicePixelRatio) ==
+          _physicalPixels(other.safeArea.right, other.devicePixelRatio) &&
+      _physicalPixels(safeArea.bottom, devicePixelRatio) ==
+          _physicalPixels(other.safeArea.bottom, other.devicePixelRatio) &&
       textScale == other.textScale &&
       fontVersion == other.fontVersion &&
       layoutSettings == other.layoutSettings &&
@@ -90,8 +100,12 @@ class ReaderLayoutFingerprint {
     chapterId,
     contentVersion,
     contentVersion == null ? sessionId : 0,
-    viewport,
-    safeArea,
+    _physicalPixels(viewport.width, devicePixelRatio),
+    _physicalPixels(viewport.height, devicePixelRatio),
+    _physicalPixels(safeArea.left, devicePixelRatio),
+    _physicalPixels(safeArea.top, devicePixelRatio),
+    _physicalPixels(safeArea.right, devicePixelRatio),
+    _physicalPixels(safeArea.bottom, devicePixelRatio),
     textScale,
     fontVersion,
     layoutSettings,
@@ -109,6 +123,9 @@ class ReaderLayoutFingerprint {
     chapterCommentPlaceholder,
   ]);
 }
+
+int _physicalPixels(double logicalPixels, double devicePixelRatio) =>
+    (logicalPixels * devicePixelRatio).round();
 
 /// Small session-local LRU for completed pagination results.
 class ReaderLayoutLru {

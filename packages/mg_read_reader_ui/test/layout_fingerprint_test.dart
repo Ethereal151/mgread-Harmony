@@ -43,6 +43,22 @@ void main() {
       reason: 'DPR changes do not change logical text pagination',
     );
     expect(
+      _key(
+        viewport: const Size(380.1302, 818.0309),
+        safeArea: const EdgeInsets.fromLTRB(0, 39.284, 0, 28.3076),
+        devicePixelRatio: 3.4619718309859153,
+      ),
+      equals(
+        _key(
+          viewport: const Size(376, 809.1429),
+          safeArea: const EdgeInsets.fromLTRB(0, 38.8571, 0, 28),
+          devicePixelRatio: 3.5,
+        ),
+      ),
+      reason:
+          'OHOS transient DPR changes preserve the same physical window metrics',
+    );
+    expect(
       _key(contentVersion: null, sessionId: 2),
       isNot(equals(_key(contentVersion: null, sessionId: 1))),
     );
