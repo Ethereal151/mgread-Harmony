@@ -4,12 +4,14 @@ import {
   AbilityPluginBinding,
   FlutterPlugin,
   FlutterPluginBinding,
+  FlutterManager,
   MethodCall,
   MethodCallHandler,
   MethodChannel,
   MethodResult,
 } from '@ohos/flutter_ohos'
 import common from '@ohos.app.ability.common'
+import UIAbility from '@ohos.app.ability.UIAbility'
 import window from '@ohos.window'
 import inputConsumer from '@ohos.multimodalInput.inputConsumer'
 import { KeyCode } from '@ohos.multimodalInput.keyCode'
@@ -24,6 +26,7 @@ import { KeyEvent } from '@ohos.multimodalInput.keyEvent'
 export default class NovelReaderUiPlugin implements FlutterPlugin, MethodCallHandler, AbilityAware {
   private channel?: MethodChannel
   private context?: common.Context
+  private ability?: UIAbility
   private activeWindow?: window.Window
   private keepScreenOn: boolean = false
   private immersiveMode: boolean = false
@@ -57,12 +60,14 @@ export default class NovelReaderUiPlugin implements FlutterPlugin, MethodCallHan
   }
 
   onAttachedToAbility(binding: AbilityPluginBinding): void {
-    this.context = binding.getAbility().context as common.UIAbilityContext
+    this.ability = binding.getAbility()
+    this.context = this.ability.context as common.UIAbilityContext
   }
 
   onDetachedFromAbility(): void {
     this.disableVolumeKeyPageTurning()
     this.context = undefined
+    this.ability = undefined
     this.activeWindow = undefined
   }
 
@@ -72,6 +77,7 @@ export default class NovelReaderUiPlugin implements FlutterPlugin, MethodCallHan
     this.channel?.setMethodCallHandler(null)
     this.channel = undefined
     this.context = undefined
+    this.ability = undefined
     this.activeWindow = undefined
   }
 
@@ -389,8 +395,14 @@ export default class NovelReaderUiPlugin implements FlutterPlugin, MethodCallHan
 
   private async applicationWindow(): Promise<window.Window> {
     if (this.activeWindow !== undefined) return this.activeWindow
-    if (this.context === undefined) throw new Error('The OHOS application context is not ready.')
-    this.activeWindow = await window.getLastWindow(this.context)
+    const ability = this.ability
+    if (ability === undefined) throw new Error('The OHOS application ability is not ready.')
+    // FlutterAbility registers the WindowStage before plugins are attached.
+    // Resolve its main window from that registry instead of getLastWindow(),
+    // which queries the global top-window stack and can race the first frame.
+    this.activeWindow = FlutterManager.getInstance()
+      .getWindowStage(ability)
+      .getMainWindowSync()
     return this.activeWindow
   }
 

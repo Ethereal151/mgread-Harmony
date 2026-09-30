@@ -57,21 +57,20 @@ final class _OhosNativeRuntimeSupervisor implements _RuntimeSupervisor {
       final config = jsonEncode(<String, Object?>{
         if (_proxyUri != null) 'proxy': _proxyUri.toString(),
       });
-      final handle =
+      // The OHOS NAPI create entrypoint constructs the bridge and calls
+      // mgread_runtime_start immediately; its integer result is a status code,
+      // not an opaque handle. Calling start again made the Dart health gate
+      // depend on a second bridge transition and surfaced runtime_start_failed
+      // even though the native runtime was already ready.
+      final createResult =
           await _channel.invokeMethod<int>('create', <String, Object?>{
             'configJson': config,
           }) ??
           -1;
-      if (handle < 0)
+      if (createResult != 0)
         throw const PluginRuntimeException(
           'runtime_start_failed',
           'OHOS Native Runtime 创建失败。',
-        );
-      final result = await _channel.invokeMethod<int>('start') ?? -1;
-      if (result != 0)
-        throw const PluginRuntimeException(
-          'runtime_start_failed',
-          'OHOS Native Runtime 启动失败。',
         );
       _installed = true;
       final progress = RuntimeInitializationProgress.fromPlatform(

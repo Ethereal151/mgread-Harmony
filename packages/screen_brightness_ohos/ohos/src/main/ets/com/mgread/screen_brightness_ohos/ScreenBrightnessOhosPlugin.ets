@@ -2,6 +2,7 @@ import {
   Any,
   FlutterPlugin,
   FlutterPluginBinding,
+  FlutterManager,
   MethodCall,
   MethodCallHandler,
   MethodChannel,
@@ -108,7 +109,13 @@ export default class ScreenBrightnessOhosPlugin implements FlutterPlugin, Method
       if (this.context === undefined) {
         throw new Error('The OHOS application context is not ready.')
       }
-      this.activeWindow = await window.getLastWindow(this.context)
+      // Resolve the FlutterAbility's registered main window. The global
+      // getLastWindow() lookup can race the first frame and return no top
+      // window while the ability is already creating its XComponent.
+      const ability = FlutterManager.getInstance().getUIAbility(this.context)
+      this.activeWindow = FlutterManager.getInstance()
+        .getWindowStage(ability)
+        .getMainWindowSync()
     }
     return this.activeWindow
   }

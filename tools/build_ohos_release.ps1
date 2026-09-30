@@ -240,7 +240,7 @@ try {
     Write-Host "OHOS Rust runtime: $($rustRuntime.Library)"
   }
   Remove-StaleFlutterBuildOutputs
-  $flutterArguments = 'build', 'hap', "--$BuildMode", '--target-platform', $targetPlatform, '--no-pub', '--dart-define=MGREAD_OHOS_NATIVE_RUNTIME=true'
+  $flutterArguments = 'build', 'hap', "--$BuildMode", '--target-platform', $targetPlatform, '--no-pub', '--no-tree-shake-icons', '--dart-define=MGREAD_OHOS_NATIVE_RUNTIME=true'
   if ($NoCodesign) {
     $flutterArguments += '--no-codesign'
   }
