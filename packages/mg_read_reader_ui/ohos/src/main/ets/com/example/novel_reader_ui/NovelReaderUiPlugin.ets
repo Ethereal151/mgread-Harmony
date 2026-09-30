@@ -192,7 +192,6 @@ export default class NovelReaderUiPlugin implements FlutterPlugin, MethodCallHan
         result.success(null)
         return
       }
-      await target.setWindowLayoutFullScreen(true)
       if (immersive) {
         await target.setWindowSystemBarEnable([])
       } else {
@@ -241,7 +240,6 @@ export default class NovelReaderUiPlugin implements FlutterPlugin, MethodCallHan
       await target.setPreferredOrientation(
         fullscreen ? window.Orientation.LANDSCAPE : window.Orientation.PORTRAIT,
       )
-      await target.setWindowLayoutFullScreen(true)
       if (generation !== this.systemUiRequestGeneration) {
         result.success(null)
         return
@@ -319,7 +317,6 @@ export default class NovelReaderUiPlugin implements FlutterPlugin, MethodCallHan
         result.success(null)
         return
       }
-      await target.setWindowLayoutFullScreen(true)
       result.success(null)
     } catch (error) {
       result.error('operation_failed', this.errorMessage(error), null)
@@ -347,7 +344,6 @@ export default class NovelReaderUiPlugin implements FlutterPlugin, MethodCallHan
         result.success(null)
         return
       }
-      await target.setWindowLayoutFullScreen(true)
       this.keepScreenOn = false
       this.immersiveMode = false
       result.success(null)
@@ -388,7 +384,6 @@ export default class NovelReaderUiPlugin implements FlutterPlugin, MethodCallHan
       statusBarContentColor: this.applicationStatusBarContentColor,
       navigationBarContentColor: this.applicationNavigationBarContentColor,
     })
-    await target.setWindowLayoutFullScreen(true)
     this.keepScreenOn = false
     this.immersiveMode = false
   }
