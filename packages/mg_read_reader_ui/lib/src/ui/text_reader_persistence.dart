@@ -210,6 +210,11 @@ extension _TextReaderPersistence on _TextReaderViewState {
     final bool foreground = normalized == ReaderLifecycleState.foreground;
     _foreground = foreground;
     if (!foreground) {
+      if (_pageTurnAnimating || _horizontalPageScrollActive) {
+        _pageTurnAnimating = false;
+        _horizontalPageScrollActive = false;
+        _pageTurnInterruptedByLifecycle = true;
+      }
       _chapterPreloadGeneration++;
       _cancelSlowChapterPreload();
       _cancelAdjacentPreparation();
@@ -219,6 +224,12 @@ extension _TextReaderPersistence on _TextReaderViewState {
       unawaited(_releaseApplicationBrightness());
       unawaited(_flushProgress());
     } else {
+      if (_pageTurnInterruptedByLifecycle) {
+        _pageTurnInterruptedByLifecycle = false;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && !_disposed) _restoreHorizontalPageAfterLifecycle();
+        });
+      }
       unawaited(_syncAwake());
       unawaited(_syncApplicationBrightness());
       WidgetsBinding.instance.addPostFrameCallback((_) {

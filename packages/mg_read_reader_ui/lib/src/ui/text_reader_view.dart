@@ -244,6 +244,7 @@ class _TextReaderViewState extends State<TextReaderView>
   String? _centeredCatalogChapterId;
   int _catalogCenterRetryCount = 0;
   bool _pageTurnAnimating = false;
+  bool _pageTurnInterruptedByLifecycle = false;
   TextChapterContent? _content;
   ReaderChapterInfo? _currentChapterInfo;
   List<ReaderPage> _pages = const <ReaderPage>[];
@@ -668,6 +669,26 @@ class _TextReaderViewState extends State<TextReaderView>
       _cancelAdjacentPreparation();
       _cancelSlowChapterPreload();
     }
+  }
+
+  void _restoreHorizontalPageAfterLifecycle() {
+    if (_disposed ||
+        _preferences.navigationMode != ReaderNavigationMode.horizontalPages ||
+        _pages.isEmpty ||
+        !_pageController.hasClients) {
+      return;
+    }
+    final int targetRawIndex = _pageIndex + 1;
+    final double? currentPage = _pageController.page;
+    if (currentPage == null || (currentPage - targetRawIndex).abs() > 0.001) {
+      _replaceHorizontalPageController(targetRawIndex);
+      return;
+    }
+    // A surface teardown can leave the old ScrollPosition's activity alive
+    // even when its raster future was interrupted. Jumping to the committed
+    // semantic page cancels that stale activity without changing the normal
+    // animated page-turn path.
+    _pageController.jumpToPage(targetRawIndex);
   }
 
   @override
