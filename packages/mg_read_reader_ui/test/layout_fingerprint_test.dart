@@ -21,12 +21,11 @@ void main() {
     expect(event.paragraphCount, 8);
   });
 
-  test('every layout-affecting identity change misses the fingerprint', () {
+  test('every logical-layout identity change misses the fingerprint', () {
     final ReaderLayoutFingerprint base = _key();
     final List<ReaderLayoutFingerprint> changed = <ReaderLayoutFingerprint>[
       _key(viewport: const Size(520, 720)),
       _key(safeArea: const EdgeInsets.only(top: 24)),
-      _key(devicePixelRatio: 3),
       _key(textScale: 1.3),
       _key(fontVersion: 'font-v2'),
       _key(layoutSettings: 'line-height-2.1'),
@@ -38,6 +37,11 @@ void main() {
     for (final ReaderLayoutFingerprint candidate in changed) {
       expect(candidate, isNot(equals(base)));
     }
+    expect(
+      _key(devicePixelRatio: 3),
+      equals(base),
+      reason: 'DPR changes do not change logical text pagination',
+    );
     expect(
       _key(contentVersion: null, sessionId: 2),
       isNot(equals(_key(contentVersion: null, sessionId: 1))),

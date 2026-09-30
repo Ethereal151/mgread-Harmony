@@ -9,6 +9,10 @@ import 'text_paginator.dart';
 /// Every field that can change line breaks is part of the key. A missing
 /// content version is scoped to the current reader session, so an unknown
 /// version can never accidentally reuse a layout from another session.
+/// The device pixel ratio is retained as metadata, but is not part of the
+/// identity because pagination uses logical pixels. HarmonyOS can report
+/// transient fractional DPR changes while an XComponent is resized; treating
+/// those raster-density changes as a new layout resets the active PageView.
 @immutable
 class ReaderLayoutFingerprint {
   const ReaderLayoutFingerprint({
@@ -65,7 +69,6 @@ class ReaderLayoutFingerprint {
       (contentVersion != null || sessionId == other.sessionId) &&
       viewport == other.viewport &&
       safeArea == other.safeArea &&
-      devicePixelRatio == other.devicePixelRatio &&
       textScale == other.textScale &&
       fontVersion == other.fontVersion &&
       layoutSettings == other.layoutSettings &&
@@ -89,7 +92,6 @@ class ReaderLayoutFingerprint {
     contentVersion == null ? sessionId : 0,
     viewport,
     safeArea,
-    devicePixelRatio,
     textScale,
     fontVersion,
     layoutSettings,
