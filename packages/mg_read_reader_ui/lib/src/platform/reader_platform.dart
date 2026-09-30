@@ -63,6 +63,13 @@ abstract class ReaderPlatform extends PlatformInterface {
   /// Whether this host can override the application's screen brightness.
   bool get supportsApplicationBrightness => false;
 
+  /// Whether horizontal reader turns should use an immediate page position.
+  ///
+  /// Some embedded surfaces cannot complete a Flutter page animation while
+  /// the host is recovering a submitted frame. Hosts can opt into the direct
+  /// path without changing the reader's public navigation model.
+  bool get prefersDirectPageTurns => false;
+
   /// Sets the application's display brightness for the active reader route.
   Future<void> setApplicationBrightness(double brightness) async {}
 
@@ -133,6 +140,9 @@ class MethodChannelReaderPlatform extends ReaderPlatform {
   }
 
   bool get _isOhos => !kIsWeb && _operatingSystem == 'ohos';
+
+  @override
+  bool get prefersDirectPageTurns => _isOhos;
 
   @override
   bool get supportsKeepScreenOn =>

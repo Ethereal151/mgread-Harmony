@@ -606,7 +606,21 @@ extension _TextReaderPagination on _TextReaderViewState {
     _pageTurnAnimating = true;
     _pageTurnForward = page > _pageIndex;
     try {
-      if (_preferences.pageAnimation == ReaderPageAnimation.none ||
+      if (_usesDirectPageTurns) {
+        // The OHOS Flutter surface can reject a submitted raster frame while
+        // its host is changing VSync rates. Waiting on animateToPage in that
+        // state leaves the reader visibly fixed at the last page even though
+        // pagination already produced later pages. Commit ordinary turns
+        // synchronously and handle a chapter boundary through the session.
+        if (page >= _pages.length) {
+          await _nextChapter();
+        } else {
+          _pageController.jumpToPage(page + 1);
+          _pageIndex = page;
+          _updateProgressFromPage();
+          if (mounted) setState(() {});
+        }
+      } else if (_preferences.pageAnimation == ReaderPageAnimation.none ||
           MediaQuery.disableAnimationsOf(context)) {
         _pageController.jumpToPage(page + 1);
       } else {

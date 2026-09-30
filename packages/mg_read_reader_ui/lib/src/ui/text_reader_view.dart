@@ -349,6 +349,8 @@ class _TextReaderViewState extends State<TextReaderView>
       _preferences.navigationMode == ReaderNavigationMode.horizontalPages &&
       (_preferences.pageAnimation == ReaderPageAnimation.cover ||
           _preferences.pageAnimation == ReaderPageAnimation.pageCurl);
+  bool get _prefersDirectPageTurns =>
+      ReaderPlatform.instance.prefersDirectPageTurns;
   ReaderChapterInfo? get _currentChapter => _currentChapterInfo;
   bool get _isBookPreview =>
       !_loading && _failure == null && _progress?.isBookPreview == true;
