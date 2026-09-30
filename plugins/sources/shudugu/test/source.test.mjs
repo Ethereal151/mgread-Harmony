@@ -114,6 +114,25 @@ test('reports redirects outside the source origin as access blocked', async () =
   );
 });
 
+test('returns detail without waiting for the paginated catalog', async () => {
+  let catalogPageRequests = 0;
+  const state = context(async (input) => {
+    const path = new URL(input).pathname;
+    if (path === '/51/') return new Response(paginatedDetail);
+    if (path === '/51/p-2.html') {
+      catalogPageRequests += 1;
+      return new Response(detailPage2);
+    }
+    return new Response('not found', { status: 404 });
+  });
+  await plugin.activate(state.value);
+
+  const book = await plugin.getDetail({ id: 'novel:51' });
+  assert.equal(book.title, '测试书');
+  assert.equal(book.chapterCount, null);
+  assert.equal(catalogPageRequests, 0);
+});
+
 test('reuses a fresh parsed detail projection after a source restart', async (t) => {
   const root = await mkdtemp(join(tmpdir(), 'mgread-shudugu-projection-'));
   t.after(() => rm(root, { recursive: true, force: true }));

@@ -424,7 +424,8 @@ class _SourceDetailScreenState extends State<_SourceDetailScreen> {
                             relatedContents: widget.relatedContents,
                             sourceVariants: widget.sourceVariants,
                             onSourceVariantRequested: widget.onSourceVariantRequested,
-                            isRefreshing: true,
+                            isRefreshing: _loadedDetail == null,
+                            isCatalogLoading: _loadedChapters == null,
                             hasLoadFailure: false,
                             onTextChapterRequested: widget.onTextChapterRequested,
                             onComicChapterRequested: widget.onComicChapterRequested,
@@ -487,6 +488,7 @@ class _SourceDetailScreenState extends State<_SourceDetailScreen> {
                                 sourceVariants: widget.sourceVariants,
                                 onSourceVariantRequested: widget.onSourceVariantRequested,
                                 isRefreshing: false,
+                                isCatalogLoading: false,
                                 hasLoadFailure: true,
                                 onTextChapterRequested: widget.onTextChapterRequested,
                                 onComicChapterRequested: widget.onComicChapterRequested,
@@ -528,6 +530,7 @@ class _SourceDetailScreenState extends State<_SourceDetailScreen> {
                         sourceVariants: widget.sourceVariants,
                         onSourceVariantRequested: widget.onSourceVariantRequested,
                         isRefreshing: false,
+                        isCatalogLoading: false,
                         hasLoadFailure: false,
                         onTextChapterRequested: widget.onTextChapterRequested,
                         onComicChapterRequested: widget.onComicChapterRequested,
@@ -568,6 +571,7 @@ class _SourceDetailView extends StatefulWidget {
     required this.sourceVariants,
     required this.onSourceVariantRequested,
     required this.isRefreshing,
+    required this.isCatalogLoading,
     required this.hasLoadFailure,
     required this.onTextChapterRequested,
     required this.onComicChapterRequested,
@@ -589,6 +593,7 @@ class _SourceDetailView extends StatefulWidget {
   final List<SourceSearchHit> sourceVariants;
   final SourceSearchVariantRequested? onSourceVariantRequested;
   final bool isRefreshing;
+  final bool isCatalogLoading;
   final bool hasLoadFailure;
   final SourceTextChapterRequested? onTextChapterRequested;
   final SourceComicChapterRequested? onComicChapterRequested;
@@ -608,7 +613,7 @@ class _SourceDetailView extends StatefulWidget {
 }
 
 class _SourceDetailViewState extends State<_SourceDetailView> {
-  late final List<PluginChapterSummary> _chapters;
+  late List<PluginChapterSummary> _chapters;
   late SourceDetailShelfState _shelfState;
   var _visibleChapterCount = 20;
   bool _isSavingToShelf = false;
@@ -624,6 +629,11 @@ class _SourceDetailViewState extends State<_SourceDetailView> {
   @override
   void didUpdateWidget(covariant _SourceDetailView oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.bundle.chapters.items.length != widget.bundle.chapters.items.length ||
+        (oldWidget.bundle.chapters.items.isNotEmpty && oldWidget.bundle.chapters.items.last.id != widget.bundle.chapters.items.last.id)) {
+      _chapters = List<PluginChapterSummary>.of(widget.bundle.chapters.items);
+      _visibleChapterCount = math.min(_visibleChapterCount, math.max(20, _chapters.length));
+    }
     if (!_isSavingToShelf &&
         !_isRemovingFromShelf &&
         oldWidget.shelfState != widget.shelfState &&
@@ -697,6 +707,7 @@ class _SourceDetailViewState extends State<_SourceDetailView> {
     sourceVariants: widget.sourceVariants,
     onSourceVariantRequested: widget.onSourceVariantRequested,
     isRefreshing: widget.isRefreshing,
+    isCatalogLoading: widget.isCatalogLoading,
     hasLoadFailure: widget.hasLoadFailure,
     onTextChapterRequested: widget.onTextChapterRequested,
     onComicChapterRequested: widget.onComicChapterRequested,

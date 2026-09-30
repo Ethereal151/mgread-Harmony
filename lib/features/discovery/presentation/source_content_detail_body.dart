@@ -17,6 +17,7 @@ class _SourceDetailBody extends StatelessWidget {
     required this.sourceVariants,
     required this.onSourceVariantRequested,
     required this.isRefreshing,
+    required this.isCatalogLoading,
     required this.hasLoadFailure,
     required this.onTextChapterRequested,
     required this.onComicChapterRequested,
@@ -44,6 +45,7 @@ class _SourceDetailBody extends StatelessWidget {
   final List<SourceSearchHit> sourceVariants;
   final SourceSearchVariantRequested? onSourceVariantRequested;
   final bool isRefreshing;
+  final bool isCatalogLoading;
   final bool hasLoadFailure;
   final SourceTextChapterRequested? onTextChapterRequested;
   final SourceComicChapterRequested? onComicChapterRequested;
@@ -74,6 +76,7 @@ class _SourceDetailBody extends StatelessWidget {
     final isVideo = content.contentKind == PluginContentKind.video;
     final canStartReading =
         !isRefreshing &&
+        !isCatalogLoading &&
         !hasLoadFailure &&
         firstChapter != null &&
         switch (content.contentKind) {
@@ -83,6 +86,7 @@ class _SourceDetailBody extends StatelessWidget {
         };
     final canChangeShelf =
         !isRefreshing &&
+        !isCatalogLoading &&
         !hasLoadFailure &&
         (shelfState != SourceDetailShelfState.canAdd
             ? onRemoveFromShelf != null && !isRemovingFromShelf
@@ -211,7 +215,7 @@ class _SourceDetailBody extends StatelessWidget {
                     disabledForegroundColor: tokens.mutedText,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                   ),
-                  child: isRefreshing
+                  child: isRefreshing || isCatalogLoading
                       ? const _DetailLoadingButtonLabel()
                       : Text(switch (content.contentKind) {
                           PluginContentKind.audio || PluginContentKind.video => '开始播放',
@@ -296,7 +300,7 @@ class _SourceDetailBody extends StatelessWidget {
           gateway: gateway,
           contentId: content.id,
           contentKind: content.contentKind,
-          isRefreshing: isRefreshing,
+          isRefreshing: isCatalogLoading,
           chapterTotal: chapterTotal,
           visibleChapterCount: visibleChapterCount,
           onLoadMore: onLoadMore,

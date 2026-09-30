@@ -147,10 +147,30 @@ export class ShuduguSource {
     if (cached !== undefined && cached.expiresAtMs >= Date.now()) return cached.value;
     const inFlight = this.#detailRequests.get(request.id);
     if (inFlight !== undefined) return inFlight;
-    const pending = this.#loadCachedDetail(request, detailProjectionPolicy, detailPolicy).then((projection) => projection.detail);
+    // Detail is the first screen the user sees. Do not make it wait for the
+    // complete chapter catalog: a cold catalog fetch can involve many network
+    // pages and must be allowed to finish independently through getChapters.
+    const pending = this.#loadDetailSummary(request, detailPolicy).then((result) => {
+      const expiresAtMs = result.storedAtMs + detailPolicy.staleAfterMs;
+      const detail = Object.freeze({ expiresAtMs, value: result.value });
+      this.#details.set(request.id, detail);
+      return result.value;
+    });
     this.#detailRequests.set(request.id, pending);
     void pending.then(() => this.#detailRequests.delete(request.id), () => this.#detailRequests.delete(request.id));
     return pending;
+  }
+
+  async #loadDetailSummary(request: ContentReferenceRequest, policy: PluginCachePolicy): Promise<CachedResult<ContentDetail>> {
+    const id = decodeNovelId(request.id);
+    const url = new URL(`/${id}/`, this.#baseUrl);
+    const cheerio = await loadCheerio();
+    const cachedHtml = await this.#getHtmlResult(url, policy);
+    const $ = cheerio.load(cachedHtml.body);
+    return Object.freeze({
+      value: this.#parseDetailSummary($, url, id, null),
+      storedAtMs: cachedHtml.storedAtMs,
+    });
   }
 
   async #loadDetailProjection(request: ContentReferenceRequest, cachePolicy: PluginCachePolicy): Promise<CachedResult<DetailProjection>> {
@@ -159,6 +179,19 @@ export class ShuduguSource {
     const cheerio = await loadCheerio();
     const cachedHtml = await this.#getHtmlResult(url, cachePolicy);
     const $ = cheerio.load(cachedHtml.body);
+    const chapters = await this.#loadCatalog(cheerio, cachedHtml.body, url, id, cachePolicy);
+    const detail = this.#parseDetailSummary($, url, id, chapters.length);
+    const expiresAtMs = cachedHtml.storedAtMs + cachePolicy.staleAfterMs;
+    // Discovery's hydration satisfies both the later detail route and add-to-shelf
+    // catalog request after loading every catalog page once.
+    const catalog = Object.freeze({ items: Object.freeze(chapters.map((chapter, index) => Object.freeze({
+        id: chapter.id, title: chapter.title, order: index, url: chapter.url.toString(), volumeTitle: null,
+        wordCount: null, updatedAt: null, isLocked: false, attributes: Object.freeze([]),
+      }))) });
+    return Object.freeze({ value: Object.freeze({ detail, catalog }), storedAtMs: cachedHtml.storedAtMs });
+  }
+
+  #parseDetailSummary($: cheerio.CheerioAPI, url: URL, id: string, chapterCount: number | null): ContentDetail {
     const item = $('.item').first();
     const title = required(item.find('.itemtxt h1 a, .itemtxt h3 a').first().text());
     const spans = item.find('.itemtxt p span').toArray().map((element) => required($(element).text()));
@@ -176,20 +209,11 @@ export class ShuduguSource {
       url: this.#sourceUrl(latestHref, url).toString(), updatedAt,
     });
     const coverUrl = this.#proxyCoverUrl(item.find('img').first().attr('src'), url);
-    const chapters = await this.#loadCatalog(cheerio, cachedHtml.body, url, id, cachePolicy);
-    const detail = Object.freeze({
+    return Object.freeze({
       ...this.#summary({ id, title, author, category, coverUrl, description, status, wordCount,
-        chapterCount: chapters.length, latestChapter, updatedAt }),
+        chapterCount, latestChapter, updatedAt }),
       aliases: Object.freeze([]), catalogUrl: url.toString(),
     });
-    const expiresAtMs = cachedHtml.storedAtMs + cachePolicy.staleAfterMs;
-    // Discovery's hydration satisfies both the later detail route and add-to-shelf
-    // catalog request after loading every catalog page once.
-    const catalog = Object.freeze({ items: Object.freeze(chapters.map((chapter, index) => Object.freeze({
-        id: chapter.id, title: chapter.title, order: index, url: chapter.url.toString(), volumeTitle: null,
-        wordCount: null, updatedAt: null, isLocked: false, attributes: Object.freeze([]),
-      }))) });
-    return Object.freeze({ value: Object.freeze({ detail, catalog }), storedAtMs: cachedHtml.storedAtMs });
   }
 
   async getChapters(request: ChaptersRequest): Promise<ChaptersResult> {

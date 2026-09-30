@@ -6864,10 +6864,26 @@ var ShuduguSource = class {
     if (cached !== void 0 && cached.expiresAtMs >= Date.now()) return cached.value;
     const inFlight = this.#detailRequests.get(request.id);
     if (inFlight !== void 0) return inFlight;
-    const pending = this.#loadCachedDetail(request, detailProjectionPolicy, detailPolicy).then((projection) => projection.detail);
+    const pending = this.#loadDetailSummary(request, detailPolicy).then((result) => {
+      const expiresAtMs = result.storedAtMs + detailPolicy.staleAfterMs;
+      const detail = Object.freeze({ expiresAtMs, value: result.value });
+      this.#details.set(request.id, detail);
+      return result.value;
+    });
     this.#detailRequests.set(request.id, pending);
     void pending.then(() => this.#detailRequests.delete(request.id), () => this.#detailRequests.delete(request.id));
     return pending;
+  }
+  async #loadDetailSummary(request, policy) {
+    const id = decodeNovelId(request.id);
+    const url = new URL(`/${id}/`, this.#baseUrl);
+    const cheerio = await loadCheerio();
+    const cachedHtml = await this.#getHtmlResult(url, policy);
+    const $ = cheerio.load(cachedHtml.body);
+    return Object.freeze({
+      value: this.#parseDetailSummary($, url, id, null),
+      storedAtMs: cachedHtml.storedAtMs
+    });
   }
   async #loadDetailProjection(request, cachePolicy) {
     const id = decodeNovelId(request.id);
@@ -6875,6 +6891,23 @@ var ShuduguSource = class {
     const cheerio = await loadCheerio();
     const cachedHtml = await this.#getHtmlResult(url, cachePolicy);
     const $ = cheerio.load(cachedHtml.body);
+    const chapters = await this.#loadCatalog(cheerio, cachedHtml.body, url, id, cachePolicy);
+    const detail = this.#parseDetailSummary($, url, id, chapters.length);
+    const expiresAtMs = cachedHtml.storedAtMs + cachePolicy.staleAfterMs;
+    const catalog = Object.freeze({ items: Object.freeze(chapters.map((chapter, index2) => Object.freeze({
+      id: chapter.id,
+      title: chapter.title,
+      order: index2,
+      url: chapter.url.toString(),
+      volumeTitle: null,
+      wordCount: null,
+      updatedAt: null,
+      isLocked: false,
+      attributes: Object.freeze([])
+    }))) });
+    return Object.freeze({ value: Object.freeze({ detail, catalog }), storedAtMs: cachedHtml.storedAtMs });
+  }
+  #parseDetailSummary($, url, id, chapterCount) {
     const item = $(".item").first();
     const title = required(item.find(".itemtxt h1 a, .itemtxt h3 a").first().text());
     const spans = item.find(".itemtxt p span").toArray().map((element) => required($(element).text()));
@@ -6894,8 +6927,7 @@ var ShuduguSource = class {
       updatedAt
     });
     const coverUrl = this.#proxyCoverUrl(item.find("img").first().attr("src"), url);
-    const chapters = await this.#loadCatalog(cheerio, cachedHtml.body, url, id, cachePolicy);
-    const detail = Object.freeze({
+    return Object.freeze({
       ...this.#summary({
         id,
         title,
@@ -6905,26 +6937,13 @@ var ShuduguSource = class {
         description,
         status,
         wordCount,
-        chapterCount: chapters.length,
+        chapterCount,
         latestChapter,
         updatedAt
       }),
       aliases: Object.freeze([]),
       catalogUrl: url.toString()
     });
-    const expiresAtMs = cachedHtml.storedAtMs + cachePolicy.staleAfterMs;
-    const catalog = Object.freeze({ items: Object.freeze(chapters.map((chapter, index2) => Object.freeze({
-      id: chapter.id,
-      title: chapter.title,
-      order: index2,
-      url: chapter.url.toString(),
-      volumeTitle: null,
-      wordCount: null,
-      updatedAt: null,
-      isLocked: false,
-      attributes: Object.freeze([])
-    }))) });
-    return Object.freeze({ value: Object.freeze({ detail, catalog }), storedAtMs: cachedHtml.storedAtMs });
   }
   async getChapters(request) {
     decodeNovelId(request.id);
