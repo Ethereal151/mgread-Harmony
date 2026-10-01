@@ -1,6 +1,7 @@
-# Run an OHOS integration test with an architecture-specific temporary project
-# configuration. Flutter's OHOS test runner does not expose --target-platform,
-# so the selected native HAR and HAP ABI must be selected before it starts.
+# Run an OHOS integration test with a debug, architecture-specific temporary
+# project configuration. Flutter's OHOS test runner does not expose
+# --target-platform, so the selected native HAR and HAP ABI must be selected
+# before it starts.
 
 param(
   [Parameter(Mandatory = $true)]
@@ -39,14 +40,20 @@ foreach ($name in $rustEnvironmentNames) {
 }
 
 $projectRoot = Split-Path -Parent $PSScriptRoot
+$targetPlatform = "ohos-$Architecture"
+$rootPackage = Join-Path $projectRoot 'ohos\oh-package.json5'
+$rootPackageLock = Join-Path $projectRoot 'ohos\oh-package-lock.json5'
 $entryPackage = Join-Path $projectRoot 'ohos\entry\oh-package.json5'
 $entryBuildProfile = Join-Path $projectRoot 'ohos\entry\build-profile.json5'
 $entryNativeLibraries = Join-Path $projectRoot 'ohos\entry\libs'
 $temporaryRoot = Join-Path ([IO.Path]::GetTempPath()) "mgread-ohos-integration-$PID"
+$backupRootPackage = Join-Path $temporaryRoot 'oh-package.json5'
+$backupRootPackageLock = Join-Path $temporaryRoot 'oh-package-lock.json5'
 $backupEntryPackage = Join-Path $temporaryRoot 'entry.oh-package.json5'
 $backupEntryBuildProfile = Join-Path $temporaryRoot 'entry.build-profile.json5'
 $backupEntryNativeLibraries = Join-Path $temporaryRoot 'libs'
 $backupPackageMetadata = Join-Path $temporaryRoot 'package-metadata'
+$hadRootPackageLock = Test-Path -LiteralPath $rootPackageLock -PathType Leaf
 
 function Remove-StaleIntegrationBuildOutputs {
   $generatedPaths = @(
@@ -61,6 +68,34 @@ function Remove-StaleIntegrationBuildOutputs {
       Write-Host "Removed stale OHOS integration output: $generatedPath"
     }
   }
+}
+
+function Set-OhosFlutterRuntimeOverrides {
+  $flutterCommand = Get-Command flutter -ErrorAction Stop | Select-Object -First 1
+  $flutterRoot = Split-Path -Parent (Split-Path -Parent $flutterCommand.Source)
+  $engineDirectory = Join-Path (Join-Path $flutterRoot 'bin\cache\artifacts\engine') $targetPlatform
+  $nativeName = if ($Architecture -eq 'arm64') { 'flutter_native_arm64_v8a' } else { 'flutter_native_x86_64' }
+  $nativeFileName = if ($Architecture -eq 'arm64') { 'arm64_v8a_debug.har' } else { 'x86_64_debug.har' }
+  $embeddingPath = Join-Path $engineDirectory 'flutter_embedding_debug.har'
+  $nativePath = Join-Path $engineDirectory $nativeFileName
+  foreach ($requiredPath in @($embeddingPath, $nativePath)) {
+    if (-not (Test-Path -LiteralPath $requiredPath -PathType Leaf)) {
+      throw "OHOS debug $Architecture Flutter HAR is missing: $requiredPath"
+    }
+  }
+
+  $config = Get-Content -LiteralPath $rootPackage -Raw | ConvertFrom-Json
+  $overrides = $config.overrides
+  if ($null -eq $overrides) {
+    throw "OHOS root package has no overrides map: $rootPackage"
+  }
+  foreach ($name in @('@ohos/flutter_ohos', 'flutter_native_arm64_v8a', 'flutter_native_x86_64')) {
+    $overrides.PSObject.Properties.Remove($name)
+  }
+  $overrides | Add-Member -MemberType NoteProperty -Name '@ohos/flutter_ohos' -Value "file:$embeddingPath" -Force
+  $overrides | Add-Member -MemberType NoteProperty -Name $nativeName -Value "file:$nativePath" -Force
+  $config | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $rootPackage -Encoding utf8
+  Write-Host "OHOS debug $Architecture selects $nativeName and matching Flutter embedding HAR."
 }
 
 function Build-OhosRustRuntime {
@@ -136,6 +171,9 @@ if (Test-Path -LiteralPath $packagesRoot -PathType Container) {
 if (-not (Test-Path -LiteralPath $entryPackage -PathType Leaf)) {
   throw "OHOS entry package not found: $entryPackage"
 }
+if (-not (Test-Path -LiteralPath $rootPackage -PathType Leaf)) {
+  throw "OHOS root package not found: $rootPackage"
+}
 if (-not (Test-Path -LiteralPath $entryBuildProfile -PathType Leaf)) {
   throw "OHOS entry build profile not found: $entryBuildProfile"
 }
@@ -144,6 +182,10 @@ if (-not (Test-Path -LiteralPath $TestPath -PathType Leaf)) {
 }
 
 New-Item -ItemType Directory -Force -Path $temporaryRoot | Out-Null
+Copy-Item -LiteralPath $rootPackage -Destination $backupRootPackage -Force
+if ($hadRootPackageLock) {
+  Copy-Item -LiteralPath $rootPackageLock -Destination $backupRootPackageLock -Force
+}
 Copy-Item -LiteralPath $entryPackage -Destination $backupEntryPackage -Force
 Copy-Item -LiteralPath $entryBuildProfile -Destination $backupEntryBuildProfile -Force
 foreach ($metadataFile in $packageMetadataFiles) {
@@ -157,6 +199,7 @@ if (Test-Path -LiteralPath $entryNativeLibraries -PathType Container) {
 }
 
 try {
+  Set-OhosFlutterRuntimeOverrides
   $selectedArchitecture = if ($Architecture -eq 'arm64') { 'arm64_v8a' } else { 'x86_64' }
   $unselectedArchitecture = if ($Architecture -eq 'arm64') { 'x86_64' } else { 'arm64_v8a' }
 
@@ -211,6 +254,12 @@ try {
     [Environment]::SetEnvironmentVariable($name, $originalRustEnvironment[$name], 'Process')
   }
   $env:Path = $originalPath
+  Copy-Item -LiteralPath $backupRootPackage -Destination $rootPackage -Force
+  if ($hadRootPackageLock) {
+    Copy-Item -LiteralPath $backupRootPackageLock -Destination $rootPackageLock -Force
+  } elseif (Test-Path -LiteralPath $rootPackageLock -PathType Leaf) {
+    Remove-Item -LiteralPath $rootPackageLock -Force
+  }
   Copy-Item -LiteralPath $backupEntryPackage -Destination $entryPackage -Force
   Copy-Item -LiteralPath $backupEntryBuildProfile -Destination $entryBuildProfile -Force
   if (Test-Path -LiteralPath $backupPackageMetadata -PathType Container) {

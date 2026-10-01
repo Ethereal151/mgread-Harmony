@@ -15,6 +15,10 @@
     {
       "name": "camera_permission_reason",
       "value": "Allow MgRead to scan QR codes using the camera"
+    },
+    {
+      "name": "background_audio_permission_reason",
+      "value": "Allow MgRead to continue audio playback in the background"
     }
   ]
 }

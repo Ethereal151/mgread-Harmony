@@ -82,7 +82,9 @@ hdc install build/ohos/hap/entry-default-signed.hap
 ## 瘦身 HAP 构建
 
 OHOS 的 Runtime 构建使用仓库脚本，构建期间会临时移除 Android、Windows、macOS
-Runtime 资源和未选择的原生架构，完成后自动恢复源配置：
+Runtime 资源、未选择的原生架构，并按 `BuildMode`/`Architecture` 选择匹配的
+Flutter embedding/native HAR；完成后自动恢复源配置和 OHPM 锁文件，不需要手工
+在 Debug/Release 路径之间切换：
 
 ```powershell
 # arm64 真机 Release；默认保留签名流程

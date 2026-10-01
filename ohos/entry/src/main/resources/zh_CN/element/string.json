@@ -15,6 +15,10 @@
     {
       "name": "camera_permission_reason",
       "value": "允许 MgRead 使用相机扫描二维码"
+    },
+    {
+      "name": "background_audio_permission_reason",
+      "value": "允许 MgRead 在后台持续播放音频"
     }
   ]
 }

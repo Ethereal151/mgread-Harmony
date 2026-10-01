@@ -22,6 +22,9 @@
         "startWindowIcon": "$media:icon",
         "startWindowBackground": "$color:start_window_background",
         "exported": true,
+        "backgroundModes": [
+          "audioPlayback"
+        ],
         "skills": [
           {
             "entities": [
@@ -43,6 +46,14 @@
         "usedScene": {
           "abilities": ["EntryAbility"],
           "when": "inuse"
+        }
+      },
+      {
+        "name": "ohos.permission.KEEP_BACKGROUND_RUNNING",
+        "reason": "$string:background_audio_permission_reason",
+        "usedScene": {
+          "abilities": ["EntryAbility"],
+          "when": "always"
         }
       }
     ]

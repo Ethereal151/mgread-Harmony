@@ -1,9 +1,9 @@
 # MgRead OHOS HAP build entry point.
 #
-# It narrows the Flutter Runtime asset manifest and entry native architecture
-# only during the build, then restores both files even when the build fails.
-# Release and debug share this path so neither package gets desktop Runtime
-# assets or an unselected architecture.
+# It narrows the Flutter Runtime asset manifest, root HAR overrides, and entry
+# native architecture only during the build, then restores them even when the
+# build fails. Release and debug share this path so neither package gets stale
+# mode/architecture artifacts or an unselected architecture.
 
 param(
   [ValidateSet('debug', 'release')]
@@ -46,15 +46,20 @@ foreach ($name in $rustEnvironmentNames) {
 
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $runtimePubspec = Join-Path $projectRoot 'packages\mgread_plugin_runtime\pubspec.yaml'
+$rootPackage = Join-Path $projectRoot 'ohos\oh-package.json5'
+$rootPackageLock = Join-Path $projectRoot 'ohos\oh-package-lock.json5'
 $entryPackage = Join-Path $projectRoot 'ohos\entry\oh-package.json5'
 $entryBuildProfile = Join-Path $projectRoot 'ohos\entry\build-profile.json5'
 $hapDirectory = Join-Path $projectRoot 'build\ohos\hap'
 $targetPlatform = "ohos-$Architecture"
 $temporaryRoot = Join-Path ([IO.Path]::GetTempPath()) "mgread-ohos-release-$PID"
 $backupPubspec = Join-Path $temporaryRoot 'mgread_plugin_runtime.pubspec.yaml'
+$backupRootPackage = Join-Path $temporaryRoot 'oh-package.json5'
+$backupRootPackageLock = Join-Path $temporaryRoot 'oh-package-lock.json5'
 $backupEntryPackage = Join-Path $temporaryRoot 'entry.oh-package.json5'
 $backupEntryBuildProfile = Join-Path $temporaryRoot 'entry.build-profile.json5'
 $backupPackageMetadata = Join-Path $temporaryRoot 'package-metadata'
+$hadRootPackageLock = Test-Path -LiteralPath $rootPackageLock -PathType Leaf
 
 $packagesRoot = Join-Path $projectRoot 'packages'
 $packageMetadataFiles = @()
@@ -94,6 +99,40 @@ function Remove-StaleFlutterBuildOutputs {
       Write-Host "Removed stale OHOS Flutter output: $generatedPath"
     }
   }
+}
+
+function Set-OhosFlutterRuntimeOverrides {
+  $flutterCommand = Get-Command flutter -ErrorAction Stop | Select-Object -First 1
+  $flutterRoot = Split-Path -Parent (Split-Path -Parent $flutterCommand.Source)
+  $engineVariant = if ($BuildMode -eq 'debug') {
+    $targetPlatform
+  } else {
+    "$targetPlatform-release"
+  }
+  $engineRoot = Join-Path $flutterRoot 'bin\cache\artifacts\engine'
+  $engineDirectory = Join-Path $engineRoot $engineVariant
+  $nativeName = if ($Architecture -eq 'arm64') { 'flutter_native_arm64_v8a' } else { 'flutter_native_x86_64' }
+  $nativeFileName = if ($Architecture -eq 'arm64') { "arm64_v8a_$BuildMode.har" } else { "x86_64_$BuildMode.har" }
+  $embeddingPath = Join-Path $engineDirectory "flutter_embedding_$BuildMode.har"
+  $nativePath = Join-Path $engineDirectory $nativeFileName
+  foreach ($requiredPath in @($embeddingPath, $nativePath)) {
+    if (-not (Test-Path -LiteralPath $requiredPath -PathType Leaf)) {
+      throw "OHOS $BuildMode $Architecture Flutter HAR is missing: $requiredPath"
+    }
+  }
+
+  $config = Get-Content -LiteralPath $rootPackage -Raw | ConvertFrom-Json
+  $overrides = $config.overrides
+  if ($null -eq $overrides) {
+    throw "OHOS root package has no overrides map: $rootPackage"
+  }
+  foreach ($name in @('@ohos/flutter_ohos', 'flutter_native_arm64_v8a', 'flutter_native_x86_64')) {
+    $overrides.PSObject.Properties.Remove($name)
+  }
+  $overrides | Add-Member -MemberType NoteProperty -Name '@ohos/flutter_ohos' -Value "file:$embeddingPath" -Force
+  $overrides | Add-Member -MemberType NoteProperty -Name $nativeName -Value "file:$nativePath" -Force
+  $config | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $rootPackage -Encoding utf8
+  Write-Host "OHOS $BuildMode $Architecture selects $nativeName and matching Flutter embedding HAR."
 }
 
 function Build-OhosRustRuntime {
@@ -144,6 +183,9 @@ function Build-OhosRustRuntime {
 if (-not (Test-Path -LiteralPath $runtimePubspec -PathType Leaf)) {
   throw "Runtime pubspec not found: $runtimePubspec"
 }
+if (-not (Test-Path -LiteralPath $rootPackage -PathType Leaf)) {
+  throw "OHOS root package not found: $rootPackage"
+}
 if (-not (Test-Path -LiteralPath $entryPackage -PathType Leaf)) {
   throw "OHOS entry package not found: $entryPackage"
 }
@@ -153,6 +195,10 @@ if (-not (Test-Path -LiteralPath $entryBuildProfile -PathType Leaf)) {
 
 New-Item -ItemType Directory -Force -Path $temporaryRoot | Out-Null
 Copy-Item -LiteralPath $runtimePubspec -Destination $backupPubspec -Force
+Copy-Item -LiteralPath $rootPackage -Destination $backupRootPackage -Force
+if ($hadRootPackageLock) {
+  Copy-Item -LiteralPath $rootPackageLock -Destination $backupRootPackageLock -Force
+}
 Copy-Item -LiteralPath $entryPackage -Destination $backupEntryPackage -Force
 Copy-Item -LiteralPath $entryBuildProfile -Destination $backupEntryBuildProfile -Force
 foreach ($metadataFile in $packageMetadataFiles) {
@@ -239,6 +285,7 @@ try {
     $env:MGREAD_RUST_RUNTIME_INCLUDE = $rustRuntime.Include
     Write-Host "OHOS Rust runtime: $($rustRuntime.Library)"
   }
+  Set-OhosFlutterRuntimeOverrides
   Remove-StaleFlutterBuildOutputs
   $flutterArguments = 'build', 'hap', "--$BuildMode", '--target-platform', $targetPlatform, '--no-pub', '--no-tree-shake-icons', '--dart-define=MGREAD_OHOS_NATIVE_RUNTIME=true'
   if ($NoCodesign) {
@@ -294,6 +341,12 @@ try {
     [Environment]::SetEnvironmentVariable($name, $originalRustEnvironment[$name], 'Process')
   }
   Copy-Item -LiteralPath $backupPubspec -Destination $runtimePubspec -Force
+  Copy-Item -LiteralPath $backupRootPackage -Destination $rootPackage -Force
+  if ($hadRootPackageLock) {
+    Copy-Item -LiteralPath $backupRootPackageLock -Destination $rootPackageLock -Force
+  } elseif (Test-Path -LiteralPath $rootPackageLock -PathType Leaf) {
+    Remove-Item -LiteralPath $rootPackageLock -Force
+  }
   Copy-Item -LiteralPath $backupEntryPackage -Destination $entryPackage -Force
   Copy-Item -LiteralPath $backupEntryBuildProfile -Destination $entryBuildProfile -Force
   if (Test-Path -LiteralPath $backupPackageMetadata -PathType Container) {

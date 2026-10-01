@@ -19,6 +19,7 @@ import common from '@ohos.app.ability.common'
 import media from '@ohos.multimedia.media'
 import audio from '@ohos.multimedia.audio'
 import avSession from '@ohos.multimedia.avsession'
+import OhosAudioBackgroundTask from './OhosAudioBackgroundTask'
 import OhosMediaEventStreamHandler from './OhosMediaEventStreamHandler'
 
 interface MediaSession {
@@ -140,6 +141,7 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
   private audioVolume = 1
   private audioWasPlayingBeforeInterrupt = false
   private audioInterruptionActive = false
+  private readonly audioBackgroundTask = new OhosAudioBackgroundTask()
 
   getUniqueClassName(): string {
     return 'MgReadOhosMediaPlugin'
@@ -158,6 +160,7 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
 
   onAttachedToAbility(binding: AbilityPluginBinding): void {
     this.context = binding.getAbility().context as common.UIAbilityContext
+    this.audioBackgroundTask.attach(this.context)
   }
 
   onDetachedFromAbility(): void {
@@ -172,8 +175,13 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
     this.eventChannel?.setStreamHandler(null)
     this.methodChannel = undefined
     this.eventChannel = undefined
-    this.disposeAll().then(() => this.destroyAudioSession()).catch(() => {})
-    this.context = undefined
+    this.disposeAll()
+      .then(() => this.destroyAudioSession())
+      .then(() => {
+        this.context = undefined
+        this.audioBackgroundTask.detach()
+      })
+      .catch(() => {})
   }
 
   onVideoSurfaceReady(view: OhosVideoSurfacePlatformView, surfaceId: string): void {
@@ -212,7 +220,7 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
         this.run(args, (session) => this.playSession(this.sessionId(args), session), result)
         break
       case 'pause':
-        this.run(args, (session) => session.player.pause(), result)
+        this.run(args, (session) => this.pauseSession(this.sessionId(args), session), result)
         break
       case 'seek':
         this.run(args, (session) => {
@@ -394,7 +402,9 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
     this.audioInterruptionActive = true
     this.audioWasPlayingBeforeInterrupt = player.state === 'playing'
     if (this.audioWasPlayingBeforeInterrupt) {
-      player.pause().catch((error: Error) => this.emit(sessionId, 'error', null, `audio_interrupt_pause_failed: ${this.errorMessage(error)}`))
+      player.pause()
+        .then(() => this.audioBackgroundTask.stop())
+        .catch((error: Error) => this.emit(sessionId, 'error', null, `audio_interrupt_pause_failed: ${this.errorMessage(error)}`))
     }
     this.emit(sessionId, 'interrupted', true)
   }
@@ -405,7 +415,11 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
     const resume = this.audioWasPlayingBeforeInterrupt
     this.audioWasPlayingBeforeInterrupt = false
     if (resume) {
-      player.play().catch((error: Error) => this.emit(sessionId, 'error', null, `audio_interrupt_resume_failed: ${this.errorMessage(error)}`))
+      const session = this.sessions.get(sessionId)
+      if (session !== undefined) {
+        this.playSession(sessionId, session)
+          .catch((error: Error) => this.emit(sessionId, 'error', null, `audio_interrupt_resume_failed: ${this.errorMessage(error)}`))
+      }
     }
     this.emit(sessionId, 'interrupted', false)
   }
@@ -437,7 +451,13 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
     // is observable. Do not let Dart issue pause/seek-after-play while the
     // player is still in `prepared`, because OHOS rejects pause in that state.
     await this.waitForState(session.player, 'playing')
+    await this.audioBackgroundTask.start()
     this.log(`playing session=${sessionId}`)
+  }
+
+  private async pauseSession(sessionId: string, session: MediaSession): Promise<void> {
+    await session.player.pause()
+    if (this.audioSessionId === sessionId) await this.audioBackgroundTask.stop()
   }
 
   private async prepareSession(
@@ -485,7 +505,10 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
     const session = this.sessions.get(sessionId)
     if (session === undefined) return
     this.sessions.delete(sessionId)
-    if (sessionId === this.audioSessionId) await this.destroyAudioSession()
+    if (sessionId === this.audioSessionId) {
+      await this.audioBackgroundTask.stop()
+      await this.destroyAudioSession()
+    }
     try {
       await session.player.release()
     } catch (_) {
@@ -669,7 +692,7 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
         operation = this.playSession(activeSessionId, session)
         break
       case 'pause':
-        operation = session.player.pause()
+        operation = this.pauseSession(activeSessionId, session)
         break
       case 'seek':
         session.player.seek(value ?? 0)
@@ -682,6 +705,7 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
   }
 
   private async destroyAudioSession(): Promise<void> {
+    await this.audioBackgroundTask.stop()
     const manager = this.audioSessionManager
     const session = this.audioSession
     this.audioSessionManager = undefined
