@@ -10,20 +10,104 @@ import {
   AbilityAware,
   AbilityPluginBinding,
   Log,
+  PlatformView,
+  PlatformViewFactory,
+  StandardMessageCodec,
 } from '@ohos/flutter_ohos'
+import { Params } from '@ohos/flutter_ohos/src/main/ets/plugin/platform/PlatformView'
 import common from '@ohos.app.ability.common'
 import media from '@ohos.multimedia.media'
 import audio from '@ohos.multimedia.audio'
 import avSession from '@ohos.multimedia.avsession'
-import { SurfaceTextureEntry, TextureRegistry } from '@ohos/flutter_ohos'
 import OhosMediaEventStreamHandler from './OhosMediaEventStreamHandler'
 
 interface MediaSession {
   player: media.AVPlayer
-  texture?: SurfaceTextureEntry
+  playerSurfaceId?: string
   video: boolean
   initialPositionMs: number
   loop: boolean
+}
+
+const VIDEO_SURFACE_VIEW_TYPE = 'mgread_ohos_video_surface'
+
+class OhosVideoSurfacePlatformViewFactory extends PlatformViewFactory {
+  private readonly owner: MgReadOhosMediaPlugin
+
+  constructor(owner: MgReadOhosMediaPlugin) {
+    super(StandardMessageCodec.INSTANCE)
+    this.owner = owner
+  }
+
+  create(_context: common.Context, _viewId: number, _args: Any): PlatformView {
+    return new OhosVideoSurfacePlatformView(this.owner)
+  }
+}
+
+class OhosVideoSurfacePlatformView extends PlatformView {
+  private readonly owner: MgReadOhosMediaPlugin
+  private readonly controller: XComponentController = new XComponentController()
+  private disposed = false
+
+  constructor(owner: MgReadOhosMediaPlugin) {
+    super()
+    this.owner = owner
+  }
+
+  getView(): WrappedBuilder<[Params]> {
+    return wrapBuilder(buildOhosVideoSurface)
+  }
+
+  markLoaded(): void {
+    if (this.disposed) return
+    this.owner.onVideoSurfaceReady(this, this.controller.getXComponentSurfaceId())
+  }
+
+  dispose(): void {
+    if (this.disposed) return
+    this.disposed = true
+    this.owner.onVideoSurfaceDisposed(this)
+  }
+
+  getXComponentController(): XComponentController {
+    return this.controller
+  }
+
+  dispatchTouch(event: TouchEvent): void {
+    // HCPP places the DISPLAY platform view above Flutter's raster surface.
+    // Forward touches from the native surface back to Flutter so the Dart
+    // gesture layer can reveal controls, seek, and toggle playback. In the
+    // texture path no dispatcher is installed, so the surface remains passive.
+    if (this.ohosHcppViewId < 0 || this.touchDispatcher == null) return
+    this.touchDispatcher(this.ohosHcppViewId, event)
+  }
+}
+
+@Builder
+function buildOhosVideoSurface(params: Params): void {
+  Stack() {
+    XComponent({
+      id: 'mgread_ohos_video_surface',
+      type: XComponentType.SURFACE,
+      controller: (params.platformView as OhosVideoSurfacePlatformView).getXComponentController(),
+    })
+      .width('100%')
+      .height('100%')
+      // The SURFACE only renders video. Input belongs to the outer container,
+      // matching the reference player's permanent-surface structure.
+      .hitTestBehavior(HitTestMode.None)
+      .backgroundColor('#000000')
+      .onLoad((): void => (params.platformView as OhosVideoSurfacePlatformView).markLoaded())
+  }
+    .width('100%')
+    .height('100%')
+    // HCPP needs the container to receive the event before forwarding it to
+    // Flutter's pointer arena. The texture path has no dispatcher and stays
+    // passive through the guard in dispatchTouch().
+    .hitTestBehavior(HitTestMode.Default)
+    .onTouch((event: TouchEvent): void => {
+      (params.platformView as OhosVideoSurfacePlatformView).dispatchTouch(event)
+    })
 }
 
 interface OhosMediaEventPayload {
@@ -38,16 +122,13 @@ interface OhosMediaEventPayload {
 /** Native AVPlayer owner for OHOS audio and video sessions. */
 export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallHandler, AbilityAware {
   private static readonly TAG = 'MgReadOhosMedia'
-  // A positive bootstrap size is required by the OHOS Flutter external
-  // texture before AVPlayer reports the stream's real dimensions. The actual
-  // size is applied again after prepared/videoSizeChange.
-  private static readonly BOOTSTRAP_VIDEO_WIDTH = 640
-  private static readonly BOOTSTRAP_VIDEO_HEIGHT = 360
   private methodChannel?: MethodChannel
   private eventChannel?: EventChannel
   private readonly events = new OhosMediaEventStreamHandler()
   private sessions: Map<string, MediaSession> = new Map()
-  private textures?: TextureRegistry
+  private videoSurfaceId?: string
+  private videoSurfaceOwner?: OhosVideoSurfacePlatformView
+  private videoSurfaceWaiters: Array<(surfaceId: string) => void> = []
   private context?: common.UIAbilityContext
   private audioSession?: avSession.AVSession
   private audioSessionManager?: audio.AudioSessionManager
@@ -65,7 +146,10 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
   }
 
   onAttachedToEngine(binding: FlutterPluginBinding): void {
-    this.textures = binding.getTextureRegistry()
+    binding.getPlatformViewRegistry().registerViewFactory(
+      VIDEO_SURFACE_VIEW_TYPE,
+      new OhosVideoSurfacePlatformViewFactory(this),
+    )
     this.methodChannel = new MethodChannel(binding.getBinaryMessenger(), 'mgread/ohos_media')
     this.methodChannel.setMethodCallHandler(this)
     this.eventChannel = new EventChannel(binding.getBinaryMessenger(), 'mgread/ohos_media/events')
@@ -90,7 +174,23 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
     this.eventChannel = undefined
     this.disposeAll().then(() => this.destroyAudioSession()).catch(() => {})
     this.context = undefined
-    this.textures = undefined
+  }
+
+  onVideoSurfaceReady(view: OhosVideoSurfacePlatformView, surfaceId: string): void {
+    if (surfaceId.length === 0) return
+    this.videoSurfaceOwner = view
+    this.videoSurfaceId = surfaceId
+    this.log(`video_surface_ready surfaceId=${surfaceId}`)
+    const waiters = this.videoSurfaceWaiters
+    this.videoSurfaceWaiters = []
+    waiters.forEach((waiter: (id: string) => void): void => waiter(surfaceId))
+  }
+
+  onVideoSurfaceDisposed(view: OhosVideoSurfacePlatformView): void {
+    if (this.videoSurfaceOwner !== view) return
+    this.videoSurfaceOwner = undefined
+    this.videoSurfaceId = undefined
+    this.log('video_surface_disposed')
   }
 
   onMethodCall(call: MethodCall, result: MethodResult): void {
@@ -151,22 +251,12 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
     }
     try {
       await this.disposeSession(sessionId)
+      const surfaceId = video ? await this.waitForVideoSurface() : undefined
       const player = await media.createAVPlayer()
-      // The OHOS Flutter engine's deprecated createSurfaceTexture() path
-      // creates an entry without registering a native surface (surfaceId is
-      // left at 0). AVPlayer can prepare successfully against that value but
-      // never receives a render target. Register an explicit texture so the
-      // engine supplies both the Flutter texture id and a real surface id.
-      const texture = video ? this.createVideoTexture() : undefined
-      if (video && texture === undefined) {
-        await player.release()
-        result.error('surface_unavailable', 'The OHOS texture registry is unavailable.', null)
-        return
-      }
       const headers = this.headers(args?.get('headers'))
       const initialPositionMs = this.number(args, 'initialPositionMs')
       const loop = this.booleanValue(args, 'loop')
-      const session: MediaSession = {player, texture, video, initialPositionMs, loop}
+      const session: MediaSession = {player, video, initialPositionMs, loop}
       this.sessions.set(sessionId, session)
       this.bind(sessionId, session)
       const resourceType = this.stringValue(args, 'resourceType')
@@ -195,46 +285,23 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
       }
       this.log(`source_set session=${sessionId} state=${player.state}`)
       await this.waitForState(player, 'initialized')
-      if (texture !== undefined) {
-        this.setVideoTextureSize(texture, MgReadOhosMediaPlugin.BOOTSTRAP_VIDEO_WIDTH, MgReadOhosMediaPlugin.BOOTSTRAP_VIDEO_HEIGHT)
-        const surfaceId = texture.getSurfaceId()
-        player.surfaceId = String(surfaceId)
-        this.log(`surface_bound session=${sessionId} textureId=${texture.getTextureId()} surfaceId=${surfaceId}`)
+      if (surfaceId !== undefined) {
+        player.surfaceId = surfaceId
+        session.playerSurfaceId = surfaceId
+        this.log(`surface_bound session=${sessionId} playerSurfaceId=${surfaceId} mode=xcomponent`)
       }
-      // A video Texture must be mounted by Flutter before AVPlayer.prepare()
-      // can produce a frame. Returning only after prepare made the texture ID
-      // unreachable to Dart until the first frame had already been submitted,
-      // which leaves API 26 devices in `initialized` and emits
-      // SurfaceFrame::Submit failed. Audio has no external Flutter surface and
-      // keeps the original prepare-before-return flow.
       if (!video) {
         await this.prepareSession(sessionId, args, session)
         if (this.booleanValue(args, 'play')) await this.playSession(sessionId, session)
       }
       result.success({
         sessionId,
-        textureId: texture?.getTextureId(),
         durationMs: video ? 0 : player.duration,
       })
     } catch (error) {
       await this.disposeSession(sessionId)
       result.error('open_failed', this.errorMessage(error), null)
     }
-  }
-
-  private createVideoTexture(): SurfaceTextureEntry | undefined {
-    if (this.textures === undefined) return undefined
-    const textureId = this.textures.getTextureId()
-    return this.textures.registerTexture(textureId)
-  }
-
-  private setVideoTextureSize(texture: SurfaceTextureEntry, width: number, height: number): void {
-    if (width <= 0 || height <= 0) {
-      this.log(`video_size_unavailable textureId=${texture.getTextureId()} size=${width}x${height}`)
-      return
-    }
-    this.textures?.setTextureBufferSize(texture.getTextureId(), width, height)
-    this.log(`texture_size textureId=${texture.getTextureId()} size=${width}x${height}`)
   }
 
   private bind(sessionId: string, session: MediaSession): void {
@@ -274,8 +341,7 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
     })
     player.on('videoSizeChange', (width: number, height: number) => {
       this.log(`video_size session=${sessionId} width=${width} height=${height}`)
-      if (session.texture !== undefined && width > 0 && height > 0) {
-        this.setVideoTextureSize(session.texture, width, height)
+      if (width > 0 && height > 0) {
         this.emitVideoSize(sessionId, width, height)
       }
     })
@@ -366,6 +432,7 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
     await this.prepareSession(sessionId, null, session)
     await session.player.play()
     this.log(`play_requested session=${sessionId}`)
+    this.log(`surface_playing session=${sessionId}`)
     // HarmonyOS resolves AVPlayer.play() before the asynchronous state change
     // is observable. Do not let Dart issue pause/seek-after-play while the
     // player is still in `prepared`, because OHOS rejects pause in that state.
@@ -383,9 +450,8 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
       this.log(`prepare_start session=${sessionId}`)
       await player.prepare()
       await this.waitForState(player, 'prepared')
-      if (session.texture !== undefined) {
-        this.setVideoTextureSize(session.texture, player.width, player.height)
-      }
+      player.videoScaleType = media.VideoScaleType.VIDEO_SCALE_TYPE_SCALED_ASPECT
+      this.log(`video_scale session=${sessionId} mode=scaled_aspect state=${player.state}`)
       this.log(`prepared session=${sessionId} durationMs=${player.duration} videoSize=${player.width}x${player.height}`)
       if (session.initialPositionMs > 0) player.seek(session.initialPositionMs)
       if (session.loop) player.loop = true
@@ -426,7 +492,6 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
       // Release is best effort after the session has been removed from the
       // registry; a native cleanup error must not block the next media item.
     } finally {
-      session.texture?.release()
       this.emit(sessionId, 'released', true)
     }
   }
@@ -639,5 +704,22 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
         // AVSession cleanup is best effort after the media registry is closed.
       }
     }
+  }
+
+  private waitForVideoSurface(): Promise<string> {
+    const current = this.videoSurfaceId
+    if (current !== undefined && current.length > 0) return Promise.resolve(current)
+    return new Promise<string>((resolve, reject): void => {
+      const waiter = (surfaceId: string): void => {
+        clearTimeout(timer)
+        resolve(surfaceId)
+      }
+      const timer = setTimeout((): void => {
+        const index = this.videoSurfaceWaiters.indexOf(waiter)
+        if (index >= 0) this.videoSurfaceWaiters.splice(index, 1)
+        reject(new Error('video_surface_unavailable'))
+      }, 10_000)
+      this.videoSurfaceWaiters.push(waiter)
+    })
   }
 }

@@ -4,6 +4,9 @@ library;
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:mgread_ohos_media/mgread_ohos_media.dart';
 
@@ -14,7 +17,49 @@ import '../api/models.dart';
 VideoPlaybackBackend createOhosVideoPlaybackBackend() =>
     OhosVideoPlaybackBackend();
 
-/// Video backend that renders through a Flutter texture owned by AVPlayer.
+/// Owns one OHOS surface-composition controller for the lifetime of the player
+/// surface.  `initSurfaceOhosView` uses the engine's native XComponent surface
+/// when HCPP is enabled and otherwise follows the engine's texture path; the
+/// controller must not be recreated from `build`, because AVPlayer is already
+/// bound to the XComponent surface returned by the native plugin.
+final class _OhosVideoSurfaceView extends StatefulWidget {
+  const _OhosVideoSurfaceView();
+
+  @override
+  State<_OhosVideoSurfaceView> createState() => _OhosVideoSurfaceViewState();
+}
+
+final class _OhosVideoSurfaceViewState extends State<_OhosVideoSurfaceView> {
+  late final OhosViewController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    final id = platformViewsRegistry.getNextPlatformViewId();
+    _controller = PlatformViewsService.initSurfaceOhosView(
+      id: id,
+      viewType: 'mgread_ohos_video_surface',
+      layoutDirection: TextDirection.ltr,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return OhosViewSurface(
+      controller: _controller,
+      hitTestBehavior: PlatformViewHitTestBehavior.transparent,
+      gestureRecognizers: const <Factory<OneSequenceGestureRecognizer>>{},
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+}
+
+/// Video backend that renders through a permanent native XComponent surface.
 final class OhosVideoPlaybackBackend implements VideoPlaybackBackend {
   /// Creates an OHOS backend using the process-scoped media channel.
   OhosVideoPlaybackBackend({OhosMediaClient? client})
@@ -27,7 +72,6 @@ final class OhosVideoPlaybackBackend implements VideoPlaybackBackend {
       );
   StreamSubscription<OhosMediaEvent>? _events;
   String? _sessionId;
-  int? _textureId;
   int _generation = 0;
   int _videoWidth = 640;
   int _videoHeight = 360;
@@ -42,24 +86,14 @@ final class OhosVideoPlaybackBackend implements VideoPlaybackBackend {
 
   @override
   Widget buildSurface({required BoxFit fit, Key? key}) {
-    final textureId = _textureId;
-    return textureId == null
-        ? SizedBox.expand(key: key)
-        : KeyedSubtree(
-            key: key,
-            child: FittedBox(
-              fit: fit,
-              clipBehavior: Clip.hardEdge,
-              child: SizedBox(
-                width: _videoWidth.toDouble(),
-                height: _videoHeight.toDouble(),
-                child: Texture(
-                  key: ValueKey<int>(textureId),
-                  textureId: textureId,
-                ),
-              ),
-            ),
-          );
+    // Keep the native XComponent permanent and full-stage. The AVPlayer owns
+    // the actual video scaling through SCALED_ASPECT; changing the HCPP node's
+    // geometry after metadata arrives can detach the OHOS surface from its
+    // compositor and produce a black frame.
+    return KeyedSubtree(
+      key: key,
+      child: const SizedBox.expand(child: _OhosVideoSurfaceView()),
+    );
   }
 
   @override
@@ -92,12 +126,6 @@ final class OhosVideoPlaybackBackend implements VideoPlaybackBackend {
         .where((event) => event.sessionId == sessionId)
         .listen((event) => _handleEvent(event, generation));
     try {
-      // AVPlayer can prepare a native surface before Flutter has rebuilt the
-      // Texture widget. Starting here makes API 26 devices occasionally
-      // deliver the first frame to an unconsumed surface; the engine then
-      // reports SurfaceFrame::Submit failed and no firstFrame event arrives.
-      // Keep open paused until the texture is mounted below, then start it
-      // through the normal command path.
       final result = await _client.openVideo(
         sessionId: sessionId,
         uri: Uri.parse(uri),
@@ -107,7 +135,6 @@ final class OhosVideoPlaybackBackend implements VideoPlaybackBackend {
         play: false,
       );
       if (!_isCurrent(generation)) return;
-      _textureId = result.textureId;
       _emit(
         _state.value.copyWith(
           duration: result.duration ?? _state.value.duration,
@@ -116,13 +143,9 @@ final class OhosVideoPlaybackBackend implements VideoPlaybackBackend {
         ),
       );
       if (play) {
-        // Wait for the state emission above to rebuild Texture before AVPlayer
-        // is allowed to produce the first frame.
-        // API 26 may continuously report SurfaceFrame::Submit failed while
-        // the window is rotating. That must not strand AVPlayer in
-        // `initialized` forever: the texture has already been registered and
-        // the native surface binding is complete, so a bounded fallback is
-        // safe and keeps the command path progressing.
+        // The native PlatformView is permanent and the AVPlayer is bound to its
+        // XComponent surface before prepare. Keep one frame boundary here so
+        // the initial surface layout has been committed before play.
         await WidgetsBinding.instance.endOfFrame.timeout(
           const Duration(milliseconds: 500),
           onTimeout: () {},
@@ -264,7 +287,6 @@ final class OhosVideoPlaybackBackend implements VideoPlaybackBackend {
   Future<void> _closeNativeSession() async {
     final sessionId = _sessionId;
     _sessionId = null;
-    _textureId = null;
     await _events?.cancel();
     _events = null;
     if (sessionId != null) {
@@ -297,7 +319,6 @@ final class OhosVideoPlaybackBackend implements VideoPlaybackBackend {
     _generation++;
     final sessionId = _sessionId;
     _sessionId = null;
-    _textureId = null;
     await _events?.cancel();
     _events = null;
     if (sessionId != null) {

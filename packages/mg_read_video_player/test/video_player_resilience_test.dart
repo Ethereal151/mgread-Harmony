@@ -187,6 +187,31 @@ void main() {
     }
   });
 
+  testWidgets('OHOS status shade does not pause visible video', (
+    WidgetTester tester,
+  ) async {
+    final previousPlatform = debugDefaultTargetPlatformOverride;
+    debugDefaultTargetPlatformOverride = TargetPlatform.ohos;
+    try {
+      final backend = _OrderedBackend();
+      await tester.pumpWidget(_app(backend: backend));
+      await tester.pumpAndSettle();
+
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      await tester.pump();
+      expect(backend.events, isNot(contains('pause')));
+      expect(backend.state.value.playing, isTrue);
+
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+      await tester.pump();
+      await tester.pump();
+      expect(backend.events, contains('pause'));
+      expect(backend.state.value.playing, isFalse);
+    } finally {
+      debugDefaultTargetPlatformOverride = previousPlatform;
+    }
+  });
+
   testWidgets('foreground does not resume a user-paused video', (
     WidgetTester tester,
   ) async {

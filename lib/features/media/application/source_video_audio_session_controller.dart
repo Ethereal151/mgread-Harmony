@@ -10,6 +10,8 @@ import 'dart:async';
 import 'package:audio_session/audio_session.dart';
 import 'package:flutter/foundation.dart';
 
+import 'package:mg_read/platform/platform_capabilities.dart';
+
 @visibleForTesting
 abstract interface class SourceVideoAudioSessionPlatform {
   Stream<void> get pauseRequests;
@@ -61,7 +63,10 @@ final class SystemSourceVideoAudioSessionPlatform implements SourceVideoAudioSes
 
 final class SourceVideoAudioSessionController {
   factory SourceVideoAudioSessionController({required Future<void> Function() onPauseRequested}) =>
-      SourceVideoAudioSessionController.withPlatform(SystemSourceVideoAudioSessionPlatform(), onPauseRequested);
+      SourceVideoAudioSessionController.withPlatform(
+        platformCapabilities.isOhos ? const OhosSourceVideoAudioSessionPlatform() : SystemSourceVideoAudioSessionPlatform(),
+        onPauseRequested,
+      );
 
   @visibleForTesting
   SourceVideoAudioSessionController.withPlatform(this._platform, this._onPauseRequested) {
@@ -118,4 +123,25 @@ final class SourceVideoAudioSessionController {
     _tail = next;
     return next;
   }
+}
+
+/// OHOS AVPlayer owns audio focus and interruption handling in the native
+/// media plugin. The generic audio_session package has no OHOS method-channel
+/// handler in this app; treating its empty response as denied focus would
+/// pause every video immediately after the first successful play request.
+@visibleForTesting
+final class OhosSourceVideoAudioSessionPlatform implements SourceVideoAudioSessionPlatform {
+  const OhosSourceVideoAudioSessionPlatform();
+
+  @override
+  Stream<void> get pauseRequests => const Stream<void>.empty();
+
+  @override
+  Future<void> initialize() async {}
+
+  @override
+  Future<bool> setActive(bool active) async => true;
+
+  @override
+  Future<void> close() async {}
 }

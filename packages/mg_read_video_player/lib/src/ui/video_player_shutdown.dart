@@ -24,7 +24,15 @@ bool pausesVideoForLifecycle(
   TargetPlatform? platform,
 }) {
   if (state == AppLifecycleState.detached) return true;
-  if (_platformIsDesktop(platform)) return false;
+  final targetPlatform = platform ?? defaultTargetPlatform;
+  if (_platformIsDesktop(targetPlatform)) return false;
+  // OHOS reports the expanded notification/status shade as `inactive` while
+  // the video surface remains visible. It is an overlay, not a background
+  // transition; pausing here makes a status-bar swipe stop playback.
+  if (targetPlatform == TargetPlatform.ohos &&
+      state == AppLifecycleState.inactive) {
+    return false;
+  }
   return state == AppLifecycleState.inactive ||
       state == AppLifecycleState.paused ||
       state == AppLifecycleState.hidden;
