@@ -2,8 +2,9 @@
  * HarmonyOS continuous-task owner for the native audio session.
  *
  * AVSession exposes transport controls but does not keep the application
- * process runnable. The official audioPlayback continuous task is acquired
- * only after AVPlayer reaches `playing` and released on pause or teardown.
+ * process runnable or authorize a background media stream by itself. The
+ * official audioPlayback and dataTransfer continuous tasks are acquired only
+ * after AVPlayer reaches `playing` and released on pause or teardown.
  */
 import common from '@ohos.app.ability.common'
 import backgroundTaskManager from '@ohos.resourceschedule.backgroundTaskManager'
@@ -12,6 +13,7 @@ import { Log } from '@ohos/flutter_ohos'
 
 export default class OhosAudioBackgroundTask {
   private static readonly TAG = 'MgReadOhosMedia'
+  private static readonly BACKGROUND_MODES: string[] = ['audioPlayback', 'dataTransfer']
   private context?: common.UIAbilityContext
   private running = false
   private tail: Promise<void> = Promise.resolve()
@@ -46,11 +48,11 @@ export default class OhosAudioBackgroundTask {
         })
         await backgroundTaskManager.startBackgroundRunning(
           context,
-          backgroundTaskManager.BackgroundMode.AUDIO_PLAYBACK,
+          OhosAudioBackgroundTask.BACKGROUND_MODES,
           agent,
         )
         this.running = true
-        Log.w(OhosAudioBackgroundTask.TAG, 'background_task_started mode=audioPlayback')
+        Log.w(OhosAudioBackgroundTask.TAG, 'background_task_started modes=audioPlayback,dataTransfer')
       } catch (error) {
         Log.w(OhosAudioBackgroundTask.TAG, `background_task_start_failed message=${String(error)}`)
       }
