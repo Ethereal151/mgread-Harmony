@@ -105,9 +105,15 @@ jobs:
         with:
           script: |
             const fs = require('fs');
-            const body = fs.readFileSync(process.env.REPORT_PATH, 'utf8');
+            const fullBody = fs.readFileSync(process.env.REPORT_PATH, 'utf8');
             const title = '[主线同步] 待适配的 MgRead 更新';
             const { owner, repo } = context.repo;
+            const issueBodyLimit = 60000;
+            const reportUrl = `https://github.com/${owner}/${repo}/actions/runs/${context.runId}`;
+            const truncationNotice = `\n\n---\n\n报告正文过长，Issue 正文已限制为 ${issueBodyLimit} 个字符（含此提示）。完整报告请查看本次工作流的 artifact：${reportUrl}`;
+            const body = fullBody.length > issueBodyLimit
+              ? `${fullBody.slice(0, issueBodyLimit - truncationNotice.length)}${truncationNotice}`
+              : fullBody;
             const { data: issues } = await github.rest.issues.listForRepo({
               owner,
               repo,
