@@ -18,6 +18,8 @@ const loadPlugin = new Function('window', 'inputConsumer', 'KeyCode',
 function fixture() {
   const state = { layout: false, bars: [], properties: {}, keep: false };
   const calls = [];
+  const subscriptions = [];
+  const removedSubscriptions = [];
   let inFlight = 0;
   let maxInFlight = 0;
   let failNext = false;
@@ -38,10 +40,14 @@ function fixture() {
     setPreferredOrientation: v => perform('orientation', v,
       () => { state.orientation = v; }),
   };
+  const input = {
+    on: (type, options, callback) => subscriptions.push({ type, options, callback }),
+    off: (type, callback) => removedSubscriptions.push({ type, callback }),
+  };
   const Plugin = loadPlugin({
     getLastWindow: async () => target,
     Orientation: { LANDSCAPE: 'landscape', PORTRAIT: 'portrait' },
-  }, {}, {});
+  }, input, { KEYCODE_VOLUME_UP: 16, KEYCODE_VOLUME_DOWN: 17 });
   const plugin = new Plugin();
   plugin.onAttachedToAbility({ getAbility: () => ({ context: {} }) });
   const invoke = (method, args = {}) => new Promise((resolve, reject) => {
@@ -52,8 +58,29 @@ function fixture() {
     });
   });
   return { plugin, invoke, state, calls, maxInFlight: () => maxInFlight,
+    subscriptions, removedSubscriptions,
     failNext: () => { failNext = true; } };
 }
+
+test('volume up and down keep independent native subscriptions', async () => {
+  const f = fixture();
+  await f.invoke('setVolumeKeyPageTurningEnabled', { enabled: true });
+
+  assert.deepEqual(
+    f.subscriptions.map(({ options }) => options.key),
+    [16, 17],
+  );
+  assert.notStrictEqual(
+    f.subscriptions[0].callback,
+    f.subscriptions[1].callback,
+  );
+
+  await f.invoke('setVolumeKeyPageTurningEnabled', { enabled: false });
+  assert.deepEqual(
+    f.removedSubscriptions.map(({ callback }) => callback),
+    f.subscriptions.map(({ callback }) => callback),
+  );
+});
 const pageStyle = {
   statusBarColor: '#FFFAF0E0', navigationBarColor: '#FFFAF0E0',
   statusBarContentColor: '#FF202020', navigationBarContentColor: '#FF202020',

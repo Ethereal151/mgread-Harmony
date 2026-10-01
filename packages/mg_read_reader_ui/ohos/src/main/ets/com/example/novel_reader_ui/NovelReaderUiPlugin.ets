@@ -38,13 +38,17 @@ export default class NovelReaderUiPlugin implements FlutterPlugin, MethodCallHan
   private systemUiRequestGeneration: number = 0
   private windowOperations: Promise<void> = Promise.resolve()
   private volumeKeyPageTurningEnabled: boolean = false
-  private readonly volumeKeyHandler = (event: KeyEvent): void => {
-    const direction = event.key.code === KeyCode.KEYCODE_VOLUME_UP
-      ? 'up'
-      : event.key.code === KeyCode.KEYCODE_VOLUME_DOWN
-        ? 'down'
-        : undefined
-    if (direction === undefined) return
+  // inputConsumer keys subscriptions are callback-scoped. Keep one stable,
+  // distinct callback per key so registering the second key does not replace
+  // the first subscription and restore the system volume behavior for it.
+  private readonly volumeUpKeyHandler = (_event: KeyEvent): void => {
+    this.emitVolumeKey('up')
+  }
+  private readonly volumeDownKeyHandler = (_event: KeyEvent): void => {
+    this.emitVolumeKey('down')
+  }
+
+  private emitVolumeKey(direction: string): void {
     const argumentsMap: Map<string, Object> = new Map<string, Object>()
     argumentsMap.set('direction', direction)
     this.channel?.invokeMethod('volumeKey', argumentsMap)
@@ -136,11 +140,11 @@ export default class NovelReaderUiPlugin implements FlutterPlugin, MethodCallHan
             action: 1,
             isRepeat: false,
           }
-          inputConsumer.on('keyPressed', optionsUp, this.volumeKeyHandler)
+          inputConsumer.on('keyPressed', optionsUp, this.volumeUpKeyHandler)
           try {
-            inputConsumer.on('keyPressed', optionsDown, this.volumeKeyHandler)
+            inputConsumer.on('keyPressed', optionsDown, this.volumeDownKeyHandler)
           } catch (error) {
-            inputConsumer.off('keyPressed', this.volumeKeyHandler)
+            inputConsumer.off('keyPressed', this.volumeUpKeyHandler)
             throw new Error(this.errorMessage(error))
           }
           this.volumeKeyPageTurningEnabled = true
@@ -158,7 +162,8 @@ export default class NovelReaderUiPlugin implements FlutterPlugin, MethodCallHan
     if (!this.volumeKeyPageTurningEnabled) return
     try {
       // off() restores HarmonyOS's normal volume adjustment behavior.
-      inputConsumer.off('keyPressed', this.volumeKeyHandler)
+      inputConsumer.off('keyPressed', this.volumeUpKeyHandler)
+      inputConsumer.off('keyPressed', this.volumeDownKeyHandler)
     } catch (_) {
       // Detach must remain best effort even if the input service is already gone.
     }
