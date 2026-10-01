@@ -82,6 +82,8 @@ napi_value Init(napi_env env, napi_value exports) {
        nullptr, napi_default, nullptr},
       {"restart", nullptr, ThrowUnavailable, nullptr, nullptr, nullptr,
        napi_default, nullptr},
+      {"restartAsync", nullptr, ThrowUnavailable, nullptr, nullptr, nullptr,
+       napi_default, nullptr},
       {"setProgressCallback", nullptr, SetProgress, nullptr, nullptr,
        nullptr, napi_default, nullptr},
       {"setBrowserSessionCallback", nullptr, SetBrowserSessionCallback, nullptr,

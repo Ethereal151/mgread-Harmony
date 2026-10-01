@@ -6,6 +6,7 @@ declare const mgreadNodeHost: {
   runtimePaths(): string;
   materializeTransfer(token: string, destination: string): string;
   restart(): string;
+  restartAsync(): Promise<string>;
   setProgressCallback(callback: (payload: string) => void): void;
   setBrowserSessionCallback(callback: (requestId: string, payload: string) => void): void;
   resolveBrowserSession(requestId: string, response: string): void;

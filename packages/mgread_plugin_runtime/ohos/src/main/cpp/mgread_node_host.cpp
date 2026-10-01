@@ -178,6 +178,26 @@ class NodeHost {
     return future.get();
   }
 
+  napi_value RestartAsync(napi_env env) {
+    napi_deferred deferred;
+    napi_value promise;
+    napi_create_promise(env, &deferred, &promise);
+    auto* restart = new AsyncRestart{this, nullptr, deferred, false, {}, {}};
+    napi_value resource_name;
+    napi_create_string_utf8(env, "mgread-node-restart", NAPI_AUTO_LENGTH, &resource_name);
+    if (napi_create_async_work(env, nullptr, resource_name, &NodeHost::ExecuteRestartAsync,
+          &NodeHost::CompleteRestartAsync, restart, &restart->work) != napi_ok ||
+        napi_queue_async_work(env, restart->work) != napi_ok) {
+      napi_value message = StringValue(env, "runtime_restart_queue_failed");
+      napi_value error;
+      napi_create_error(env, nullptr, message, &error);
+      napi_reject_deferred(env, deferred, error);
+      if (restart->work != nullptr) napi_delete_async_work(env, restart->work);
+      delete restart;
+    }
+    return promise;
+  }
+
   void Dispose() {
     {
       std::lock_guard<std::mutex> lock(mutex_);
@@ -306,6 +326,15 @@ class NodeHost {
     std::string error;
   };
 
+  struct AsyncRestart {
+    NodeHost* host;
+    napi_async_work work;
+    napi_deferred deferred;
+    bool failed;
+    std::string response;
+    std::string error;
+  };
+
   static void ExecuteAsync(napi_env, void* data) {
     auto* invocation = static_cast<AsyncInvocation*>(data);
     try {
@@ -329,6 +358,30 @@ class NodeHost {
     }
     napi_delete_async_work(env, invocation->work);
     delete invocation;
+  }
+
+  static void ExecuteRestartAsync(napi_env, void* data) {
+    auto* restart = static_cast<AsyncRestart*>(data);
+    try {
+      restart->response = restart->host->Restart();
+    } catch (const std::exception& error) {
+      restart->failed = true;
+      restart->error = error.what();
+    }
+  }
+
+  static void CompleteRestartAsync(napi_env env, napi_status status, void* data) {
+    auto* restart = static_cast<AsyncRestart*>(data);
+    if (status != napi_ok || restart->failed) {
+      napi_value message = StringValue(env, restart->failed ? restart->error : "runtime_restart_cancelled");
+      napi_value error;
+      napi_create_error(env, nullptr, message, &error);
+      napi_reject_deferred(env, restart->deferred, error);
+    } else {
+      napi_resolve_deferred(env, restart->deferred, StringValue(env, restart->response));
+    }
+    napi_delete_async_work(env, restart->work);
+    delete restart;
   }
 
   void EnqueueLocked(std::function<void()> task) {
@@ -780,6 +833,10 @@ napi_value Restart(napi_env env, napi_callback_info) {
   catch (const std::exception& error) { napi_throw_error(env, "runtime_restart_failed", error.what()); return nullptr; }
 }
 
+napi_value RestartAsync(napi_env env, napi_callback_info) {
+  return Host().RestartAsync(env);
+}
+
 napi_value SetProgress(napi_env env, napi_callback_info info) {
   size_t argc = 1; napi_value argv[1]; napi_get_cb_info(env, info, &argc, argv, nullptr, nullptr);
   if (argc != 1) { napi_throw_error(env, "invalid_arguments", "setProgressCallback expects a function"); return nullptr; }
@@ -833,6 +890,7 @@ napi_value Init(napi_env env, napi_value exports) {
     {"runtimePaths", nullptr, RuntimePaths, nullptr, nullptr, nullptr, napi_default, nullptr},
     {"materializeTransfer", nullptr, MaterializeTransfer, nullptr, nullptr, nullptr, napi_default, nullptr},
     {"restart", nullptr, Restart, nullptr, nullptr, nullptr, napi_default, nullptr},
+    {"restartAsync", nullptr, RestartAsync, nullptr, nullptr, nullptr, napi_default, nullptr},
     {"setProgressCallback", nullptr, SetProgress, nullptr, nullptr, nullptr, napi_default, nullptr},
     {"setBrowserSessionCallback", nullptr, SetBrowserSessionCallback, nullptr, nullptr, nullptr, napi_default, nullptr},
     {"resolveBrowserSession", nullptr, ResolveBrowserSession, nullptr, nullptr, nullptr, napi_default, nullptr},

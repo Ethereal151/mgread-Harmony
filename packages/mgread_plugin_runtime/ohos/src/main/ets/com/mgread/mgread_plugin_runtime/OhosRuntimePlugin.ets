@@ -120,7 +120,9 @@ export default class OhosRuntimePlugin implements FlutterPlugin, MethodCallHandl
         break
       case 'restart':
         try {
-          result.success(mgreadNodeHost.restart())
+          mgreadNodeHost.restartAsync()
+            .then((encoded: string): void => result.success(encoded))
+            .catch((error: Object): void => result.error('runtime_restart_failed', this.errorMessage(error), null))
         } catch (error) {
           result.error('runtime_restart_failed', this.errorMessage(error), null)
         }
