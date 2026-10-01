@@ -87,14 +87,13 @@ export default class OhosAudioBackgroundTask {
           requestCode: 0,
           wantAgentFlags: [wantAgent.WantAgentFlags.UPDATE_PRESENT_FLAG],
         })
-        const request = new backgroundTaskManager.ContinuousTaskRequest()
-        request.backgroundTaskModes = [backgroundTaskManager.BackgroundTaskMode.MODE_AUDIO_PLAYBACK]
-        request.backgroundTaskSubmodes = [backgroundTaskManager.BackgroundTaskSubmode.SUBMODE_AVSESSION_AUDIO_PLAYBACK]
-        request.wantAgent = agent
-        const notification = await backgroundTaskManager.startBackgroundRunning(context, request)
-        this.continuousTaskId = notification.continuousTaskId
+        await backgroundTaskManager.startBackgroundRunning(
+          context,
+          backgroundTaskManager.BackgroundMode.AUDIO_PLAYBACK,
+          agent,
+        )
         this.running = true
-        Log.w(OhosAudioBackgroundTask.TAG, `background_task_started mode=audioPlayback submode=avSessionAudioPlayback id=${this.continuousTaskId ?? -1}`)
+        Log.w(OhosAudioBackgroundTask.TAG, 'background_task_started mode=audioPlayback')
       } catch (error) {
         Log.w(OhosAudioBackgroundTask.TAG, `background_task_start_failed ${this.errorMessage(error)}`)
       }
