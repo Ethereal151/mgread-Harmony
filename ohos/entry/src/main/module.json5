@@ -23,8 +23,7 @@
         "startWindowBackground": "$color:start_window_background",
         "exported": true,
         "backgroundModes": [
-          "audioPlayback",
-          "dataTransfer"
+          "audioPlayback"
         ],
         "skills": [
           {
