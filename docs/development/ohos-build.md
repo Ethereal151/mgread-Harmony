@@ -86,6 +86,10 @@ Runtime 资源、未选择的原生架构，并按 `BuildMode`/`Architecture` �
 Flutter embedding/native HAR；完成后自动恢复源配置和 OHPM 锁文件，不需要手工
 在 Debug/Release 路径之间切换：
 
+如果项目缺少 `.dart_tool/package_config.json`，脚本会使用固定 Flutter SDK 自动
+执行一次 `flutter pub get`。当前 SDK 元数据必须保持真实版本 `3.47.5`，不能标记
+为 `0.0.0-unknown`，否则 Pub 会拒绝 `go_router_builder` 的 Flutter SDK 约束。
+
 ```powershell
 # arm64 真机 Release；默认保留签名流程
 .\tools\build_ohos_release.ps1 -BuildMode release -Architecture arm64

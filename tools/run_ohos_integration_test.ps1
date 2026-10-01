@@ -98,6 +98,26 @@ function Set-OhosFlutterRuntimeOverrides {
   Write-Host "OHOS debug $Architecture selects $nativeName and matching Flutter embedding HAR."
 }
 
+function Ensure-FlutterPackageConfig {
+  $packageConfig = Join-Path $projectRoot '.dart_tool\package_config.json'
+  if (Test-Path -LiteralPath $packageConfig -PathType Leaf) {
+    return
+  }
+  Write-Host 'Flutter package_config.json is missing; running the pinned Flutter pub get.'
+  Push-Location $projectRoot
+  try {
+    & flutter pub get
+    if ($LASTEXITCODE -ne 0) {
+      throw "Flutter pub get failed with exit code $LASTEXITCODE"
+    }
+  } finally {
+    Pop-Location
+  }
+  if (-not (Test-Path -LiteralPath $packageConfig -PathType Leaf)) {
+    throw "Flutter pub get completed without producing: $packageConfig"
+  }
+}
+
 function Build-OhosRustRuntime {
   param([string]$TargetArchitecture)
 
@@ -199,6 +219,7 @@ if (Test-Path -LiteralPath $entryNativeLibraries -PathType Container) {
 }
 
 try {
+  Ensure-FlutterPackageConfig
   Set-OhosFlutterRuntimeOverrides
   $selectedArchitecture = if ($Architecture -eq 'arm64') { 'arm64_v8a' } else { 'x86_64' }
   $unselectedArchitecture = if ($Architecture -eq 'arm64') { 'x86_64' } else { 'arm64_v8a' }

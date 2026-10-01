@@ -135,6 +135,26 @@ function Set-OhosFlutterRuntimeOverrides {
   Write-Host "OHOS $BuildMode $Architecture selects $nativeName and matching Flutter embedding HAR."
 }
 
+function Ensure-FlutterPackageConfig {
+  $packageConfig = Join-Path $projectRoot '.dart_tool\package_config.json'
+  if (Test-Path -LiteralPath $packageConfig -PathType Leaf) {
+    return
+  }
+  Write-Host 'Flutter package_config.json is missing; running the pinned Flutter pub get.'
+  Push-Location $projectRoot
+  try {
+    & flutter pub get
+    if ($LASTEXITCODE -ne 0) {
+      throw "Flutter pub get failed with exit code $LASTEXITCODE"
+    }
+  } finally {
+    Pop-Location
+  }
+  if (-not (Test-Path -LiteralPath $packageConfig -PathType Leaf)) {
+    throw "Flutter pub get completed without producing: $packageConfig"
+  }
+}
+
 function Build-OhosRustRuntime {
   param([string]$TargetArchitecture)
 
@@ -209,6 +229,7 @@ foreach ($metadataFile in $packageMetadataFiles) {
 }
 
 try {
+  Ensure-FlutterPackageConfig
   $nodeRuntimeRoot = Join-Path $projectRoot 'packages\mg_read_node_runtime'
   $runtimeNodeRoot = Split-Path -Parent $mgreadRuntimeNpm
   $runtimeStagePath = $env:Path
