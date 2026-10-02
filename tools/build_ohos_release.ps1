@@ -69,6 +69,15 @@ if (Test-Path -LiteralPath $packagesRoot -PathType Container) {
       Where-Object { $_.Name -in @('BuildProfile.ets', 'oh-package-lock.json5') }
   )
 }
+$packageBuildProfileFiles = @()
+if (Test-Path -LiteralPath $packagesRoot -PathType Container) {
+  $packageBuildProfileFiles = @(
+    Get-ChildItem -LiteralPath $packagesRoot -Recurse -File -Filter 'build-profile.json5' |
+      Where-Object {
+        (Get-Content -LiteralPath $_.FullName -Raw) -match '"abiFilters"'
+      }
+  )
+}
 
 function Remove-StaleNativeBuildModeMetadata {
   $packagesRoot = Join-Path $projectRoot 'packages'
@@ -87,10 +96,20 @@ function Remove-StaleNativeBuildModeMetadata {
 
 function Remove-StaleFlutterBuildOutputs {
   $generatedPaths = @(
+    # Flutter's OHOS task stores app.dill/kernel outputs under the root build
+    # tree. They are mode- and Dart-kernel-version-specific and must not be
+    # reused across release/debug or SDK updates.
+    (Join-Path $projectRoot 'build\ohos\intermediates'),
+    # Native asset hooks also cache Dart kernel files. A cache produced by a
+    # different Flutter/Dart SDK cannot be loaded by the current frontend.
+    (Join-Path $projectRoot '.dart_tool\hooks_runner'),
+    (Join-Path $projectRoot '.dart_tool\flutter_build'),
     (Join-Path $projectRoot 'ohos\entry\build'),
     (Join-Path $projectRoot 'ohos\entry\.cxx'),
     (Join-Path $projectRoot 'packages\mgread_ohos_native_runtime\ohos\build'),
     (Join-Path $projectRoot 'packages\mgread_ohos_native_runtime\ohos\.cxx'),
+    (Join-Path $projectRoot 'packages\mgread_plugin_runtime\ohos\build'),
+    (Join-Path $projectRoot 'packages\mgread_plugin_runtime\ohos\.cxx'),
     $hapDirectory
   )
   foreach ($generatedPath in $generatedPaths) {
@@ -98,6 +117,26 @@ function Remove-StaleFlutterBuildOutputs {
       Remove-Item -LiteralPath $generatedPath -Recurse -Force
       Write-Host "Removed stale OHOS Flutter output: $generatedPath"
     }
+  }
+}
+
+function Set-OhosNativeBuildProfileArchitecture {
+  $selectedAbi = if ($Architecture -eq 'arm64') { 'arm64-v8a' } else { 'x86_64' }
+  $abiArrayPattern = '(?s)"abiFilters"\s*:\s*\[(?<values>.*?)\]'
+  foreach ($profileFile in $packageBuildProfileFiles) {
+    $source = Get-Content -LiteralPath $profileFile.FullName -Raw
+    $match = [regex]::Match($source, $abiArrayPattern)
+    if (-not $match.Success -or $match.Groups['values'].Value -notmatch 'arm64-v8a' -or $match.Groups['values'].Value -notmatch 'x86_64') {
+      throw "Native architecture filters were not recognized in: $($profileFile.FullName)"
+    }
+    $updated = [regex]::Replace(
+      $source,
+      $abiArrayPattern,
+      ('"abiFilters": ["' + $selectedAbi + '"]'),
+      1
+    )
+    Set-Content -LiteralPath $profileFile.FullName -Value $updated -Encoding utf8
+    Write-Host "OHOS native build profile keeps only ${selectedAbi}: $($profileFile.FullName)"
   }
 }
 
@@ -133,6 +172,41 @@ function Set-OhosFlutterRuntimeOverrides {
   $overrides | Add-Member -MemberType NoteProperty -Name $nativeName -Value "file:$nativePath" -Force
   $config | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $rootPackage -Encoding utf8
   Write-Host "OHOS $BuildMode $Architecture selects $nativeName and matching Flutter embedding HAR."
+}
+
+function Set-OhosPackageLockOverrides {
+  $engineDirectoryName = if ($BuildMode -eq 'debug') {
+    $targetPlatform
+  } else {
+    "$targetPlatform-release"
+  }
+  $nativeName = if ($Architecture -eq 'arm64') { 'flutter_native_arm64_v8a' } else { 'flutter_native_x86_64' }
+  $nativeHarName = if ($Architecture -eq 'arm64') {
+    "arm64_v8a_$BuildMode.har"
+  } else {
+    "x86_64_$BuildMode.har"
+  }
+  $embeddingHarName = "flutter_embedding_$BuildMode.har"
+
+  foreach ($metadataFile in $packageMetadataFiles) {
+    if ($metadataFile.Name -ne 'oh-package-lock.json5') {
+      continue
+    }
+    $source = Get-Content -LiteralPath $metadataFile.FullName -Raw
+    $updated = $source
+    # Locks are generated artifacts, but leaving the old architecture in them
+    # makes ohpm select the previous HAR even after the package manifest was
+    # narrowed. Rewrite only the temporary build copy; the finally block
+    # restores every original lock file.
+    $updated = $updated -replace 'flutter_native_(?:arm64_v8a|x86_64)', $nativeName
+    $updated = $updated -replace 'f-ohos-3449', 'f'
+    $updated = $updated -replace 'ohos-(?:arm64|x64)(?:-profile|-release)?', $engineDirectoryName
+    $updated = $updated -replace 'flutter_embedding_(?:debug|profile|release)\.har', $embeddingHarName
+    $updated = $updated -replace '(?:arm64_v8a|x86_64)_(?:debug|profile|release)\.har', $nativeHarName
+    if ($updated -ne $source) {
+      Set-Content -LiteralPath $metadataFile.FullName -Value $updated -Encoding utf8
+    }
+  }
 }
 
 function Ensure-FlutterPackageConfig {
@@ -200,6 +274,47 @@ function Build-OhosRustRuntime {
   return @{ Library = $rustTarget; Include = $rustInclude }
 }
 
+function Assert-OhosAotToolchainCompatibility {
+  if ($BuildMode -eq 'debug') {
+    return
+  }
+
+  $flutterCommand = Get-Command flutter -ErrorAction Stop | Select-Object -First 1
+  $flutterRoot = Split-Path -Parent (Split-Path -Parent $flutterCommand.Source)
+  $ohosRuntimeRoot = Join-Path $flutterRoot 'bin\cache\dart-sdk-ohos'
+  $dartRuntime = Join-Path $ohosRuntimeRoot 'bin\dartaotruntime.exe'
+  $aotTool = Join-Path $flutterRoot "bin\cache\artifacts\engine\$targetPlatform-release\windows-x64\gen_snapshot.exe"
+  foreach ($requiredPath in @($dartRuntime, $aotTool)) {
+    if (-not (Test-Path -LiteralPath $requiredPath -PathType Leaf)) {
+      throw "OHOS release toolchain input is missing: $requiredPath"
+    }
+  }
+
+  $runtimeVersionOutput = (& $dartRuntime --version 2>&1 | Out-String).Trim()
+  $runtimeVersionMatch = [regex]::Match($runtimeVersionOutput, 'Dart SDK version:\s*([0-9]+\.[0-9]+\.[0-9]+)')
+  if (-not $runtimeVersionMatch.Success) {
+    throw "Unable to read OHOS dartaotruntime Dart version from $dartRuntime. Output: $runtimeVersionOutput"
+  }
+  $expectedVersion = $runtimeVersionMatch.Groups[1].Value
+  $previousErrorActionPreference = $ErrorActionPreference
+  $ErrorActionPreference = 'Continue'
+  $aotVersionOutput = (& $aotTool --version 2>&1 | Out-String).Trim()
+  $ErrorActionPreference = $previousErrorActionPreference
+  $aotVersionMatch = [regex]::Match($aotVersionOutput, 'Dart SDK version:\s*([0-9]+\.[0-9]+\.[0-9]+)')
+  if (-not $aotVersionMatch.Success) {
+    throw "Unable to read OHOS gen_snapshot Dart version from $aotTool. Output: $aotVersionOutput"
+  }
+  $aotVersion = $aotVersionMatch.Groups[1].Value
+  if ($expectedVersion -ne $aotVersion) {
+    throw @"
+OHOS release toolchain is not internally compatible.
+  frontend_server/dartaotruntime: Dart $expectedVersion ($ohosRuntimeRoot)
+  gen_snapshot: Dart $aotVersion ($aotTool)
+The HAP cannot be built safely until these two versions match; refusing to stage or mutate the project.
+"@
+  }
+}
+
 if (-not (Test-Path -LiteralPath $runtimePubspec -PathType Leaf)) {
   throw "Runtime pubspec not found: $runtimePubspec"
 }
@@ -212,6 +327,8 @@ if (-not (Test-Path -LiteralPath $entryPackage -PathType Leaf)) {
 if (-not (Test-Path -LiteralPath $entryBuildProfile -PathType Leaf)) {
   throw "OHOS entry build profile not found: $entryBuildProfile"
 }
+
+Assert-OhosAotToolchainCompatibility
 
 New-Item -ItemType Directory -Force -Path $temporaryRoot | Out-Null
 Copy-Item -LiteralPath $runtimePubspec -Destination $backupPubspec -Force
@@ -226,6 +343,12 @@ foreach ($metadataFile in $packageMetadataFiles) {
   $backupPath = Join-Path $backupPackageMetadata $relativePath
   New-Item -ItemType Directory -Force -Path (Split-Path -Parent $backupPath) | Out-Null
   Copy-Item -LiteralPath $metadataFile.FullName -Destination $backupPath -Force
+}
+foreach ($profileFile in $packageBuildProfileFiles) {
+  $relativePath = $profileFile.FullName.Substring($projectRoot.Length + 1)
+  $backupPath = Join-Path $temporaryRoot $relativePath
+  New-Item -ItemType Directory -Force -Path (Split-Path -Parent $backupPath) | Out-Null
+  Copy-Item -LiteralPath $profileFile.FullName -Destination $backupPath -Force
 }
 
 try {
@@ -252,9 +375,17 @@ try {
     '    - assets/runtime/ohos/runtime-version.txt',
     '    - assets/runtime/ohos/dist/'
   ) -join "`r`n"
-  $updatedPubspec = [regex]::Replace($pubspec, $assetBlockPattern, $ohosAssetBlock.TrimEnd() + "`r`n", 1)
+  $hasOhosRuntimeAssets = $pubspec -match '(?m)^\s+- assets/runtime/ohos/(?:runtime-version\.txt|dist/)$'
+  $hasNonOhosRuntimeAssets = $pubspec -match '(?m)^\s+- assets/runtime/(?:android|windows-x64|macos-arm64)/'
+  $updatedPubspec = if ($hasOhosRuntimeAssets -and -not $hasNonOhosRuntimeAssets) {
+    # The manifest may already be permanently narrowed for OHOS. Keep this
+    # idempotent so release/debug builds do not fail after a prior staging run.
+    $pubspec
+  } else {
+    [regex]::Replace($pubspec, $assetBlockPattern, $ohosAssetBlock.TrimEnd() + "`r`n", 1)
+  }
 
-  if ($updatedPubspec -eq $pubspec) {
+  if ($updatedPubspec -eq $pubspec -and $hasNonOhosRuntimeAssets) {
     throw 'Runtime asset block was not found; stopped to avoid producing an invalid package.'
   }
 
@@ -290,6 +421,8 @@ try {
     1
   )
   Set-Content -LiteralPath $entryBuildProfile -Value $updatedBuildProfile -Encoding utf8
+  Set-OhosPackageLockOverrides
+  Set-OhosNativeBuildProfileArchitecture
 
   # The DevEco Hvigor version bundled with the current SDK calls
   # fs.rmdirSync(path, { recursive: true }) when this metadata records a
@@ -376,6 +509,13 @@ try {
       $destination = Join-Path $projectRoot $relativePath
       New-Item -ItemType Directory -Force -Path (Split-Path -Parent $destination) | Out-Null
       Copy-Item -LiteralPath $backupFile.FullName -Destination $destination -Force
+    }
+  }
+  foreach ($profileFile in $packageBuildProfileFiles) {
+    $relativePath = $profileFile.FullName.Substring($projectRoot.Length + 1)
+    $backupPath = Join-Path $temporaryRoot $relativePath
+    if (Test-Path -LiteralPath $backupPath -PathType Leaf) {
+      Copy-Item -LiteralPath $backupPath -Destination $profileFile.FullName -Force
     }
   }
   Remove-Item -LiteralPath $temporaryRoot -Recurse -Force -ErrorAction SilentlyContinue

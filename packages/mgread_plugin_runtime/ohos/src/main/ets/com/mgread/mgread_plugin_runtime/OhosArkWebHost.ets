@@ -13,11 +13,13 @@ import {
 import { Params } from '@ohos/flutter_ohos/src/main/ets/plugin/platform/PlatformView'
 import common from '@ohos.app.ability.common'
 import webview from '@ohos.web.webview'
+import hilog from '@ohos.hilog'
 
 const VIEW_TYPE = 'mgread_ohos_arkweb'
 const MAX_WAIT_MS = 120_000
 const POLL_MS = 80
 const MAX_RESPONSE_BYTES = 2 * 1024 * 1024
+const LOG_DOMAIN = 0xFF01
 interface WebHeaderPayload {
   headerKey: string
   headerValue: string
@@ -653,10 +655,19 @@ export class OhosArkWebPlatformView extends PlatformView {
       if (decoded !== null && typeof decoded === 'object') {
         const error = (decoded as Record<string, string>)['error']
         if (error === 'plugin_execution_failed') throw new OhosArkWebError('plugin_execution_failed')
+        const result: Any = (decoded as Record<string, Any>)['value']
+        if (result !== null && typeof result === 'object') {
+          const status = (result as Record<string, Object>)['status']
+          const body = (result as Record<string, Object>)['body']
+          hilog.info(LOG_DOMAIN, 'MgReadArkWeb', '%{public}s', `evaluate_result status=${String(status)} bodyLength=${typeof body === 'string' ? body.length : -1}`)
+        } else {
+          hilog.info(LOG_DOMAIN, 'MgReadArkWeb', '%{public}s', `evaluate_result type=${typeof result}`)
+        }
         return decoded
       }
       return {value: decoded}
     } catch (error) {
+      hilog.error(LOG_DOMAIN, 'MgReadArkWeb', '%{public}s', `evaluate_error ${String(error)}`)
       throw new OhosArkWebError(`plugin_execution_failed:${String(error)}`)
     }
   }
@@ -665,6 +676,8 @@ export class OhosArkWebPlatformView extends PlatformView {
     const value = await this.script('JSON.stringify({html:document.documentElement?.outerHTML??""})')
     const decoded: Any = this.parseScriptResult(value)
     if (decoded === null || typeof decoded !== 'object') throw new OhosArkWebError('plugin_execution_failed')
+      const html = (decoded as Record<string, Object>)['html']
+     hilog.info(LOG_DOMAIN, 'MgReadArkWeb', '%{public}s', `html_result length=${typeof html === 'string' ? html.length : -1}`)
      return decoded
   }
 

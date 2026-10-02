@@ -141,6 +141,16 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
   private audioVolume = 1
   private audioWasPlayingBeforeInterrupt = false
   private audioInterruptionActive = false
+  // AVPlayer emits timeUpdate much faster than the AVSession service can
+  // consume state writes. Keep one write in flight and coalesce the newest
+  // position so Bluetooth/Star Flash controllers see fresh state without
+  // building an unbounded AVSession request queue.
+  private audioPlaybackSyncInFlight = false
+  private audioPlaybackSyncPending = false
+  private audioPlaybackSyncTimer?: number
+  private audioPlaybackSyncLastSentAt = 0
+  private audioPlaybackSyncGeneration = 0
+  private static readonly AUDIO_PLAYBACK_SYNC_INTERVAL_MS = 1000
   private readonly audioBackgroundTask = new OhosAudioBackgroundTask()
 
   getUniqueClassName(): string {
@@ -216,8 +226,16 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
         })
         break
       case 'play':
-        this.log(`command_received session=${this.sessionId(args)} method=play`)
-        this.run(args, (session) => this.playSession(this.sessionId(args), session), result)
+        const playSessionId = this.sessionId(args)
+        this.log(`command_received session=${playSessionId} method=play`)
+        const playSession = this.sessions.get(playSessionId)
+        if (playSession !== undefined && playSession.player.state === 'completed') {
+          this.log(`command_translated session=${playSessionId} method=play target=next reason=completed`)
+          this.emit(playSessionId, 'remoteCommand', 'next')
+          result.success(null)
+          break
+        }
+        this.run(args, (session) => this.playSession(playSessionId, session), result)
         break
       case 'pause':
         this.run(args, (session) => this.pauseSession(this.sessionId(args), session), result)
@@ -327,8 +345,12 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
       }
     })
     player.on('timeUpdate', (value: number) => {
+      // Keep the latest position locally. Huawei AVSession state writes are
+      // control-plane operations; sending one for every AVPlayer timeUpdate
+      // blocks the service executor and makes Bluetooth/Star Flash controls
+      // time out. Position is published with the next state/seek update.
+      if (this.audioSessionId === sessionId) this.audioPosition = value
       this.emit(sessionId, 'position', value)
-      if (!session.video) this.syncAudioPlaybackState(sessionId, undefined, value)
     })
     player.on('durationUpdate', (value: number) => {
       this.emit(sessionId, 'duration', value)
@@ -372,9 +394,22 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
       this.emit(sessionId, 'error', null, message)
     })
     player.on('audioInterrupt', (event: audio.InterruptEvent) => {
-      if (event.eventType === audio.InterruptType.INTERRUPT_TYPE_BEGIN) {
+      const shared = event.forceType === audio.InterruptForceType.INTERRUPT_SHARE
+      this.log(`audio_interrupt type=${event.eventType} force=${event.forceType} hint=${event.hintType} shared=${shared}`)
+      // Huawei documents INTERRUPT_SHARE as an advisory event: the system
+      // does not perform the pause/stop operation and the application chooses
+      // how to proceed. A notification sound must not pause spoken audio or
+      // stop its continuous task. A forced DUCK/MUTE event is also not a
+      // pause: Huawei supplies those hints for volume/mute handling while the
+      // renderer remains active. Only forced PAUSE/STOP enters the existing
+      // interruption recovery path.
+      if (shared) return
+      const pauseOrStop = event.hintType === audio.InterruptHint.INTERRUPT_HINT_PAUSE ||
+        event.hintType === audio.InterruptHint.INTERRUPT_HINT_STOP
+      const isBegin = event.eventType === audio.InterruptType.INTERRUPT_TYPE_BEGIN
+      if (isBegin && pauseOrStop) {
         this.beginAudioInterruption(sessionId, player)
-      } else {
+      } else if (!isBegin && this.audioInterruptionActive) {
         this.endAudioInterruption(sessionId, player)
       }
     })
@@ -456,6 +491,14 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
   }
 
   private async pauseSession(sessionId: string, session: MediaSession): Promise<void> {
+    // A user pause supersedes any still-pending forced-interruption recovery.
+    // Otherwise a delayed RESUME from an earlier notification/call can invoke
+    // playSession after this pause and silently restart playback.
+    if (this.audioInterruptionActive || this.audioWasPlayingBeforeInterrupt) {
+      this.audioInterruptionActive = false
+      this.audioWasPlayingBeforeInterrupt = false
+      this.emit(sessionId, 'interrupted', false)
+    }
     await session.player.pause()
     if (this.audioSessionId === sessionId) await this.audioBackgroundTask.stop()
   }
@@ -584,6 +627,14 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
     duration: number,
     sessionType: avSession.AVSessionType,
   ): Promise<void> {
+    this.audioPlaybackSyncGeneration += 1
+    if (this.audioPlaybackSyncTimer !== undefined) {
+      clearTimeout(this.audioPlaybackSyncTimer)
+      this.audioPlaybackSyncTimer = undefined
+    }
+    this.audioPlaybackSyncInFlight = false
+    this.audioPlaybackSyncPending = false
+    this.audioPlaybackSyncLastSentAt = 0
     if (this.context === undefined) {
       throw new Error('avsession_unavailable: The OHOS ability context is not ready.')
     }
@@ -596,7 +647,12 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
       this.audioSessionManager = manager
       try {
         await manager.activateAudioSession({
-          concurrencyMode: audio.AudioConcurrencyMode.CONCURRENCY_DEFAULT,
+          // Media playback must remain active while system notification sounds
+          // are rendered. The default strategy lets the system pause this
+          // session; that pause path stops the audio continuous task and the
+          // app is then frozen in the background. Mixing is the documented
+          // media-session policy for concurrent audio streams.
+          concurrencyMode: audio.AudioConcurrencyMode.CONCURRENCY_MIX_WITH_OTHERS,
         })
       } catch (error) {
         manager.off('audioSessionStateChanged')
@@ -650,15 +706,69 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
     if (duration !== undefined) this.audioDuration = duration
     if (speed !== undefined) this.audioSpeed = speed
     if (volume !== undefined) this.audioVolume = volume
-    this.audioSession.setAVPlaybackState({
+    if (this.audioPlaybackSyncInFlight) {
+      this.audioPlaybackSyncPending = true
+      return
+    }
+    this.audioPlaybackSyncPending = true
+    this.scheduleAudioPlaybackStateSync(sessionId, this.audioPlaybackSyncGeneration)
+  }
+
+  private scheduleAudioPlaybackStateSync(sessionId: string, generation: number): void {
+    if (
+      generation !== this.audioPlaybackSyncGeneration ||
+      this.audioSessionId !== sessionId ||
+      this.audioSession === undefined ||
+      !this.audioPlaybackSyncPending ||
+      this.audioPlaybackSyncTimer !== undefined ||
+      this.audioPlaybackSyncInFlight
+    ) return
+    const elapsed = Date.now() - this.audioPlaybackSyncLastSentAt
+    const delay = Math.max(0, MgReadOhosMediaPlugin.AUDIO_PLAYBACK_SYNC_INTERVAL_MS - elapsed)
+    this.audioPlaybackSyncTimer = setTimeout((): void => {
+      this.audioPlaybackSyncTimer = undefined
+      if (
+        generation !== this.audioPlaybackSyncGeneration ||
+        this.audioSessionId !== sessionId ||
+        this.audioSession === undefined ||
+        !this.audioPlaybackSyncPending ||
+        this.audioPlaybackSyncInFlight
+      ) return
+      this.audioPlaybackSyncPending = false
+      this.audioPlaybackSyncInFlight = true
+      this.audioPlaybackSyncLastSentAt = Date.now()
+      this.flushAudioPlaybackState(sessionId, generation)
+    }, delay)
+  }
+
+  private flushAudioPlaybackState(sessionId: string, generation: number): void {
+    if (
+      generation !== this.audioPlaybackSyncGeneration ||
+      this.audioSessionId !== sessionId ||
+      this.audioSession === undefined
+    ) {
+      this.audioPlaybackSyncInFlight = false
+      this.audioPlaybackSyncPending = false
+      return
+    }
+    const session = this.audioSession
+    session.setAVPlaybackState({
       state: this.audioState,
       speed: this.audioSpeed,
       position: { elapsedTime: this.audioPosition, updateTime: Date.now() },
       duration: this.audioDuration,
       volume: this.audioVolume,
-    }).catch((error: Error) => {
+    }).then(() => this.finishAudioPlaybackStateSync(sessionId, generation)).catch((error: Error) => {
       this.emit(sessionId, 'error', null, `avsession_state_failed: ${this.errorMessage(error)}`)
+      this.finishAudioPlaybackStateSync(sessionId, generation)
     })
+  }
+
+  private finishAudioPlaybackStateSync(sessionId: string, generation: number): void {
+    if (generation !== this.audioPlaybackSyncGeneration) return
+    this.audioPlaybackSyncInFlight = false
+    if (!this.audioPlaybackSyncPending) return
+    this.scheduleAudioPlaybackStateSync(sessionId, generation)
   }
 
   private playbackState(state: media.AVPlayerState): avSession.PlaybackState | undefined {
@@ -689,6 +799,16 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
     let operation: Promise<void>
     switch (command) {
       case 'play':
+        // A controller can replay a stale PLAY command immediately after
+        // Huawei reports COMPLETED. Replaying the same AVPlayer resets the
+        // ended item to position zero and preempts the host's next-track
+        // recovery. Leave a completed session untouched so the existing
+        // queue continuation can select the next chapter.
+        if (session.player.state === 'completed') {
+          this.log(`command_translated session=${activeSessionId} method=play target=next reason=completed`)
+          this.emitRemoteCommand('next')
+          return
+        }
         operation = this.playSession(activeSessionId, session)
         break
       case 'pause':
@@ -696,6 +816,7 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
         break
       case 'seek':
         session.player.seek(value ?? 0)
+        this.syncAudioPlaybackState(activeSessionId, undefined, value ?? 0)
         operation = Promise.resolve()
         break
       default:
@@ -705,6 +826,14 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
   }
 
   private async destroyAudioSession(): Promise<void> {
+    this.audioPlaybackSyncGeneration += 1
+    if (this.audioPlaybackSyncTimer !== undefined) {
+      clearTimeout(this.audioPlaybackSyncTimer)
+      this.audioPlaybackSyncTimer = undefined
+    }
+    this.audioPlaybackSyncInFlight = false
+    this.audioPlaybackSyncPending = false
+    this.audioPlaybackSyncLastSentAt = 0
     await this.audioBackgroundTask.stop()
     const manager = this.audioSessionManager
     const session = this.audioSession
