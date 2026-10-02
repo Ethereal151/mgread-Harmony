@@ -1,5 +1,5 @@
-# Run an OHOS integration test with a debug, architecture-specific temporary
-# project configuration. Flutter's OHOS test runner does not expose
+# Run an OHOS integration test with a debug, architecture-specific build
+# adapter. Flutter's OHOS test runner does not expose
 # --target-platform, so the selected native HAR and HAP ABI must be selected
 # before it starts.
 
@@ -9,15 +9,23 @@ param(
   [string]$DeviceId = '127.0.0.1:5555',
   [ValidateSet('arm64', 'x64')]
   [string]$Architecture = 'arm64',
+  [string]$FlutterExecutable = 'flutter',
+  [int]$DdsPort = 45000,
   [string[]]$DartDefine = @()
 )
 
 $ErrorActionPreference = 'Stop'
+$projectRoot = Split-Path -Parent $PSScriptRoot
+. (Join-Path $PSScriptRoot 'ohos-build-contract.ps1')
+$variant = Get-MgReadOhosVariant -BuildMode 'debug' -Architecture $Architecture
+$toolchain = Get-MgReadOhosToolchain -ProjectRoot $projectRoot
+Assert-MgReadOhosToolchain -Toolchain $toolchain -Variant $variant -ProjectRoot $projectRoot
+$variantRoot = Set-MgReadOhosBuildEnvironment -Toolchain $toolchain -Variant $variant -ProjectRoot $projectRoot
 
 # Keep Flutter/Hvigor integration builds on the same compatible Node version
 # as the Release HAP builder. DevEco's current Hvigor still calls the removed
 # fs.rmdirSync(path, { recursive: true }) API, which fails under Node 24/26.
-$mgreadNodeRoot = 'D:\mgread-env\node-v20.19.5-win-x64'
+$mgreadNodeRoot = $toolchain.BuildNode.Root
 $mgreadNodeExecutable = Join-Path $mgreadNodeRoot 'node.exe'
 if (-not (Test-Path -LiteralPath $mgreadNodeExecutable -PathType Leaf)) {
   throw "MgRead fixed Node toolchain is missing: $mgreadNodeExecutable"
@@ -39,18 +47,23 @@ foreach ($name in $rustEnvironmentNames) {
   $originalRustEnvironment[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
 }
 
-$projectRoot = Split-Path -Parent $PSScriptRoot
+$flutterPath = Join-Path $toolchain.Flutter.Root 'bin\flutter.bat'
+if ($FlutterExecutable -ne 'flutter') {
+  throw 'OHOS integration tests use the pinned Flutter from toolchain.lock; custom Flutter executables are not supported.'
+}
 $targetPlatform = "ohos-$Architecture"
 $rootPackage = Join-Path $projectRoot 'ohos\oh-package.json5'
 $rootPackageLock = Join-Path $projectRoot 'ohos\oh-package-lock.json5'
 $entryPackage = Join-Path $projectRoot 'ohos\entry\oh-package.json5'
 $entryBuildProfile = Join-Path $projectRoot 'ohos\entry\build-profile.json5'
+$runtimeBuildProfile = Join-Path $projectRoot 'packages\mgread_plugin_runtime\ohos\build-profile.json5'
 $entryNativeLibraries = Join-Path $projectRoot 'ohos\entry\libs'
 $temporaryRoot = Join-Path ([IO.Path]::GetTempPath()) "mgread-ohos-integration-$PID"
 $backupRootPackage = Join-Path $temporaryRoot 'oh-package.json5'
 $backupRootPackageLock = Join-Path $temporaryRoot 'oh-package-lock.json5'
 $backupEntryPackage = Join-Path $temporaryRoot 'entry.oh-package.json5'
 $backupEntryBuildProfile = Join-Path $temporaryRoot 'entry.build-profile.json5'
+$backupRuntimeBuildProfile = Join-Path $temporaryRoot 'runtime.build-profile.json5'
 $backupEntryNativeLibraries = Join-Path $temporaryRoot 'libs'
 $backupPackageMetadata = Join-Path $temporaryRoot 'package-metadata'
 $hadRootPackageLock = Test-Path -LiteralPath $rootPackageLock -PathType Leaf
@@ -59,20 +72,28 @@ function Remove-StaleIntegrationBuildOutputs {
   $generatedPaths = @(
     (Join-Path $projectRoot 'ohos\entry\build'),
     (Join-Path $projectRoot 'ohos\entry\.cxx'),
+    (Join-Path $projectRoot 'ohos\oh_modules'),
+    (Join-Path $projectRoot 'ohos\entry\oh_modules'),
+    (Join-Path $projectRoot 'packages\mgread_plugin_runtime\ohos\build'),
+    (Join-Path $projectRoot 'packages\mgread_plugin_runtime\ohos\.cxx'),
+    (Join-Path $projectRoot 'packages\mgread_plugin_runtime\ohos\oh_modules'),
     (Join-Path $projectRoot 'packages\mgread_ohos_native_runtime\ohos\build'),
     (Join-Path $projectRoot 'packages\mgread_ohos_native_runtime\ohos\.cxx')
   )
   foreach ($generatedPath in $generatedPaths) {
     if (Test-Path -LiteralPath $generatedPath) {
-      Remove-Item -LiteralPath $generatedPath -Recurse -Force
-      Write-Host "Removed stale OHOS integration output: $generatedPath"
+      try {
+        Remove-Item -LiteralPath $generatedPath -Recurse -Force -ErrorAction Stop
+        Write-Host "Removed stale OHOS integration output: $generatedPath"
+      } catch {
+        Write-Warning "Keeping locked OHOS integration output; the build will reconfigure it: $generatedPath ($($_.Exception.Message))"
+      }
     }
   }
 }
 
 function Set-OhosFlutterRuntimeOverrides {
-  $flutterCommand = Get-Command flutter -ErrorAction Stop | Select-Object -First 1
-  $flutterRoot = Split-Path -Parent (Split-Path -Parent $flutterCommand.Source)
+  $flutterRoot = Split-Path -Parent (Split-Path -Parent $flutterPath)
   $engineDirectory = Join-Path (Join-Path $flutterRoot 'bin\cache\artifacts\engine') $targetPlatform
   $nativeName = if ($Architecture -eq 'arm64') { 'flutter_native_arm64_v8a' } else { 'flutter_native_x86_64' }
   $nativeFileName = if ($Architecture -eq 'arm64') { 'arm64_v8a_debug.har' } else { 'x86_64_debug.har' }
@@ -106,7 +127,7 @@ function Ensure-FlutterPackageConfig {
   Write-Host 'Flutter package_config.json is missing; running the pinned Flutter pub get.'
   Push-Location $projectRoot
   try {
-    & flutter pub get
+    & $flutterPath pub get
     if ($LASTEXITCODE -ne 0) {
       throw "Flutter pub get failed with exit code $LASTEXITCODE"
     }
@@ -208,6 +229,7 @@ if ($hadRootPackageLock) {
 }
 Copy-Item -LiteralPath $entryPackage -Destination $backupEntryPackage -Force
 Copy-Item -LiteralPath $entryBuildProfile -Destination $backupEntryBuildProfile -Force
+Copy-Item -LiteralPath $runtimeBuildProfile -Destination $backupRuntimeBuildProfile -Force
 foreach ($metadataFile in $packageMetadataFiles) {
   $relativePath = $metadataFile.FullName.Substring($projectRoot.Length + 1)
   $backupPath = Join-Path $backupPackageMetadata $relativePath
@@ -216,6 +238,7 @@ foreach ($metadataFile in $packageMetadataFiles) {
 }
 if (Test-Path -LiteralPath $entryNativeLibraries -PathType Container) {
   Copy-Item -LiteralPath $entryNativeLibraries -Destination $backupEntryNativeLibraries -Recurse -Force
+  Remove-Item -LiteralPath $entryNativeLibraries -Recurse -Force
 }
 
 try {
@@ -253,6 +276,19 @@ try {
   )
   Set-Content -LiteralPath $entryBuildProfile -Value $updatedBuildProfile -Encoding utf8
 
+  $runtimeProfileSource = Get-Content -LiteralPath $runtimeBuildProfile -Raw
+  $runtimeAbi = if ($Architecture -eq 'arm64') { '"arm64-v8a"' } else { '"x86_64"' }
+  $updatedRuntimeProfile = [regex]::Replace(
+    $runtimeProfileSource,
+    '(?s)"abiFilters"\s*:\s*\[[^\]]*\]',
+    '"abiFilters": [' + $runtimeAbi + ']',
+    1
+  )
+  if ($updatedRuntimeProfile -eq $runtimeProfileSource) {
+    throw "Could not select the runtime ABI in $runtimeBuildProfile"
+  }
+  Set-Content -LiteralPath $runtimeBuildProfile -Value $updatedRuntimeProfile -Encoding utf8
+
   $rustRuntime = Build-OhosRustRuntime -TargetArchitecture $Architecture
   if ($null -ne $rustRuntime) {
     $env:MGREAD_RUST_RUNTIME_LIB = $rustRuntime.Library
@@ -263,10 +299,13 @@ try {
 
   Write-Host "Running OHOS $Architecture integration test on ${DeviceId}: $TestPath"
   $flutterArguments = @('test', $TestPath, '-d', $DeviceId, '--no-pub')
+  if ($DdsPort -gt 0) {
+    $flutterArguments += @('--dds-port', $DdsPort.ToString())
+  }
   foreach ($define in $DartDefine) {
     $flutterArguments += "--dart-define=$define"
   }
-  & flutter @flutterArguments
+  & $flutterPath @flutterArguments
   if ($LASTEXITCODE -ne 0) {
     throw "Flutter integration test failed with exit code $LASTEXITCODE"
   }
@@ -283,6 +322,7 @@ try {
   }
   Copy-Item -LiteralPath $backupEntryPackage -Destination $entryPackage -Force
   Copy-Item -LiteralPath $backupEntryBuildProfile -Destination $entryBuildProfile -Force
+  Copy-Item -LiteralPath $backupRuntimeBuildProfile -Destination $runtimeBuildProfile -Force
   if (Test-Path -LiteralPath $backupPackageMetadata -PathType Container) {
     foreach ($backupFile in (Get-ChildItem -LiteralPath $backupPackageMetadata -Recurse -File)) {
       $relativePath = $backupFile.FullName.Substring($backupPackageMetadata.Length + 1)

@@ -37,3 +37,11 @@
 - Runtime 和数据源的 Windows Node 命令使用仓库固定 Node，不回退全局 Node。
 - Android 只有任务确实需要 Android 平台验证时才读取
   [`.agents/references/android-testing.md`](.agents/references/android-testing.md)，普通开发任务不得加载该手册。
+
+## OHOS 构建链冻结
+
+- `ohos/hvigorfile.ts`、`ohos/entry/hvigorfile.ts` 和 Flutter 主构建调用链是已验证的稳定边界；后续架构、
+  debug/release、Flutter/Node/Rust 版本或缓存/锁变更，只能修改 `tools/ohos-build-contract.ps1`、
+  `tools/build_ohos_release.ps1` 及其对应的锁定版本记录，不能再改主构建链路。
+- OHOS 构建必须使用 `tools/ohos-build-contract.ps1` 选择单一变体。禁止回退全局 Flutter/Node/ohpm，
+  禁止用临时备份恢复掩盖锁漂移；失败现场必须保留选中的清单、锁和变体指纹。

@@ -13,8 +13,13 @@ version = "3.44.9+ohos-0.0.1-canary1"
 framework_revision = "d7f5b90c59"
 engine_revision = "5a2a6a42cc"
 dart_version = "3.12.2"
-sdk_path = "D:\\f"
+sdk_path = "D:\\f-ohos-3449"
 ohos_enabled = true
+
+[build]
+node_version = "20.19.5"
+node_path = "D:\\mgread-env\\node-v20.19.5-win-x64"
+npm_version = "10.8.2"
 
 [harmony]
 dev_eco_studio = "26.0.0.821"
@@ -27,8 +32,13 @@ hdc_version = "3.2.0f"
 primary_architecture = "arm64"
 
 [runtime]
-node_version = "24.16.0"
-node_path = "D:\\nodejs\\node.exe"
+node_version = "26.10.0"
+node_path = "D:\\mgread-env\\node-v26.10.0-win-x64"
+npm_version = "11.19.1"
+
+[rust]
+root = "D:\\rust"
+toolchain = "1.97.1-x86_64-pc-windows-msvc"
 
 [application]
 name = "mg_read"

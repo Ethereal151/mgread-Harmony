@@ -1,9 +1,9 @@
 # MgRead OHOS HAP build entry point.
 #
-# It narrows the Flutter Runtime asset manifest, root HAR overrides, and entry
-# native architecture only during the build, then restores them even when the
-# build fails. Release and debug share this path so neither package gets stale
-# mode/architecture artifacts or an unselected architecture.
+# It materializes one pinned OHOS variant and leaves the selected manifests and
+# locks in place. A failed build therefore remains reproducible and debuggable;
+# the next invocation explicitly selects its own variant. Flutter/Hvigor and
+# Runtime versions are owned by tools/ohos-build-contract.ps1.
 
 param(
   [ValidateSet('debug', 'release')]
@@ -14,31 +14,22 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+$projectRoot = Split-Path -Parent $PSScriptRoot
+. (Join-Path $PSScriptRoot 'ohos-build-contract.ps1')
+$variant = Get-MgReadOhosVariant -BuildMode $BuildMode -Architecture $Architecture
+$toolchain = Get-MgReadOhosToolchain -ProjectRoot $projectRoot
+Assert-MgReadOhosToolchain -Toolchain $toolchain -Variant $variant -ProjectRoot $projectRoot
+$variantRoot = Set-MgReadOhosBuildEnvironment -Toolchain $toolchain -Variant $variant -ProjectRoot $projectRoot
 
-# Hvigor bundled with the installed DevEco SDK still calls the removed
-# fs.rmdirSync(path, { recursive: true }) API. Keep OHOS builds independent
-# from the user's global Node version by using the repository toolchain on D:.
-$mgreadNodeRoot = 'D:\mgread-env\node-v20.19.5-win-x64'
-$mgreadNodeExecutable = Join-Path $mgreadNodeRoot 'node.exe'
-if (-not (Test-Path -LiteralPath $mgreadNodeExecutable -PathType Leaf)) {
-  throw "MgRead fixed Node toolchain is missing: $mgreadNodeExecutable"
-}
-$mgreadRuntimeNpm = 'D:\mgread-env\node-v26.10.0-win-x64\npm.cmd'
-if (-not (Test-Path -LiteralPath $mgreadRuntimeNpm -PathType Leaf)) {
-  throw "MgRead Runtime fixed Node toolchain is missing: $mgreadRuntimeNpm"
-}
+# The build host uses Node 20 for DevEco/Hvigor. Runtime asset staging is
+# switched to the separately pinned Node 26 toolchain only around npm.
+$mgreadNodeRoot = $toolchain.BuildNode.Root
+$mgreadRuntimeNpm = Join-Path $toolchain.RuntimeNode.Root 'npm.cmd'
 $originalPath = $env:Path
-$env:Path = "$mgreadNodeRoot;$originalPath"
-# The installed Flutter SDK is currently on Dart 3.13.3 while its OHOS
-# release gen_snapshot remains Dart 3.12.2. The repository's OHOS 3.44.9
-# SDK contains the matching 3.12.2 frontend/runtime and release snapshot.
-# Select it for release builds as one coherent toolchain; debug keeps using
-# the active SDK because its debug artifacts are already internally matched.
-$releaseFlutterRoot = 'D:\f-ohos-3449'
-if ($BuildMode -eq 'release' -and (Test-Path -LiteralPath (Join-Path $releaseFlutterRoot 'bin\flutter.bat') -PathType Leaf)) {
-  $env:Path = "$releaseFlutterRoot\bin;$mgreadNodeRoot;$originalPath"
-  Write-Host "OHOS release selects the matching Flutter SDK: $releaseFlutterRoot"
-}
+$env:Path = "$(Join-Path $toolchain.Flutter.Root 'bin');$mgreadNodeRoot;$originalPath"
+$selectedFlutterRoot = $toolchain.Flutter.Root
+$selectedFlutterRootLeaf = Split-Path -Leaf $selectedFlutterRoot
+$flutter = Join-Path $toolchain.Flutter.Root 'bin\flutter.bat'
 $rustEnvironmentNames = @(
   'CARGO_HOME',
   'RUSTUP_HOME',
@@ -47,14 +38,17 @@ $rustEnvironmentNames = @(
   'CC_aarch64_unknown_linux_ohos',
   'AR_aarch64_unknown_linux_ohos',
   'MGREAD_RUST_RUNTIME_LIB',
-  'MGREAD_RUST_RUNTIME_INCLUDE'
+  'MGREAD_RUST_RUNTIME_INCLUDE',
+  'MGREAD_NODE_ROOT',
+  'MGREAD_NODE_SOURCE_ROOT',
+  'MGREAD_OHOS_VARIANT',
+  'CARGO_TARGET_DIR'
 )
 $originalRustEnvironment = @{}
 foreach ($name in $rustEnvironmentNames) {
   $originalRustEnvironment[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
 }
 
-$projectRoot = Split-Path -Parent $PSScriptRoot
 $runtimePubspec = Join-Path $projectRoot 'packages\mgread_plugin_runtime\pubspec.yaml'
 $rootPackage = Join-Path $projectRoot 'ohos\oh-package.json5'
 $rootPackageLock = Join-Path $projectRoot 'ohos\oh-package-lock.json5'
@@ -62,15 +56,9 @@ $entryPackage = Join-Path $projectRoot 'ohos\entry\oh-package.json5'
 $entryPackageLock = Join-Path $projectRoot 'ohos\entry\oh-package-lock.json5'
 $entryBuildProfile = Join-Path $projectRoot 'ohos\entry\build-profile.json5'
 $hapDirectory = Join-Path $projectRoot 'build\ohos\hap'
-$targetPlatform = "ohos-$Architecture"
-$temporaryRoot = Join-Path ([IO.Path]::GetTempPath()) "mgread-ohos-release-$PID"
-$backupPubspec = Join-Path $temporaryRoot 'mgread_plugin_runtime.pubspec.yaml'
-$backupRootPackage = Join-Path $temporaryRoot 'oh-package.json5'
-$backupRootPackageLock = Join-Path $temporaryRoot 'oh-package-lock.json5'
-$backupEntryPackage = Join-Path $temporaryRoot 'entry.oh-package.json5'
-$backupEntryPackageLock = Join-Path $temporaryRoot 'entry.oh-package-lock.json5'
-$backupEntryBuildProfile = Join-Path $temporaryRoot 'entry.build-profile.json5'
-$backupPackageMetadata = Join-Path $temporaryRoot 'package-metadata'
+$targetPlatform = $variant.TargetPlatform
+$variantLockRoot = Join-Path $variantRoot 'locks'
+$variantOutputRoot = Join-Path $variantRoot 'output'
 $hadRootPackageLock = Test-Path -LiteralPath $rootPackageLock -PathType Leaf
 $hadEntryPackageLock = Test-Path -LiteralPath $entryPackageLock -PathType Leaf
 
@@ -122,7 +110,7 @@ function Remove-StaleFlutterBuildOutputs {
     # ohpm materializes this tree from package locks. Keeping it across an
     # architecture/mode build preserves the previous Flutter HAR path in
     # ohos/oh_modules/.ohpm/lock.json5 and makes ProcessRouterMap resolve a
-    # deleted remote package before Hvigor sees the temporary lock overrides.
+    # deleted remote package before Hvigor sees the selected lock overrides.
     (Join-Path $projectRoot 'ohos\oh_modules'),
     (Join-Path $projectRoot 'ohos\entry\oh_modules'),
     (Join-Path $projectRoot 'packages\mgread_ohos_native_runtime\ohos\build'),
@@ -145,8 +133,20 @@ function Set-OhosNativeBuildProfileArchitecture {
   foreach ($profileFile in $packageBuildProfileFiles) {
     $source = Get-Content -LiteralPath $profileFile.FullName -Raw
     $match = [regex]::Match($source, $abiArrayPattern)
-    if (-not $match.Success -or $match.Groups['values'].Value -notmatch 'arm64-v8a' -or $match.Groups['values'].Value -notmatch 'x86_64') {
+    if (-not $match.Success) {
       throw "Native architecture filters were not recognized in: $($profileFile.FullName)"
+    }
+    $currentValues = $match.Groups['values'].Value
+    $normalizedValues = $currentValues.Trim().Trim('"', "'").Trim()
+    $selectedAbiPresent = $currentValues -match [regex]::Escape($selectedAbi)
+    $unselectedAbi = if ($selectedAbi -eq 'arm64-v8a') { 'x86_64' } else { 'arm64-v8a' }
+    $unselectedAbiPresent = $currentValues -match [regex]::Escape($unselectedAbi)
+    if (-not $selectedAbiPresent -and -not $unselectedAbiPresent -and $normalizedValues.Length -gt 0) {
+      throw "Native architecture filters contain no recognized ABI for $($profileFile.FullName)"
+    }
+    if ($selectedAbiPresent -and -not $unselectedAbiPresent) {
+      Write-Host "OHOS native build profile already keeps only ${selectedAbi}: $($profileFile.FullName)"
+      continue
     }
     $updated = [regex]::Replace(
       $source,
@@ -156,6 +156,60 @@ function Set-OhosNativeBuildProfileArchitecture {
     )
     Set-Content -LiteralPath $profileFile.FullName -Value $updated -Encoding utf8
     Write-Host "OHOS native build profile keeps only ${selectedAbi}: $($profileFile.FullName)"
+  }
+}
+
+function Set-OhosBuildModeMetadata {
+  $buildModeFiles = @(
+    Get-ChildItem -LiteralPath $packagesRoot -Recurse -File -Filter 'BuildProfile.ets' -ErrorAction SilentlyContinue
+  )
+  $debugLiteral = if ($BuildMode -eq 'debug') { 'true' } else { 'false' }
+  foreach ($modeFile in $buildModeFiles) {
+    $source = Get-Content -LiteralPath $modeFile.FullName -Raw
+    $updated = $source -replace "export const BUILD_MODE_NAME = '(?:debug|profile|release)';", "export const BUILD_MODE_NAME = '$BuildMode';"
+    $updated = $updated -replace 'export const DEBUG = (?:true|false);', "export const DEBUG = $debugLiteral;"
+    if ($updated -ne $source) {
+      Set-Content -LiteralPath $modeFile.FullName -Value $updated -Encoding utf8
+      Write-Host "OHOS $BuildMode metadata: $($modeFile.FullName)"
+    }
+  }
+}
+
+function Select-OhosVariantLocks {
+  if (-not (Test-Path -LiteralPath $variantLockRoot -PathType Container)) {
+    return
+  }
+  foreach ($metadataFile in $packageMetadataFiles) {
+    $relativePath = $metadataFile.FullName.Substring($projectRoot.Length + 1)
+    $savedPath = Join-Path $variantLockRoot $relativePath
+    if (Test-Path -LiteralPath $savedPath -PathType Leaf) {
+      Copy-Item -LiteralPath $savedPath -Destination $metadataFile.FullName -Force
+    }
+  }
+  foreach ($lockFile in @($rootPackageLock, $entryPackageLock)) {
+    $savedPath = Join-Path $variantLockRoot ([IO.Path]::GetRelativePath($projectRoot, $lockFile))
+    if (Test-Path -LiteralPath $savedPath -PathType Leaf) {
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $lockFile) | Out-Null
+      Copy-Item -LiteralPath $savedPath -Destination $lockFile -Force
+    }
+  }
+}
+
+function Save-OhosVariantLocks {
+  New-Item -ItemType Directory -Force -Path $variantLockRoot | Out-Null
+  foreach ($metadataFile in $packageMetadataFiles) {
+    $relativePath = $metadataFile.FullName.Substring($projectRoot.Length + 1)
+    $savedPath = Join-Path $variantLockRoot $relativePath
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $savedPath) | Out-Null
+    Copy-Item -LiteralPath $metadataFile.FullName -Destination $savedPath -Force
+  }
+  foreach ($lockFile in @($rootPackageLock, $entryPackageLock)) {
+    if (-not (Test-Path -LiteralPath $lockFile -PathType Leaf)) {
+      continue
+    }
+    $savedPath = Join-Path $variantLockRoot ([IO.Path]::GetRelativePath($projectRoot, $lockFile))
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $savedPath) | Out-Null
+    Copy-Item -LiteralPath $lockFile -Destination $savedPath -Force
   }
 }
 
@@ -219,16 +273,48 @@ function Set-OhosPackageLockOverrides {
     $updated = $source
     # Locks are generated artifacts, but leaving the old architecture in them
     # makes ohpm select the previous HAR even after the package manifest was
-    # narrowed. Rewrite only the temporary build copy; the finally block
-    # restores every original lock file.
+    # narrowed. Rewrite the active variant lock; a successful build snapshots
+    # it under the variant-specific .mgread-build directory.
     $updated = $updated -replace 'flutter_native_(?:arm64_v8a|x86_64)', $nativeName
-    $updated = $updated -replace 'f-ohos-3449', 'f'
+    # oh-package-lock.json5 stores the Flutter SDK as a path relative to each
+    # package. Keep that path rooted at the SDK selected above. Replacing it
+    # with a hard-coded directory makes the generated root lock point at a
+    # different SDK and leaves a stale x64/debug HAR for ProcessRouterMap.
+    $updated = $updated -replace 'f(?:-ohos-3449)?(?=/bin|/packages)', $selectedFlutterRootLeaf
     $updated = $updated -replace 'ohos-(?:arm64|x64)(?:-profile|-release)?', $engineDirectoryName
     $updated = $updated -replace 'flutter_embedding_(?:debug|profile|release)\.har', $embeddingHarName
     $updated = $updated -replace '(?:arm64_v8a|x86_64)_(?:debug|profile|release)\.har', $nativeHarName
     if ($updated -ne $source) {
       Set-Content -LiteralPath $metadataFile.FullName -Value $updated -Encoding utf8
     }
+  }
+}
+
+function Ensure-OhosLocalPluginOverrides {
+  $config = Get-Content -LiteralPath $rootPackage -Raw | ConvertFrom-Json
+  $overrides = $config.overrides
+  if ($null -eq $overrides) {
+    return
+  }
+
+  $rootDirectory = Split-Path -Parent $rootPackage
+  foreach ($property in @($overrides.PSObject.Properties)) {
+    if ($property.Value -isnot [string] -or $property.Value -notmatch '^file:plugins/\.flutter_ohos_plugins/([^/]+)/ohos$') {
+      continue
+    }
+    $pluginName = $Matches[1]
+    $localPluginPath = Join-Path $packagesRoot "$pluginName\ohos"
+    if (-not (Test-Path -LiteralPath $localPluginPath -PathType Container)) {
+      continue
+    }
+    $relativePluginPath = [IO.Path]::GetRelativePath($rootDirectory, $localPluginPath).Replace('\', '/')
+    $property.Value = "file:$relativePluginPath"
+    Write-Host "OHOS local plugin override uses the checked-out package: $pluginName"
+  }
+  $config | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $rootPackage -Encoding utf8
+  $writtenRootPackage = Get-Content -LiteralPath $rootPackage -Raw
+  if ($writtenRootPackage -match 'file:plugins/\.flutter_ohos_plugins/') {
+    throw 'OHOS root package still contains an unresolved generated plugin bridge path.'
   }
 }
 
@@ -252,6 +338,53 @@ function Ensure-FlutterPackageConfig {
   }
 }
 
+function Install-OhosDependencies {
+  # Materialized oh_modules are variant-local in the lock/cache contract. The
+  # project path is still shared by Hvigor, so stale materialization is removed
+  # before installing the selected lock set.
+  Push-Location (Join-Path $projectRoot 'ohos')
+  try {
+    $entryManifestBeforeInstall = Get-Content -LiteralPath (Join-Path $projectRoot 'ohos\entry\oh-package.json5') -Raw
+    $entryLockBeforeInstall = Get-Content -LiteralPath (Join-Path $projectRoot 'ohos\entry\oh-package-lock.json5') -Raw
+    Write-Host ("OHOS entry dependency selection: manifest arm64={0}, x64={1}; lock arm64={2}, x64={3}" -f `
+      ($entryManifestBeforeInstall -match 'flutter_native_arm64_v8a'),
+      ($entryManifestBeforeInstall -match 'flutter_native_x86_64'),
+      ($entryLockBeforeInstall -match 'flutter_native_arm64_v8a'),
+      ($entryLockBeforeInstall -match 'flutter_native_x86_64'))
+    & ohpm install --all --no-save --lockfile_stable_order `
+      --cache (Join-Path $variantRoot 'ohpm-cache') --enable_cross_process_lock
+    if ($LASTEXITCODE -ne 0) {
+      throw "OHOS ohpm install --all failed with exit code $LASTEXITCODE"
+    }
+  } finally {
+    Pop-Location
+  }
+
+  $entryModules = Join-Path $projectRoot 'ohos\entry\oh_modules'
+  if (-not (Test-Path -LiteralPath $entryModules -PathType Container)) {
+    throw "OHOS dependency installation completed without producing: $entryModules"
+  }
+  $selectedNativeModule = if ($Architecture -eq 'arm64') {
+    'flutter_native_arm64_v8a'
+  } else {
+    'flutter_native_x86_64'
+  }
+  $unselectedNativeModule = if ($Architecture -eq 'arm64') {
+    'flutter_native_x86_64'
+  } else {
+    'flutter_native_arm64_v8a'
+  }
+  if (-not (Test-Path -LiteralPath (Join-Path $entryModules '@ohos\flutter_ohos'))) {
+    throw 'OHOS entry dependency installation did not materialize @ohos/flutter_ohos.'
+  }
+  if (-not (Test-Path -LiteralPath (Join-Path $entryModules $selectedNativeModule))) {
+    throw "OHOS entry dependency installation did not materialize $selectedNativeModule."
+  }
+  if (Test-Path -LiteralPath (Join-Path $entryModules $unselectedNativeModule)) {
+    throw "OHOS entry dependency installation materialized the unselected architecture: $unselectedNativeModule"
+  }
+}
+
 function Build-OhosRustRuntime {
   param([string]$TargetArchitecture)
 
@@ -259,11 +392,12 @@ function Build-OhosRustRuntime {
     return $null
   }
 
-  $rustRoot = 'D:\rust'
+  $rustRoot = $toolchain.Rust.Root
   $cargoExecutable = Join-Path $rustRoot 'cargo\bin\cargo.exe'
-  $rustToolchainBin = Join-Path $rustRoot 'rustup\toolchains\1.97.1-x86_64-pc-windows-msvc\bin'
+  $rustToolchainBin = Join-Path $rustRoot "rustup\toolchains\$($toolchain.Rust.Toolchain)\bin"
   $rustProject = Join-Path $projectRoot 'packages\mgread_ohos_native_runtime\native\rust-runtime'
-  $rustTarget = Join-Path $rustProject 'target\aarch64-unknown-linux-ohos\release\libmgread_rust_runtime.so'
+  $env:CARGO_TARGET_DIR = Join-Path $variantRoot 'rust-target'
+  $rustTarget = Join-Path $env:CARGO_TARGET_DIR 'aarch64-unknown-linux-ohos\release\libmgread_rust_runtime.so'
   $rustInclude = Join-Path $projectRoot 'packages\mgread_ohos_native_runtime\native\rust-runtime\include'
   $rustLinker = Join-Path $projectRoot 'packages\mgread_ohos_native_runtime\native\ohos-clang-linker.cmd'
   $rustCompiler = Join-Path $projectRoot 'packages\mgread_ohos_native_runtime\native\ohos-clang-cc.cmd'
@@ -277,7 +411,7 @@ function Build-OhosRustRuntime {
   $env:CARGO_HOME = Join-Path $rustRoot 'cargo'
   $env:RUSTUP_HOME = Join-Path $rustRoot 'rustup'
   $env:Path = "$rustRoot\cargo\bin;$rustToolchainBin;$env:Path"
-  $env:OHOS_SDK_NATIVE = 'D:\DevEco Studio\sdk\default\openharmony\native'
+  $env:OHOS_SDK_NATIVE = Join-Path $toolchain.Harmony.SdkRoot 'openharmony\native'
   $env:CARGO_TARGET_AARCH64_UNKNOWN_LINUX_OHOS_LINKER = $rustLinker
   $env:CC_aarch64_unknown_linux_ohos = $rustCompiler
   $env:AR_aarch64_unknown_linux_ohos = Join-Path $env:OHOS_SDK_NATIVE 'llvm\bin\llvm-ar.exe'
@@ -358,30 +492,6 @@ if (-not (Test-Path -LiteralPath $entryBuildProfile -PathType Leaf)) {
 
 Assert-OhosAotToolchainCompatibility
 
-New-Item -ItemType Directory -Force -Path $temporaryRoot | Out-Null
-Copy-Item -LiteralPath $runtimePubspec -Destination $backupPubspec -Force
-Copy-Item -LiteralPath $rootPackage -Destination $backupRootPackage -Force
-if ($hadRootPackageLock) {
-  Copy-Item -LiteralPath $rootPackageLock -Destination $backupRootPackageLock -Force
-}
-Copy-Item -LiteralPath $entryPackage -Destination $backupEntryPackage -Force
-if ($hadEntryPackageLock) {
-  Copy-Item -LiteralPath $entryPackageLock -Destination $backupEntryPackageLock -Force
-}
-Copy-Item -LiteralPath $entryBuildProfile -Destination $backupEntryBuildProfile -Force
-foreach ($metadataFile in $packageMetadataFiles) {
-  $relativePath = $metadataFile.FullName.Substring($projectRoot.Length + 1)
-  $backupPath = Join-Path $backupPackageMetadata $relativePath
-  New-Item -ItemType Directory -Force -Path (Split-Path -Parent $backupPath) | Out-Null
-  Copy-Item -LiteralPath $metadataFile.FullName -Destination $backupPath -Force
-}
-foreach ($profileFile in $packageBuildProfileFiles) {
-  $relativePath = $profileFile.FullName.Substring($projectRoot.Length + 1)
-  $backupPath = Join-Path $temporaryRoot $relativePath
-  New-Item -ItemType Directory -Force -Path (Split-Path -Parent $backupPath) | Out-Null
-  Copy-Item -LiteralPath $profileFile.FullName -Destination $backupPath -Force
-}
-
 try {
   Ensure-FlutterPackageConfig
   $nodeRuntimeRoot = Join-Path $projectRoot 'packages\mg_read_node_runtime'
@@ -399,28 +509,9 @@ try {
     $env:Path = $runtimeStagePath
   }
 
-  $pubspec = Get-Content -LiteralPath $runtimePubspec -Raw
-  $assetBlockPattern = '(?ms)^  assets:\r?\n(?:    - assets/runtime/[^\r\n]+\r?\n)+'
-  $ohosAssetBlock = @(
-    '  assets:',
-    '    - assets/runtime/ohos/runtime-version.txt',
-    '    - assets/runtime/ohos/dist/'
-  ) -join "`r`n"
-  $hasOhosRuntimeAssets = $pubspec -match '(?m)^\s+- assets/runtime/ohos/(?:runtime-version\.txt|dist/)$'
-  $hasNonOhosRuntimeAssets = $pubspec -match '(?m)^\s+- assets/runtime/(?:android|windows-x64|macos-arm64)/'
-  $updatedPubspec = if ($hasOhosRuntimeAssets -and -not $hasNonOhosRuntimeAssets) {
-    # The manifest may already be permanently narrowed for OHOS. Keep this
-    # idempotent so release/debug builds do not fail after a prior staging run.
-    $pubspec
-  } else {
-    [regex]::Replace($pubspec, $assetBlockPattern, $ohosAssetBlock.TrimEnd() + "`r`n", 1)
-  }
-
-  if ($updatedPubspec -eq $pubspec -and $hasNonOhosRuntimeAssets) {
-    throw 'Runtime asset block was not found; stopped to avoid producing an invalid package.'
-  }
-
-  Set-Content -LiteralPath $runtimePubspec -Value $updatedPubspec -Encoding utf8
+  # Runtime assets stay platform-complete in pubspec.yaml. The permanent
+  # Hvigor adapter removes non-OHOS runtime trees from the selected HAP.
+  Select-OhosVariantLocks
   $entrySource = Get-Content -LiteralPath $entryPackage -Raw
   $selectedArchitecture = if ($Architecture -eq 'arm64') { 'arm64_v8a' } else { 'x86_64' }
   $unselectedArchitecture = if ($Architecture -eq 'arm64') { 'x86_64' } else { 'arm64_v8a' }
@@ -453,7 +544,46 @@ try {
   )
   Set-Content -LiteralPath $entryBuildProfile -Value $updatedBuildProfile -Encoding utf8
   Set-OhosPackageLockOverrides
+  $expectedEngineDirectoryName = if ($BuildMode -eq 'debug') {
+    $targetPlatform
+  } else {
+    "$targetPlatform-release"
+  }
+  $expectedEmbeddingHarName = "flutter_embedding_$BuildMode.har"
+  $expectedNativeHarName = if ($Architecture -eq 'arm64') {
+    "arm64_v8a_$BuildMode.har"
+  } else {
+    "x86_64_$BuildMode.har"
+  }
+  $entryLockSource = Get-Content -LiteralPath $entryPackageLock -Raw
+  $requiredLockTokens = @(
+    $selectedFlutterRootLeaf,
+    $expectedEngineDirectoryName,
+    $expectedEmbeddingHarName,
+    $expectedNativeHarName
+  )
+  foreach ($requiredLockToken in $requiredLockTokens) {
+    if ($entryLockSource -notmatch [regex]::Escape($requiredLockToken)) {
+      throw "OHOS entry package lock does not select the requested Flutter package: $requiredLockToken"
+    }
+  }
+  if ($BuildMode -eq 'release' -and $entryLockSource -match 'ohos-x64|ohos-arm64(?!-release)|flutter_embedding_debug\.har|(?:arm64_v8a|x86_64)_debug\.har') {
+    throw 'OHOS release entry package lock still contains a debug or unselected architecture Flutter package.'
+  }
   Set-OhosNativeBuildProfileArchitecture
+  Set-OhosBuildModeMetadata
+  Set-Content -LiteralPath (Join-Path $variantRoot 'variant.json') -Value (
+    [ordered]@{
+      id = $variant.Id
+      flutter = $toolchain.Flutter.Version
+      dart = $toolchain.Flutter.DartVersion
+      buildNode = $toolchain.BuildNode.Version
+      runtimeNode = $toolchain.RuntimeNode.Version
+      targetPlatform = $targetPlatform
+      abi = $variant.Abi
+      mode = $BuildMode
+    } | ConvertTo-Json
+  ) -Encoding utf8
 
   # The DevEco Hvigor version bundled with the current SDK calls
   # fs.rmdirSync(path, { recursive: true }) when this metadata records a
@@ -471,7 +601,9 @@ try {
     Write-Host "OHOS Rust runtime: $($rustRuntime.Library)"
   }
   Set-OhosFlutterRuntimeOverrides
+  Ensure-OhosLocalPluginOverrides
   Remove-StaleFlutterBuildOutputs
+  Install-OhosDependencies
   $flutterArguments = 'build', 'hap', "--$BuildMode", '--target-platform', $targetPlatform, '--no-pub', '--no-tree-shake-icons', '--dart-define=MGREAD_OHOS_NATIVE_RUNTIME=true'
   if ($NoCodesign) {
     $flutterArguments += '--no-codesign'
@@ -523,41 +655,15 @@ try {
       throw "The generated HAP still contains a non-OHOS Runtime: $pattern"
     }
   }
+  New-Item -ItemType Directory -Force -Path $variantOutputRoot | Out-Null
+  $variantHap = Join-Path $variantOutputRoot $hap.Name
+  Copy-Item -LiteralPath $hap.FullName -Destination $variantHap -Force
+  Save-OhosVariantLocks
   Write-Host ("OHOS $BuildMode HAP: {0} ({1:N2} MB)" -f $hap.FullName, ($hap.Length / 1MB))
 } finally {
   $env:Path = $originalPath
   foreach ($name in $rustEnvironmentNames) {
     [Environment]::SetEnvironmentVariable($name, $originalRustEnvironment[$name], 'Process')
   }
-  Copy-Item -LiteralPath $backupPubspec -Destination $runtimePubspec -Force
-  Copy-Item -LiteralPath $backupRootPackage -Destination $rootPackage -Force
-  if ($hadRootPackageLock) {
-    Copy-Item -LiteralPath $backupRootPackageLock -Destination $rootPackageLock -Force
-  } elseif (Test-Path -LiteralPath $rootPackageLock -PathType Leaf) {
-    Remove-Item -LiteralPath $rootPackageLock -Force
-  }
-  Copy-Item -LiteralPath $backupEntryPackage -Destination $entryPackage -Force
-  if ($hadEntryPackageLock) {
-    Copy-Item -LiteralPath $backupEntryPackageLock -Destination $entryPackageLock -Force
-  } elseif (Test-Path -LiteralPath $entryPackageLock -PathType Leaf) {
-    Remove-Item -LiteralPath $entryPackageLock -Force
-  }
-  Copy-Item -LiteralPath $backupEntryBuildProfile -Destination $entryBuildProfile -Force
-  if (Test-Path -LiteralPath $backupPackageMetadata -PathType Container) {
-    foreach ($backupFile in (Get-ChildItem -LiteralPath $backupPackageMetadata -Recurse -File)) {
-      $relativePath = $backupFile.FullName.Substring($backupPackageMetadata.Length + 1)
-      $destination = Join-Path $projectRoot $relativePath
-      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $destination) | Out-Null
-      Copy-Item -LiteralPath $backupFile.FullName -Destination $destination -Force
-    }
-  }
-  foreach ($profileFile in $packageBuildProfileFiles) {
-    $relativePath = $profileFile.FullName.Substring($projectRoot.Length + 1)
-    $backupPath = Join-Path $temporaryRoot $relativePath
-    if (Test-Path -LiteralPath $backupPath -PathType Leaf) {
-      Copy-Item -LiteralPath $backupPath -Destination $profileFile.FullName -Force
-    }
-  }
-  Remove-Item -LiteralPath $temporaryRoot -Recurse -Force -ErrorAction SilentlyContinue
-  Write-Host 'Restored temporary OHOS build configuration.'
+  Write-Host "OHOS build contract retained for variant $($variant.Id); locks and manifests remain selected."
 }

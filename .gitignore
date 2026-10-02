@@ -41,6 +41,7 @@ migrate_working_dir/
 /packages/**/ohos/build/
 /packages/**/ohos/oh_modules/
 /packages/mg_read_node_runtime/.tmp-ohos-debug-data/
+/.mgread-build/
 **/.gradle/
 /tmp/
 **/failures/*.png
