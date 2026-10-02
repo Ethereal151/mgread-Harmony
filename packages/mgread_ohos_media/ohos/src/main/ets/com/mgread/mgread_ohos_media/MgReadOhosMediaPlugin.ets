@@ -28,6 +28,7 @@ interface MediaSession {
   video: boolean
   initialPositionMs: number
   loop: boolean
+  commandRevision: number
 }
 
 const VIDEO_SURFACE_VIEW_TYPE = 'mgread_ohos_video_surface'
@@ -235,7 +236,10 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
           result.success(null)
           break
         }
-        this.run(args, (session) => this.playSession(playSessionId, session), result)
+        this.run(args, (session) => {
+          const revision = ++session.commandRevision
+          return this.playSession(playSessionId, session, revision)
+        }, result)
         break
       case 'pause':
         this.run(args, (session) => this.pauseSession(this.sessionId(args), session), result)
@@ -282,7 +286,13 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
       const headers = this.headers(args?.get('headers'))
       const initialPositionMs = this.number(args, 'initialPositionMs')
       const loop = this.booleanValue(args, 'loop')
-      const session: MediaSession = {player, video, initialPositionMs, loop}
+      const session: MediaSession = {
+        player,
+        video,
+        initialPositionMs,
+        loop,
+        commandRevision: 0,
+      }
       this.sessions.set(sessionId, session)
       this.bind(sessionId, session)
       const resourceType = this.stringValue(args, 'resourceType')
@@ -318,7 +328,10 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
       }
       if (!video) {
         await this.prepareSession(sessionId, args, session)
-        if (this.booleanValue(args, 'play')) await this.playSession(sessionId, session)
+        if (this.booleanValue(args, 'play')) {
+          const revision = ++session.commandRevision
+          await this.playSession(sessionId, session, revision)
+        }
       }
       result.success({
         sessionId,
@@ -452,7 +465,8 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
     if (resume) {
       const session = this.sessions.get(sessionId)
       if (session !== undefined) {
-        this.playSession(sessionId, session)
+        const revision = session.commandRevision
+        this.playSession(sessionId, session, revision)
           .catch((error: Error) => this.emit(sessionId, 'error', null, `audio_interrupt_resume_failed: ${this.errorMessage(error)}`))
       }
     }
@@ -468,7 +482,12 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
     Promise.resolve().then(() => operation(session)).then(() => result.success(null)).catch((error: Error) => result.error('operation_failed', this.errorMessage(error), null))
   }
 
-  private async playSession(sessionId: string, session: MediaSession): Promise<void> {
+  private async playSession(
+    sessionId: string,
+    session: MediaSession,
+    revision: number,
+  ): Promise<void> {
+    if (revision !== session.commandRevision) return
     // Some API 26 devices send the interruption begin callback but omit the
     // matching RESUME after a third-party player is paused or force-stopped.
     // An explicit user play is a safe focus reassertion and clears that stale
@@ -479,18 +498,61 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
       this.emit(sessionId, 'interrupted', false)
     }
     await this.prepareSession(sessionId, null, session)
+    if (revision !== session.commandRevision) return
     await session.player.play()
+    if (revision !== session.commandRevision) {
+      await this.pauseCancelledPlay(session.player)
+      return
+    }
     this.log(`play_requested session=${sessionId}`)
     this.log(`surface_playing session=${sessionId}`)
     // HarmonyOS resolves AVPlayer.play() before the asynchronous state change
     // is observable. Do not let Dart issue pause/seek-after-play while the
     // player is still in `prepared`, because OHOS rejects pause in that state.
-    await this.waitForState(session.player, 'playing')
+    while (session.player.state !== 'playing') {
+      if (revision !== session.commandRevision) {
+        await this.pauseCancelledPlay(session.player)
+        return
+      }
+      if (session.player.state === 'error' || session.player.state === 'released') {
+        throw new Error(`avplayer_state_${session.player.state}`)
+      }
+      await new Promise<void>((resolve): void => {
+        setTimeout((): void => resolve(), 80)
+      })
+    }
+    if (revision !== session.commandRevision) {
+      await this.pauseCancelledPlay(session.player)
+      return
+    }
     await this.audioBackgroundTask.start()
     this.log(`playing session=${sessionId}`)
   }
 
+  private async pauseCancelledPlay(player: media.AVPlayer): Promise<void> {
+    const deadline = Date.now() + 5_000
+    while (player.state !== 'paused' &&
+        player.state !== 'completed' &&
+        player.state !== 'stopped' &&
+        player.state !== 'released') {
+      if (player.state === 'playing') {
+        try {
+          await player.pause()
+        } catch (_) {
+          // A concurrent pause owns the same player; its final state is
+          // observed by the loop below.
+        }
+        return
+      }
+      if (Date.now() >= deadline) return
+      await new Promise<void>((resolve): void => {
+        setTimeout((): void => resolve(), 40)
+      })
+    }
+  }
+
   private async pauseSession(sessionId: string, session: MediaSession): Promise<void> {
+    ++session.commandRevision
     // A user pause supersedes any still-pending forced-interruption recovery.
     // Otherwise a delayed RESUME from an earlier notification/call can invoke
     // playSession after this pause and silently restart playback.
@@ -814,7 +876,8 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
           this.emitRemoteCommand('next')
           return
         }
-        operation = this.playSession(activeSessionId, session)
+        const revision = ++session.commandRevision
+        operation = this.playSession(activeSessionId, session, revision)
         break
       case 'pause':
         operation = this.pauseSession(activeSessionId, session)
