@@ -221,7 +221,7 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
         this.open(args, true, result)
         break
       case 'dispose':
-        this.disposeSession(this.sessionId(args)).then(() => result.success(null)).catch((error: Error) => {
+        this.disposeSession(this.sessionId(args), this.booleanValue(args, 'preserveAudioSession')).then(() => result.success(null)).catch((error: Error) => {
           result.error('dispose_failed', this.errorMessage(error), null)
         })
         break
@@ -544,13 +544,18 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
     this.events.emit(event)
   }
 
-  private async disposeSession(sessionId: string): Promise<void> {
+  private async disposeSession(sessionId: string, preserveAudioSession: boolean = false): Promise<void> {
     const session = this.sessions.get(sessionId)
     if (session === undefined) return
     this.sessions.delete(sessionId)
-    if (sessionId === this.audioSessionId) {
+    if (sessionId === this.audioSessionId && !preserveAudioSession) {
       await this.audioBackgroundTask.stop()
       await this.destroyAudioSession()
+    } else if (sessionId === this.audioSessionId) {
+      // A chapter switch replaces the AVPlayer but keeps the process-scoped
+      // AVSession and audioPlayback continuous task. The next audio.open
+      // binds the shared session to its new player before publishing state.
+      this.audioSessionId = undefined
     }
     try {
       await session.player.release()

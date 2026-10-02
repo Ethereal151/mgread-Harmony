@@ -29,6 +29,16 @@ if (-not (Test-Path -LiteralPath $mgreadRuntimeNpm -PathType Leaf)) {
 }
 $originalPath = $env:Path
 $env:Path = "$mgreadNodeRoot;$originalPath"
+# The installed Flutter SDK is currently on Dart 3.13.3 while its OHOS
+# release gen_snapshot remains Dart 3.12.2. The repository's OHOS 3.44.9
+# SDK contains the matching 3.12.2 frontend/runtime and release snapshot.
+# Select it for release builds as one coherent toolchain; debug keeps using
+# the active SDK because its debug artifacts are already internally matched.
+$releaseFlutterRoot = 'D:\f-ohos-3449'
+if ($BuildMode -eq 'release' -and (Test-Path -LiteralPath (Join-Path $releaseFlutterRoot 'bin\flutter.bat') -PathType Leaf)) {
+  $env:Path = "$releaseFlutterRoot\bin;$mgreadNodeRoot;$originalPath"
+  Write-Host "OHOS release selects the matching Flutter SDK: $releaseFlutterRoot"
+}
 $rustEnvironmentNames = @(
   'CARGO_HOME',
   'RUSTUP_HOME',
@@ -49,6 +59,7 @@ $runtimePubspec = Join-Path $projectRoot 'packages\mgread_plugin_runtime\pubspec
 $rootPackage = Join-Path $projectRoot 'ohos\oh-package.json5'
 $rootPackageLock = Join-Path $projectRoot 'ohos\oh-package-lock.json5'
 $entryPackage = Join-Path $projectRoot 'ohos\entry\oh-package.json5'
+$entryPackageLock = Join-Path $projectRoot 'ohos\entry\oh-package-lock.json5'
 $entryBuildProfile = Join-Path $projectRoot 'ohos\entry\build-profile.json5'
 $hapDirectory = Join-Path $projectRoot 'build\ohos\hap'
 $targetPlatform = "ohos-$Architecture"
@@ -57,9 +68,11 @@ $backupPubspec = Join-Path $temporaryRoot 'mgread_plugin_runtime.pubspec.yaml'
 $backupRootPackage = Join-Path $temporaryRoot 'oh-package.json5'
 $backupRootPackageLock = Join-Path $temporaryRoot 'oh-package-lock.json5'
 $backupEntryPackage = Join-Path $temporaryRoot 'entry.oh-package.json5'
+$backupEntryPackageLock = Join-Path $temporaryRoot 'entry.oh-package-lock.json5'
 $backupEntryBuildProfile = Join-Path $temporaryRoot 'entry.build-profile.json5'
 $backupPackageMetadata = Join-Path $temporaryRoot 'package-metadata'
 $hadRootPackageLock = Test-Path -LiteralPath $rootPackageLock -PathType Leaf
+$hadEntryPackageLock = Test-Path -LiteralPath $entryPackageLock -PathType Leaf
 
 $packagesRoot = Join-Path $projectRoot 'packages'
 $packageMetadataFiles = @()
@@ -106,6 +119,12 @@ function Remove-StaleFlutterBuildOutputs {
     (Join-Path $projectRoot '.dart_tool\flutter_build'),
     (Join-Path $projectRoot 'ohos\entry\build'),
     (Join-Path $projectRoot 'ohos\entry\.cxx'),
+    # ohpm materializes this tree from package locks. Keeping it across an
+    # architecture/mode build preserves the previous Flutter HAR path in
+    # ohos/oh_modules/.ohpm/lock.json5 and makes ProcessRouterMap resolve a
+    # deleted remote package before Hvigor sees the temporary lock overrides.
+    (Join-Path $projectRoot 'ohos\oh_modules'),
+    (Join-Path $projectRoot 'ohos\entry\oh_modules'),
     (Join-Path $projectRoot 'packages\mgread_ohos_native_runtime\ohos\build'),
     (Join-Path $projectRoot 'packages\mgread_ohos_native_runtime\ohos\.cxx'),
     (Join-Path $projectRoot 'packages\mgread_plugin_runtime\ohos\build'),
@@ -188,10 +207,14 @@ function Set-OhosPackageLockOverrides {
   }
   $embeddingHarName = "flutter_embedding_$BuildMode.har"
 
-  foreach ($metadataFile in $packageMetadataFiles) {
-    if ($metadataFile.Name -ne 'oh-package-lock.json5') {
-      continue
-    }
+  $lockFiles = @(
+    @($packageMetadataFiles | Where-Object { $_.Name -eq 'oh-package-lock.json5' }) +
+    @(
+      if (Test-Path -LiteralPath $rootPackageLock -PathType Leaf) { Get-Item -LiteralPath $rootPackageLock }
+      if (Test-Path -LiteralPath $entryPackageLock -PathType Leaf) { Get-Item -LiteralPath $entryPackageLock }
+    )
+  )
+  foreach ($metadataFile in $lockFiles) {
     $source = Get-Content -LiteralPath $metadataFile.FullName -Raw
     $updated = $source
     # Locks are generated artifacts, but leaving the old architecture in them
@@ -282,6 +305,11 @@ function Assert-OhosAotToolchainCompatibility {
   $flutterCommand = Get-Command flutter -ErrorAction Stop | Select-Object -First 1
   $flutterRoot = Split-Path -Parent (Split-Path -Parent $flutterCommand.Source)
   $ohosRuntimeRoot = Join-Path $flutterRoot 'bin\cache\dart-sdk-ohos'
+  if (-not (Test-Path -LiteralPath $ohosRuntimeRoot -PathType Container)) {
+    # Flutter 3.44.9+ohos stores the matching runtime in the normal Dart SDK
+    # directory; newer OHOS bundles expose the same runtime as dart-sdk-ohos.
+    $ohosRuntimeRoot = Join-Path $flutterRoot 'bin\cache\dart-sdk'
+  }
   $dartRuntime = Join-Path $ohosRuntimeRoot 'bin\dartaotruntime.exe'
   $aotTool = Join-Path $flutterRoot "bin\cache\artifacts\engine\$targetPlatform-release\windows-x64\gen_snapshot.exe"
   foreach ($requiredPath in @($dartRuntime, $aotTool)) {
@@ -337,6 +365,9 @@ if ($hadRootPackageLock) {
   Copy-Item -LiteralPath $rootPackageLock -Destination $backupRootPackageLock -Force
 }
 Copy-Item -LiteralPath $entryPackage -Destination $backupEntryPackage -Force
+if ($hadEntryPackageLock) {
+  Copy-Item -LiteralPath $entryPackageLock -Destination $backupEntryPackageLock -Force
+}
 Copy-Item -LiteralPath $entryBuildProfile -Destination $backupEntryBuildProfile -Force
 foreach ($metadataFile in $packageMetadataFiles) {
   $relativePath = $metadataFile.FullName.Substring($projectRoot.Length + 1)
@@ -473,6 +504,10 @@ try {
   if ($selectedArchitectureEntries.Count -eq 0) {
     throw "The generated HAP does not contain the requested architecture: $selectedArchitecturePath"
   }
+  $selectedSqlitePath = $selectedArchitecturePath + 'libsqlite3.so'
+  if (-not ($hapEntries -contains $selectedSqlitePath)) {
+    throw "The generated HAP is missing the selected architecture SQLite runtime: $selectedSqlitePath"
+  }
   $unexpectedArchitecturePath = if ($Architecture -eq 'arm64') { 'libs/x86_64/' } else { 'libs/arm64-v8a/' }
   $unexpectedArchitectureEntries = @($hapEntries | Where-Object { $_ -like "$unexpectedArchitecturePath*" })
   if ($unexpectedArchitectureEntries.Count -gt 0) {
@@ -502,6 +537,11 @@ try {
     Remove-Item -LiteralPath $rootPackageLock -Force
   }
   Copy-Item -LiteralPath $backupEntryPackage -Destination $entryPackage -Force
+  if ($hadEntryPackageLock) {
+    Copy-Item -LiteralPath $backupEntryPackageLock -Destination $entryPackageLock -Force
+  } elseif (Test-Path -LiteralPath $entryPackageLock -PathType Leaf) {
+    Remove-Item -LiteralPath $entryPackageLock -Force
+  }
   Copy-Item -LiteralPath $backupEntryBuildProfile -Destination $entryBuildProfile -Force
   if (Test-Path -LiteralPath $backupPackageMetadata -PathType Container) {
     foreach ($backupFile in (Get-ChildItem -LiteralPath $backupPackageMetadata -Recurse -File)) {

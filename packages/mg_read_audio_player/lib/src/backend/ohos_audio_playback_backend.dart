@@ -48,7 +48,11 @@ final class OhosAudioPlaybackBackend implements AudioPlaybackBackend {
     }
     final generation = ++_generation;
     _tracks = List<AudioTrack>.unmodifiable(tracks);
-    await _closeNativeSession();
+    // A chapter switch replaces only the AVPlayer. Keep the native audio
+    // session and its continuous-task registration alive until the explicit
+    // backend dispose; recreating them at EOF makes OHOS validate a second
+    // audioPlayback task while the first teardown is still settling.
+    await _closeNativeSession(preserveAudioSession: _sessionId != null);
     if (!_isGenerationCurrent(generation)) return;
     final sessionId = _newSessionId();
     _sessionId = sessionId;
@@ -141,7 +145,16 @@ final class OhosAudioPlaybackBackend implements AudioPlaybackBackend {
   Future<void> _jump(int index) async {
     _ensureActive();
     if (index < 0 || index >= _tracks.length) return;
-    await open(_tracks, initialIndex: index, play: _snapshot.playing);
+    // A completed chapter is no longer reported as playing, but a next
+    // command at that boundary is a continuation request. Keep autoplay for
+    // this one transition; otherwise OHOS only prepares the next AVPlayer and
+    // its audio session eventually receives TIME_OUT_STOP before recovery can
+    // reopen it.
+    await open(
+      _tracks,
+      initialIndex: index,
+      play: _snapshot.playing || _snapshot.completed,
+    );
   }
 
   Future<void> _command(
@@ -220,12 +233,20 @@ final class OhosAudioPlaybackBackend implements AudioPlaybackBackend {
     }
   }
 
-  Future<void> _closeNativeSession() async {
+  Future<void> _closeNativeSession({bool preserveAudioSession = false}) async {
     final oldSession = _sessionId;
     _sessionId = null;
     await _events?.cancel();
     _events = null;
-    if (oldSession != null) await _client.command('dispose', oldSession);
+    if (oldSession != null) {
+      await _client.command(
+        'dispose',
+        oldSession,
+        arguments: <String, Object?>{
+          if (preserveAudioSession) 'preserveAudioSession': true,
+        },
+      );
+    }
   }
 
   String _newSessionId() =>

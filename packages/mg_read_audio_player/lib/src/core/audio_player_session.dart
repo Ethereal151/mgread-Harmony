@@ -113,6 +113,7 @@ final class AudioPlayerSession extends ChangeNotifier {
   String? _lastPrefetchTriggerTrackId;
   String? _lastBackendErrorMessage;
   bool _continuationRecoveryPending = false;
+  bool _selectionInFlight = false;
   bool _playbackDesired;
   int _playbackIntentRevision = 0;
   int _continuationRequestRevision = 0;

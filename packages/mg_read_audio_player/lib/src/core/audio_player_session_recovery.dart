@@ -45,6 +45,7 @@ extension _AudioPlayerSessionRecovery on AudioPlayerSession {
     };
     if (playlist == null ||
         source is! AudioPlaylistContinuationDataSource ||
+        _selectionInFlight ||
         !isPrefetchWindow ||
         _prefetchRequest != null ||
         _closing ||
@@ -225,7 +226,7 @@ extension _AudioPlayerSessionRecovery on AudioPlayerSession {
   }
 
   Future<void> _recoverInterruptedPlayback() async {
-    if (_closing || _closed || !_playbackDesired) return;
+    if (_closing || _closed || !_playbackDesired || _selectionInFlight) return;
     final activeContinuation = _prefetchRequest;
     if (activeContinuation != null) {
       try {
@@ -245,6 +246,7 @@ extension _AudioPlayerSessionRecovery on AudioPlayerSession {
         // The regular continuation failure path records the retry state.
       }
       if (_closing || _closed || !_playbackDesired) return;
+      if (_selectionInFlight) return;
       if (_snapshot.playing &&
           !_snapshot.buffering &&
           !backend.snapshot.completed &&
@@ -253,6 +255,7 @@ extension _AudioPlayerSessionRecovery on AudioPlayerSession {
       }
     }
     _cancelContinuationLoad(retry: _continuationRecoveryPending);
+    if (_selectionInFlight) return;
     final intentRevision = _playbackIntentRevision;
     final hasBackendFailure =
         _snapshot.failure?.code == 'audio_backend_error' ||
@@ -286,6 +289,7 @@ extension _AudioPlayerSessionRecovery on AudioPlayerSession {
     AudioPlaylistQueueDataSource source, {
     required int intentRevision,
   }) async {
+    if (_selectionInFlight) return;
     final playlist = _playlist;
     final track = _snapshot.currentTrack;
     if (playlist == null || track == null) return;
@@ -301,6 +305,7 @@ extension _AudioPlayerSessionRecovery on AudioPlayerSession {
         trackId: track.id,
       );
       if (!_isCurrent(generation) ||
+          _selectionInFlight ||
           !_playbackDesired ||
           intentRevision != _playbackIntentRevision) {
         return;
@@ -360,6 +365,10 @@ extension _AudioPlayerSessionRecovery on AudioPlayerSession {
   }
 
   void _observeRecoveryState(AudioPlaybackBackendSnapshot value) {
+    if (_selectionInFlight) {
+      _cancelRecoveryTimers(resetAttempts: true);
+      return;
+    }
     if (!_playbackDesired || _closing || _closed) {
       _cancelRecoveryTimers(resetAttempts: true);
       return;
@@ -387,6 +396,7 @@ extension _AudioPlayerSessionRecovery on AudioPlayerSession {
     if (_closing ||
         _closed ||
         !_playbackDesired ||
+        _selectionInFlight ||
         // Waiting for the source is not a failed attempt. Spending retries
         // here can exhaust the budget before a slow request reports failure,
         // leaving background playback stuck until a screen/network event.

@@ -36,13 +36,14 @@ export default class OhosAudioBackgroundTask {
   }
 
   private readonly onTaskSuspend = (info: backgroundTaskManager.ContinuousTaskSuspendInfo): void => {
-    if (this.continuousTaskId === undefined || info.continuousTaskId === this.continuousTaskId) {
-      this.running = false
-    }
+    // Suspend does not cancel the registered continuous task. Keeping the
+    // registration prevents the next chapter from calling
+    // startBackgroundRunning again and triggering OHOS 9800005.
     Log.w(OhosAudioBackgroundTask.TAG, `background_task_suspended id=${info.continuousTaskId} reason=${info.suspendReason}`)
   }
 
   private readonly onTaskActive = (info: backgroundTaskManager.ContinuousTaskActiveInfo): void => {
+    this.continuousTaskId = info.id
     if (this.continuousTaskId === undefined || info.id === this.continuousTaskId) {
       this.running = true
     }

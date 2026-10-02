@@ -14,6 +14,23 @@ extension _AudioPlayerSessionSelection on AudioPlayerSession {
         trackId == _snapshot.currentTrack?.id) {
       return;
     }
+    if (_selectionInFlight) return;
+    _selectionInFlight = true;
+    try {
+      await _selectQueueEntryInternal(trackId);
+    } finally {
+      _selectionInFlight = false;
+    }
+  }
+
+  Future<void> _selectQueueEntryInternal(String trackId) async {
+    final playlist = _playlist;
+    if (playlist == null ||
+        _snapshot.status != AudioPlayerStatus.ready ||
+        trackId.isEmpty ||
+        trackId == _snapshot.currentTrack?.id) {
+      return;
+    }
     _recordPlaybackIntent(true);
     _cancelRecoveryTimers(resetAttempts: true);
     final intentRevision = _playbackIntentRevision;
