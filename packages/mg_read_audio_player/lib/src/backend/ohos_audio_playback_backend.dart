@@ -111,7 +111,14 @@ final class OhosAudioPlaybackBackend implements AudioPlaybackBackend {
   Future<void> play() => _command('play');
 
   @override
-  Future<void> pause() => _command('pause');
+  Future<void> pause() {
+    // A forced interruption may have recorded an automatic resume. Clear that
+    // latch before sending the user pause command: OHOS can deliver the
+    // matching interruption-end event after this command returns, and that
+    // event must not turn an explicit pause back into play.
+    _resumeAfterInterruption = false;
+    return _command('pause');
+  }
 
   @override
   Future<void> seek(Duration position) => _command(
