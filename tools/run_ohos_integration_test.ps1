@@ -19,7 +19,11 @@ $projectRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot 'ohos-build-contract.ps1')
 $variant = Get-MgReadOhosVariant -BuildMode 'debug' -Architecture $Architecture
 $toolchain = Get-MgReadOhosToolchain -ProjectRoot $projectRoot
-Assert-MgReadOhosToolchain -Toolchain $toolchain -Variant $variant -ProjectRoot $projectRoot
+Assert-MgReadOhosToolchain `
+  -Toolchain $toolchain `
+  -Variant $variant `
+  -ProjectRoot $projectRoot `
+  -RequireRuntimeNode ($Architecture -eq 'arm64')
 $variantRoot = Set-MgReadOhosBuildEnvironment -Toolchain $toolchain -Variant $variant -ProjectRoot $projectRoot
 
 # Keep Flutter/Hvigor integration builds on the same compatible Node version
@@ -57,14 +61,12 @@ $rootPackageLock = Join-Path $projectRoot 'ohos\oh-package-lock.json5'
 $entryPackage = Join-Path $projectRoot 'ohos\entry\oh-package.json5'
 $entryBuildProfile = Join-Path $projectRoot 'ohos\entry\build-profile.json5'
 $runtimeBuildProfile = Join-Path $projectRoot 'packages\mgread_plugin_runtime\ohos\build-profile.json5'
-$entryNativeLibraries = Join-Path $projectRoot 'ohos\entry\libs'
 $temporaryRoot = Join-Path ([IO.Path]::GetTempPath()) "mgread-ohos-integration-$PID"
 $backupRootPackage = Join-Path $temporaryRoot 'oh-package.json5'
 $backupRootPackageLock = Join-Path $temporaryRoot 'oh-package-lock.json5'
 $backupEntryPackage = Join-Path $temporaryRoot 'entry.oh-package.json5'
 $backupEntryBuildProfile = Join-Path $temporaryRoot 'entry.build-profile.json5'
 $backupRuntimeBuildProfile = Join-Path $temporaryRoot 'runtime.build-profile.json5'
-$backupEntryNativeLibraries = Join-Path $temporaryRoot 'libs'
 $backupPackageMetadata = Join-Path $temporaryRoot 'package-metadata'
 $hadRootPackageLock = Test-Path -LiteralPath $rootPackageLock -PathType Leaf
 
@@ -72,6 +74,7 @@ function Remove-StaleIntegrationBuildOutputs {
   $generatedPaths = @(
     (Join-Path $projectRoot 'ohos\entry\build'),
     (Join-Path $projectRoot 'ohos\entry\.cxx'),
+    (Join-Path $projectRoot 'ohos\entry\src\main\resources\rawfile\flutter_assets'),
     (Join-Path $projectRoot 'ohos\oh_modules'),
     (Join-Path $projectRoot 'ohos\entry\oh_modules'),
     (Join-Path $projectRoot 'packages\mgread_plugin_runtime\ohos\build'),
@@ -89,6 +92,19 @@ function Remove-StaleIntegrationBuildOutputs {
         Write-Warning "Keeping locked OHOS integration output; the build will reconfigure it: $generatedPath ($($_.Exception.Message))"
       }
     }
+  }
+
+  $rawfileRoot = Join-Path $projectRoot 'ohos\entry\src\main\resources\rawfile'
+  if (Test-Path -LiteralPath $rawfileRoot -PathType Container) {
+    Get-ChildItem -LiteralPath $rawfileRoot -Directory -Filter 'flutter_assets.stale-*' |
+      ForEach-Object {
+        try {
+          Remove-Item -LiteralPath $_.FullName -Recurse -Force -ErrorAction Stop
+          Write-Host "Removed stale OHOS integration assets: $($_.FullName)"
+        } catch {
+          Write-Warning "Keeping locked OHOS integration assets: $($_.FullName) ($($_.Exception.Message))"
+        }
+      }
   }
 }
 
@@ -236,11 +252,6 @@ foreach ($metadataFile in $packageMetadataFiles) {
   New-Item -ItemType Directory -Force -Path (Split-Path -Parent $backupPath) | Out-Null
   Copy-Item -LiteralPath $metadataFile.FullName -Destination $backupPath -Force
 }
-if (Test-Path -LiteralPath $entryNativeLibraries -PathType Container) {
-  Copy-Item -LiteralPath $entryNativeLibraries -Destination $backupEntryNativeLibraries -Recurse -Force
-  Remove-Item -LiteralPath $entryNativeLibraries -Recurse -Force
-}
-
 try {
   Ensure-FlutterPackageConfig
   Set-OhosFlutterRuntimeOverrides
@@ -330,12 +341,6 @@ try {
       New-Item -ItemType Directory -Force -Path (Split-Path -Parent $destination) | Out-Null
       Copy-Item -LiteralPath $backupFile.FullName -Destination $destination -Force
     }
-  }
-  if (Test-Path -LiteralPath $backupEntryNativeLibraries -PathType Container) {
-    if (Test-Path -LiteralPath $entryNativeLibraries -PathType Container) {
-      Remove-Item -LiteralPath $entryNativeLibraries -Recurse -Force
-    }
-    Copy-Item -LiteralPath $backupEntryNativeLibraries -Destination $entryNativeLibraries -Recurse -Force
   }
   foreach ($rule in (Get-HdcForwardRules)) {
     if ($initialHdcForwardRules -notcontains $rule) {

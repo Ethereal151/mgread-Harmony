@@ -141,7 +141,8 @@ function Assert-MgReadOhosToolchain {
   param(
     [Parameter(Mandatory = $true)][hashtable]$Toolchain,
     [Parameter(Mandatory = $true)][hashtable]$Variant,
-    [Parameter(Mandatory = $true)][string]$ProjectRoot
+    [Parameter(Mandatory = $true)][string]$ProjectRoot,
+    [bool]$RequireRuntimeNode = $true
   )
 
   $flutterBat = Join-Path $Toolchain.Flutter.Root 'bin\flutter.bat'
@@ -149,15 +150,21 @@ function Assert-MgReadOhosToolchain {
   $buildNpm = Join-Path $Toolchain.BuildNode.Root 'npm.cmd'
   $runtimeNode = Join-Path $Toolchain.RuntimeNode.Root 'node.exe'
   $runtimeNpm = Join-Path $Toolchain.RuntimeNode.Root 'npm.cmd'
-  foreach ($path in @($flutterBat, $buildNpm, $runtimeNpm)) {
+  $requiredToolchainPaths = @($flutterBat, $buildNpm)
+  if ($RequireRuntimeNode) {
+    $requiredToolchainPaths += $runtimeNpm
+  }
+  foreach ($path in $requiredToolchainPaths) {
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
       throw "Pinned OHOS toolchain input is missing: $path"
     }
   }
   Assert-MgReadExactNode $buildNode $Toolchain.BuildNode.Version 'OHOS build'
-  Assert-MgReadExactNode $runtimeNode $Toolchain.RuntimeNode.Version 'Runtime'
   Assert-MgReadExactNpm $buildNpm $Toolchain.BuildNode.NpmVersion 'OHOS build'
-  Assert-MgReadExactNpm $runtimeNpm $Toolchain.RuntimeNode.NpmVersion 'Runtime'
+  if ($RequireRuntimeNode) {
+    Assert-MgReadExactNode $runtimeNode $Toolchain.RuntimeNode.Version 'Runtime'
+    Assert-MgReadExactNpm $runtimeNpm $Toolchain.RuntimeNode.NpmVersion 'Runtime'
+  }
 
   $flutterInfo = (& $flutterBat --version --machine 2>$null | ConvertFrom-Json)
   if ($flutterInfo.frameworkVersion -ne $Toolchain.Flutter.Version -or
@@ -180,19 +187,21 @@ Pinned Flutter toolchain mismatch.
       throw "Pinned Flutter $($Variant.Id) HAR is missing: $harPath"
     }
   }
-  $nodeRoot = Join-Path (Join-Path $ProjectRoot 'packages\mgread_plugin_runtime\ohos\src\main\cpp\node-runtime') $Variant.Architecture
-  foreach ($path in @(
-      (Join-Path $nodeRoot 'lib\libnode.so'),
-      (Join-Path $nodeRoot 'mgread-node-target.txt'),
-      (Join-Path $ProjectRoot 'packages\mgread_plugin_runtime\ohos\src\main\cpp\node-source\src\node.h')
-    )) {
-    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
-      throw "Pinned OHOS native Runtime input is missing: $path"
+  if ($RequireRuntimeNode) {
+    $nodeRoot = Join-Path (Join-Path $ProjectRoot 'packages\mgread_plugin_runtime\ohos\src\main\cpp\node-runtime') $Variant.Architecture
+    foreach ($path in @(
+        (Join-Path $nodeRoot 'lib\libnode.so'),
+        (Join-Path $nodeRoot 'mgread-node-target.txt'),
+        (Join-Path $ProjectRoot 'packages\mgread_plugin_runtime\ohos\src\main\cpp\node-source\src\node.h')
+      )) {
+      if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+        throw "Pinned OHOS native Runtime input is missing: $path"
+      }
     }
-  }
-  $nodeTarget = (Get-Content -LiteralPath (Join-Path $nodeRoot 'mgread-node-target.txt') -Raw).Trim()
-  if ($nodeTarget -ne $Variant.Architecture) {
-    throw "OHOS native Node target '$nodeTarget' does not match $($Variant.Architecture)."
+    $nodeTarget = (Get-Content -LiteralPath (Join-Path $nodeRoot 'mgread-node-target.txt') -Raw).Trim()
+    if ($nodeTarget -ne $Variant.Architecture) {
+      throw "OHOS native Node target '$nodeTarget' does not match $($Variant.Architecture)."
+    }
   }
 }
 

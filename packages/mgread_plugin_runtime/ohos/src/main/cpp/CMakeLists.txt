@@ -1,12 +1,18 @@
 cmake_minimum_required(VERSION 3.16)
 project(mgread_node_host)
 
-# MGREAD_NODE_ROOT is an extracted Node v26.10.0 OpenHarmony arm64 install
+# MGREAD_NODE_ROOT is an extracted Node v26.10.0 OpenHarmony install for the
+# current HAP ABI
 # produced by tools/build-ohos-node.sh. It is deliberately supplied as a
 # build input instead of checked into this package.
 set(MGREAD_NODE_ROOT "$ENV{MGREAD_NODE_ROOT}" CACHE PATH "Node OpenHarmony install root")
-if(NOT MGREAD_NODE_ROOT)
+if(NOT "$ENV{MGREAD_NODE_ROOT}")
   set(MGREAD_NODE_ROOT "${CMAKE_CURRENT_LIST_DIR}/node-runtime")
+  if(OHOS_ARCH STREQUAL "x86_64")
+    set(MGREAD_NODE_ROOT "${MGREAD_NODE_ROOT}/x64" CACHE PATH "Node OpenHarmony install root" FORCE)
+  else()
+    set(MGREAD_NODE_ROOT "${MGREAD_NODE_ROOT}/arm64" CACHE PATH "Node OpenHarmony install root" FORCE)
+  endif()
 endif()
 set(MGREAD_NODE_SOURCE_ROOT "$ENV{MGREAD_NODE_SOURCE_ROOT}" CACHE PATH "Node source root used for public embedding headers")
 if(NOT MGREAD_NODE_SOURCE_ROOT)
@@ -25,6 +31,9 @@ if(NOT OHOS_NAPI_INCLUDE)
 endif()
 
 if(OHOS_ARCH STREQUAL "x86_64")
+  # The production Node Runtime is ARM64-only. x64 integration tests use a
+  # real x64 HAP with an explicit unavailable stub, so they never link or
+  # package an accidental x64 Node binary.
   add_library(mgread_node_host SHARED mgread_node_host_x86_stub.cpp)
   target_include_directories(mgread_node_host PRIVATE "${OHOS_NAPI_INCLUDE}")
   target_link_libraries(mgread_node_host PRIVATE ace_napi.z)
@@ -34,6 +43,15 @@ else()
   endif()
   if(NOT EXISTS "${MGREAD_NODE_SOURCE_ROOT}/src/node.h")
     message(FATAL_ERROR "MGREAD_NODE_SOURCE_ROOT must point at the matching Node v26.10.0 source tree")
+  endif()
+  set(MGREAD_NODE_TARGET_FILE "${MGREAD_NODE_ROOT}/mgread-node-target.txt")
+  if(NOT EXISTS "${MGREAD_NODE_TARGET_FILE}")
+    message(FATAL_ERROR "The staged Node runtime is missing mgread-node-target.txt; restage the runtime for this ABI")
+  endif()
+  file(READ "${MGREAD_NODE_TARGET_FILE}" MGREAD_NODE_TARGET)
+  string(STRIP "${MGREAD_NODE_TARGET}" MGREAD_NODE_TARGET)
+  if(NOT MGREAD_NODE_TARGET STREQUAL "arm64")
+    message(FATAL_ERROR "Staged Node target '${MGREAD_NODE_TARGET}' does not match OHOS ABI '${OHOS_ARCH}' (expected arm64)")
   endif()
   add_library(mgread_node_host SHARED mgread_node_host.cpp)
   target_include_directories(mgread_node_host PRIVATE

@@ -18,7 +18,11 @@ $projectRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot 'ohos-build-contract.ps1')
 $variant = Get-MgReadOhosVariant -BuildMode $BuildMode -Architecture $Architecture
 $toolchain = Get-MgReadOhosToolchain -ProjectRoot $projectRoot
-Assert-MgReadOhosToolchain -Toolchain $toolchain -Variant $variant -ProjectRoot $projectRoot
+Assert-MgReadOhosToolchain `
+  -Toolchain $toolchain `
+  -Variant $variant `
+  -ProjectRoot $projectRoot `
+  -RequireRuntimeNode ($Architecture -eq 'arm64')
 $variantRoot = Set-MgReadOhosBuildEnvironment -Toolchain $toolchain -Variant $variant -ProjectRoot $projectRoot
 
 # The build host uses Node 20 for DevEco/Hvigor. Runtime asset staging is
@@ -68,11 +72,15 @@ $hadRootPackageLock = Test-Path -LiteralPath $rootPackageLock -PathType Leaf
 $hadEntryPackageLock = Test-Path -LiteralPath $entryPackageLock -PathType Leaf
 
 $packagesRoot = Join-Path $projectRoot 'packages'
+$armOnlyNativeRuntimeRoot = Join-Path $packagesRoot 'mgread_ohos_native_runtime\ohos'
 $packageMetadataFiles = @()
 if (Test-Path -LiteralPath $packagesRoot -PathType Container) {
   $packageMetadataFiles = @(
     Get-ChildItem -LiteralPath $packagesRoot -Recurse -File |
-      Where-Object { $_.Name -in @('BuildProfile.ets', 'oh-package-lock.json5') }
+      Where-Object {
+        $_.Name -in @('BuildProfile.ets', 'oh-package-lock.json5') -and
+        -not $_.FullName.StartsWith($armOnlyNativeRuntimeRoot, [StringComparison]::OrdinalIgnoreCase)
+      }
   )
 }
 $packageBuildProfileFiles = @()
@@ -80,7 +88,8 @@ if (Test-Path -LiteralPath $packagesRoot -PathType Container) {
   $packageBuildProfileFiles = @(
     Get-ChildItem -LiteralPath $packagesRoot -Recurse -File -Filter 'build-profile.json5' |
       Where-Object {
-        (Get-Content -LiteralPath $_.FullName -Raw) -match '"abiFilters"'
+        (Get-Content -LiteralPath $_.FullName -Raw) -match '"abiFilters"' -and
+        -not $_.FullName.Equals((Join-Path $armOnlyNativeRuntimeRoot 'build-profile.json5'), [StringComparison]::OrdinalIgnoreCase)
       }
   )
 }
@@ -190,6 +199,23 @@ function Get-HapEntries {
   $archive = [System.IO.Compression.ZipFile]::OpenRead($Path)
   try {
     return @($archive.Entries | ForEach-Object { $_.FullName })
+  } finally {
+    $archive.Dispose()
+  }
+}
+
+function Assert-OhosHapNativeLibrariesCompressed {
+  param([Parameter(Mandatory)][string]$Path)
+
+  Add-Type -AssemblyName System.IO.Compression.FileSystem
+  $archive = [System.IO.Compression.ZipFile]::OpenRead($Path)
+  try {
+    $nativeEntries = @($archive.Entries | Where-Object { $_.FullName -match '(^|/)lib[^/]*\.so$' })
+    foreach ($entry in $nativeEntries) {
+      if ($entry.Length -gt 0 -and $entry.CompressedLength -ge $entry.Length) {
+        throw "OHOS HAP native library is not compressed: $($entry.FullName)"
+      }
+    }
   } finally {
     $archive.Dispose()
   }
@@ -705,6 +731,7 @@ try {
   if ($null -eq $hap) {
     throw "Build completed but no HAP was found: $hapDirectory"
   }
+  Assert-OhosHapNativeLibrariesCompressed -Path $hap.FullName
   $hapEntries = Get-HapEntries -Path $hap.FullName
   $hasAotSnapshot = @($hapEntries | Where-Object { $_ -eq 'libs/arm64-v8a/libapp.so' -or $_ -eq 'libs/x86_64/libapp.so' }).Count -gt 0
   $hasDebugKernel = @($hapEntries | Where-Object { $_ -eq 'resources/rawfile/flutter_assets/kernel_blob.bin' }).Count -gt 0
@@ -717,7 +744,7 @@ try {
     throw "The generated HAP does not contain the requested architecture: $selectedArchitecturePath"
   }
   $selectedSqlitePath = $selectedArchitecturePath + 'libsqlite3.so'
-  if (-not ($hapEntries -contains $selectedSqlitePath)) {
+  if ($Architecture -eq 'arm64' -and -not ($hapEntries -contains $selectedSqlitePath)) {
     throw "The generated HAP is missing the selected architecture SQLite runtime: $selectedSqlitePath"
   }
   $unexpectedArchitecturePath = if ($Architecture -eq 'arm64') { 'libs/x86_64/' } else { 'libs/arm64-v8a/' }

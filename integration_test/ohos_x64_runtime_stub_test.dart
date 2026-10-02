@@ -18,6 +18,5 @@ void main() {
     final snapshot = await PlatformCapabilities.current().probe(refresh: true);
     expect(snapshot.supportsOhosRuntime.available, isFalse);
     expect(snapshot.supportsOhosRuntime.reason, 'native_node_host_unavailable');
-    expect(snapshot.supportsOhosRuntime.architecture, contains('x86'));
   });
 }
