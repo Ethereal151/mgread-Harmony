@@ -59,6 +59,11 @@ $hapDirectory = Join-Path $projectRoot 'build\ohos\hap'
 $targetPlatform = $variant.TargetPlatform
 $variantLockRoot = Join-Path $variantRoot 'locks'
 $variantOutputRoot = Join-Path $variantRoot 'output'
+$requiredArm64Sqlite = Join-Path $projectRoot 'ohos\entry\libs\arm64-v8a\libsqlite3.so'
+$nativeLibsRoot = Join-Path $projectRoot 'ohos\entry\libs'
+$protectedNativeRoot = Join-Path $variantRoot 'protected-native'
+$protectedArm64Sqlite = Join-Path $protectedNativeRoot 'libsqlite3.so'
+$protectedUnselectedNativeRoot = Join-Path $protectedNativeRoot 'unselected-libs'
 $hadRootPackageLock = Test-Path -LiteralPath $rootPackageLock -PathType Leaf
 $hadEntryPackageLock = Test-Path -LiteralPath $entryPackageLock -PathType Leaf
 
@@ -107,6 +112,7 @@ function Remove-StaleFlutterBuildOutputs {
     (Join-Path $projectRoot '.dart_tool\flutter_build'),
     (Join-Path $projectRoot 'ohos\entry\build'),
     (Join-Path $projectRoot 'ohos\entry\.cxx'),
+    (Join-Path $projectRoot 'ohos\entry\src\main\resources\rawfile\flutter_assets'),
     # ohpm materializes this tree from package locks. Keeping it across an
     # architecture/mode build preserves the previous Flutter HAR path in
     # ohos/oh_modules/.ohpm/lock.json5 and makes ProcessRouterMap resolve a
@@ -124,6 +130,68 @@ function Remove-StaleFlutterBuildOutputs {
       Remove-Item -LiteralPath $generatedPath -Recurse -Force
       Write-Host "Removed stale OHOS Flutter output: $generatedPath"
     }
+  }
+
+  $rawfileRoot = Join-Path $projectRoot 'ohos\entry\src\main\resources\rawfile'
+  if (Test-Path -LiteralPath $rawfileRoot -PathType Container) {
+    Get-ChildItem -LiteralPath $rawfileRoot -Directory -Filter 'flutter_assets.stale-*' |
+      ForEach-Object {
+        Remove-Item -LiteralPath $_.FullName -Recurse -Force
+        Write-Host "Removed stale OHOS Flutter assets: $($_.FullName)"
+      }
+  }
+}
+
+function Assert-OhosRequiredNativeInputs {
+  if (-not (Test-Path -LiteralPath $requiredArm64Sqlite -PathType Leaf)) {
+    throw "Required arm64 SQLite runtime is missing and must not be deleted: $requiredArm64Sqlite"
+  }
+  $sqliteLength = (Get-Item -LiteralPath $requiredArm64Sqlite).Length
+  if ($sqliteLength -le 0) {
+    throw "Required arm64 SQLite runtime is empty and must not be replaced: $requiredArm64Sqlite"
+  }
+}
+
+function Protect-OhosUnselectedNativeInputs {
+  $unselectedNativeLibDirectory = if ($Architecture -eq 'arm64') { 'x86_64' } else { 'arm64-v8a' }
+  $sourceDirectory = Join-Path $nativeLibsRoot $unselectedNativeLibDirectory
+  if (-not (Test-Path -LiteralPath $sourceDirectory -PathType Container)) {
+    return
+  }
+
+  $protectedDirectory = Join-Path $protectedUnselectedNativeRoot $unselectedNativeLibDirectory
+  New-Item -ItemType Directory -Force -Path $protectedDirectory | Out-Null
+  Get-ChildItem -LiteralPath $sourceDirectory -Force | ForEach-Object {
+    Copy-Item -LiteralPath $_.FullName -Destination $protectedDirectory -Recurse -Force
+  }
+  $script:hadProtectedUnselectedNativeInputs = $true
+  Write-Host "Protected unselected OHOS native inputs: $sourceDirectory"
+}
+
+function Restore-OhosUnselectedNativeInputs {
+  if (-not $script:hadProtectedUnselectedNativeInputs) {
+    return
+  }
+
+  $unselectedNativeLibDirectory = if ($Architecture -eq 'arm64') { 'x86_64' } else { 'arm64-v8a' }
+  $protectedDirectory = Join-Path $protectedUnselectedNativeRoot $unselectedNativeLibDirectory
+  $targetDirectory = Join-Path $nativeLibsRoot $unselectedNativeLibDirectory
+  New-Item -ItemType Directory -Force -Path $targetDirectory | Out-Null
+  Get-ChildItem -LiteralPath $protectedDirectory -Force | ForEach-Object {
+    Copy-Item -LiteralPath $_.FullName -Destination $targetDirectory -Recurse -Force
+  }
+  Write-Host "Restored unselected OHOS native inputs: $targetDirectory"
+}
+
+function Get-HapEntries {
+  param([Parameter(Mandatory)][string]$Path)
+
+  Add-Type -AssemblyName System.IO.Compression.FileSystem
+  $archive = [System.IO.Compression.ZipFile]::OpenRead($Path)
+  try {
+    return @($archive.Entries | ForEach-Object { $_.FullName })
+  } finally {
+    $archive.Dispose()
   }
 }
 
@@ -491,8 +559,16 @@ if (-not (Test-Path -LiteralPath $entryBuildProfile -PathType Leaf)) {
 }
 
 Assert-OhosAotToolchainCompatibility
+Assert-OhosRequiredNativeInputs
+New-Item -ItemType Directory -Force -Path $protectedNativeRoot | Out-Null
+Copy-Item -LiteralPath $requiredArm64Sqlite -Destination $protectedArm64Sqlite -Force
 
 try {
+  # Hvigor's frozen Flutter adapter prunes the other ABI from entry/libs after
+  # FlutterTask. Preserve files that existed before this variant build so an
+  # arm64 build cannot destroy x64 inputs (and vice versa). The HAP is already
+  # validated before this snapshot is restored.
+  Protect-OhosUnselectedNativeInputs
   Ensure-FlutterPackageConfig
   $nodeRuntimeRoot = Join-Path $projectRoot 'packages\mg_read_node_runtime'
   $runtimeNodeRoot = Split-Path -Parent $mgreadRuntimeNpm
@@ -567,7 +643,11 @@ try {
       throw "OHOS entry package lock does not select the requested Flutter package: $requiredLockToken"
     }
   }
-  if ($BuildMode -eq 'release' -and $entryLockSource -match 'ohos-x64|ohos-arm64(?!-release)|flutter_embedding_debug\.har|(?:arm64_v8a|x86_64)_debug\.har') {
+  $unselectedEnginePlatform = if ($Architecture -eq 'arm64') { 'ohos-x64' } else { 'ohos-arm64' }
+  if ($BuildMode -eq 'release' -and (
+      $entryLockSource -match [regex]::Escape($unselectedEnginePlatform) -or
+      $entryLockSource -match 'flutter_embedding_debug\.har|(?:arm64_v8a|x86_64)_debug\.har'
+    )) {
     throw 'OHOS release entry package lock still contains a debug or unselected architecture Flutter package.'
   }
   Set-OhosNativeBuildProfileArchitecture
@@ -625,7 +705,7 @@ try {
   if ($null -eq $hap) {
     throw "Build completed but no HAP was found: $hapDirectory"
   }
-  $hapEntries = tar -tf $hap.FullName
+  $hapEntries = Get-HapEntries -Path $hap.FullName
   $hasAotSnapshot = @($hapEntries | Where-Object { $_ -eq 'libs/arm64-v8a/libapp.so' -or $_ -eq 'libs/x86_64/libapp.so' }).Count -gt 0
   $hasDebugKernel = @($hapEntries | Where-Object { $_ -eq 'resources/rawfile/flutter_assets/kernel_blob.bin' }).Count -gt 0
   if ($BuildMode -eq 'release' -and (-not $hasAotSnapshot -or $hasDebugKernel)) {
@@ -661,6 +741,7 @@ try {
   Save-OhosVariantLocks
   Write-Host ("OHOS $BuildMode HAP: {0} ({1:N2} MB)" -f $hap.FullName, ($hap.Length / 1MB))
 } finally {
+  Restore-OhosUnselectedNativeInputs
   $env:Path = $originalPath
   foreach ($name in $rustEnvironmentNames) {
     [Environment]::SetEnvironmentVariable($name, $originalRustEnvironment[$name], 'Process')
