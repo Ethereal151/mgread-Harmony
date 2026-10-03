@@ -1,3 +1,4 @@
 packages/mg_read_runtime/tools/node-v24.16.0-darwin-arm64/bin/node filter=lfs diff=lfs merge=lfs -text
 packages/mg_read_node_runtime/tools/node-v24.16.0-darwin-arm64/bin/node filter=lfs diff=lfs merge=lfs -text
 packages/mg_read_node_runtime/tools/node-v24.16.0-win-x64/node.exe filter=lfs diff=lfs merge=lfs -text
+packages/mgread_plugin_runtime/ohos/src/main/cpp/node-runtime/arm64/lib/libnode.so filter=lfs diff=lfs merge=lfs -text
