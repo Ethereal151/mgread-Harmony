@@ -34,6 +34,7 @@ part 'src/windows_system_proxy.dart';
 part 'src/system_proxy.dart';
 part 'src/desktop_supervisor.dart';
 part 'src/desktop_lifecycle_gate.dart';
+part 'src/ohos_lifecycle_gate.dart';
 part 'src/desktop_plugin_artifact_io.dart';
 part 'src/desktop_development_synchronization.dart';
 part 'src/desktop_supervisor_bundle.dart';

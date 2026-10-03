@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -87,4 +89,65 @@ void main() {
       ],
     );
   });
+
+  test(
+    'waits for an admitted invocation before restarting the OHOS VM',
+    () async {
+      final root = await Directory.systemTemp.createTemp(
+        'mgread-ohos-supervisor-',
+      );
+      final inbox = Directory('${root.path}${Platform.pathSeparator}inbox');
+      await inbox.create(recursive: true);
+      final artifact = File(
+        '${root.path}${Platform.pathSeparator}source.mgplugin.js',
+      );
+      await artifact.writeAsString('test artifact');
+      addTearDown(() async {
+        if (await root.exists()) await root.delete(recursive: true);
+      });
+
+      final invokeStarted = Completer<void>();
+      final releaseInvoke = Completer<void>();
+      var restartCalled = false;
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+            switch (call.method) {
+              case 'invoke':
+                if (!invokeStarted.isCompleted) {
+                  invokeStarted.complete();
+                  await releaseInvoke.future;
+                }
+                return jsonEncode(<String, Object?>{
+                  'ok': true,
+                  'result': <String, Object?>{
+                    'ok': true,
+                    'nodeVersion': 'v26.10.0',
+                    'runtimeVersion': 'test',
+                  },
+                });
+              case 'runtimePaths':
+                return jsonEncode(<String, Object?>{
+                  'dataRoot': root.path,
+                  'inboxRoot': inbox.path,
+                });
+              case 'restart':
+                restartCalled = true;
+                return '{}';
+              default:
+                return null;
+            }
+          });
+
+      final inFlight = runtime.invoke(const RuntimePingInvocation());
+      await invokeStarted.future;
+      final importing = runtime.importLocalPluginForTesting(artifact.path);
+      await Future<void>.delayed(Duration.zero);
+      expect(restartCalled, isFalse);
+
+      releaseInvoke.complete();
+      await inFlight;
+      await importing;
+      expect(restartCalled, isTrue);
+    },
+  );
 }
