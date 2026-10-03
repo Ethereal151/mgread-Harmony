@@ -250,7 +250,7 @@ class _LibraryHomeShellState extends State<LibraryHomeShell> {
                         },
                       ),
                     ],
-                    const SizedBox(height: AppSpacing.libraryHomeTopBarContentGap),
+                    if (!_isFirstRunEmpty) const SizedBox(height: AppSpacing.regular),
                   ],
                 ),
               ),

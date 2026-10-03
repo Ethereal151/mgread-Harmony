@@ -30,6 +30,85 @@ void main() {
     await Future.wait(<Future<void>>[miSans.load(), materialIcons.load()]);
   });
 
+  testWidgets('renders a reusable account profile on the discovery home', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    String? selectedCategory;
+    final result = PluginDiscoveryDocumentResult(
+      pluginId: 'account.source',
+      sourceName: '番茄小说',
+      document: PluginDiscoveryDocument(
+        components: <PluginDiscoveryComponent>[
+          PluginDiscoverySectionComponent(
+            id: 'account',
+            title: '我的番茄账号',
+            subtitle: null,
+            children: <PluginDiscoveryComponent>[
+              PluginDiscoveryProfileCardComponent(
+                id: 'profile',
+                name: '番茄读者',
+                subtitle: '喜欢阅读',
+                badge: '已登录',
+                avatarUrl: null,
+                details: const <PluginDiscoveryMetric>[PluginDiscoveryMetric(label: '用户 ID', value: '12345')],
+              ),
+              PluginDiscoveryCategoryCollectionComponent(
+                id: 'action-list',
+                layout: PluginDiscoveryCategoryLayout.chips,
+                categories: const <PluginDiscoveryCategory>[
+                  PluginDiscoveryCategory(id: 'shelf', title: '查看番茄书架', target: 'bookshelf', count: null, url: null),
+                  PluginDiscoveryCategory(id: 'site', title: '打开番茄小说', target: 'login', count: null, url: null),
+                ],
+              ),
+            ],
+          ),
+          PluginDiscoverySectionComponent(
+            id: 'channels',
+            title: '番茄小说',
+            subtitle: '公开分类',
+            children: <PluginDiscoveryComponent>[
+              PluginDiscoveryCategoryCollectionComponent(
+                id: 'channel-list',
+                layout: PluginDiscoveryCategoryLayout.chips,
+                categories: const <PluginDiscoveryCategory>[
+                  PluginDiscoveryCategory(id: 'urban', title: '都市', target: 'channel:1', count: null, url: null),
+                  PluginDiscoveryCategory(id: 'fantasy', title: '玄幻', target: 'channel:7', count: null, url: null),
+                ],
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        debugShowCheckedModeBanner: false,
+        theme: AppTheme.light(),
+        home: RuntimeDiscoveryPage(
+          result: result,
+          onDestinationRequested: (_) {},
+          onSourcePressed: () {},
+          onTabSelected: (_) {},
+          onCategorySelected: (value) => selectedCategory = value,
+          onContentPressed: (_) {},
+          onRefreshRequested: () {},
+          onLoadMore: (_) {},
+          canNavigateBack: false,
+          onBackRequested: () {},
+          loadingCollectionId: null,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('runtime-discovery-profile-name')), findsOneWidget);
+    expect(find.byKey(const Key('runtime-discovery-nested-header')), findsNothing);
+    expect(find.text('12345'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await expectLater(find.byType(MaterialApp), matchesGoldenFile('goldens/runtime_discovery_profile_home_compact_light.png'));
+    await tester.tap(find.text('查看番茄书架'));
+    expect(selectedCategory, 'bookshelf');
+  });
+
   testWidgets('renders source-composed discovery layouts and keeps actions typed', (tester) async {
     await tester.binding.setSurfaceSize(const Size(900, 1600));
     addTearDown(() => tester.binding.setSurfaceSize(null));

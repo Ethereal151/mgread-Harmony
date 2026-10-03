@@ -306,9 +306,9 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('管理数据源'), findsOneWidget);
-    expect(find.text('我的数据源'), findsOneWidget);
-    expect(find.text('已启用 1/1'), findsOneWidget);
+    expect(find.text('数据源'), findsOneWidget);
+    expect(find.text('数据源列表'), findsOneWidget);
+    expect(find.textContaining('1 个已启用'), findsOneWidget);
     expect(find.text('示例插件'), findsOneWidget);
     expect(find.byKey(const ValueKey<String>('data-source-org.example.fixture')), findsOneWidget);
     expect(find.byKey(const Key('data-source-add')), findsOneWidget);
@@ -332,6 +332,8 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('data-source-add')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('data-source-add-node')));
     await tester.pumpAndSettle();
 
     expect(gateway.importLocalPluginCalls, 1);
@@ -358,7 +360,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(PluginRuntimeStatusPage), findsOneWidget);
-    expect(find.text('管理数据源'), findsOneWidget);
+    expect(find.text('数据源'), findsOneWidget);
     expect(find.text('示例插件'), findsOneWidget);
 
     await tester.tap(find.byKey(const ValueKey<String>('data-source-org.example.fixture')));

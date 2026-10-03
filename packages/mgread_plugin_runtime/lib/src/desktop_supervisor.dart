@@ -26,8 +26,7 @@ const _maxPreBootFallbackBytes = 16 * 1024;
 typedef _RuntimeDiagnosticSink = void Function(RuntimeDiagnostic diagnostic);
 
 /// Receives a bounded, already-safe Runtime progress event.
-typedef _RuntimeInitializationSink =
-    void Function(RuntimeInitializationProgress progress);
+typedef _RuntimeInitializationSink = void Function(RuntimeInitializationProgress progress);
 
 /// Reports child termination together with whether readiness was already seen.
 typedef _RuntimeProcessExitSink = void Function(int exitCode, bool wasReady);
@@ -36,8 +35,7 @@ typedef _RuntimeProcessExitSink = void Function(int exitCode, bool wasReady);
 typedef _RuntimePreBootFatalSink = void Function(String code, String phase);
 
 /// Creates a Facade-safe startup exception with the current diagnostic snapshot.
-typedef _RuntimeStartupFailureFactory =
-    PluginRuntimeException Function(String code, String message);
+typedef _RuntimeStartupFailureFactory = PluginRuntimeException Function(String code, String message);
 
 /// Testable Runtime-package-owned Windows shell action.
 typedef _DesktopDirectoryLauncher = Future<void> Function(Directory directory);
@@ -55,16 +53,13 @@ final class _DesktopRuntimeSupervisor implements _RuntimeSupervisor {
   final _DesktopRuntimeBundle _bundle;
 
   /// Broadcasts diagnostics; it is closed during dispose.
-  final StreamController<RuntimeDiagnostic> _diagnosticController =
-      StreamController<RuntimeDiagnostic>.broadcast();
+  final StreamController<RuntimeDiagnostic> _diagnosticController = StreamController<RuntimeDiagnostic>.broadcast();
 
   /// Broadcasts bounded import/startup progress without exposing paths.
-  final StreamController<RuntimeInitializationProgress>
-  _initializationController =
+  final StreamController<RuntimeInitializationProgress> _initializationController =
       StreamController<RuntimeInitializationProgress>.broadcast();
 
-  final StreamController<DevelopmentPluginChangeBatch>
-  _developmentChangeController =
+  final StreamController<DevelopmentPluginChangeBatch> _developmentChangeController =
       StreamController<DevelopmentPluginChangeBatch>.broadcast();
 
   /// Oldest-to-newest bounded snapshot used when constructing safe failures.
@@ -113,8 +108,7 @@ final class _DesktopRuntimeSupervisor implements _RuntimeSupervisor {
 
   bool _controlledRestarting = false;
   Directory? _developmentPluginDirectory;
-  late final _DesktopPluginArtifactIo _pluginArtifactIo =
-      _DesktopPluginArtifactIo(this);
+  late final _DesktopPluginArtifactIo _pluginArtifactIo = _DesktopPluginArtifactIo(this);
 
   /// Package-test-only child launch count; not a public process handle.
   int get debugProcessStartCount => _processStartCount;
@@ -122,10 +116,7 @@ final class _DesktopRuntimeSupervisor implements _RuntimeSupervisor {
   @override
   Future<void> configureNodeEnvironmentProxy(bool enabled) async {
     if (_disposed) {
-      throw const PluginRuntimeException(
-        'runtime_unavailable',
-        'The desktop Runtime has been closed.',
-      );
+      throw const PluginRuntimeException('runtime_unavailable', 'The desktop Runtime has been closed.');
     }
     await _runLifecycleTransition(() async {
       _useEnvironmentProxy = enabled;
@@ -134,11 +125,7 @@ final class _DesktopRuntimeSupervisor implements _RuntimeSupervisor {
       if (connection != null) {
         try {
           await connection
-              .request(
-                method: 'runtime.shutdown',
-                params: const <String, Object?>{},
-                idempotencyKey: 'node-environment-proxy-change',
-              )
+              .request(method: 'runtime.shutdown', params: const <String, Object?>{}, idempotencyKey: 'node-environment-proxy-change')
               .timeout(_startupTimeout);
         } on Object {
           // Platform process ownership remains the bounded cleanup authority.
@@ -160,10 +147,7 @@ final class _DesktopRuntimeSupervisor implements _RuntimeSupervisor {
   }
 
   @override
-  Future<void> configurePluginHttpProxy(
-    Uri? proxyUri, {
-    String? noProxy,
-  }) async {
+  Future<void> configurePluginHttpProxy(Uri? proxyUri, {String? noProxy}) async {
     if (_pluginHttpProxy == proxyUri) return;
     _pluginHttpProxy = proxyUri;
     final connection = _connection;
@@ -179,10 +163,7 @@ final class _DesktopRuntimeSupervisor implements _RuntimeSupervisor {
       'Plugin HTTP proxy configuration result',
     );
     if (result.length != 1 || result['enabled'] != (_pluginHttpProxy != null)) {
-      throw const PluginRuntimeException(
-        'invalid_response',
-        'The Runtime returned an invalid plugin HTTP proxy result.',
-      );
+      throw const PluginRuntimeException('invalid_response', 'The Runtime returned an invalid plugin HTTP proxy result.');
     }
   }
 
@@ -190,36 +171,24 @@ final class _DesktopRuntimeSupervisor implements _RuntimeSupervisor {
   Stream<RuntimeDiagnostic> get diagnostics => _diagnosticController.stream;
 
   @override
-  Stream<RuntimeInitializationProgress> get initialization =>
-      _initializationController.stream;
+  Stream<RuntimeInitializationProgress> get initialization => _initializationController.stream;
 
   @override
-  Stream<DevelopmentPluginChangeBatch> get developmentChanges =>
-      _developmentChangeController.stream;
+  Stream<DevelopmentPluginChangeBatch> get developmentChanges => _developmentChangeController.stream;
 
   /// Immutable copy of all currently retained diagnostics, oldest first.
-  List<RuntimeDiagnostic> get latestDiagnostics =>
-      List<RuntimeDiagnostic>.unmodifiable(_diagnostics);
+  List<RuntimeDiagnostic> get latestDiagnostics => List<RuntimeDiagnostic>.unmodifiable(_diagnostics);
 
   /// Starts the Runtime on demand and projects a typed capability result.
-  Future<T> invoke<T>(
-    PluginInvocation<T> invocation, {
-    PluginInvocationCancellation? cancellation,
-  }) async {
+  Future<T> invoke<T>(PluginInvocation<T> invocation, {PluginInvocationCancellation? cancellation}) async {
     if (_disposed) {
-      throw const PluginRuntimeException(
-        'runtime_unavailable',
-        'The Runtime has been closed.',
-      );
+      throw const PluginRuntimeException('runtime_unavailable', 'The Runtime has been closed.');
     }
 
     if (invocation is OpenPluginCodeDirectoryInvocation) {
       final lease = await _acquireInvocationLease();
       try {
-        return await _openPluginCodeDirectory(
-              invocation as OpenPluginCodeDirectoryInvocation,
-            )
-            as T;
+        return await _openPluginCodeDirectory(invocation as OpenPluginCodeDirectoryInvocation) as T;
       } finally {
         lease.release();
       }
@@ -232,10 +201,7 @@ final class _DesktopRuntimeSupervisor implements _RuntimeSupervisor {
 
     final lease = await _acquireInvocationLease();
     try {
-      final connection = await _awaitPluginInvocation(
-        _ensureStarted(),
-        cancellation,
-      );
+      final connection = await _awaitPluginInvocation(_ensureStarted(), cancellation);
       final result = await connection.request(
         method: invocation._wireMethod,
         params: invocation._wireParams,
@@ -273,27 +239,19 @@ final class _DesktopRuntimeSupervisor implements _RuntimeSupervisor {
 
   /// Resolves the source directory in Node, then launches Explorer from the
   /// Flutter owner so it is outside the Node Windows Job Object.
-  Future<PluginCodeDirectoryKind> _openPluginCodeDirectory(
-    OpenPluginCodeDirectoryInvocation invocation,
-  ) async {
+  Future<PluginCodeDirectoryKind> _openPluginCodeDirectory(OpenPluginCodeDirectoryInvocation invocation) async {
     final connection = await _ensureStarted();
-    final raw = await connection.request(
-      method: invocation._wireMethod,
-      params: invocation._wireParams,
-      timeout: invocation._timeout,
-    );
+    final raw = await connection.request(method: invocation._wireMethod, params: invocation._wireParams, timeout: invocation._timeout);
     final result = _jsonObject(raw, 'Plugin code directory result');
     final directory = result['directory'];
     final kind = switch (result['kind']) {
       'development' => PluginCodeDirectoryKind.development,
       'installed' => PluginCodeDirectoryKind.installed,
+      'archive' => PluginCodeDirectoryKind.archive,
       _ => null,
     };
     if (directory is! String || directory.isEmpty || kind == null) {
-      throw const PluginRuntimeException(
-        'invalid_response',
-        'The Runtime returned an invalid plugin code directory result.',
-      );
+      throw const PluginRuntimeException('invalid_response', 'The Runtime returned an invalid plugin code directory result.');
     }
     try {
       await _bundle.directoryLauncher(Directory(directory));
@@ -311,70 +269,41 @@ final class _DesktopRuntimeSupervisor implements _RuntimeSupervisor {
 
   @override
   Future<bool> pickAndImportLocalPlugin() {
-    throw const PluginRuntimeException(
-      'unsupported',
-      'The Android file picker is unavailable on desktop.',
-    );
+    throw const PluginRuntimeException('unsupported', 'The Android file picker is unavailable on desktop.');
   }
 
   @override
-  Future<Stream<List<int>>> exportPluginArtifact(
-    PluginTransferArtifact artifact,
-  ) => _pluginArtifactIo.exportArtifact(artifact);
+  Future<Stream<List<int>>> exportPluginArtifact(PluginTransferArtifact artifact) => _pluginArtifactIo.exportArtifact(artifact);
 
   @override
-  Future<MaterializedPluginArtifact> materializePluginArtifact(
-    PluginTransferOffer offer,
-  ) => _pluginArtifactIo.materializeArtifact(offer);
+  Future<MaterializedPluginArtifact> materializePluginArtifact(PluginTransferOffer offer) => _pluginArtifactIo.materializeArtifact(offer);
 
   @override
-  Future<PluginDevelopmentPackage> packageDevelopmentPlugin(
-    String pluginId,
-    String directoryPath,
-  ) => _pluginArtifactIo.packageDevelopmentPlugin(
-    pluginId,
-    Directory(directoryPath),
-  );
+  Future<PluginDevelopmentPackage> packageDevelopmentPlugin(String pluginId, String directoryPath) =>
+      _pluginArtifactIo.packageDevelopmentPlugin(pluginId, Directory(directoryPath));
 
   @override
   Future<List<PluginTransferImportResult>> importPluginArtifacts(
-    List<({PluginTransferArtifact artifact, Stream<List<int>> bytes})>
-    artifacts, {
+    List<({PluginTransferArtifact artifact, Stream<List<int>> bytes})> artifacts, {
     Set<String> forceUpgradePluginIds = const <String>{},
-  }) => _pluginArtifactIo.importArtifacts(
-    artifacts,
-    forceUpgradePluginIds: forceUpgradePluginIds,
-  );
+  }) => _pluginArtifactIo.importArtifacts(artifacts, forceUpgradePluginIds: forceUpgradePluginIds);
 
   @override
-  Future<void> importLocalPlugin(String sourcePath) =>
-      _pluginArtifactIo.importLocalArtifact(sourcePath);
+  Future<void> importLocalPlugin(String sourcePath) => _pluginArtifactIo.importLocalArtifact(sourcePath);
 
   @override
   Future<void> setDevelopmentDirectory(String path) async {
     if (_disposed) {
-      throw const PluginRuntimeException(
-        'runtime_unavailable',
-        'The desktop Runtime has been closed.',
-      );
+      throw const PluginRuntimeException('runtime_unavailable', 'The desktop Runtime has been closed.');
     }
     final directory = Directory(path);
     if (!await directory.exists()) {
-      throw const PluginRuntimeException(
-        'not_found',
-        'The selected development directory is unavailable.',
-      );
+      throw const PluginRuntimeException('not_found', 'The selected development directory is unavailable.');
     }
     try {
-      await _writeConfiguredDevelopmentPluginDirectory(
-        _bundle.dataRoot,
-        directory.path,
-      );
+      await _writeConfiguredDevelopmentPluginDirectory(_bundle.dataRoot, directory.path);
     } on FileSystemException {
-      throw const PluginRuntimeException(
-        'disk_full',
-        'The development directory could not be saved.',
-      );
+      throw const PluginRuntimeException('disk_full', 'The development directory could not be saved.');
     }
     _developmentPluginDirectory = directory;
     await _restartForDevelopmentDirectoryChange();
@@ -392,11 +321,7 @@ final class _DesktopRuntimeSupervisor implements _RuntimeSupervisor {
     if (connection == null) return;
     try {
       await connection
-          .request(
-            method: 'runtime.shutdown',
-            params: const <String, Object?>{},
-            idempotencyKey: 'local-plugin-import',
-          )
+          .request(method: 'runtime.shutdown', params: const <String, Object?>{}, idempotencyKey: 'local-plugin-import')
           .timeout(_startupTimeout);
     } on Object {
       // The owned Job Object remains the authoritative cleanup path.
@@ -426,19 +351,14 @@ final class _DesktopRuntimeSupervisor implements _RuntimeSupervisor {
       if (connection != null) {
         try {
           await connection
-              .request(
-                method: 'runtime.shutdown',
-                params: const <String, Object?>{},
-                idempotencyKey: 'facade-close',
-              )
+              .request(method: 'runtime.shutdown', params: const <String, Object?>{}, idempotencyKey: 'facade-close')
               .timeout(_controlTimeout);
         } on Object {
           _recordDiagnostic(
             const RuntimeDiagnostic(
               code: 'runtime_shutdown_request_failed',
               level: RuntimeDiagnosticLevel.warning,
-              message:
-                  'The Runtime did not acknowledge its graceful shutdown request.',
+              message: 'The Runtime did not acknowledge its graceful shutdown request.',
             ),
           );
         }
@@ -455,16 +375,8 @@ final class _DesktopRuntimeSupervisor implements _RuntimeSupervisor {
     await _developmentChangeController.close();
   }
 
-  void _emitInitializationProgress({
-    required int completedBytes,
-    required String stage,
-    required int totalBytes,
-  }) {
-    final progress = RuntimeInitializationProgress.fromPlatform(
-      completedBytes: completedBytes,
-      stage: stage,
-      totalBytes: totalBytes,
-    );
+  void _emitInitializationProgress({required int completedBytes, required String stage, required int totalBytes}) {
+    final progress = RuntimeInitializationProgress.fromPlatform(completedBytes: completedBytes, stage: stage, totalBytes: totalBytes);
     if (progress != null && !_initializationController.isClosed) {
       _initializationController.add(progress);
     }
@@ -521,19 +433,14 @@ final class _DesktopRuntimeSupervisor implements _RuntimeSupervisor {
           // The listener remains disabled until the Runtime-owned preference
           // is explicitly enabled from the application.
           '--debug-http-enabled=1',
-          if (_bundle.bundledPluginDirectory != null)
-            '--bundled-plugin-root=${_bundle.bundledPluginDirectory!.path}',
-          if (_developmentPluginDirectory != null)
-            '--development-plugin-root=${_developmentPluginDirectory!.path}',
-          if (_developmentPluginDirectory != null)
-            '--development-npm-cli=${_bundle.developmentNpmCli!.path}',
+          if (_bundle.bundledPluginDirectory != null) '--bundled-plugin-root=${_bundle.bundledPluginDirectory!.path}',
+          if (_developmentPluginDirectory != null) '--development-plugin-root=${_developmentPluginDirectory!.path}',
+          if (_developmentPluginDirectory != null) '--development-npm-cli=${_bundle.developmentNpmCli!.path}',
           if (_bundle.testExitAfterReady != null)
             '--test-exit-after-ready-millis='
                 '${_bundle.testExitAfterReady!.inMilliseconds}',
         ],
-        environment: _allowlistedEnvironment(
-          useEnvironmentProxy: _useEnvironmentProxy,
-        ),
+        environment: _allowlistedEnvironment(useEnvironmentProxy: _useEnvironmentProxy),
         includeParentEnvironment: false,
         runInShell: false,
         workingDirectory: _bundle.workingDirectory.path,
@@ -562,11 +469,7 @@ final class _DesktopRuntimeSupervisor implements _RuntimeSupervisor {
       _assertStartupGeneration(generation);
       await _probeHttpReady(ready, deadline: startupDeadline);
       _assertStartupGeneration(generation);
-      final connection = await _WireConnection.connect(
-        ready,
-        dataRoot: _bundle.dataRoot,
-        onDevelopmentChange: _recordDevelopmentChange,
-      );
+      final connection = await _WireConnection.connect(ready, dataRoot: _bundle.dataRoot, onDevelopmentChange: _recordDevelopmentChange);
       candidateConnection = connection;
       await connection.hello();
       _assertStartupGeneration(generation);
@@ -576,9 +479,7 @@ final class _DesktopRuntimeSupervisor implements _RuntimeSupervisor {
       candidateConnection = null;
       return connection;
     } on PluginRuntimeException catch (error) {
-      if (!_diagnostics.any(
-        (diagnostic) => diagnostic.code == error.code && diagnostic.isFatal,
-      )) {
+      if (!_diagnostics.any((diagnostic) => diagnostic.code == error.code && diagnostic.isFatal)) {
         _recordFatal(error.code, error.message);
       }
       _recordPreBootFatal(error.code, 'startup');
@@ -590,10 +491,7 @@ final class _DesktopRuntimeSupervisor implements _RuntimeSupervisor {
       await _stopFailedStart(candidateConnection);
       _startup = null;
       _recordPreBootFatal(error.code, 'processOwnership');
-      throw _failure(
-        error.code,
-        'The desktop Runtime could not be started with required process ownership.',
-      );
+      throw _failure(error.code, 'The desktop Runtime could not be started with required process ownership.');
     } on ProcessException catch (error) {
       final osErrorCode = error.errorCode;
       _recordFatal(
@@ -604,22 +502,13 @@ final class _DesktopRuntimeSupervisor implements _RuntimeSupervisor {
       await _stopFailedStart(candidateConnection);
       _startup = null;
       _recordPreBootFatal('runtime_process_launch_failed', 'launch');
-      throw _failure(
-        'runtime_process_launch_failed',
-        'The packaged desktop Runtime process could not be launched.',
-      );
+      throw _failure('runtime_process_launch_failed', 'The packaged desktop Runtime process could not be launched.');
     } on Object {
-      _recordFatal(
-        'runtime_start_failed',
-        'The desktop Runtime failed during startup.',
-      );
+      _recordFatal('runtime_start_failed', 'The desktop Runtime failed during startup.');
       await _stopFailedStart(candidateConnection);
       _startup = null;
       _recordPreBootFatal('runtime_start_failed', 'startup');
-      throw _failure(
-        'runtime_start_failed',
-        'The desktop Runtime could not be started.',
-      );
+      throw _failure('runtime_start_failed', 'The desktop Runtime could not be started.');
     }
   }
 
@@ -633,10 +522,7 @@ final class _DesktopRuntimeSupervisor implements _RuntimeSupervisor {
           message: 'The packaged desktop Node executable is missing.',
         ),
       );
-      throw _failure(
-        'runtime_node_executable_missing',
-        'The packaged desktop Node executable is unavailable.',
-      );
+      throw _failure('runtime_node_executable_missing', 'The packaged desktop Node executable is unavailable.');
     }
     if (!await _bundle.entrypoint.exists()) {
       _recordDiagnostic(
@@ -646,14 +532,10 @@ final class _DesktopRuntimeSupervisor implements _RuntimeSupervisor {
           message: 'The packaged desktop Runtime main script is missing.',
         ),
       );
-      throw _failure(
-        'runtime_entrypoint_missing',
-        'The packaged desktop Runtime main script is unavailable.',
-      );
+      throw _failure('runtime_entrypoint_missing', 'The packaged desktop Runtime main script is unavailable.');
     }
     final bundledPluginDirectory = _bundle.bundledPluginDirectory;
-    if (bundledPluginDirectory != null &&
-        !await bundledPluginDirectory.exists()) {
+    if (bundledPluginDirectory != null && !await bundledPluginDirectory.exists()) {
       _recordDiagnostic(
         const RuntimeDiagnostic(
           code: 'runtime_bundled_plugin_assets_missing',
@@ -661,26 +543,15 @@ final class _DesktopRuntimeSupervisor implements _RuntimeSupervisor {
           message: 'The packaged default source assets are missing.',
         ),
       );
-      throw _failure(
-        'runtime_bundled_plugin_assets_missing',
-        'The packaged default source assets are unavailable.',
-      );
+      throw _failure('runtime_bundled_plugin_assets_missing', 'The packaged default source assets are unavailable.');
     }
     final developmentPluginDirectory = _developmentPluginDirectory;
-    if (developmentPluginDirectory != null &&
-        !await developmentPluginDirectory.exists()) {
-      throw _failure(
-        'runtime_development_plugin_root_missing',
-        'The desktop development source directory is unavailable.',
-      );
+    if (developmentPluginDirectory != null && !await developmentPluginDirectory.exists()) {
+      throw _failure('runtime_development_plugin_root_missing', 'The desktop development source directory is unavailable.');
     }
     final developmentNpmCli = _bundle.developmentNpmCli;
-    if (developmentPluginDirectory != null &&
-        (developmentNpmCli == null || !await developmentNpmCli.exists())) {
-      throw _failure(
-        'runtime_development_build_tool_missing',
-        'The pinned desktop development build tool is unavailable.',
-      );
+    if (developmentPluginDirectory != null && (developmentNpmCli == null || !await developmentNpmCli.exists())) {
+      throw _failure('runtime_development_build_tool_missing', 'The pinned desktop development build tool is unavailable.');
     }
   }
 
@@ -693,10 +564,7 @@ final class _DesktopRuntimeSupervisor implements _RuntimeSupervisor {
     _process = null;
     _closeJobObject();
     if (!_disposed && !_controlledRestarting) {
-      _recordFatal(
-        'runtime_process_exited',
-        'The desktop Runtime process exited unexpectedly.',
-      );
+      _recordFatal('runtime_process_exited', 'The desktop Runtime process exited unexpectedly.');
     }
   }
 
@@ -706,9 +574,7 @@ final class _DesktopRuntimeSupervisor implements _RuntimeSupervisor {
   /// plugin fields. A write failure is observational and cannot alter startup.
   void _recordPreBootFatal(String code, String phase) {
     final startedAt = _startupStartedAt;
-    final elapsedMillis = startedAt == null
-        ? 0
-        : DateTime.now().difference(startedAt).inMilliseconds.clamp(0, 60000);
+    final elapsedMillis = startedAt == null ? 0 : DateTime.now().difference(startedAt).inMilliseconds.clamp(0, 60000);
     final fingerprint =
         '${DateTime.now().microsecondsSinceEpoch.toRadixString(36)}'
         '-${Random.secure().nextInt(1 << 32).toRadixString(36)}';
@@ -726,13 +592,9 @@ final class _DesktopRuntimeSupervisor implements _RuntimeSupervisor {
 
   Future<void> _appendPreBootFallback(String line) async {
     try {
-      final directory = Directory(
-        _joinPath(<String>[_bundle.dataRoot.path, 'diagnostics']),
-      );
+      final directory = Directory(_joinPath(<String>[_bundle.dataRoot.path, 'diagnostics']));
       await directory.create(recursive: true);
-      final file = File(
-        _joinPath(<String>[directory.path, 'desktop-fatal-fallback.txt']),
-      );
+      final file = File(_joinPath(<String>[directory.path, 'desktop-fatal-fallback.txt']));
       final bytes = utf8.encode('$line\n');
       if (bytes.length > _maxPreBootFallbackBytes) return;
       final length = await file.exists() ? await file.length() : 0;
@@ -748,8 +610,7 @@ final class _DesktopRuntimeSupervisor implements _RuntimeSupervisor {
 
   /// Closes any partial transport and child tree after a failed startup phase.
   Future<void> _stopFailedStart([_WireConnection? candidateConnection]) async {
-    if (candidateConnection != null &&
-        !identical(candidateConnection, _connection)) {
+    if (candidateConnection != null && !identical(candidateConnection, _connection)) {
       try {
         await candidateConnection.close();
       } on Object {
@@ -816,13 +677,7 @@ final class _DesktopRuntimeSupervisor implements _RuntimeSupervisor {
       jobObject.close();
       return true;
     } on WindowsJobObjectException catch (error) {
-      _recordDiagnostic(
-        RuntimeDiagnostic(
-          code: error.code,
-          level: RuntimeDiagnosticLevel.error,
-          message: error.message,
-        ),
-      );
+      _recordDiagnostic(RuntimeDiagnostic(code: error.code, level: RuntimeDiagnosticLevel.error, message: error.message));
       return false;
     }
   }
@@ -848,11 +703,7 @@ final class _DesktopRuntimeSupervisor implements _RuntimeSupervisor {
 
   /// Builds a stable Facade exception with an immutable diagnostic copy.
   PluginRuntimeException _failure(String code, String message) {
-    return PluginRuntimeException(
-      code,
-      message,
-      diagnostics: latestDiagnostics,
-    );
+    return PluginRuntimeException(code, message, diagnostics: latestDiagnostics);
   }
 
   /// Retains and broadcasts one diagnostic without unbounded growth.
@@ -867,13 +718,7 @@ final class _DesktopRuntimeSupervisor implements _RuntimeSupervisor {
   }
 
   void _recordFatal(String code, String message) {
-    _recordDiagnostic(
-      RuntimeDiagnostic(
-        code: code,
-        level: RuntimeDiagnosticLevel.fatal,
-        message: message,
-      ),
-    );
+    _recordDiagnostic(RuntimeDiagnostic(code: code, level: RuntimeDiagnosticLevel.fatal, message: message));
   }
 }
 

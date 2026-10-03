@@ -103,6 +103,10 @@ plugins/sources/                    真实数据源及其他能力参考实现
 - artifact 必须确定性、有界，并携带可复核的 descriptor、大小和 SHA-256；传输和安装两端都复核。
 - 导入、安装、导出和局域网同步共用自包含 artifact 契约；安装写入不可变版本并原子切换，失败保留当前版本。
   安装不执行构建或任意脚本；删除和占用统计不再维护 npm 缓存、依赖图或共享依赖对象。
+- 自动发布的 Node 数据源合集使用独立的 `.mgplugins` ZIP 容器，不占用单来源 `.mgplugin` 格式。根目录
+  `manifest.json` 的 `format=mgread-source-collection`、`schemaVersion=1`，`plugins` 数组逐项声明
+  `id/name/version/format/path/bytes/sha256`；每项仍是原始自包含的单来源 artifact。App 在安装前校验清单、
+  条目、大小和 SHA-256，让用户选择新增及覆盖项，再交给 Runtime 批量安装。合集暂不包含原生来源。
 - 插件缓存使用来源声明的展示投影策略；stale 可离线读取，刷新异步单飞，缓存失败按 miss 处理。
 
 ## 插件内容 API
@@ -118,6 +122,7 @@ plugins/sources/                    真实数据源及其他能力参考实现
   `coverOrientation=portrait|square|landscape` 独立表达真实封面的竖版、方形或横版构图，二者不得互相推断。Flutter 宿主按封面构图
   选择通用组件，并拥有主题、尺寸、断点、可访问性、导航和交互实现；横向组件不等同于视频播放器入口，
   不附加播放图标或视频标识。旧 Plugin API v1 输出缺少该键时只在 Runtime 边界执行兼容归一化，新来源必须声明。
+- 账号资料以 `profileCard` 的真实名称、可选简介/头像和有界详情项表达，由宿主统一渲染；来源不得填造缺失的个人资料。
 - 热门词必须来自来源；默认进入搜索页不触发搜索，只有用户提交或点击建议才执行。
 - 搜索页默认可在 Flutter 应用层并行调用全部启用来源，并按规范化标题与兼容作者聚合；每个聚合条目必须保留来源
   ID、内容 ID 和封面身份，详情、目录、阅读和书架操作始终回到被选中的单一来源。Runtime 与来源插件仍只处理单来源搜索。

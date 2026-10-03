@@ -7,9 +7,11 @@
 
 | 项目 | 精确版本 |
 | --- | --- |
-| desktop bundled Node | `26.10.0` |
+| Android 默认 Javet | `com.caoccao.javet:javet-node-android:6.0.1`；Node `26.9.0` |
+| Android 独立进程 | Node `24.21.0`；arm64-v8a `libnode.so` 来自 nodejs-mobile Android 24.21.0-0 |
+| Windows bundled Node/npm | `26.10.0` / `11.19.1` |
+| macOS bundled Node/npm | `26.10.0` / `11.19.1` |
 | OHOS bundled Node | `26.10.0` |
-| bundled npm | `11.19.1` |
 | TypeScript | `5.9.3` |
 | `@types/node` | `24.13.3` |
 | protocol marker | `1.0` |
@@ -19,7 +21,6 @@ OHOS Flutter/Hvigor builds use the repository-pinned Flutter
 `20.19.5`; Runtime asset staging uses the separate pinned Node `26.10.0`.
 These selections are recorded in the repository `toolchain.lock` and are
 validated before an OHOS build starts.
-
 每个后端只接受自己的精确 Node 版本；不得回退用户 PATH 或全局 Node。插件 `engines.node` 统一声明 `>=24`，
 表示兼容 Node 24 及以上；这不改变宿主固定工具链。插件打包和安装不另设 Node 版本白名单。
 
@@ -27,7 +28,7 @@ validated before an OHOS build starts.
 
 | 平台 | 选择 | 证据边界 |
 | --- | --- | --- |
-| Android | Javet Node；minSdk 24；arm64-v8a 生产、x86_64 emulator/CI | 不支持 armeabi-v7a；仍需真实宿主 build 与生命周期证据 |
+| Android | 同包包含 Javet Node 26.9.0（arm64-v8a/x86_64）与 Node 24.21.0 私有进程（仅 arm64-v8a）；默认 Javet，设置中选择并重启 App 生效；minSdk 24 | 新后端 `libnode.so` 是基于 Node.js 源码的移动端第三方构建，非 Node.js 官方 Android 二进制；模拟器集成验证与最终安装包验收分别记录 |
 | Windows | bundled Node 26.10.0 x64 child process | Windows 测试不证明 Android、macOS 或最终安装包 |
 | macOS | bundled Node 26.10.0；当前产物为 arm64 | arm64 验证执行、签名和启动；x64、hardened runtime 与公证待发布验证 |
 | OHOS | Node 26.10.0 OpenHarmony arm64/x64 shared build；单嵌入 VM | Node 源码已声明 OpenHarmony 实验支持；shared library、Flutter host 和 API 26 x86_64 模拟器 Runtime/source-flow smoke 已通过；arm64 真机仍按对应 ABI 验证 |

@@ -1,8 +1,173 @@
+/// 漫画阅读器的评论、书签和设置模态面板。
+///
+/// 职责：渲染会话内弹层，并用会话世代隔离异步回调。
+/// 注意：不持有独立持久状态；会话关闭时由视图关闭活动弹层。
 part of 'comic_reader_view.dart';
 
 // ignore_for_file: invalid_use_of_protected_member
 
-extension _ComicReaderSheetActions on _ComicReaderViewState {
+extension _ComicReaderSheets on _ComicReaderViewState {
+  void _showImageComments(ReaderCommentTarget target, ReaderPalette palette) {
+    final ReaderCommentFeed? feed = widget.commentFeed;
+    if (feed == null ||
+        target.bookId != widget.bookId ||
+        target.chapterId == null ||
+        target.chapterId!.trim().isEmpty ||
+        target.imageId == null ||
+        target.imageId!.trim().isEmpty ||
+        target.paragraphId != null) {
+      return;
+    }
+    final int session = _sessionGeneration;
+    final String bookId = widget.bookId;
+    final ComicReaderDataSource source = widget.dataSource;
+    final ComicReaderStateStore store = widget.stateStore;
+    final int sheetGeneration = _beginSheet();
+    final Future<void> sheet = showReaderCommentsSheet(
+      context: context,
+      feed: feed,
+      target: target,
+      palette: palette,
+      title: ReaderCommentStrings.title,
+      onLoadError: (Object error) {
+        if (_isSession(session, bookId, source, store) &&
+            identical(feed, widget.commentFeed)) {
+          unawaited(_reportFailure(_asFailure(error, ReaderFailureKind.data)));
+        }
+      },
+      onSheetBuilt: (BuildContext context) =>
+          _captureSheetContext(context, sheetGeneration),
+    );
+    unawaited(sheet.whenComplete(() => _finishSheet(sheetGeneration)));
+  }
+
+  int _beginSheet() {
+    _dismissSessionSheet();
+    return ++_sheetGeneration;
+  }
+
+  void _captureSheetContext(BuildContext context, int generation) {
+    if (generation == _sheetGeneration && !_disposed) {
+      _activeSheetContext = context;
+      return;
+    }
+    _popSheetAfterFrame(context);
+  }
+
+  void _finishSheet(int generation) {
+    if (generation == _sheetGeneration) _activeSheetContext = null;
+  }
+
+  void _dismissSessionSheet() {
+    _sheetGeneration++;
+    final BuildContext? context = _activeSheetContext;
+    _activeSheetContext = null;
+    if (context != null) _popSheetAfterFrame(context);
+  }
+
+  void _popSheetAfterFrame(BuildContext sheetContext) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!sheetContext.mounted) return;
+      final ModalRoute<Object?>? route = ModalRoute.of(sheetContext);
+      if (route?.isCurrent ?? false) Navigator.of(sheetContext).pop();
+    });
+  }
+
+  void _showBookmarks() {
+    final int session = _sessionGeneration;
+    final String bookId = widget.bookId;
+    final ComicReaderDataSource source = widget.dataSource;
+    final ComicReaderStateStore store = widget.stateStore;
+    bool isCurrent() => _isSession(session, bookId, source, store);
+    final int sheetGeneration = _beginSheet();
+    _setControlsVisible(false);
+    final Future<void> sheet = showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF202326),
+      builder: (BuildContext context) {
+        _captureSheetContext(context, sheetGeneration);
+        return _darkSheet(
+          SafeArea(
+            child: SizedBox(
+              height: MediaQuery.sizeOf(context).height * .7,
+              child: Column(
+                children: <Widget>[
+                  _sheetHeader(ComicReaderStrings.bookmarks),
+                  Expanded(
+                    child: _bookmarks.isEmpty
+                        ? const Center(
+                            child: Text(ComicReaderStrings.noBookmarks),
+                          )
+                        : ListView.builder(
+                            itemCount: _bookmarks.length,
+                            itemBuilder: (BuildContext context, int index) {
+                              final ComicReaderBookmark bookmark =
+                                  _bookmarks[index];
+                              return ListTile(
+                                minTileHeight: 56,
+                                title: Text(bookmark.chapterTitle),
+                                subtitle: Text(
+                                  ComicReaderStrings.imageProgress(
+                                    bookmark.imageId,
+                                    (bookmark.imageFraction * 100).round(),
+                                  ),
+                                ),
+                                trailing: IconButton(
+                                  tooltip: ComicReaderStrings.removeBookmark,
+                                  icon: const Icon(
+                                    Icons.delete_outline_rounded,
+                                  ),
+                                  onPressed: () {
+                                    if (!isCurrent()) {
+                                      Navigator.of(context).pop();
+                                      return;
+                                    }
+                                    Navigator.of(context).pop();
+                                    unawaited(_removeBookmark(bookmark));
+                                  },
+                                ),
+                                onTap: () {
+                                  if (!isCurrent()) {
+                                    Navigator.of(context).pop();
+                                    return;
+                                  }
+                                  Navigator.of(context).pop();
+                                  unawaited(_openBookmark(bookmark));
+                                },
+                              );
+                            },
+                          ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+    unawaited(sheet.whenComplete(() => _finishSheet(sheetGeneration)));
+  }
+
+  Future<void> _openBookmark(ComicReaderBookmark bookmark) async {
+    ComicChapterInfo? chapter = _catalogById[bookmark.chapterId];
+    while (chapter == null && _catalogHasMore && !_disposed) {
+      if (!await _loadNextCatalogPage()) break;
+      chapter = _catalogById[bookmark.chapterId];
+    }
+    if (chapter == null) return;
+    await _openChapterInfo(
+      chapter,
+      restore: ComicReaderProgress(
+        chapterId: bookmark.chapterId,
+        imageId: bookmark.imageId,
+        imageFraction: bookmark.imageFraction,
+        chapterIndex: chapter.index,
+      ),
+      replaceWindow: true,
+    );
+  }
+
   Future<void> _showSettings() async {
     if (_settingsVisible) return;
     final int session = _sessionGeneration;
@@ -104,19 +269,18 @@ extension _ComicReaderSheetActions on _ComicReaderViewState {
                                       ),
                                     ),
                                   ),
-                                if (_platformCapabilities.volumeKeyPageTurning)
-                                  SwitchListTile.adaptive(
-                                    contentPadding: EdgeInsets.zero,
-                                    title: const Text(
-                                      ComicReaderStrings.pageTurnShortcuts,
-                                    ),
-                                    value: _preferences.pageTurnShortcuts,
-                                    onChanged: (bool value) => update(
-                                      _preferences.copyWith(
-                                        pageTurnShortcuts: value,
-                                      ),
+                                SwitchListTile.adaptive(
+                                  contentPadding: EdgeInsets.zero,
+                                  title: const Text(
+                                    ComicReaderStrings.pageTurnShortcuts,
+                                  ),
+                                  value: _preferences.pageTurnShortcuts,
+                                  onChanged: (bool value) => update(
+                                    _preferences.copyWith(
+                                      pageTurnShortcuts: value,
                                     ),
                                   ),
+                                ),
                                 DropdownButtonFormField<double>(
                                   key: const ValueKey<String>(
                                     'comic-reader-page-turn-fraction',

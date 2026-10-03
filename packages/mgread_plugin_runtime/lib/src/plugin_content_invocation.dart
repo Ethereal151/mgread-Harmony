@@ -127,11 +127,7 @@ enum PluginDiscoveryIcon {
 
 @immutable
 final class PluginContentAttribute {
-  const PluginContentAttribute({
-    required this.key,
-    required this.label,
-    required this.value,
-  });
+  const PluginContentAttribute({required this.key, required this.label, required this.value});
 
   final String key;
   final String label;
@@ -140,12 +136,7 @@ final class PluginContentAttribute {
 
 @immutable
 final class PluginLatestChapter {
-  const PluginLatestChapter({
-    required this.id,
-    required this.title,
-    required this.url,
-    required this.updatedAt,
-  });
+  const PluginLatestChapter({required this.id, required this.title, required this.url, required this.updatedAt});
 
   final String? id;
   final String title;
@@ -154,14 +145,8 @@ final class PluginLatestChapter {
 }
 
 @immutable
-final class SourceSearchInvocation
-    extends PluginInvocation<PluginSearchResult> {
-  const SourceSearchInvocation({
-    required this.pluginId,
-    required this.query,
-    this.cursor,
-    this.pageSize = 20,
-  });
+final class SourceSearchInvocation extends PluginInvocation<PluginSearchResult> {
+  const SourceSearchInvocation({required this.pluginId, required this.query, this.cursor, this.pageSize = 20});
 
   final String pluginId;
   final String query;
@@ -175,35 +160,24 @@ final class SourceSearchInvocation
   String get _wireMethod => 'source.search.v1';
 
   @override
-  Map<String, Object?> get _wireParams => <String, Object?>{
-    'pluginId': pluginId,
-    'query': query,
-    'cursor': cursor,
-    'pageSize': pageSize,
-  };
+  Map<String, Object?> get _wireParams => <String, Object?>{'pluginId': pluginId, 'query': query, 'cursor': cursor, 'pageSize': pageSize};
 
   @override
   PluginSearchResult _decodeResult(Object? value) {
     final result = _contentObject(value, 'Source search result');
     _requireMatchingPlugin(result, pluginId, 'Source search result');
-    final items = _contentList(result, 'items', 'Source search result')
-        .map((raw) => _decodeContentSummary(raw, 'Source search item'))
-        .toList(growable: false);
+    final items = _contentList(
+      result,
+      'items',
+      'Source search result',
+    ).map((raw) => _decodeContentSummary(raw, 'Source search item')).toList(growable: false);
     _requireUnique(items.map((item) => item.id), 'Source search result');
     return PluginSearchResult(
       pluginId: pluginId,
       sourceName: _contentString(result, 'sourceName', 'Source search result'),
       items: items,
-      nextCursor: _contentNullableString(
-        result,
-        'nextCursor',
-        'Source search result',
-      ),
-      totalCount: _contentNullableInt(
-        result,
-        'totalCount',
-        'Source search result',
-      ),
+      nextCursor: _contentNullableString(result, 'nextCursor', 'Source search result'),
+      totalCount: _contentNullableInt(result, 'totalCount', 'Source search result'),
     );
   }
 }
@@ -226,13 +200,8 @@ final class PluginSearchResult {
 }
 
 @immutable
-final class SourceSearchSuggestionsInvocation
-    extends PluginInvocation<PluginSearchSuggestionsResult> {
-  const SourceSearchSuggestionsInvocation({
-    required this.pluginId,
-    this.cursor,
-    this.pageSize = 20,
-  });
+final class SourceSearchSuggestionsInvocation extends PluginInvocation<PluginSearchSuggestionsResult> {
+  const SourceSearchSuggestionsInvocation({required this.pluginId, this.cursor, this.pageSize = 20});
 
   final String pluginId;
   final String? cursor;
@@ -245,55 +214,27 @@ final class SourceSearchSuggestionsInvocation
   String get _wireMethod => 'source.searchSuggestions.v1';
 
   @override
-  Map<String, Object?> get _wireParams => <String, Object?>{
-    'pluginId': pluginId,
-    'cursor': cursor,
-    'pageSize': pageSize,
-  };
+  Map<String, Object?> get _wireParams => <String, Object?>{'pluginId': pluginId, 'cursor': cursor, 'pageSize': pageSize};
 
   @override
   PluginSearchSuggestionsResult _decodeResult(Object? value) {
     final result = _contentObject(value, 'Source search suggestions result');
-    _requireMatchingPlugin(
-      result,
-      pluginId,
-      'Source search suggestions result',
-    );
-    final items =
-        _contentList(result, 'items', 'Source search suggestions result')
-            .map((raw) {
-              final item = _contentObject(raw, 'Source search suggestion');
-              return PluginSearchSuggestion(
-                query: _contentString(
-                  item,
-                  'query',
-                  'Source search suggestion',
-                ),
-                metric: _contentNullableString(
-                  item,
-                  'metric',
-                  'Source search suggestion',
-                ),
-              );
-            })
-            .toList(growable: false);
-    _requireUnique(
-      items.map((item) => item.query),
-      'Source search suggestions result',
-    );
+    _requireMatchingPlugin(result, pluginId, 'Source search suggestions result');
+    final items = _contentList(result, 'items', 'Source search suggestions result')
+        .map((raw) {
+          final item = _contentObject(raw, 'Source search suggestion');
+          return PluginSearchSuggestion(
+            query: _contentString(item, 'query', 'Source search suggestion'),
+            metric: _contentNullableString(item, 'metric', 'Source search suggestion'),
+          );
+        })
+        .toList(growable: false);
+    _requireUnique(items.map((item) => item.query), 'Source search suggestions result');
     return PluginSearchSuggestionsResult(
       pluginId: pluginId,
-      sourceName: _contentString(
-        result,
-        'sourceName',
-        'Source search suggestions result',
-      ),
+      sourceName: _contentString(result, 'sourceName', 'Source search suggestions result'),
       items: items,
-      nextCursor: _contentNullableString(
-        result,
-        'nextCursor',
-        'Source search suggestions result',
-      ),
+      nextCursor: _contentNullableString(result, 'nextCursor', 'Source search suggestions result'),
     );
   }
 }
@@ -322,15 +263,8 @@ final class PluginSearchSuggestion {
 }
 
 @immutable
-final class SourceDiscoverInvocation
-    extends PluginInvocation<PluginDiscoverResult> {
-  const SourceDiscoverInvocation({
-    required this.pluginId,
-    this.target,
-    this.cursor,
-    this.collectionId,
-    this.pageSize = 20,
-  });
+final class SourceDiscoverInvocation extends PluginInvocation<PluginDiscoverResult> {
+  const SourceDiscoverInvocation({required this.pluginId, this.target, this.cursor, this.collectionId, this.pageSize = 20});
 
   final String pluginId;
   final String? target;
@@ -357,49 +291,28 @@ final class SourceDiscoverInvocation
   PluginDiscoverResult _decodeResult(Object? value) {
     final result = _contentObject(value, 'Source discovery result');
     _requireMatchingPlugin(result, pluginId, 'Source discovery result');
-    final sourceName = _contentString(
-      result,
-      'sourceName',
-      'Source discovery result',
-    );
+    final sourceName = _contentString(result, 'sourceName', 'Source discovery result');
     return switch (_contentString(result, 'kind', 'Source discovery result')) {
       'document' => PluginDiscoveryDocumentResult(
         pluginId: pluginId,
         sourceName: sourceName,
-        document: _decodeDiscoveryDocument(
-          _contentField(result, 'document', 'Source discovery result'),
-        ),
+        document: _decodeDiscoveryDocument(_contentField(result, 'document', 'Source discovery result')),
       ),
       'append' => PluginDiscoveryAppendResult(
         pluginId: pluginId,
         sourceName: sourceName,
-        collectionId: _contentString(
-          result,
-          'collectionId',
-          'Source discovery result',
-        ),
-        items: _contentList(
-          result,
-          'items',
-          'Source discovery result',
-        ).map(_decodeDiscoveryContentItem).toList(growable: false),
-        continuation: _decodeDiscoveryContinuation(
-          _contentField(result, 'continuation', 'Source discovery result'),
-        ),
+        collectionId: _contentString(result, 'collectionId', 'Source discovery result'),
+        items: _contentList(result, 'items', 'Source discovery result').map(_decodeDiscoveryContentItem).toList(growable: false),
+        continuation: _decodeDiscoveryContinuation(_contentField(result, 'continuation', 'Source discovery result')),
       ),
-      _ => _contentInvalid(
-        'Source discovery result has an unknown result kind.',
-      ),
+      _ => _contentInvalid('Source discovery result has an unknown result kind.'),
     };
   }
 }
 
 @immutable
 sealed class PluginDiscoverResult {
-  const PluginDiscoverResult({
-    required this.pluginId,
-    required this.sourceName,
-  });
+  const PluginDiscoverResult({required this.pluginId, required this.sourceName});
 
   final String pluginId;
   final String sourceName;
@@ -407,11 +320,7 @@ sealed class PluginDiscoverResult {
 
 @immutable
 final class PluginDiscoveryDocumentResult extends PluginDiscoverResult {
-  const PluginDiscoveryDocumentResult({
-    required super.pluginId,
-    required super.sourceName,
-    required this.document,
-  });
+  const PluginDiscoveryDocumentResult({required super.pluginId, required super.sourceName, required this.document});
 
   final PluginDiscoveryDocument document;
 }
@@ -433,12 +342,7 @@ final class PluginDiscoveryAppendResult extends PluginDiscoverResult {
 
 @immutable
 final class PluginDiscoveryTab {
-  const PluginDiscoveryTab({
-    required this.id,
-    required this.label,
-    required this.target,
-    this.icon,
-  });
+  const PluginDiscoveryTab({required this.id, required this.label, required this.target, this.icon});
 
   final String id;
   final String label;
@@ -456,12 +360,7 @@ final class PluginDiscoveryMetric {
 
 @immutable
 final class PluginDiscoveryContentItem {
-  const PluginDiscoveryContentItem({
-    required this.content,
-    required this.rank,
-    required this.metric,
-    required this.recommendation,
-  });
+  const PluginDiscoveryContentItem({required this.content, required this.rank, required this.metric, required this.recommendation});
 
   final PluginContentSummary content;
   final int? rank;
@@ -490,10 +389,7 @@ final class PluginDiscoveryCategory {
 
 @immutable
 final class PluginDiscoveryContinuation {
-  const PluginDiscoveryContinuation({
-    required this.target,
-    required this.cursor,
-  });
+  const PluginDiscoveryContinuation({required this.target, required this.cursor});
 
   final String target;
   final String cursor;
@@ -515,11 +411,8 @@ sealed class PluginDiscoveryComponent {
 }
 
 final class PluginDiscoveryTabsComponent extends PluginDiscoveryComponent {
-  PluginDiscoveryTabsComponent({
-    required super.id,
-    required List<PluginDiscoveryTab> tabs,
-    required this.selectedTabId,
-  }) : tabs = List<PluginDiscoveryTab>.unmodifiable(tabs);
+  PluginDiscoveryTabsComponent({required super.id, required List<PluginDiscoveryTab> tabs, required this.selectedTabId})
+    : tabs = List<PluginDiscoveryTab>.unmodifiable(tabs);
 
   final List<PluginDiscoveryTab> tabs;
   final String? selectedTabId;
@@ -541,18 +434,14 @@ final class PluginDiscoverySectionComponent extends PluginDiscoveryComponent {
 }
 
 final class PluginDiscoveryGroupComponent extends PluginDiscoveryComponent {
-  PluginDiscoveryGroupComponent({
-    required super.id,
-    required this.layout,
-    required List<PluginDiscoveryComponent> children,
-  }) : children = List<PluginDiscoveryComponent>.unmodifiable(children);
+  PluginDiscoveryGroupComponent({required super.id, required this.layout, required List<PluginDiscoveryComponent> children})
+    : children = List<PluginDiscoveryComponent>.unmodifiable(children);
 
   final PluginDiscoveryGroupLayout layout;
   final List<PluginDiscoveryComponent> children;
 }
 
-final class PluginDiscoveryContentCollectionComponent
-    extends PluginDiscoveryComponent {
+final class PluginDiscoveryContentCollectionComponent extends PluginDiscoveryComponent {
   PluginDiscoveryContentCollectionComponent({
     required super.id,
     required this.layout,
@@ -565,13 +454,9 @@ final class PluginDiscoveryContentCollectionComponent
   final PluginDiscoveryContinuation? continuation;
 }
 
-final class PluginDiscoveryCategoryCollectionComponent
-    extends PluginDiscoveryComponent {
-  PluginDiscoveryCategoryCollectionComponent({
-    required super.id,
-    required this.layout,
-    required List<PluginDiscoveryCategory> categories,
-  }) : categories = List<PluginDiscoveryCategory>.unmodifiable(categories);
+final class PluginDiscoveryCategoryCollectionComponent extends PluginDiscoveryComponent {
+  PluginDiscoveryCategoryCollectionComponent({required super.id, required this.layout, required List<PluginDiscoveryCategory> categories})
+    : categories = List<PluginDiscoveryCategory>.unmodifiable(categories);
 
   final PluginDiscoveryCategoryLayout layout;
   final List<PluginDiscoveryCategory> categories;
@@ -583,13 +468,29 @@ final class PluginDiscoveryTextComponent extends PluginDiscoveryComponent {
   final String text;
 }
 
+final class PluginDiscoveryProfileCardComponent extends PluginDiscoveryComponent {
+  PluginDiscoveryProfileCardComponent({
+    required super.id,
+    required this.name,
+    required this.subtitle,
+    required this.badge,
+    required this.avatarUrl,
+    required List<PluginDiscoveryMetric> details,
+  }) : details = List<PluginDiscoveryMetric>.unmodifiable(details);
+
+  final String name;
+  final String? subtitle;
+  final String? badge;
+  final Uri? avatarUrl;
+  final List<PluginDiscoveryMetric> details;
+}
+
 final class PluginDiscoveryDividerComponent extends PluginDiscoveryComponent {
   const PluginDiscoveryDividerComponent({required super.id});
 }
 
 @immutable
-final class SourceDetailInvocation
-    extends PluginInvocation<PluginContentDetail> {
+final class SourceDetailInvocation extends PluginInvocation<PluginContentDetail> {
   const SourceDetailInvocation({required this.pluginId, required this.id});
 
   final String pluginId;
@@ -602,10 +503,7 @@ final class SourceDetailInvocation
   String get _wireMethod => 'source.getDetail.v1';
 
   @override
-  Map<String, Object?> get _wireParams => <String, Object?>{
-    'pluginId': pluginId,
-    'id': id,
-  };
+  Map<String, Object?> get _wireParams => <String, Object?>{'pluginId': pluginId, 'id': id};
 
   @override
   PluginContentDetail _decodeResult(Object? value) {
@@ -620,11 +518,7 @@ final class SourceDetailInvocation
       sourceName: _contentString(result, 'sourceName', 'Source detail result'),
       summary: summary,
       aliases: _contentStringList(result, 'aliases', 'Source detail result'),
-      catalogUrl: _contentNullableUri(
-        result,
-        'catalogUrl',
-        'Source detail result',
-      ),
+      catalogUrl: _contentNullableUri(result, 'catalogUrl', 'Source detail result'),
     );
   }
 }
@@ -647,14 +541,8 @@ final class PluginContentDetail {
 }
 
 @immutable
-final class SourceChaptersInvocation
-    extends PluginInvocation<PluginChaptersResult> {
-  const SourceChaptersInvocation({
-    required this.pluginId,
-    required this.id,
-    this.groupId,
-    this.refresh = false,
-  });
+final class SourceChaptersInvocation extends PluginInvocation<PluginChaptersResult> {
+  const SourceChaptersInvocation({required this.pluginId, required this.id, this.groupId, this.refresh = false});
 
   final String pluginId;
   final String id;
@@ -679,46 +567,27 @@ final class SourceChaptersInvocation
   PluginChaptersResult _decodeResult(Object? value) {
     final result = _contentObject(value, 'Source chapters result');
     _requireMatchingPlugin(result, pluginId, 'Source chapters result');
-    final items = _contentList(
-      result,
-      'items',
-      'Source chapters result',
-    ).map(_decodeChapterSummary).toList(growable: false);
+    final items = _contentList(result, 'items', 'Source chapters result').map(_decodeChapterSummary).toList(growable: false);
     _requireUnique(items.map((item) => item.id), 'Source chapters result');
     final groups = result.containsKey('groups')
-        ? _contentList(
-            result,
-            'groups',
-            'Source chapters result',
-          ).map(_decodeMediaGroup).toList(growable: false)
+        ? _contentList(result, 'groups', 'Source chapters result').map(_decodeMediaGroup).toList(growable: false)
         : const <PluginMediaGroup>[];
     _requireUnique(groups.map((group) => group.id), 'Source media groups');
     for (var index = 0; index < groups.length; index += 1) {
-      if (groups[index].order != index)
-        _contentInvalid('Source media groups are not ordered.');
+      if (groups[index].order != index) _contentInvalid('Source media groups are not ordered.');
     }
-    final episodeIds = groups
-        .expand((group) => group.episodes)
-        .map((episode) => episode.id)
-        .toList(growable: false);
+    final episodeIds = groups.expand((group) => group.episodes).map((episode) => episode.id).toList(growable: false);
     final itemIds = items.map((item) => item.id).toSet();
     if (groups.isNotEmpty &&
-        (episodeIds.length != items.length ||
-            episodeIds.toSet().length != episodeIds.length ||
-            !episodeIds.every(itemIds.contains))) {
+        (episodeIds.length != items.length || episodeIds.toSet().length != episodeIds.length || !episodeIds.every(itemIds.contains))) {
       _contentInvalid('Source media groups do not match the episode catalog.');
     }
-    if (groupId != null &&
-        !groups.any((group) => group.id == groupId && !group.deferred)) {
+    if (groupId != null && !groups.any((group) => group.id == groupId && !group.deferred)) {
       _contentInvalid('Requested media group was not loaded.');
     }
     return PluginChaptersResult(
       pluginId: pluginId,
-      sourceName: _contentString(
-        result,
-        'sourceName',
-        'Source chapters result',
-      ),
+      sourceName: _contentString(result, 'sourceName', 'Source chapters result'),
       items: items,
       groups: groups,
     );
@@ -784,13 +653,8 @@ final class PluginChapterSummary {
 }
 
 @immutable
-final class SourceContentInvocation
-    extends PluginInvocation<PluginChapterContent> {
-  const SourceContentInvocation({
-    required this.pluginId,
-    required this.id,
-    required this.chapterId,
-  });
+final class SourceContentInvocation extends PluginInvocation<PluginChapterContent> {
+  const SourceContentInvocation({required this.pluginId, required this.id, required this.chapterId});
 
   final String pluginId;
   final String id;
@@ -803,54 +667,29 @@ final class SourceContentInvocation
   String get _wireMethod => 'source.getContent.v1';
 
   @override
-  Map<String, Object?> get _wireParams => <String, Object?>{
-    'pluginId': pluginId,
-    'id': id,
-    'chapterId': chapterId,
-  };
+  Map<String, Object?> get _wireParams => <String, Object?>{'pluginId': pluginId, 'id': id, 'chapterId': chapterId};
 
   @override
   PluginChapterContent _decodeResult(Object? value) {
     final result = _contentObject(value, 'Source content result');
     _requireMatchingPlugin(result, pluginId, 'Source content result');
-    final resultChapterId = _contentString(
-      result,
-      'chapterId',
-      'Source content result',
-    );
+    final resultChapterId = _contentString(result, 'chapterId', 'Source content result');
     if (resultChapterId != chapterId) {
       _contentInvalid('Source content result does not match its request.');
     }
-    final contentKind = _contentKind(
-      _contentString(result, 'contentKind', 'Source content result'),
-      'Source content result',
-    );
-    final text = _contentNullableString(
-      result,
-      'text',
-      'Source content result',
-      allowEmpty: true,
-    );
-    final pages = _contentList(
-      result,
-      'pages',
-      'Source content result',
-    ).map(_decodeMangaPage).toList(growable: false);
-    final media = result.containsKey('media') && result['media'] != null
-        ? _decodeMediaResource(result['media'])
-        : null;
+    final contentKind = _contentKind(_contentString(result, 'contentKind', 'Source content result'), 'Source content result');
+    final text = _contentNullableString(result, 'text', 'Source content result', allowEmpty: true);
+    final pages = _contentList(result, 'pages', 'Source content result').map(_decodeMangaPage).toList(growable: false);
+    final media = result.containsKey('media') && result['media'] != null ? _decodeMediaResource(result['media']) : null;
     _requireUnique(pages.map((page) => page.id), 'Source content pages');
     for (var index = 0; index < pages.length; index += 1) {
       if (pages[index].index != index) {
         _contentInvalid('Source content pages are not zero-based and ordered.');
       }
     }
-    if ((contentKind == PluginContentKind.novel &&
-            (text == null || pages.isNotEmpty || media != null)) ||
-        (contentKind == PluginContentKind.manga &&
-            (text != null || pages.isEmpty || media != null)) ||
-        ((contentKind == PluginContentKind.audio ||
-                contentKind == PluginContentKind.video) &&
+    if ((contentKind == PluginContentKind.novel && (text == null || pages.isNotEmpty || media != null)) ||
+        (contentKind == PluginContentKind.manga && (text != null || pages.isEmpty || media != null)) ||
+        ((contentKind == PluginContentKind.audio || contentKind == PluginContentKind.video) &&
             (text != null || pages.isNotEmpty || media == null))) {
       _contentInvalid('Source content result has inconsistent content fields.');
     }
@@ -860,11 +699,7 @@ final class SourceContentInvocation
       contentKind: contentKind,
       chapterId: resultChapterId,
       title: _contentNullableString(result, 'title', 'Source content result'),
-      updatedAt: _contentNullableDateTime(
-        result,
-        'updatedAt',
-        'Source content result',
-      ),
+      updatedAt: _contentNullableDateTime(result, 'updatedAt', 'Source content result'),
       text: text,
       pages: pages,
       media: media,
@@ -944,14 +779,8 @@ PluginContentSummary _decodeContentSummary(Object? value, String context) {
   return PluginContentSummary(
     id: _contentString(item, 'id', context),
     title: _contentString(item, 'title', context),
-    contentKind: _contentKind(
-      _contentString(item, 'contentKind', context),
-      context,
-    ),
-    coverOrientation: _coverOrientation(
-      _contentString(item, 'coverOrientation', context),
-      context,
-    ),
+    contentKind: _contentKind(_contentString(item, 'contentKind', context), context),
+    coverOrientation: _coverOrientation(_contentString(item, 'coverOrientation', context), context),
     author: _contentNullableString(item, 'author', context),
     url: _contentNullableUri(item, 'url', context),
     coverUrl: _contentNullableUri(item, 'coverUrl', context),
@@ -966,24 +795,18 @@ PluginContentSummary _decodeContentSummary(Object? value, String context) {
     latestChapter: _decodeLatestChapter(item, context),
     categories: _contentStringList(item, 'categories', context),
     tags: _contentStringList(item, 'tags', context),
-    attributes: _contentList(item, 'attributes', context)
-        .map((raw) => _decodeAttribute(raw, '$context attribute'))
-        .toList(growable: false),
+    attributes: _contentList(item, 'attributes', context).map((raw) => _decodeAttribute(raw, '$context attribute')).toList(growable: false),
   );
 }
 
-PluginCoverOrientation _coverOrientation(String value, String context) =>
-    switch (value) {
-      'landscape' => PluginCoverOrientation.landscape,
-      'portrait' => PluginCoverOrientation.portrait,
-      'square' => PluginCoverOrientation.square,
-      _ => _contentInvalid('$context contains an unknown cover orientation.'),
-    };
+PluginCoverOrientation _coverOrientation(String value, String context) => switch (value) {
+  'landscape' => PluginCoverOrientation.landscape,
+  'portrait' => PluginCoverOrientation.portrait,
+  'square' => PluginCoverOrientation.square,
+  _ => _contentInvalid('$context contains an unknown cover orientation.'),
+};
 
-PluginLatestChapter? _decodeLatestChapter(
-  Map<String, Object?> item,
-  String context,
-) {
+PluginLatestChapter? _decodeLatestChapter(Map<String, Object?> item, String context) {
   final raw = _contentField(item, 'latestChapter', context);
   if (raw == null) return null;
   final chapter = _contentObject(raw, '$context latest chapter');
@@ -1011,18 +834,10 @@ PluginDiscoveryDocument _decodeDiscoveryDocument(Object? value) {
   final components = _contentList(document, 'components', context)
       .asMap()
       .entries
-      .map(
-        (entry) => _decodeDiscoveryComponent(
-          entry.value,
-          state,
-          depth: 1,
-          isFirstRootComponent: entry.key == 0,
-        ),
-      )
+      .map((entry) => _decodeDiscoveryComponent(entry.value, state, depth: 1, isFirstRootComponent: entry.key == 0))
       .toList(growable: false);
   final tabCount = components.whereType<PluginDiscoveryTabsComponent>().length;
-  if (tabCount > 1 ||
-      (tabCount == 1 && components.first is! PluginDiscoveryTabsComponent)) {
+  if (tabCount > 1 || (tabCount == 1 && components.first is! PluginDiscoveryTabsComponent)) {
     _contentInvalid('$context has an invalid tabs placement.');
   }
   return PluginDiscoveryDocument(components: components);
@@ -1042,22 +857,13 @@ PluginDiscoveryComponent _decodeDiscoveryComponent(
   final id = _contentString(item, 'id', context);
   if (!state.ids.add(id)) _contentInvalid('$context has a duplicate id.');
   final type = _contentString(item, 'type', context);
-  List<PluginDiscoveryComponent> children() =>
-      _contentList(item, 'children', context)
-          .map(
-            (child) => _decodeDiscoveryComponent(
-              child,
-              state,
-              depth: depth + 1,
-              isFirstRootComponent: false,
-            ),
-          )
-          .toList(growable: false);
+  List<PluginDiscoveryComponent> children() => _contentList(
+    item,
+    'children',
+    context,
+  ).map((child) => _decodeDiscoveryComponent(child, state, depth: depth + 1, isFirstRootComponent: false)).toList(growable: false);
   return switch (type) {
-    'tabs' when depth == 1 && isFirstRootComponent => _decodeDiscoveryTabs(
-      item,
-      id,
-    ),
+    'tabs' when depth == 1 && isFirstRootComponent => _decodeDiscoveryTabs(item, id),
     'section' => PluginDiscoverySectionComponent(
       id: id,
       title: _contentString(item, 'title', context),
@@ -1067,17 +873,19 @@ PluginDiscoveryComponent _decodeDiscoveryComponent(
     ),
     'group' => PluginDiscoveryGroupComponent(
       id: id,
-      layout: _discoveryGroupLayout(
-        _contentString(item, 'layout', context),
-        context,
-      ),
+      layout: _discoveryGroupLayout(_contentString(item, 'layout', context), context),
       children: children(),
     ),
     'contentCollection' => _decodeDiscoveryContentCollection(item, id),
     'categoryCollection' => _decodeDiscoveryCategoryCollection(item, id),
-    'text' => PluginDiscoveryTextComponent(
+    'text' => PluginDiscoveryTextComponent(id: id, text: _contentString(item, 'text', context)),
+    'profileCard' => PluginDiscoveryProfileCardComponent(
       id: id,
-      text: _contentString(item, 'text', context),
+      name: _contentString(item, 'name', context),
+      subtitle: _contentNullableString(item, 'subtitle', context),
+      badge: _contentNullableString(item, 'badge', context),
+      avatarUrl: _contentNullableUri(item, 'avatarUrl', context),
+      details: _contentList(item, 'details', context).map(_decodeDiscoveryMetric).toList(growable: false),
     ),
     'divider' => PluginDiscoveryDividerComponent(id: id),
     _ => _contentInvalid('$context has an unknown or misplaced type.'),

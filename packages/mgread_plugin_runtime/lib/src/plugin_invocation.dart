@@ -29,26 +29,15 @@ final class RuntimePingInvocation extends PluginInvocation<RuntimePingResult> {
     final nodeVersion = result['nodeVersion'];
     final runtimeVersion = result['runtimeVersion'];
     if (ok is! bool || nodeVersion is! String || runtimeVersion is! String) {
-      throw const PluginRuntimeException(
-        'invalid_response',
-        'The Runtime returned an invalid ping result.',
-      );
+      throw const PluginRuntimeException('invalid_response', 'The Runtime returned an invalid ping result.');
     }
-    return RuntimePingResult(
-      isHealthy: ok,
-      nodeVersion: nodeVersion,
-      runtimeVersion: runtimeVersion,
-    );
+    return RuntimePingResult(isHealthy: ok, nodeVersion: nodeVersion, runtimeVersion: runtimeVersion);
   }
 }
 
 @immutable
 final class RuntimePingResult {
-  const RuntimePingResult({
-    required this.isHealthy,
-    required this.nodeVersion,
-    required this.runtimeVersion,
-  });
+  const RuntimePingResult({required this.isHealthy, required this.nodeVersion, required this.runtimeVersion});
 
   final bool isHealthy;
   final String nodeVersion;
@@ -57,8 +46,7 @@ final class RuntimePingResult {
 
 /// Returns a bounded, path-free snapshot for the Runtime status page.
 @immutable
-final class RuntimeStatusInvocation
-    extends PluginInvocation<RuntimeStatusResult> {
+final class RuntimeStatusInvocation extends PluginInvocation<RuntimeStatusResult> {
   const RuntimeStatusInvocation();
 
   @override
@@ -92,10 +80,7 @@ final class RuntimeStatusInvocation
         uptimeMs < 0 ||
         plugins is! List<Object?> ||
         plugins.length > 1024) {
-      throw const PluginRuntimeException(
-        'invalid_response',
-        'The Runtime returned an invalid status result.',
-      );
+      throw const PluginRuntimeException('invalid_response', 'The Runtime returned an invalid status result.');
     }
     return RuntimeStatusResult(
       arch: arch,
@@ -109,9 +94,7 @@ final class RuntimeStatusInvocation
       ),
       nodeVersion: nodeVersion,
       platform: platform,
-      plugins: List<InstalledPlugin>.unmodifiable(
-        plugins.map(_decodeInstalledPlugin),
-      ),
+      plugins: List<InstalledPlugin>.unmodifiable(plugins.map(_decodeInstalledPlugin)),
       runtimeVersion: runtimeVersion,
       runtimeKind: runtimeKind as String,
       uptimeMs: uptimeMs,
@@ -133,26 +116,17 @@ final class SourceResourceResolveInvocation extends PluginInvocation<String> {
   String _decodeResult(Object? value) {
     final result = _jsonObject(value, 'Resolved source resource');
     final resolved = result['url'];
-    final route = resolved is String
-        ? _SourceResourceUrl.parse(resolved)
-        : null;
+    final route = resolved is String ? _SourceResourceUrl.parse(resolved) : null;
     final original = _SourceResourceUrl.require(url);
-    if (resolved is! String ||
-        route == null ||
-        route.pluginId != original.pluginId ||
-        route.engine != original.engine)
-      throw const PluginRuntimeException(
-        'invalid_response',
-        'Invalid resolved resource URL.',
-      );
+    if (resolved is! String || route == null || route.pluginId != original.pluginId || route.engine != original.engine)
+      throw const PluginRuntimeException('invalid_response', 'Invalid resolved resource URL.');
     return resolved;
   }
 }
 
 /// Decodes one Runtime-generated source-resource URL for technical inspection.
 @immutable
-final class SourceResourceDecodeInvocation
-    extends PluginInvocation<SourceResourceDecodeResult> {
+final class SourceResourceDecodeInvocation extends PluginInvocation<SourceResourceDecodeResult> {
   const SourceResourceDecodeInvocation({required this.url});
 
   final String url;
@@ -163,10 +137,7 @@ final class SourceResourceDecodeInvocation
   @override
   Map<String, Object?> get _wireParams {
     final route = _SourceResourceUrl.require(url);
-    return <String, Object?>{
-      'url': url,
-      if (route.engine == PluginEngine.native) 'pluginId': route.pluginId,
-    };
+    return <String, Object?>{'url': url, if (route.engine == PluginEngine.native) 'pluginId': route.pluginId};
   }
 
   @override
@@ -174,28 +145,16 @@ final class SourceResourceDecodeInvocation
     final result = _jsonObject(value, 'Source-resource URL decode result');
     final pluginId = result['pluginId'];
     if (pluginId is! String) {
-      throw const PluginRuntimeException(
-        'invalid_response',
-        'The Runtime returned an invalid source-resource URL decode result.',
-      );
+      throw const PluginRuntimeException('invalid_response', 'The Runtime returned an invalid source-resource URL decode result.');
     }
-    final request = _jsonObject(
-      result['request'],
-      'Source-resource URL decode request',
-    );
-    return SourceResourceDecodeResult(
-      pluginId: pluginId,
-      request: Map<String, Object?>.unmodifiable(request),
-    );
+    final request = _jsonObject(result['request'], 'Source-resource URL decode request');
+    return SourceResourceDecodeResult(pluginId: pluginId, request: Map<String, Object?>.unmodifiable(request));
   }
 }
 
 @immutable
 final class SourceResourceDecodeResult {
-  const SourceResourceDecodeResult({
-    required this.pluginId,
-    required this.request,
-  });
+  const SourceResourceDecodeResult({required this.pluginId, required this.request});
 
   final String pluginId;
   final Map<String, Object?> request;
@@ -204,10 +163,7 @@ final class SourceResourceDecodeResult {
 int _nonNegativeInt(Map<String, Object?> object, String key) {
   final value = object[key];
   if (value is! int || value < 0) {
-    throw const PluginRuntimeException(
-      'invalid_response',
-      'The Runtime returned invalid memory usage.',
-    );
+    throw const PluginRuntimeException('invalid_response', 'The Runtime returned invalid memory usage.');
   }
   return value;
 }
@@ -260,8 +216,7 @@ final class RuntimeMemoryUsage {
 
 /// Debug-only switch for the Runtime-owned LAN inspector page.
 @immutable
-final class RuntimeDebugHttpInvocation
-    extends PluginInvocation<RuntimeDebugHttpStatus> {
+final class RuntimeDebugHttpInvocation extends PluginInvocation<RuntimeDebugHttpStatus> {
   const RuntimeDebugHttpInvocation({required this.enabled});
 
   final bool enabled;
@@ -273,14 +228,12 @@ final class RuntimeDebugHttpInvocation
   Map<String, Object?> get _wireParams => <String, Object?>{'enabled': enabled};
 
   @override
-  RuntimeDebugHttpStatus _decodeResult(Object? value) =>
-      _decodeRuntimeDebugHttpStatus(value);
+  RuntimeDebugHttpStatus _decodeResult(Object? value) => _decodeRuntimeDebugHttpStatus(value);
 }
 
 /// Debug-only query of the Runtime-owned, durable inspector setting.
 @immutable
-final class RuntimeDebugHttpStatusInvocation
-    extends PluginInvocation<RuntimeDebugHttpStatus> {
+final class RuntimeDebugHttpStatusInvocation extends PluginInvocation<RuntimeDebugHttpStatus> {
   const RuntimeDebugHttpStatusInvocation();
 
   @override
@@ -290,8 +243,7 @@ final class RuntimeDebugHttpStatusInvocation
   Map<String, Object?> get _wireParams => const <String, Object?>{};
 
   @override
-  RuntimeDebugHttpStatus _decodeResult(Object? value) =>
-      _decodeRuntimeDebugHttpStatus(value);
+  RuntimeDebugHttpStatus _decodeResult(Object? value) => _decodeRuntimeDebugHttpStatus(value);
 }
 
 enum PluginWebViewDebugAction { enter, show }
@@ -300,11 +252,7 @@ enum PluginWebViewDebugAction { enter, show }
 /// source session against programmatic hide requests until Runtime shutdown.
 @immutable
 final class PluginWebViewDebugInvocation extends PluginInvocation<void> {
-  const PluginWebViewDebugInvocation({
-    required this.pluginId,
-    required this.pluginName,
-    required this.action,
-  });
+  const PluginWebViewDebugInvocation({required this.pluginId, required this.pluginName, required this.action});
 
   final String pluginId;
   final String pluginName;
@@ -314,20 +262,13 @@ final class PluginWebViewDebugInvocation extends PluginInvocation<void> {
   String get _wireMethod => 'plugins.webview.debug.v1';
 
   @override
-  Map<String, Object?> get _wireParams => <String, Object?>{
-    'pluginId': pluginId,
-    'pluginName': pluginName,
-    'action': action.name,
-  };
+  Map<String, Object?> get _wireParams => <String, Object?>{'pluginId': pluginId, 'pluginName': pluginName, 'action': action.name};
 
   @override
   void _decodeResult(Object? value) {
     final result = _jsonObject(value, 'Plugin WebView debug result');
     if (result['accepted'] != true || result['action'] != action.name) {
-      throw const PluginRuntimeException(
-        'invalid_response',
-        'The Runtime returned an invalid WebView debug result.',
-      );
+      throw const PluginRuntimeException('invalid_response', 'The Runtime returned an invalid WebView debug result.');
     }
   }
 }
@@ -346,17 +287,11 @@ RuntimeDebugHttpStatus _decodeRuntimeDebugHttpStatus(Object? value) {
       rawEndpoints is! List<Object?> ||
       rawEndpoints.length > 32 ||
       rawEndpoints.any((Object? value) => value is! String)) {
-    throw const PluginRuntimeException(
-      'invalid_response',
-      'The Runtime returned an invalid Debug HTTP status.',
-    );
+    throw const PluginRuntimeException('invalid_response', 'The Runtime returned an invalid Debug HTTP status.');
   }
   final endpoints = rawEndpoints.cast<String>();
   if (enabled != endpoints.isNotEmpty || !endpoints.every(_isDebugEndpoint)) {
-    throw const PluginRuntimeException(
-      'invalid_response',
-      'The Runtime returned invalid Debug HTTP endpoints.',
-    );
+    throw const PluginRuntimeException('invalid_response', 'The Runtime returned invalid Debug HTTP endpoints.');
   }
   return RuntimeDebugHttpStatus(
     configuredEnabled: configuredEnabled,
@@ -392,8 +327,7 @@ final class RuntimeDebugHttpStatus {
 
 /// Lists Runtime-owned installed-plugin projections without exposing paths.
 @immutable
-final class InstalledPluginsInvocation
-    extends PluginInvocation<List<InstalledPlugin>> {
+final class InstalledPluginsInvocation extends PluginInvocation<List<InstalledPlugin>> {
   const InstalledPluginsInvocation();
 
   @override
@@ -405,10 +339,7 @@ final class InstalledPluginsInvocation
   @override
   List<InstalledPlugin> _decodeResult(Object? value) {
     if (value is! List<Object?>) {
-      throw const PluginRuntimeException(
-        'invalid_response',
-        'The Runtime returned an invalid installed-plugin list.',
-      );
+      throw const PluginRuntimeException('invalid_response', 'The Runtime returned an invalid installed-plugin list.');
     }
     return List<InstalledPlugin>.unmodifiable(
       value.map((Object? raw) {
@@ -420,8 +351,7 @@ final class InstalledPluginsInvocation
 
 /// Consumes the path-free summary of sources isolated during this Runtime start.
 @immutable
-final class PluginStartupRecoveryInvocation
-    extends PluginInvocation<PluginStartupRecovery> {
+final class PluginStartupRecoveryInvocation extends PluginInvocation<PluginStartupRecovery> {
   const PluginStartupRecoveryInvocation();
 
   @override
@@ -435,10 +365,7 @@ final class PluginStartupRecoveryInvocation
     final result = _jsonObject(value, 'Plugin startup recovery');
     final quarantinedCount = result['quarantinedCount'];
     if (quarantinedCount is! int || quarantinedCount < 0) {
-      throw const PluginRuntimeException(
-        'invalid_response',
-        'The Runtime returned an invalid plugin recovery summary.',
-      );
+      throw const PluginRuntimeException('invalid_response', 'The Runtime returned an invalid plugin recovery summary.');
     }
     return PluginStartupRecovery(quarantinedCount: quarantinedCount);
   }
@@ -453,12 +380,8 @@ final class PluginStartupRecovery {
 
 /// Persists a source's desired enabled state in the Runtime-owned plugin store.
 @immutable
-final class SetPluginEnabledInvocation
-    extends PluginInvocation<InstalledPlugin> {
-  const SetPluginEnabledInvocation({
-    required this.pluginId,
-    required this.enabled,
-  });
+final class SetPluginEnabledInvocation extends PluginInvocation<InstalledPlugin> {
+  const SetPluginEnabledInvocation({required this.pluginId, required this.enabled});
 
   final String pluginId;
   final bool enabled;
@@ -467,10 +390,7 @@ final class SetPluginEnabledInvocation
   String get _wireMethod => 'plugins.setEnabled.v1';
 
   @override
-  Map<String, Object?> get _wireParams => <String, Object?>{
-    'pluginId': pluginId,
-    'enabled': enabled,
-  };
+  Map<String, Object?> get _wireParams => <String, Object?>{'pluginId': pluginId, 'enabled': enabled};
 
   @override
   InstalledPlugin _decodeResult(Object? value) => _decodeInstalledPlugin(value);
@@ -487,18 +407,13 @@ final class UninstallPluginInvocation extends PluginInvocation<void> {
   String get _wireMethod => 'plugins.uninstall.v1';
 
   @override
-  Map<String, Object?> get _wireParams => <String, Object?>{
-    'pluginId': pluginId,
-  };
+  Map<String, Object?> get _wireParams => <String, Object?>{'pluginId': pluginId};
 
   @override
   void _decodeResult(Object? value) {
     final result = _jsonObject(value, 'Plugin uninstall result');
     if (result['removed'] != true || result['pluginId'] != pluginId) {
-      throw const PluginRuntimeException(
-        'invalid_response',
-        'The Runtime returned an invalid plugin uninstall result.',
-      );
+      throw const PluginRuntimeException('invalid_response', 'The Runtime returned an invalid plugin uninstall result.');
     }
   }
 }
@@ -525,21 +440,18 @@ final class UninstallAllPluginsInvocation extends PluginInvocation<void> {
     final result = _jsonObject(value, 'All-source uninstall result');
     final removedCount = result['removedCount'];
     if (removedCount is! int || removedCount < 0) {
-      throw const PluginRuntimeException(
-        'invalid_response',
-        'The Runtime returned an invalid all-source uninstall result.',
-      );
+      throw const PluginRuntimeException('invalid_response', 'The Runtime returned an invalid all-source uninstall result.');
     }
   }
 }
 
 /// Opens a source code directory through the Flutter desktop Supervisor.
 ///
-/// The result intentionally reveals only whether this was a live development
-/// project or an immutable installed version. It never contains a file path.
+/// The result identifies a live development project, an immutable installed
+/// version, or the retained artifact when its installed version is missing.
+/// It never contains a file path.
 @immutable
-final class OpenPluginCodeDirectoryInvocation
-    extends PluginInvocation<PluginCodeDirectoryKind> {
+final class OpenPluginCodeDirectoryInvocation extends PluginInvocation<PluginCodeDirectoryKind> {
   const OpenPluginCodeDirectoryInvocation({required this.pluginId});
 
   final String pluginId;
@@ -548,9 +460,7 @@ final class OpenPluginCodeDirectoryInvocation
   String get _wireMethod => 'plugins.openCodeDirectory.v1';
 
   @override
-  Map<String, Object?> get _wireParams => <String, Object?>{
-    'pluginId': pluginId,
-  };
+  Map<String, Object?> get _wireParams => <String, Object?>{'pluginId': pluginId};
 
   @override
   PluginCodeDirectoryKind _decodeResult(Object? value) {
@@ -558,23 +468,20 @@ final class OpenPluginCodeDirectoryInvocation
     return switch (result['kind']) {
       'development' => PluginCodeDirectoryKind.development,
       'installed' => PluginCodeDirectoryKind.installed,
-      _ => throw const PluginRuntimeException(
-        'invalid_response',
-        'The Runtime returned an invalid plugin code directory result.',
-      ),
+      'archive' => PluginCodeDirectoryKind.archive,
+      _ => throw const PluginRuntimeException('invalid_response', 'The Runtime returned an invalid plugin code directory result.'),
     };
   }
 }
 
-enum PluginCodeDirectoryKind { development, installed }
+enum PluginCodeDirectoryKind { development, installed, archive }
 
 /// Opens the Runtime-private data root through the Flutter Windows shell action.
 ///
 /// The result is deliberately path-free; Android and other unsupported
 /// platforms return a stable `unsupported` Runtime error.
 @immutable
-final class OpenRuntimePrivateDirectoryInvocation
-    extends PluginInvocation<void> {
+final class OpenRuntimePrivateDirectoryInvocation extends PluginInvocation<void> {
   const OpenRuntimePrivateDirectoryInvocation();
 
   @override
@@ -587,10 +494,7 @@ final class OpenRuntimePrivateDirectoryInvocation
   void _decodeResult(Object? value) {
     final result = _jsonObject(value, 'Runtime private directory result');
     if (result['opened'] != true) {
-      throw const PluginRuntimeException(
-        'invalid_response',
-        'The Runtime returned an invalid private directory result.',
-      );
+      throw const PluginRuntimeException('invalid_response', 'The Runtime returned an invalid private directory result.');
     }
   }
 }
@@ -600,12 +504,8 @@ enum PluginInstallationSizeScope { archive, data }
 
 /// Returns path-free byte totals for one installed source subtree.
 @immutable
-final class PluginInstallationSizeInvocation
-    extends PluginInvocation<PluginInstallationSize> {
-  const PluginInstallationSizeInvocation({
-    required this.pluginId,
-    required this.scope,
-  });
+final class PluginInstallationSizeInvocation extends PluginInvocation<PluginInstallationSize> {
+  const PluginInstallationSizeInvocation({required this.pluginId, required this.scope});
 
   final String pluginId;
   final PluginInstallationSizeScope scope;
@@ -633,16 +533,8 @@ final class PluginInstallationSizeInvocation
     final scope = result['scope'];
     final bytes = result['bytes'];
     final fileCount = result['fileCount'];
-    if (pluginId is! String ||
-        version is! String ||
-        bytes is! int ||
-        bytes < 0 ||
-        fileCount is! int ||
-        fileCount < 0) {
-      throw const PluginRuntimeException(
-        'invalid_response',
-        'The Runtime returned an invalid installation size result.',
-      );
+    if (pluginId is! String || version is! String || bytes is! int || bytes < 0 || fileCount is! int || fileCount < 0) {
+      throw const PluginRuntimeException('invalid_response', 'The Runtime returned an invalid installation size result.');
     }
     final parsedScope = switch (scope) {
       'archive' => PluginInstallationSizeScope.archive,
@@ -650,18 +542,9 @@ final class PluginInstallationSizeInvocation
       _ => null,
     };
     if (parsedScope == null) {
-      throw const PluginRuntimeException(
-        'invalid_response',
-        'The Runtime returned an invalid installation size scope.',
-      );
+      throw const PluginRuntimeException('invalid_response', 'The Runtime returned an invalid installation size scope.');
     }
-    return PluginInstallationSize(
-      bytes: bytes,
-      fileCount: fileCount,
-      pluginId: pluginId,
-      scope: parsedScope,
-      version: version,
-    );
+    return PluginInstallationSize(bytes: bytes, fileCount: fileCount, pluginId: pluginId, scope: parsedScope, version: version);
   }
 }
 
@@ -685,8 +568,7 @@ final class PluginInstallationSize {
 
 /// Lists Runtime-owned cache byte totals without exposing private directories.
 @immutable
-final class PluginCacheUsageInvocation
-    extends PluginInvocation<List<PluginCacheUsage>> {
+final class PluginCacheUsageInvocation extends PluginInvocation<List<PluginCacheUsage>> {
   const PluginCacheUsageInvocation({this.pluginId});
 
   final String? pluginId;
@@ -695,28 +577,20 @@ final class PluginCacheUsageInvocation
   String get _wireMethod => 'plugins.cache.usage.v1';
 
   @override
-  Map<String, Object?> get _wireParams => pluginId == null
-      ? const <String, Object?>{}
-      : <String, Object?>{'pluginId': pluginId};
+  Map<String, Object?> get _wireParams => pluginId == null ? const <String, Object?>{} : <String, Object?>{'pluginId': pluginId};
 
   @override
   List<PluginCacheUsage> _decodeResult(Object? value) {
     if (value is! List<Object?> || value.length > 1024) {
-      throw const PluginRuntimeException(
-        'invalid_response',
-        'The Runtime returned an invalid plugin cache usage list.',
-      );
+      throw const PluginRuntimeException('invalid_response', 'The Runtime returned an invalid plugin cache usage list.');
     }
-    return List<PluginCacheUsage>.unmodifiable(
-      value.map(_decodePluginCacheUsage),
-    );
+    return List<PluginCacheUsage>.unmodifiable(value.map(_decodePluginCacheUsage));
   }
 }
 
 /// Clears one plugin's Runtime-owned private cache.
 @immutable
-final class ClearPluginCacheInvocation
-    extends PluginInvocation<PluginCacheClearResult> {
+final class ClearPluginCacheInvocation extends PluginInvocation<PluginCacheClearResult> {
   const ClearPluginCacheInvocation({required this.pluginId});
 
   final String pluginId;
@@ -725,19 +599,15 @@ final class ClearPluginCacheInvocation
   String get _wireMethod => 'plugins.cache.clear.v1';
 
   @override
-  Map<String, Object?> get _wireParams => <String, Object?>{
-    'pluginId': pluginId,
-  };
+  Map<String, Object?> get _wireParams => <String, Object?>{'pluginId': pluginId};
 
   @override
-  PluginCacheClearResult _decodeResult(Object? value) =>
-      _decodePluginCacheClearResult(value);
+  PluginCacheClearResult _decodeResult(Object? value) => _decodePluginCacheClearResult(value);
 }
 
 /// Clears every currently installed plugin cache in one Runtime-owned action.
 @immutable
-final class ClearAllPluginCachesInvocation
-    extends PluginInvocation<PluginCacheClearResult> {
+final class ClearAllPluginCachesInvocation extends PluginInvocation<PluginCacheClearResult> {
   const ClearAllPluginCachesInvocation();
 
   @override
@@ -747,8 +617,7 @@ final class ClearAllPluginCachesInvocation
   Map<String, Object?> get _wireParams => const <String, Object?>{};
 
   @override
-  PluginCacheClearResult _decodeResult(Object? value) =>
-      _decodePluginCacheClearResult(value);
+  PluginCacheClearResult _decodeResult(Object? value) => _decodePluginCacheClearResult(value);
 }
 
 PluginCacheUsage _decodePluginCacheUsage(Object? value) {
@@ -756,10 +625,7 @@ PluginCacheUsage _decodePluginCacheUsage(Object? value) {
   final pluginId = item['pluginId'];
   final bytes = item['bytes'];
   if (pluginId is! String || bytes is! int || bytes < 0) {
-    throw const PluginRuntimeException(
-      'invalid_response',
-      'The Runtime returned an invalid plugin cache usage projection.',
-    );
+    throw const PluginRuntimeException('invalid_response', 'The Runtime returned an invalid plugin cache usage projection.');
   }
   return PluginCacheUsage(pluginId: pluginId, bytes: bytes);
 }
@@ -768,16 +634,9 @@ PluginCacheClearResult _decodePluginCacheClearResult(Object? value) {
   final result = _jsonObject(value, 'Plugin cache clear result');
   final items = result['items'];
   if (items is! List<Object?> || items.length > 1024) {
-    throw const PluginRuntimeException(
-      'invalid_response',
-      'The Runtime returned an invalid plugin cache clear result.',
-    );
+    throw const PluginRuntimeException('invalid_response', 'The Runtime returned an invalid plugin cache clear result.');
   }
-  return PluginCacheClearResult(
-    items: List<PluginCacheClearItem>.unmodifiable(
-      items.map(_decodePluginCacheClearItem),
-    ),
-  );
+  return PluginCacheClearResult(items: List<PluginCacheClearItem>.unmodifiable(items.map(_decodePluginCacheClearItem)));
 }
 
 PluginCacheClearItem _decodePluginCacheClearItem(Object? value) {
@@ -797,17 +656,9 @@ PluginCacheClearItem _decodePluginCacheClearItem(Object? value) {
       bytesRemaining is! int ||
       bytesRemaining < 0 ||
       parsedStatus == null) {
-    throw const PluginRuntimeException(
-      'invalid_response',
-      'The Runtime returned an invalid plugin cache clear item.',
-    );
+    throw const PluginRuntimeException('invalid_response', 'The Runtime returned an invalid plugin cache clear item.');
   }
-  return PluginCacheClearItem(
-    pluginId: pluginId,
-    bytesBefore: bytesBefore,
-    bytesRemaining: bytesRemaining,
-    status: parsedStatus,
-  );
+  return PluginCacheClearItem(pluginId: pluginId, bytesBefore: bytesBefore, bytesRemaining: bytesRemaining, status: parsedStatus);
 }
 
 /// A path-free cache byte projection owned by the Runtime.
@@ -832,12 +683,7 @@ final class PluginCacheClearResult {
 /// The result for one plugin; private paths and raw errors are never returned.
 @immutable
 final class PluginCacheClearItem {
-  const PluginCacheClearItem({
-    required this.pluginId,
-    required this.bytesBefore,
-    required this.bytesRemaining,
-    required this.status,
-  });
+  const PluginCacheClearItem({required this.pluginId, required this.bytesBefore, required this.bytesRemaining, required this.status});
 
   final String pluginId;
   final int bytesBefore;
@@ -875,10 +721,7 @@ InstalledPlugin _decodeInstalledPlugin(Object? value) {
       status is! String ||
       kinds is! List<Object?> ||
       kinds.any((Object? kind) => kind is! String)) {
-    throw const PluginRuntimeException(
-      'invalid_response',
-      'The Runtime returned an invalid installed-plugin projection.',
-    );
+    throw const PluginRuntimeException('invalid_response', 'The Runtime returned an invalid installed-plugin projection.');
   }
   return InstalledPlugin(
     engine: engine,

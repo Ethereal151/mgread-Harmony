@@ -11,7 +11,6 @@
 /// - 跨章提交重建不保留 PageStorage 页码的控制器，并在目标页挂载前保留交接页。
 /// - 跨章回退时屏蔽 PageView 重建产生的过期页回调，保持上一章真实尾页。
 /// - 相邻章节在首屏静默窗口后按单页时间片预排，任何真实交互立即让出 UI isolate。
-/// - 当前章渐进分页只追加稳定页；恢复预览在完整排版就绪前不被章首覆盖。
 /// - 处理触摸、鼠标、滚轮和键盘的阅读交互。
 /// - 目录打开后分批补齐全部章节，并将当前章节定位到可视区域中部。
 /// - 将章节状态查询合并进阅读器会话缓存，目录重开只补查尚未覆盖的章节。
@@ -67,7 +66,9 @@ part 'text_reader_vertical_content_widgets.dart';
 part 'text_reader_chrome_widgets.dart';
 part 'text_reader_cache_dialog.dart';
 part 'text_reader_library_sheet.dart';
-part 'text_reader_library_detail_sheet.dart';
+part 'text_reader_library_details.dart';
+part 'text_reader_library_catalog.dart';
+part 'text_reader_library_bookmarks.dart';
 part 'text_reader_status_widgets.dart';
 
 /// A complete, embeddable text reading surface.
@@ -623,8 +624,8 @@ class _TextReaderViewState extends State<TextReaderView>
     _requestGeneration++;
     _sessionGeneration++;
     _navigationGeneration++;
-    _saveTimer?.cancel();
     _cancelCurrentPagination();
+    _saveTimer?.cancel();
     _noticeTimer?.cancel();
     _clockTimer?.cancel();
     _wheelResetTimer?.cancel();
@@ -671,6 +672,9 @@ class _TextReaderViewState extends State<TextReaderView>
     }
   }
 
+  @override
+  Widget build(BuildContext context) => _buildReaderRoot(context);
+
   void _restoreHorizontalPageAfterLifecycle() {
     if (_disposed ||
         _preferences.navigationMode != ReaderNavigationMode.horizontalPages ||
@@ -684,15 +688,8 @@ class _TextReaderViewState extends State<TextReaderView>
       _replaceHorizontalPageController(targetRawIndex);
       return;
     }
-    // A surface teardown can leave the old ScrollPosition's activity alive
-    // even when its raster future was interrupted. Jumping to the committed
-    // semantic page cancels that stale activity without changing the normal
-    // animated page-turn path.
     _pageController.jumpToPage(targetRawIndex);
   }
-
-  @override
-  Widget build(BuildContext context) => _buildReaderRoot(context);
 
   Future<void> _showSettingsSheet() async {
     if (_readerSettingsVisible) return;

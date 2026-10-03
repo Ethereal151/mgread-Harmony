@@ -11,12 +11,14 @@ import 'package:novel_reader_ui/src/ui/comic/comic_chapter_preloader.dart';
 import 'package:novel_reader_ui/src/ui/comic/comic_image_retry_coordinator.dart';
 import 'package:novel_reader_ui/src/ui/reader_theme.dart';
 
-part 'comic_reader_test_part_one.dart';
-part 'comic_reader_test_part_two.dart';
+part 'comic_reader_cache_part.dart';
+part 'comic_reader_preferences_part.dart';
+part 'comic_reader_widgets_part.dart';
 
 void main() {
-  registerComicReaderTestsPartOne();
-  registerComicReaderTestsPartTwo();
+  _registerComicCacheTests();
+  _registerComicPreferencesTests();
+  _registerComicWidgetTests();
 }
 
 ComicImageInfo _image(String id, int? size) =>

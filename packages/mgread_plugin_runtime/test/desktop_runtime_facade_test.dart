@@ -7,17 +7,15 @@ import 'package:mgread_plugin_runtime/mgread_plugin_runtime.dart';
 
 import 'test_paths.dart';
 
-part 'desktop_runtime_facade_test_part_one.dart';
-part 'desktop_runtime_facade_test_part_two.dart';
+part 'desktop_runtime_facade_startup_part.dart';
+part 'desktop_runtime_facade_lifecycle_part.dart';
 
 void main() {
-  registerDesktopRuntimeFacadeTestsPartOne();
-  registerDesktopRuntimeFacadeTestsPartTwo();
+  _registerDesktopRuntimeStartupTests();
+  _registerDesktopRuntimeLifecycleTests();
 }
 
-Future<PluginRuntimeException> _captureRuntimeFailure(
-  Future<Object?> future,
-) async {
+Future<PluginRuntimeException> _captureRuntimeFailure(Future<Object?> future) async {
   try {
     await future;
   } on PluginRuntimeException catch (error) {
@@ -38,32 +36,21 @@ Future<void> _waitForFile(File file) async {
 /// Reads the checked-in cross-language desktop fixture through a typed JSON boundary.
 Future<Map<String, Object?>> _desktopFixture(Directory repositoryRoot) async {
   final fixtureFile = File(
-    <String>[
-      repositoryRoot.path,
-      'protocol',
-      'fixtures',
-      'standard-node-plugin-v1.json',
-    ].join(Platform.pathSeparator),
+    <String>[repositoryRoot.path, 'protocol', 'fixtures', 'standard-node-plugin-v1.json'].join(Platform.pathSeparator),
   );
   final Object? decoded = jsonDecode(await fixtureFile.readAsString());
   expect(decoded, isA<Map<Object?, Object?>>());
   return <String, Object?>{
-    for (final MapEntry<Object?, Object?> entry
-        in (decoded as Map<Object?, Object?>).entries)
+    for (final MapEntry<Object?, Object?> entry in (decoded as Map<Object?, Object?>).entries)
       if (entry.key case final String key) key: entry.value,
   };
 }
 
 /// Waits only for child stderr delivery; it never retries a Runtime operation.
-Future<void> _waitForDiagnosticCodes(
-  List<RuntimeDiagnostic> diagnostics,
-  List<String> requiredCodes,
-) async {
+Future<void> _waitForDiagnosticCodes(List<RuntimeDiagnostic> diagnostics, List<String> requiredCodes) async {
   final deadline = DateTime.now().add(const Duration(seconds: 1));
   while (DateTime.now().isBefore(deadline)) {
-    final observedCodes = diagnostics
-        .map((diagnostic) => diagnostic.code)
-        .toSet();
+    final observedCodes = diagnostics.map((diagnostic) => diagnostic.code).toSet();
     if (requiredCodes.every(observedCodes.contains)) {
       return;
     }
@@ -77,32 +64,18 @@ Future<void> _waitForDiagnosticCodes(
 }
 
 Future<Directory> _stageInstalledStandardPlugin() async {
-  final root = await Directory.systemTemp.createTemp(
-    'mgread-flutter-plugin-runtime-',
-  );
-  final pluginRoot = Directory(
-    <String>[
-      root.path,
-      'plugins',
-      'org.mgread.flutter.fixture',
-    ].join(Platform.pathSeparator),
-  );
-  final versionRoot = Directory(
-    <String>[pluginRoot.path, 'versions', '1.0.0'].join(Platform.pathSeparator),
-  );
-  final dist = Directory(
-    <String>[versionRoot.path, 'dist'].join(Platform.pathSeparator),
-  );
+  final root = await Directory.systemTemp.createTemp('mgread-flutter-plugin-runtime-');
+  final pluginRoot = Directory(<String>[root.path, 'plugins', 'org.mgread.flutter.fixture'].join(Platform.pathSeparator));
+  final versionRoot = Directory(<String>[pluginRoot.path, 'versions', '1.0.0'].join(Platform.pathSeparator));
+  final dist = Directory(<String>[versionRoot.path, 'dist'].join(Platform.pathSeparator));
   await dist.create(recursive: true);
-  await File(
-    <String>[versionRoot.path, 'package.json'].join(Platform.pathSeparator),
-  ).writeAsString('''
+  await File(<String>[versionRoot.path, 'package.json'].join(Platform.pathSeparator)).writeAsString('''
 {
   "name": "@mgread-plugin/flutter-fixture",
   "version": "1.0.0",
   "type": "module",
   "main": "dist/index.mjs",
-  "engines": { "node": ">=24 <25" },
+  "engines": { "node": "24.16.0 || 24.21.0 || 26.9.0 || 26.10.0" },
   "mgread": {
     "schemaVersion": 1,
     "id": "org.mgread.flutter.fixture",
@@ -113,12 +86,7 @@ Future<Directory> _stageInstalledStandardPlugin() async {
 }
 
 ''');
-  await File(
-    <String>[
-      versionRoot.path,
-      'package-lock.json',
-    ].join(Platform.pathSeparator),
-  ).writeAsString('''
+  await File(<String>[versionRoot.path, 'package-lock.json'].join(Platform.pathSeparator)).writeAsString('''
 {
   "name": "@mgread-plugin/flutter-fixture",
   "version": "1.0.0",
@@ -132,9 +100,7 @@ Future<Directory> _stageInstalledStandardPlugin() async {
   }
 }
 ''');
-  await File(
-    <String>[dist.path, 'index.mjs'].join(Platform.pathSeparator),
-  ).writeAsString('''
+  await File(<String>[dist.path, 'index.mjs'].join(Platform.pathSeparator)).writeAsString('''
 let context;
 export async function activate(nextContext) {
   context = nextContext;
@@ -253,55 +219,30 @@ export async function getContent(request) {
   };
 }
 ''');
-  await File(
-    <String>[pluginRoot.path, 'pending'].join(Platform.pathSeparator),
-  ).writeAsString('1.0.0\n');
-  final artifactRoot = Directory(
-    <String>[
-      root.path,
-      'plugin-archives',
-      'org.mgread.flutter.fixture',
-    ].join(Platform.pathSeparator),
-  );
+  await File(<String>[pluginRoot.path, 'pending'].join(Platform.pathSeparator)).writeAsString('1.0.0\n');
+  final artifactRoot = Directory(<String>[root.path, 'plugin-archives', 'org.mgread.flutter.fixture'].join(Platform.pathSeparator));
   await artifactRoot.create(recursive: true);
   await File(
-    <String>[
-      artifactRoot.path,
-      '1.0.0.mgplugin.js',
-    ].join(Platform.pathSeparator),
+    <String>[artifactRoot.path, '1.0.0.mgplugin.js'].join(Platform.pathSeparator),
   ).writeAsString('/* MgRead test single-file artifact. */\n');
   return root;
 }
 
-Future<void> _writeDevelopmentPlugin(
-  Directory developmentRoot,
-  String prefix,
-) async {
-  final projectRoot = Directory(
-    <String>[developmentRoot.path, 'live-source'].join(Platform.pathSeparator),
-  );
-  final dist = Directory(
-    <String>[projectRoot.path, 'dist'].join(Platform.pathSeparator),
-  );
-  final src = Directory(
-    <String>[projectRoot.path, 'src'].join(Platform.pathSeparator),
-  );
-  await Future.wait(<Future<void>>[
-    dist.create(recursive: true),
-    src.create(recursive: true),
-  ]);
+Future<void> _writeDevelopmentPlugin(Directory developmentRoot, String prefix) async {
+  final projectRoot = Directory(<String>[developmentRoot.path, 'live-source'].join(Platform.pathSeparator));
+  final dist = Directory(<String>[projectRoot.path, 'dist'].join(Platform.pathSeparator));
+  final src = Directory(<String>[projectRoot.path, 'src'].join(Platform.pathSeparator));
+  await Future.wait(<Future<void>>[dist.create(recursive: true), src.create(recursive: true)]);
   const packageName = '@mgread-plugin/flutter-live';
   const version = '0.1.0';
-  await File(
-    <String>[projectRoot.path, 'package.json'].join(Platform.pathSeparator),
-  ).writeAsString(
+  await File(<String>[projectRoot.path, 'package.json'].join(Platform.pathSeparator)).writeAsString(
     '${jsonEncode(<String, Object?>{
       'name': packageName,
       'version': version,
       'type': 'module',
       'main': 'dist/index.mjs',
       'scripts': <String, String>{'build': 'node build.mjs'},
-      'engines': <String, String>{'node': '>=24 <25'},
+      'engines': <String, String>{'node': '24.16.0 || 24.21.0 || 26.9.0 || 26.10.0'},
       'mgread': <String, Object?>{
         'schemaVersion': 1,
         'id': 'org.example.flutter-live',
@@ -311,12 +252,7 @@ Future<void> _writeDevelopmentPlugin(
       },
     })}\n',
   );
-  await File(
-    <String>[
-      projectRoot.path,
-      'package-lock.json',
-    ].join(Platform.pathSeparator),
-  ).writeAsString(
+  await File(<String>[projectRoot.path, 'package-lock.json'].join(Platform.pathSeparator)).writeAsString(
     '${jsonEncode(<String, Object?>{
       'name': packageName,
       'version': version,
@@ -327,9 +263,7 @@ Future<void> _writeDevelopmentPlugin(
       },
     })}\n',
   );
-  await File(
-    <String>[projectRoot.path, 'build.mjs'].join(Platform.pathSeparator),
-  ).writeAsString(
+  await File(<String>[projectRoot.path, 'build.mjs'].join(Platform.pathSeparator)).writeAsString(
     "import { copyFile } from 'node:fs/promises';\n"
     "await copyFile(new URL('./src/index.mjs', import.meta.url), "
     "new URL('./dist/index.mjs', import.meta.url));\n",
@@ -346,14 +280,8 @@ export function discover() { return { kind: 'document', document: { components: 
 export function getDetail(request) { return { ...summary(request.id), id: request.id, aliases: [], catalogUrl: null }; } export function getChapters() { return { items: [], nextCursor: null, totalCount: 0 }; }
 export function getContent(request) { return { contentKind: 'novel', chapterId: request.chapterId, title: null, updatedAt: null, text: 'text', pages: [] }; }
 ''';
-  await File(
-    <String>[src.path, 'index.mjs'].join(Platform.pathSeparator),
-  ).writeAsString(source);
-  if (!await File(
-    <String>[dist.path, 'index.mjs'].join(Platform.pathSeparator),
-  ).exists()) {
-    await File(
-      <String>[dist.path, 'index.mjs'].join(Platform.pathSeparator),
-    ).writeAsString(source);
+  await File(<String>[src.path, 'index.mjs'].join(Platform.pathSeparator)).writeAsString(source);
+  if (!await File(<String>[dist.path, 'index.mjs'].join(Platform.pathSeparator)).exists()) {
+    await File(<String>[dist.path, 'index.mjs'].join(Platform.pathSeparator)).writeAsString(source);
   }
 }
