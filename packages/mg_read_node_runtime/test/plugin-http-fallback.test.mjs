@@ -25,6 +25,15 @@ test("native HTTP fallback serves direct requests when WebAssembly is unavailabl
       response.end(body);
       return;
     }
+    if (request.url === "/fetch-metadata") {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({
+        site: request.headers["sec-fetch-site"],
+        mode: request.headers["sec-fetch-mode"],
+        dest: request.headers["sec-fetch-dest"],
+      }));
+      return;
+    }
     response.writeHead(200, { "content-type": "text/plain" });
     response.end(`fallback:${request.headers["user-agent"]}`);
   });
@@ -47,6 +56,15 @@ test("native HTTP fallback serves direct requests when WebAssembly is unavailabl
   const gzipResponse = await client.fetch(`http://127.0.0.1:${address.port}/gzip`, {});
   assert.equal(gzipResponse.status, 200);
   assert.equal(await gzipResponse.text(), "gzip-fallback:ok");
+
+  const metadataResponse = await client.fetch(`http://127.0.0.1:${address.port}/fetch-metadata`, {
+    headers: { referer: `http://127.0.0.1:${address.port}/source` },
+  });
+  assert.deepEqual(await metadataResponse.json(), {
+    site: "same-origin",
+    mode: "cors",
+    dest: "empty",
+  });
 
   const proxy = http.createServer((proxyRequest, proxyResponse) => {
     const target = new URL(proxyRequest.url);

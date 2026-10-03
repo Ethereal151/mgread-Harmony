@@ -13,13 +13,12 @@ import {
 import { Params } from '@ohos/flutter_ohos/src/main/ets/plugin/platform/PlatformView'
 import common from '@ohos.app.ability.common'
 import webview from '@ohos.web.webview'
-import hilog from '@ohos.hilog'
 
 const VIEW_TYPE = 'mgread_ohos_arkweb'
 const MAX_WAIT_MS = 120_000
 const POLL_MS = 80
+const EVALUATE_POLL_MS = 500
 const MAX_RESPONSE_BYTES = 2 * 1024 * 1024
-const LOG_DOMAIN = 0xFF01
 interface WebHeaderPayload {
   headerKey: string
   headerValue: string
@@ -380,8 +379,11 @@ export default class OhosArkWebHost implements MethodCallHandler {
     const body: Any = raw.get('body')
     const responseType = this.stringValue(raw, 'responseType') || 'text'
     const maxResponseBytes = this.numberValue(raw, 'maxResponseBytes') || MAX_RESPONSE_BYTES
-    const script = `(()=>{const c=new AbortController();const t=setTimeout(()=>c.abort(),${Math.max(1, deadline - Date.now())});return fetch(${JSON.stringify(url)},{method:${JSON.stringify(method)},headers:${JSON.stringify(headers)},body:${body === null || body === undefined ? 'null' : JSON.stringify(body)},credentials:'include',redirect:'follow',signal:c.signal}).then(async r=>{const source=new URL(${JSON.stringify(url)});const finalUrl=new URL(r.url);if(source.origin!==finalUrl.origin)throw new Error('cross_origin');const bytes=await r.arrayBuffer();if(bytes.byteLength>${maxResponseBytes})throw new Error('overloaded');const h={};for(const k of ['cache-control','content-type','etag','expires','last-modified']){const v=r.headers.get(k);if(v!==null)h[k]=v.slice(0,1024)};const text=new TextDecoder().decode(bytes);let b;${responseType === 'json' ? "b=JSON.parse(text)" : responseType === 'base64' ? "b=btoa(Array.from(new Uint8Array(bytes),x=>String.fromCharCode(x)).join(''))" : "b=text"};return JSON.stringify({status:r.status,url:r.url,headers:h,body:b})}).catch(error=>JSON.stringify({__mgreadBrowserSessionError:error?.message==='overloaded'?'overloaded':'plugin_execution_failed'})).finally(()=>clearTimeout(t))})()`
-     const payload: FetchPayload | null = await this.decode(await page.script(script)) as FetchPayload | null
+    const script = `const c=new AbortController();const t=setTimeout(()=>c.abort(),${Math.max(1, deadline - Date.now())});try{return await fetch(${JSON.stringify(url)},{method:${JSON.stringify(method)},headers:${JSON.stringify(headers)},body:${body === null || body === undefined ? 'null' : JSON.stringify(body)},credentials:'include',redirect:'follow',signal:c.signal}).then(async r=>{const source=new URL(${JSON.stringify(url)});const finalUrl=new URL(r.url);if(source.origin!==finalUrl.origin)throw new Error('cross_origin');const bytes=await r.arrayBuffer();if(bytes.byteLength>${maxResponseBytes})throw new Error('overloaded');const h={};for(const k of ['cache-control','content-type','etag','expires','last-modified']){const v=r.headers.get(k);if(v!==null)h[k]=v.slice(0,1024)};const text=new TextDecoder().decode(bytes);let b;${responseType === 'json' ? "b=JSON.parse(text)" : responseType === 'base64' ? "b=btoa(Array.from(new Uint8Array(bytes),x=>String.fromCharCode(x)).join(''))" : "b=text"};return {status:r.status,url:r.url,headers:h,body:b}})}catch(error){return {__mgreadBrowserSessionError:error?.message==='overloaded'?'overloaded':'plugin_execution_failed'}}finally{clearTimeout(t)}`
+     const evaluated: Any = await page.evaluate(script)
+     const payload: FetchPayload | null = evaluated !== null && typeof evaluated === 'object'
+       ? (evaluated as Record<string, Any>)['value'] as FetchPayload | null
+       : null
      await this.ensureNotCancelled(jobId, deadline)
      if (payload !== null && payload.__mgreadBrowserSessionError !== undefined) throw new OhosArkWebError(payload.__mgreadBrowserSessionError)
      if (payload === null) throw new OhosArkWebError('plugin_execution_failed')
@@ -404,10 +406,28 @@ export default class OhosArkWebHost implements MethodCallHandler {
       await this.ensureNotCancelled(jobId, deadline)
       try {
         const state = (await page.script('document.readyState')).replace(/"/g, '')
-        if (state === 'interactive' || state === 'complete') {
-          if (targetUrl === 'about:blank') return
-          const body = (await page.script('document.body?.innerHTML??""')).replace(/"/g, '')
-          if (body.trim().length > 0) return
+        if (targetUrl === 'about:blank') return
+        const body = (await page.script('document.body?.innerHTML??""')).replace(/"/g, '')
+        const challengeTarget = targetUrl.includes('/__gatekeeper_challenge/')
+        const currentUrl = page.url()
+        if (!challengeTarget && currentUrl.includes('/__gatekeeper_challenge/')) {
+          await this.delay(POLL_MS)
+          continue
+        }
+        if (!challengeTarget && (body.includes('challengeId:') || body.includes('verifyUrl:'))) {
+          await this.delay(POLL_MS)
+          continue
+        }
+        if (challengeTarget && currentUrl.includes('/__gatekeeper_challenge/') &&
+            body.includes('challengeId:') && body.includes('verifyUrl:')) {
+          // Expose the challenge as soon as its parameters are present. The
+          // page's own worker may replace it immediately after verification.
+          await page.script('window.__mgreadOhosChallengeFetch=window.fetch;window.fetch=()=>new Promise(()=>{});true')
+          return
+        }
+        if (state === 'complete') {
+          if (!challengeTarget && body.trim().length > 0) return
+          if (challengeTarget && !currentUrl.includes('/__gatekeeper_challenge/')) return
         }
       } catch (_) {
         // The first controller call can race Web initialization; keep polling.
@@ -569,6 +589,8 @@ export class OhosArkWebPlatformView extends PlatformView {
   pluginId: string
   private readonly host: OhosArkWebHost
   private ready = false
+  private evaluateSequence = 0
+  private explicitNavigationUrl = ''
 
   constructor(pluginId: string, host: OhosArkWebHost) {
     super()
@@ -589,6 +611,21 @@ export class OhosArkWebPlatformView extends PlatformView {
     this.host.attach(this.pluginId, this)
   }
 
+  shouldInterceptNavigation(event: Any): boolean {
+    try {
+      const targetUrl = String(event.data.getRequestUrl())
+      const currentUrl = this.controller.getUrl()
+      if (!currentUrl.includes('/__gatekeeper_challenge/') || targetUrl.includes('/__gatekeeper_challenge/')) return false
+      if (targetUrl === this.explicitNavigationUrl) {
+        this.explicitNavigationUrl = ''
+        return false
+      }
+      return true
+    } catch (_) {
+      return false
+    }
+  }
+
   getView(): WrappedBuilder<[Params]> {
     return wrapBuilder(buildOhosArkWeb)
   }
@@ -598,6 +635,7 @@ export class OhosArkWebPlatformView extends PlatformView {
     let lastError: Object | null = null
     for (let attempt = 0; attempt < 75; attempt++) {
       try {
+        this.explicitNavigationUrl = url
         this.controller.loadUrl(url, headers)
         if (url === 'about:blank') return
         for (let waitAttempt = 0; waitAttempt < 75; waitAttempt++) {
@@ -639,35 +677,50 @@ export class OhosArkWebPlatformView extends PlatformView {
 
   async evaluate(source: string): Promise<Any> {
     try {
+      if (source.includes('/__gatekeeper_challenge/verify') && source.includes('challenge_id')) {
+        return await this.evaluateGatekeeperVerify(source)
+      }
       const trimmed = source.trim()
       if (!trimmed.includes(';') && !/\breturn\b/.test(trimmed)) {
         const value = await this.script(`JSON.stringify(${source})`)
         return {value: this.parseScriptResult(value)}
       }
-      // ArkWeb's runJavaScript returns a Promise. Execute through the
-      // AsyncFunction constructor so snippets with `return`, await and
-      // multiple statements have the same completion-value semantics as the
-      // desktop host. `eval(source)` rejects top-level `return`, which makes
-      // challenge solvers such as Baozimh look like an access block on OHOS.
-      const expression = `(async()=>{try{const AsyncFunction=Object.getPrototypeOf(async function(){}).constructor;const value=await new AsyncFunction(${JSON.stringify(source)}).call(window);return JSON.stringify({value:value===undefined?null:value})}catch(_){return JSON.stringify({error:'plugin_execution_failed'})}})()`
-      const value = await this.script(expression)
-      const decoded: Any = this.parseScriptResult(value)
+      const key = `__mgreadEvaluate_${this.evaluateSequence++}`
+      const keyLiteral = JSON.stringify(key)
+      const scriptId = `${key}_script`
+      const scriptIdLiteral = JSON.stringify(scriptId)
+      const injected = `(()=>{const cleanup=()=>{document.getElementById(${scriptIdLiteral})?.remove()};const originalFetch=window.fetch;const restore=()=>{window.fetch=originalFetch};const publish=(value)=>{window[${keyLiteral}]=JSON.stringify(value)};const finish=(value)=>{publish({value:value===undefined?null:value});cleanup();restore()};const fail=(error)=>{publish({error:'plugin_execution_failed',detail:String(error)});cleanup();restore()};const asyncFetch=(input,init={})=>{const requestUrl=new URL(typeof input==='string'?input:input?.url||String(input),location.href).toString();const method=init.method||'GET';const requestHeaders=Object.assign({},init.headers||{});if(requestHeaders.origin===undefined&&requestHeaders.Origin===undefined)requestHeaders.origin=location.origin;const xhr=new XMLHttpRequest();xhr.open(method,requestUrl,false);xhr.withCredentials=init.credentials==='include'||init.credentials==='same-origin';Object.entries(requestHeaders).forEach(([name,value])=>xhr.setRequestHeader(name,String(value)));try{xhr.send(init.body===undefined||init.body===null?null:String(init.body));window.stop();const responseHeaders={};(xhr.getAllResponseHeaders()||'').trim().split(/[\\r\\n]+/).forEach((line)=>{const separator=line.indexOf(':');if(separator>0)responseHeaders[line.slice(0,separator).trim()]=line.slice(separator+1).trim()});const rawBody=xhr.responseText||'';const body=rawBody;const response={bodyUsed:false,ok:xhr.status>=200&&xhr.status<300,status:xhr.status,statusText:xhr.statusText||'',url:xhr.responseURL||requestUrl,headers:{get:(name)=>responseHeaders[name]??responseHeaders[name.toLowerCase()]??null},text:()=>Promise.resolve(body),json:()=>Promise.resolve(JSON.parse(body)),arrayBuffer:()=>Promise.resolve(new TextEncoder().encode(body).buffer)};return Promise.resolve(response)}catch(error){return Promise.reject(error)}};window.fetch=asyncFetch;try{const value=(async(fetch)=>{${source}\n})(asyncFetch);if(value&&typeof value.then==='function'){value.then(finish,fail)}else{finish(value)}}catch(error){fail(error)}})()`
+      const expression = `(()=>{const key=${keyLiteral};window[key]=null;const script=document.createElement('script');script.id=${scriptIdLiteral};const nonce=document.querySelector('script[nonce]')?.nonce||'';if(nonce)script.nonce=nonce;script.textContent=${JSON.stringify(injected)};(document.head||document.documentElement).appendChild(script);return 'started'})()`
+      await this.script(expression)
+      await new Promise<void>((resolve): void => {
+        setTimeout((): void => resolve(), EVALUATE_POLL_MS)
+      })
+      const deadline = Date.now() + MAX_WAIT_MS
+      let decoded: Any = null
+      while (Date.now() < deadline) {
+        const pending = await this.script(`JSON.stringify(window[${keyLiteral}]??null)`)
+        decoded = this.parseScriptResult(pending)
+        const unresolved = decoded === null || (
+          typeof decoded === 'object' && decoded !== null &&
+          (decoded as Record<string, Any>)['value'] === null &&
+          (decoded as Record<string, Any>)['error'] === undefined
+        )
+        if (!unresolved) break
+        await new Promise<void>((resolve): void => {
+          setTimeout((): void => resolve(), EVALUATE_POLL_MS)
+        })
+      }
+      await this.script(`delete window[${keyLiteral}]`)
+      if (decoded === null) throw new OhosArkWebError('timeout')
       if (decoded !== null && typeof decoded === 'object') {
         const error = (decoded as Record<string, string>)['error']
-        if (error === 'plugin_execution_failed') throw new OhosArkWebError('plugin_execution_failed')
-        const result: Any = (decoded as Record<string, Any>)['value']
-        if (result !== null && typeof result === 'object') {
-          const status = (result as Record<string, Object>)['status']
-          const body = (result as Record<string, Object>)['body']
-          hilog.info(LOG_DOMAIN, 'MgReadArkWeb', '%{public}s', `evaluate_result status=${String(status)} bodyLength=${typeof body === 'string' ? body.length : -1}`)
-        } else {
-          hilog.info(LOG_DOMAIN, 'MgReadArkWeb', '%{public}s', `evaluate_result type=${typeof result}`)
+        if (error === 'plugin_execution_failed') {
+          throw new OhosArkWebError('plugin_execution_failed')
         }
         return decoded
       }
       return {value: decoded}
     } catch (error) {
-      hilog.error(LOG_DOMAIN, 'MgReadArkWeb', '%{public}s', `evaluate_error ${String(error)}`)
       throw new OhosArkWebError(`plugin_execution_failed:${String(error)}`)
     }
   }
@@ -676,9 +729,47 @@ export class OhosArkWebPlatformView extends PlatformView {
     const value = await this.script('JSON.stringify({html:document.documentElement?.outerHTML??""})')
     const decoded: Any = this.parseScriptResult(value)
     if (decoded === null || typeof decoded !== 'object') throw new OhosArkWebError('plugin_execution_failed')
-      const html = (decoded as Record<string, Object>)['html']
-     hilog.info(LOG_DOMAIN, 'MgReadArkWeb', '%{public}s', `html_result length=${typeof html === 'string' ? html.length : -1}`)
      return decoded
+  }
+
+  private async evaluateGatekeeperVerify(source: string): Promise<Any> {
+    let stage = 'extract'
+    try {
+      const verifyMatch = /fetch\(\s*(['"])([^'"]+\/__gatekeeper_challenge\/verify[^'"]*)\1/.exec(source)
+      const challengeMatch = /challenge_id\s*:\s*(['"])([0-9a-f]{64})\1/i.exec(source)
+      const ticketMatch = /ticket\s*:\s*(['"])([A-Za-z0-9_.-]{200,})\1/.exec(source)
+      const nonceMatch = /nonce\s*:\s*(?:(['"])(\d+)\1|(\d+))/.exec(source)
+      const verifyUrl = verifyMatch?.[2] ?? ''
+      const challengeId = challengeMatch?.[2] ?? ''
+      const ticket = ticketMatch?.[2] ?? ''
+      const nonce = nonceMatch?.[2] ?? nonceMatch?.[3] ?? ''
+      if (verifyUrl.length === 0 || challengeId.length === 0 || ticket.length === 0 || nonce.length === 0) {
+        return {value: `__mgreadGateError:extract:${verifyUrl.length}:${challengeId.length}:${ticket.length}:${nonce.length}`}
+      }
+      const resultKey = `__mgreadGatekeeperVerify_${this.evaluateSequence++}`
+      const resultKeyLiteral = JSON.stringify(resultKey)
+      const injected = `(()=>{try{const xhr=new XMLHttpRequest();xhr.open('POST',${JSON.stringify(verifyUrl)},false);xhr.withCredentials=true;xhr.setRequestHeader('content-type','application/json');xhr.send(JSON.stringify({challenge_id:${JSON.stringify(challengeId)},ticket:${JSON.stringify(ticket)},nonce:${JSON.stringify(nonce)}}));window.stop();window[${resultKeyLiteral}]=JSON.stringify({status:xhr.status,body:xhr.responseText||''})}catch(error){window[${resultKeyLiteral}]=JSON.stringify({error:String(error)})}})()`
+      const scriptId = `${resultKey}_script`
+      const scriptIdLiteral = JSON.stringify(scriptId)
+      const expression = `(()=>{const script=document.createElement('script');script.id=${scriptIdLiteral};const nonce=document.querySelector('script[nonce]')?.nonce||'';if(nonce)script.nonce=nonce;script.textContent=${JSON.stringify(injected)};(document.head||document.documentElement).appendChild(script);return 'started'})()`
+      stage = 'inject'
+      await this.script(expression)
+      const deadline = Date.now() + 30_000
+      stage = 'poll'
+      while (Date.now() < deadline) {
+        const pending: Any = this.parseScriptResult(await this.script(`JSON.stringify(window[${resultKeyLiteral}]??null)`))
+        if (pending !== null) {
+          await this.script(`delete window[${resultKeyLiteral}];document.getElementById(${scriptIdLiteral})?.remove()`)
+          return {value: pending}
+        }
+        await new Promise<void>((resolve): void => {
+          setTimeout((): void => resolve(), POLL_MS)
+        })
+      }
+      throw new OhosArkWebError('timeout')
+    } catch (error) {
+      return {value: `__mgreadGateError:${stage}:${error instanceof Error ? error.message : String(error)}`}
+    }
   }
 
   async click(x: number, y: number): Promise<Any> {
@@ -726,9 +817,14 @@ export class OhosArkWebPlatformView extends PlatformView {
 
   private parseScriptResult(value: string): Any {
     let decoded: Any = JSON.parse(value)
-    if (typeof decoded === 'string') {
+    for (let depth = 0; depth < 4 && typeof decoded === 'string'; depth++) {
       const nested = decoded.trim()
-      if (nested.startsWith('{') || nested.startsWith('[')) decoded = JSON.parse(nested)
+      if (!nested.startsWith('{') && !nested.startsWith('[') && !nested.startsWith('"')) break
+      try {
+        decoded = JSON.parse(nested)
+      } catch (_) {
+        break
+      }
     }
     return decoded
   }
@@ -741,5 +837,6 @@ function buildOhosArkWeb(params: Params): void {
     .height('100%')
     .javaScriptAccess(true)
     .zoomAccess(true)
-    .onAppear((): void => (params.platformView as OhosArkWebPlatformView).markReady())
+    .onLoadIntercept((event: Any): boolean => (params.platformView as OhosArkWebPlatformView).shouldInterceptNavigation(event))
+    .onControllerAttached((): void => (params.platformView as OhosArkWebPlatformView).markReady())
 }

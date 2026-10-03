@@ -113,9 +113,9 @@ export class ConfigurablePluginHttpClient implements PluginRuntimeHttpClient {
         ));
       }
     }
-    const requestInit = withDefaultUserAgent({ ...init, signal: init.signal == null
-      ? this.#shutdown.signal : AbortSignal.any([init.signal, this.#shutdown.signal]) });
     const url = new URL(input.toString());
+    const requestInit = withBrowserFetchMetadata(input, withDefaultUserAgent({ ...init, signal: init.signal == null
+      ? this.#shutdown.signal : AbortSignal.any([init.signal, this.#shutdown.signal]) }));
     const bypassExplicitProxy = this.#proxyUrl !== undefined && matchesNoProxy(url, this.#proxyNoProxy);
     // HarmonyOS runs the embedded Node host with --jitless because its W^X
     // policy rejects V8's executable JIT range. That build also omits the
@@ -488,5 +488,33 @@ function fallbackRequestBody(body: unknown): Uint8Array | undefined {
 function withDefaultUserAgent(init: RequestInit): RequestInit {
   const headers = new Headers(init.headers);
   if (!headers.has("user-agent")) headers.set("user-agent", defaultPluginUserAgent);
+  return { ...init, headers };
+}
+
+/**
+ * `ctx.http.fetch` is the source-facing Fetch API, but on HarmonyOS it is
+ * emitted by Node's native HTTP parser instead of ArkWeb. Baozimh's gatekeeper
+ * uses the Fetch metadata headers to select its JSON challenge response; a
+ * request without them is deliberately served an HTML challenge document.
+ * Keep the metadata at this shared HTTP boundary so every source request has
+ * the same Fetch contract on both the Undici and no-WebAssembly transports.
+ */
+function withBrowserFetchMetadata(input: string | URL, init: RequestInit): RequestInit {
+  const headers = new Headers(init.headers);
+  if (!headers.has("sec-fetch-mode")) headers.set("sec-fetch-mode", "cors");
+  if (!headers.has("sec-fetch-dest")) headers.set("sec-fetch-dest", "empty");
+  if (!headers.has("sec-fetch-site")) {
+    const target = new URL(input.toString());
+    const referer = headers.get("referer");
+    let site = "none";
+    if (referer !== null) {
+      try {
+        site = new URL(referer).origin === target.origin ? "same-origin" : "cross-site";
+      } catch {
+        site = "cross-site";
+      }
+    }
+    headers.set("sec-fetch-site", site);
+  }
   return { ...init, headers };
 }
