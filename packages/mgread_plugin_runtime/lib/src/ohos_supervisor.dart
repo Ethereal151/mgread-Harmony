@@ -92,6 +92,9 @@ final class _OhosRuntimeSupervisor implements _RuntimeSupervisor {
   late final StreamSubscription<dynamic> _progressSubscription;
   bool _disposed = false;
   int _invocationSequence = 0;
+  Future<void> _lifecycleAdmissionTail = Future<void>.value();
+  Completer<void>? _inFlightDrained;
+  int _activeInvocationLeases = 0;
   Future<Map<String, String>>? _runtimeRoots;
 
   void _onNativeProgress(dynamic raw) {
@@ -140,6 +143,18 @@ final class _OhosRuntimeSupervisor implements _RuntimeSupervisor {
       );
     }
     cancellation?._throwIfCancelled();
+    final lease = await _acquireInvocationLease();
+    try {
+      return await _invokeAdmitted(invocation, cancellation: cancellation);
+    } finally {
+      lease.release();
+    }
+  }
+
+  Future<T> _invokeAdmitted<T>(
+    PluginInvocation<T> invocation, {
+    PluginInvocationCancellation? cancellation,
+  }) async {
     final requestId =
         'ohos-${DateTime.now().microsecondsSinceEpoch.toRadixString(36)}-${++_invocationSequence}';
     final timeout = invocation._timeout > _ohosRuntimeTimeout
@@ -312,14 +327,16 @@ final class _OhosRuntimeSupervisor implements _RuntimeSupervisor {
   ).then((value) => value.value);
 
   Future<void> _restartNativeRuntime() async {
-    try {
-      await _ohosRuntimeChannel.invokeMethod<String>('restart');
-    } on Object catch (error) {
-      throw PluginRuntimeException(
-        'runtime_shutdown_failed',
-        'The OHOS Runtime could not be restarted: $error',
-      );
-    }
+    await _runLifecycleTransition<void>(() async {
+      try {
+        await _ohosRuntimeChannel.invokeMethod<String>('restart');
+      } on Object catch (error) {
+        throw PluginRuntimeException(
+          'runtime_shutdown_failed',
+          'The OHOS Runtime could not be restarted: $error',
+        );
+      }
+    });
   }
 
   Future<void> _copyStream(
@@ -698,12 +715,14 @@ final class _OhosRuntimeSupervisor implements _RuntimeSupervisor {
     if (_disposed) return;
     _disposed = true;
     await _progressSubscription.cancel();
-    try {
-      await _ohosRuntimeChannel.invokeMethod<void>('dispose');
-    } on Object {
-      // Native disposal is best effort; the host owns no Dart resources after
-      // this point and must remain idempotent during app shutdown.
-    }
+    await _runLifecycleTransition<void>(() async {
+      try {
+        await _ohosRuntimeChannel.invokeMethod<void>('dispose');
+      } on Object {
+        // Native disposal is best effort; the host owns no Dart resources after
+        // this point and must remain idempotent during app shutdown.
+      }
+    });
     await _diagnosticsController.close();
     await _initializationController.close();
   }
