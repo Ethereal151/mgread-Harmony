@@ -161,9 +161,6 @@ final class PluginRuntime {
       Platform.operatingSystem == 'ohos';
 
   /// Probes the compiled OHOS native host without starting Node.
-  ///
-  /// The x64 emulator ships a deliberate stub so the same HAP can be built
-  /// for both targets; only the arm64 host is allowed to enter Runtime warmup.
   static Future<bool> ohosNodeHostAvailable() {
     if (Platform.operatingSystem != 'ohos') return Future<bool>.value(false);
     return _ohosNodeHostAvailability ??= () async {

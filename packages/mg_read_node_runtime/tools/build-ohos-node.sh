@@ -2,7 +2,7 @@
 
 # Build the exact Node Runtime used by the OHOS host.
 #
-# Ownership: this script owns only the reproducible Node.js OHOS arm64 build
+# Ownership: this script owns only the reproducible Node.js OHOS shared build
 # inputs and output. It does not stage a Flutter asset or change capability
 # flags; the shared library must pass the native host and device probes first.
 # The build must run on a native Linux x64 host with a Linux OHOS SDK/LLVM
@@ -13,6 +13,7 @@ set -euo pipefail
 
 node_version="${1:-v26.10.0}"
 work_root="${2:-${PWD}/.ohos-node-build}"
+target_cpu="${3:-arm64}"
 ohos_sdk_root="${OHOS_SDK_ROOT:-}"
 ohos_llvm_root="${OHOS_LLVM_ROOT:-}"
 ohos_cxx_frontend="${OHOS_CXX_FRONTEND:-}"
@@ -31,6 +32,10 @@ if [[ "$(uname -m)" != "x86_64" ]]; then
 fi
 if [[ "$node_version" != "v26.10.0" ]]; then
   echo "MgRead OHOS requires Node v26.10.0; refusing $node_version." >&2
+  exit 2
+fi
+if [[ "$target_cpu" != "arm64" && "$target_cpu" != "x64" ]]; then
+  echo "The OpenHarmony target must be arm64 or x64, got ${target_cpu}." >&2
   exit 2
 fi
 if [[ -z "$ohos_sdk_root" || -z "$ohos_llvm_root" ]]; then
@@ -52,7 +57,15 @@ source_sums_url="https://nodejs.org/dist/${node_version}/SHASUMS256.txt"
 source_archive="${work_root}/node-${node_version}.tar.gz"
 source_sums="${work_root}/SHASUMS256.txt"
 source_root="${work_root}/node-${node_version}"
-install_root="${work_root}/node-${node_version}-openharmony-arm64"
+install_root="${work_root}/node-${node_version}-openharmony-${target_cpu}"
+target_triple="aarch64-unknown-linux-ohos"
+target_clang="aarch64-unknown-linux-ohos-clang"
+target_clangxx="aarch64-unknown-linux-ohos-clang++"
+if [[ "$target_cpu" == "x64" ]]; then
+  target_triple="x86_64-unknown-linux-ohos"
+  target_clang="x86_64-unknown-linux-ohos-clang"
+  target_clangxx="x86_64-unknown-linux-ohos-clang++"
+fi
 script_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 compat_include_root="${work_root}/mgread-ohos-compat"
 
@@ -89,29 +102,29 @@ make_cxx_frontend_wrapper() {
     '    compile=1' \
     '  fi' \
     'done' \
-    "if [[ \"\$compile\" == 1 ]]; then exec \"${frontend_path}\" --target=aarch64-unknown-linux-ohos --sysroot=\"${ohos_sdk_root}/native/sysroot\" -stdlib=libc++ -nostdinc++ -D_LIBCPP_PROVIDES_DEFAULT_RUNE_TABLE -isystem \"${compat_include_root}\" -isystem /usr/include/c++/v1 \"\$@\"; fi" \
+    "if [[ \"\$compile\" == 1 ]]; then exec \"${frontend_path}\" --target=${target_triple} --sysroot=\"${ohos_sdk_root}/native/sysroot\" -stdlib=libc++ -nostdinc++ -D_LIBCPP_PROVIDES_DEFAULT_RUNE_TABLE -isystem \"${compat_include_root}\" -isystem /usr/include/c++/v1 \"\$@\"; fi" \
     "exec \"${linker_path}\" \"\$@\"" \
     > "${toolchain_wrapper_root}/${wrapper_name}"
   chmod +x "${toolchain_wrapper_root}/${wrapper_name}"
 }
 
-clang_path="${ohos_llvm_root}/bin/aarch64-unknown-linux-ohos-clang"
-cxx_path="${ohos_llvm_root}/bin/aarch64-unknown-linux-ohos-clang++"
+clang_path="${ohos_llvm_root}/bin/${target_clang}"
+cxx_path="${ohos_llvm_root}/bin/${target_clangxx}"
 if [[ "$ohos_llvm_root" == *" "* ]]; then
-  make_toolchain_wrapper aarch64-unknown-linux-ohos-clang "$clang_path"
-  make_toolchain_wrapper aarch64-unknown-linux-ohos-clang++ "$cxx_path"
-  clang_path="${toolchain_wrapper_root}/aarch64-unknown-linux-ohos-clang"
-  cxx_path="${toolchain_wrapper_root}/aarch64-unknown-linux-ohos-clang++"
+  make_toolchain_wrapper "$target_clang" "$clang_path"
+  make_toolchain_wrapper "$target_clangxx" "$cxx_path"
+  clang_path="${toolchain_wrapper_root}/${target_clang}"
+  cxx_path="${toolchain_wrapper_root}/${target_clangxx}"
 fi
 if [[ -n "$ohos_cxx_frontend" ]]; then
   if [[ ! -x "$ohos_cxx_frontend" ]]; then
     echo "OHOS_CXX_FRONTEND must point to an executable Clang++ frontend." >&2
     exit 2
   fi
-  make_cxx_frontend_wrapper aarch64-unknown-linux-ohos-clang++ \
+  make_cxx_frontend_wrapper "$target_clangxx" \
     "$ohos_cxx_frontend" \
-    "${ohos_llvm_root}/bin/aarch64-unknown-linux-ohos-clang++"
-  cxx_path="${toolchain_wrapper_root}/aarch64-unknown-linux-ohos-clang++"
+    "${ohos_llvm_root}/bin/${target_clangxx}"
+  cxx_path="${toolchain_wrapper_root}/${target_clangxx}"
 fi
 
 if [[ ! -f "${source_root}/configure.py" ]]; then
@@ -179,14 +192,18 @@ export CXXFLAGS="${CXXFLAGS:-} -I${compat_include_root} -include ${compat_includ
 
 pushd "$source_root" >/dev/null
 if [[ ! -f out/Makefile ]]; then
-  python3 ./configure \
-    --dest-cpu=arm64 \
-    --dest-os=openharmony \
-    --cross-compiling \
-    --shared \
-    --with-arm-fpu=vfp \
-    --openssl-no-asm \
-    --prefix="$install_root"
+  configure_args=(
+    "--dest-cpu=${target_cpu}"
+    --dest-os=openharmony
+    --cross-compiling
+    --shared
+    --openssl-no-asm
+    "--prefix=${install_root}"
+  )
+  if [[ "$target_cpu" == "arm64" ]]; then
+    configure_args+=(--with-arm-fpu=vfp)
+  fi
+  python3 ./configure "${configure_args[@]}"
 else
   echo "Reusing existing OpenHarmony Node configure output at ${source_root}/out."
 fi
@@ -217,9 +234,10 @@ if [[ -z "$shared_library" ]]; then
 fi
 
 source_commit="$(git -C "$source_root" rev-parse HEAD 2>/dev/null || echo "source-archive-${node_version}")"
-printf '{\n  "nodeVersion": "26.10.0",\n  "target": "openharmony-arm64",\n  "sourceCommit": "%s",\n  "sharedLibrary": "%s"\n}\n' \
+printf '{\n  "nodeVersion": "26.10.0",\n  "target": "openharmony-%s",\n  "sourceCommit": "%s",\n  "sharedLibrary": "%s"\n}\n' \
+  "$target_cpu" \
   "$source_commit" \
   "${shared_library#"$install_root/"}" \
   > "${install_root}/mgread-node-build.json"
 
-echo "Built verified Node 26.10.0 OpenHarmony arm64 shared runtime at ${install_root}."
+echo "Built verified Node 26.10.0 OpenHarmony ${target_cpu} shared runtime at ${install_root}."
