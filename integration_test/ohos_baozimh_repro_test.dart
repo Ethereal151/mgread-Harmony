@@ -5,10 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:mgread_plugin_runtime/mgread_plugin_runtime.dart';
 
-const _artifactBaseUrl = String.fromEnvironment(
-  'OHOS_BAOZIMH_ARTIFACT_BASE_URL',
-  defaultValue: 'http://127.0.0.1:64524',
-);
+const _artifactBaseUrl = String.fromEnvironment('OHOS_BAOZIMH_ARTIFACT_BASE_URL', defaultValue: 'http://127.0.0.1:64524');
 const _pluginId = 'org.mgread.baozimh-com';
 const _version = '1.0.6';
 const _artifactFile = 'org.mgread.baozimh-com-1.0.6.mgplugin.js';
@@ -56,29 +53,20 @@ void main() {
     expect(discovery, isA<PluginDiscoveryDocumentResult>());
     final summary = _firstContent(discovery as PluginDiscoveryDocumentResult);
     expect(summary, isNotNull);
+    final contentSummary = summary!;
 
-    debugPrint('BAOZIMH_FLOW=detail:start id=${summary!.id}');
-    final detail = await _invokeWithFrames(
-      tester,
-      runtime.invoke(SourceDetailInvocation(pluginId: _pluginId, id: summary!.id)),
-    );
+    debugPrint('BAOZIMH_FLOW=detail:start id=${contentSummary.id}');
+    final detail = await _invokeWithFrames(tester, runtime.invoke(SourceDetailInvocation(pluginId: _pluginId, id: contentSummary.id)));
     debugPrint('BAOZIMH_FLOW=detail:done');
     debugPrint('BAOZIMH_FLOW=chapters:start');
-    final chapters = await _invokeWithFrames(
-      tester,
-      runtime.invoke(SourceChaptersInvocation(pluginId: _pluginId, id: detail.summary.id)),
-    );
+    final chapters = await _invokeWithFrames(tester, runtime.invoke(SourceChaptersInvocation(pluginId: _pluginId, id: detail.summary.id)));
     debugPrint('BAOZIMH_FLOW=chapters:done count=${chapters.items.length}');
     expect(chapters.items, isNotEmpty);
 
     debugPrint('BAOZIMH_FLOW=content:first:start');
     final first = await _invokeWithFrames(
       tester,
-      runtime.invoke(SourceContentInvocation(
-        pluginId: _pluginId,
-        id: detail.summary.id,
-        chapterId: chapters.items.first.id,
-      )),
+      runtime.invoke(SourceContentInvocation(pluginId: _pluginId, id: detail.summary.id, chapterId: chapters.items.first.id)),
     );
     debugPrint('BAOZIMH_FLOW=content:first:done pages=${first.pages.length}');
     expect(first.contentKind, PluginContentKind.manga);
@@ -90,11 +78,7 @@ void main() {
       debugPrint('BAOZIMH_FLOW=content:second:start');
       final second = await _invokeWithFrames(
         tester,
-        runtime.invoke(SourceContentInvocation(
-          pluginId: _pluginId,
-          id: detail.summary.id,
-          chapterId: chapters.items[1].id,
-        )),
+        runtime.invoke(SourceContentInvocation(pluginId: _pluginId, id: detail.summary.id, chapterId: chapters.items[1].id)),
       );
       debugPrint('BAOZIMH_FLOW=content:second:done pages=${second.pages.length}');
       expect(second.contentKind, PluginContentKind.manga);
@@ -141,12 +125,19 @@ PluginContentSummary? _firstContent(PluginDiscoveryDocumentResult result) {
       return;
     }
     if (component case PluginDiscoverySectionComponent(:final children)) {
-      for (final child in children) visit(child);
+      for (final child in children) {
+        visit(child);
+      }
     } else if (component case PluginDiscoveryGroupComponent(:final children)) {
-      for (final child in children) visit(child);
+      for (final child in children) {
+        visit(child);
+      }
     }
   }
-  for (final component in result.document.components) visit(component);
+
+  for (final component in result.document.components) {
+    visit(component);
+  }
   return found;
 }
 
@@ -155,14 +146,17 @@ Future<T> _invokeWithFrames<T>(WidgetTester tester, Future<T> invocation) async 
   T? value;
   Object? error;
   StackTrace? stack;
-  invocation.then<void>((result) {
-    value = result;
-    completed = true;
-  }, onError: (Object caught, StackTrace caughtStack) {
-    error = caught;
-    stack = caughtStack;
-    completed = true;
-  });
+  invocation.then<void>(
+    (result) {
+      value = result;
+      completed = true;
+    },
+    onError: (Object caught, StackTrace caughtStack) {
+      error = caught;
+      stack = caughtStack;
+      completed = true;
+    },
+  );
   while (!completed) {
     await tester.pump(const Duration(milliseconds: 50));
   }
