@@ -121,12 +121,11 @@ jobs:
           New-Item -ItemType Directory -Force -Path $signingRoot | Out-Null
           $materialRoot = Join-Path $signingRoot 'material'
           New-Item -ItemType Directory -Force -Path $materialRoot | Out-Null
-          Set-Content -LiteralPath (Join-Path $materialRoot 'ci-material-placeholder.txt') -Value 'managed-by-github-actions' -NoNewline
-          foreach ($materialName in @('fd', 'ac', 'ce')) {
-            $materialDir = Join-Path $materialRoot $materialName
-            New-Item -ItemType Directory -Force -Path $materialDir | Out-Null
-            Set-Content -LiteralPath (Join-Path $materialDir 'ci-material-placeholder.txt') -Value 'managed-by-github-actions' -NoNewline
+          $materialTemplate = Join-Path $env:GITHUB_WORKSPACE 'tools/ohos-signing-material/material'
+          if (-not (Test-Path -LiteralPath $materialTemplate -PathType Container)) {
+            throw "OHOS signing material template is missing: $materialTemplate"
           }
+          Copy-Item -Path (Join-Path $materialTemplate '*') -Destination $materialRoot -Recurse -Force
           function Decode-SecretFile([string] $Name, [string] $Path) {
             $value = [Environment]::GetEnvironmentVariable($Name)
             [IO.File]::WriteAllBytes($Path, [Convert]::FromBase64String($value))
