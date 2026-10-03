@@ -31,9 +31,31 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
         with:
-          clean: true
+          clean: false
           lfs: true
           fetch-depth: 1
+
+      - name: Clear generated OHOS build caches
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $generatedPaths = @(
+            '.mgread-build',
+            'build/ohos',
+            'ohos/.hvigor',
+            'ohos/oh_modules',
+            'ohos/entry/build',
+            'ohos/entry/oh_modules',
+            'packages/mgread_plugin_runtime/ohos/.cxx',
+            'packages/mgread_ohos_native_runtime/ohos/.cxx'
+          )
+          foreach ($relativePath in $generatedPaths) {
+            $path = Join-Path $env:GITHUB_WORKSPACE $relativePath
+            if (Test-Path -LiteralPath $path) {
+              Remove-Item -LiteralPath $path -Recurse -Force
+              Write-Host "Removed generated OHOS cache: $relativePath"
+            }
+          }
 
       - name: Check pinned OHOS runner inputs
         shell: pwsh
