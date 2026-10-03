@@ -5,13 +5,13 @@
         "name": "default",
         "type": "HarmonyOS",
         "material": {
-          "certpath": "C:\\Users\\qiao1\\.ohos\\config\\default_ohos_SRDFGQmAKb6jSvO-UbEH98LTWz2UuO4RCM1zZaOMPlc=.cer",
-          "keyAlias": "debugKey",
-          "keyPassword": "0000001A069BDACA44D3E6E66BDD3FD90003CA145F78F342EC11536F4B8704C80F99EE8B6A0BCBA925FC",
-          "profile": "C:\\Users\\qiao1\\.ohos\\config\\default_ohos_SRDFGQmAKb6jSvO-UbEH98LTWz2UuO4RCM1zZaOMPlc=.p7b",
+          "certpath": "__OHOS_CERT_PATH__",
+          "keyAlias": "__OHOS_KEY_ALIAS__",
+          "keyPassword": "__OHOS_KEY_PASSWORD__",
+          "profile": "__OHOS_PROFILE_PATH__",
           "signAlg": "SHA256withECDSA",
-          "storeFile": "C:\\Users\\qiao1\\.ohos\\config\\default_ohos_SRDFGQmAKb6jSvO-UbEH98LTWz2UuO4RCM1zZaOMPlc=.p12",
-          "storePassword": "0000001A705A4EFC677E1BFC237EB8267A1376855D55982876A9AFF0F3FA7382E3F1EEF826DDAA12B015"
+          "storeFile": "__OHOS_STORE_FILE__",
+          "storePassword": "__OHOS_STORE_PASSWORD__"
         }
       }
     ],
