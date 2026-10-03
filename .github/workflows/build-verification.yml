@@ -137,7 +137,7 @@ jobs:
             throw "OHOS arm64 release build failed with exit code $LASTEXITCODE"
           }
 
-      - name: Package HAP and checksum
+      - name: Package HAP only
         id: package
         shell: pwsh
         run: |
@@ -161,8 +161,6 @@ jobs:
           $assetName = "MgRead-$version-ohos-arm64.hap"
           $assetPath = Join-Path $releaseRoot $assetName
           Copy-Item -LiteralPath $hap.FullName -Destination $assetPath -Force
-          $hash = (Get-FileHash -LiteralPath $assetPath -Algorithm SHA256).Hash.ToLowerInvariant()
-          "$hash  $assetName" | Set-Content -LiteralPath (Join-Path $releaseRoot 'SHA256SUMS.txt') -Encoding ascii
           "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
 
       - name: Upload signed HAP
@@ -210,7 +208,7 @@ jobs:
           tag="v${VERSION}"
           title="MgRead v${VERSION} OHOS arm64"
           notes="Automated signed OHOS arm64 HAP built from commit ${SOURCE_COMMIT}."
-          assets=(release/*)
+          assets=(release/*.hap)
           if [ ! -e "${assets[0]}" ]; then
             echo 'No release assets were downloaded.' >&2
             exit 1
