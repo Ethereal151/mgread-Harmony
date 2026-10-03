@@ -602,6 +602,10 @@ try {
   $env:Path = "$runtimeNodeRoot;$runtimeStagePath"
   Push-Location $nodeRuntimeRoot
   try {
+    & $mgreadRuntimeNpm ci --ignore-scripts --no-audit --no-fund
+    if ($LASTEXITCODE -ne 0) {
+      throw "OHOS Node Runtime dependency install failed with exit code $LASTEXITCODE"
+    }
     & $mgreadRuntimeNpm run stage:flutter-ohos
     if ($LASTEXITCODE -ne 0) {
       throw "OHOS Node Runtime staging failed with exit code $LASTEXITCODE"
