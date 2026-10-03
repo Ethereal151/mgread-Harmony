@@ -253,7 +253,7 @@ class _MgReadAppState extends ConsumerState<MgReadApp> with WidgetsBindingObserv
                 ),
                 const ChapterCacheTaskBar(),
                 SourceAudioPlaybackNavigator(backButtonDispatcher: router.backButtonDispatcher),
-                const OhosBrowserSessionSurface(),
+                const OhosBrowserSessionSurface(prewarm: true),
               ],
             ),
           ),
