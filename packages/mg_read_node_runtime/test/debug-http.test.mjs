@@ -16,6 +16,7 @@ import { access, mkdtemp, readFile, rm } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { runInNewContext } from "node:vm";
 import test from "node:test";
 
 import { RuntimeDebugHttpServer, RuntimeDebugLogBuffer, runtimeDebugHttpPort } from "../dist/debug-http.js";
@@ -173,6 +174,28 @@ test("Debug inspector uses a temporary port when the preferred port is occupied"
   assert.ok(loopbackEndpoint);
   assert.notEqual(new URL(loopbackEndpoint).port, String(blockedAddress.port));
   assert.deepEqual(inspector.status(), enabled);
+});
+
+test("Debug inspector preserves stable Runtime codes across realms", async (t) => {
+  const inspector = new RuntimeDebugHttpServer({
+    ...emptyDebugHost(),
+    status: async () => {
+      throw runInNewContext(`
+        Object.assign(new Error("The Runtime plugin capability could not be completed."), {
+          code: "plugin_load_failed",
+          name: "PluginManagerError",
+        })
+      `);
+    },
+  }, 0);
+  t.after(async () => inspector.dispose());
+
+  const enabled = await inspector.setEnabled(true);
+  const endpoint = enabled.endpoints.find((value) => value.startsWith("http://127.0.0.1:"));
+  assert.ok(endpoint);
+  const response = await fetch(new URL("/__debug/api/status", endpoint));
+  assert.equal(response.status, 400);
+  assert.deepEqual(await response.json(), { code: "plugin_load_failed" });
 });
 
 test("Runtime persists the Debug preference and restores the fixed listener", async (t) => {

@@ -442,7 +442,21 @@ function requiredText(value: string | null, name: string): string {
 }
 
 function stableDebugError(error: unknown): string {
-  return error instanceof Error && /^[a-z_]+$/.test(error.message) ? error.message : "debug_request_failed";
+  const code = stableErrorField(error, "code");
+  if (code !== undefined) return code;
+  const message = stableErrorField(error, "message");
+  return message ?? "debug_request_failed";
+}
+
+/**
+ * Runtime errors may cross a VM/Javet realm boundary before reaching this
+ * listener. Structural inspection is intentional here: `instanceof Error`
+ * would reject the stable `code` carried by a foreign-realm Runtime error.
+ */
+function stableErrorField(error: unknown, field: "code" | "message"): string | undefined {
+  if (error === null || typeof error !== "object") return undefined;
+  const value = (error as Record<string, unknown>)[field];
+  return typeof value === "string" && /^[a-z_]+$/.test(value) ? value : undefined;
 }
 
 function writeJson(response: ServerResponse, status: number, body: JsonObject): void {
