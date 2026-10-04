@@ -2,9 +2,10 @@ part of mgread_plugin_runtime;
 
 /// Native/Rust supervisor for the opt-in OHOS release engine.
 ///
-/// The Rust bridge intentionally exposes one built-in source rather than a
-/// filesystem plugin installer. This supervisor adapts that source to the
-/// same typed Runtime facade used by the Android and desktop engines.
+/// The Rust bridge owns the source implementation rather than a filesystem
+/// plugin installer. This supervisor adapts that source to the same typed
+/// Runtime facade used by the Android and desktop engines, but keeps it
+/// uninstalled until the user explicitly enables/imports it.
 final class _OhosNativeRuntimeSupervisor implements _RuntimeSupervisor {
   static const String _sourceId = 'org.mgread.aisishuwu.native';
   static const String _sourceName = '爱丽丝书屋（Rust）';
@@ -55,7 +56,6 @@ final class _OhosNativeRuntimeSupervisor implements _RuntimeSupervisor {
       // even though the native runtime was already ready.
       final createResult = await _channel.invokeMethod<int>('create', <String, Object?>{'configJson': config}) ?? -1;
       if (createResult != 0) throw const PluginRuntimeException('runtime_start_failed', 'OHOS Native Runtime 创建失败。');
-      _installed = true;
       final progress = RuntimeInitializationProgress.fromPlatform(
         completedBytes: 1,
         totalBytes: 1,
@@ -90,6 +90,7 @@ final class _OhosNativeRuntimeSupervisor implements _RuntimeSupervisor {
   }
 
   Future<T> _sourceInvoke<T>(PluginInvocation<T> invocation, String method, Map<String, Object?> request) async {
+    if (!_installed) throw const PluginRuntimeException('plugin_not_found', 'Rust 原生数据源未安装。');
     if (!_enabled) throw const PluginRuntimeException('plugin_disabled', 'Rust 原生数据源未启用。');
     await _ensureStarted();
     final raw = await _channel.invokeMethod<String>('invoke', <String, Object?>{
@@ -162,7 +163,7 @@ final class _OhosNativeRuntimeSupervisor implements _RuntimeSupervisor {
     }
     if (invocation is SetPluginEnabledInvocation) {
       final typed = invocation as SetPluginEnabledInvocation;
-      if (typed.pluginId != _sourceId) throw const PluginRuntimeException('plugin_not_found', 'Rust 原生数据源不存在。');
+      if (typed.pluginId != _sourceId || !_installed) throw const PluginRuntimeException('plugin_not_found', 'Rust 原生数据源不存在。');
       _enabled = typed.enabled;
       return _decode(invocation, _plugin());
     }
