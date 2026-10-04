@@ -43,6 +43,7 @@ final class LanSyncViewState {
     this.totalBytes = 0,
     this.result,
     this.errorCode,
+    this.errorDetails,
   });
 
   final LanSyncRole? role;
@@ -56,6 +57,7 @@ final class LanSyncViewState {
   final int totalBytes;
   final LanSyncApplyResult? result;
   final String? errorCode;
+  final String? errorDetails;
 
   bool get busy => switch (phase) {
     LanSyncPhase.preparing ||
@@ -554,7 +556,13 @@ final class LanSyncController extends Notifier<LanSyncViewState> {
     );
     final role = keepRole ? state.role : null;
     unawaited(_disposeResources());
-    state = LanSyncViewState(role: role, phase: LanSyncPhase.failed, message: lanSyncFailureMessage(code), errorCode: code);
+    state = LanSyncViewState(
+      role: role,
+      phase: LanSyncPhase.failed,
+      message: lanSyncFailureMessage(code),
+      errorCode: code,
+      errorDetails: error == null ? null : _technicalErrorText(error),
+    );
   }
 
   Future<bool> _ensureLocalNetwork(int generation) async {

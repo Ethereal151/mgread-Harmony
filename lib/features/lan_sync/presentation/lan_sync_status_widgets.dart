@@ -49,10 +49,17 @@ class _StatusDetail extends StatelessWidget {
             '正在写入书架和阅读进度' => '插件已处理，正在单事务写入选中的书架和进度。',
             _ => null,
           };
-    if (transferred == null && detail == null) return const SizedBox.shrink();
+    final failure = state.errorCode == null ? null : '错误码：${state.errorCode}';
+    final errorDetails = state.errorDetails;
+    if (transferred == null && detail == null && failure == null && errorDetails == null) return const SizedBox.shrink();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[if (transferred != null) Text(transferred), if (detail != null) Text(detail)],
+      children: <Widget>[
+        if (transferred != null) Text(transferred),
+        if (detail != null) Text(detail),
+        if (failure != null) Text(failure),
+        if (errorDetails != null) Text(errorDetails),
+      ],
     );
   }
 }

@@ -62,6 +62,22 @@ void main() {
               as Map<String, Object?>;
       final method = decoded['method'] as String? ?? '';
       requests.add(method);
+      if (method == 'plugins.transfer.list.v2' ||
+          method == 'plugins.transfer.offers.v1') {
+        request.response
+          ..headers.contentType = ContentType.json
+          ..write(
+            jsonEncode(<String, Object?>{
+              'ok': false,
+              'error': <String, Object?>{
+                'code': 'unsupported',
+                'message': 'Native fixture does not export plugin packages.',
+              },
+            }),
+          );
+        await request.response.close();
+        return;
+      }
       final result = switch (method) {
         'plugins.list.v1' => <Object?>[
           <String, Object?>{
@@ -151,6 +167,12 @@ void main() {
           .engine,
       PluginEngine.native,
     );
+    final artifacts = await hybrid.invoke(const PluginTransferListInvocation());
+    expect(
+      artifacts.map((item) => item.pluginId),
+      contains('org.mgread.android-runtime-fixture'),
+    );
+    await hybrid.invoke(const PluginTransferOfferListInvocation());
 
     final nodeSearch = await hybrid.invoke(
       const SourceSearchInvocation(

@@ -154,18 +154,16 @@ final class _HybridRuntimeSupervisor implements _RuntimeSupervisor {
       return <PluginCacheUsage>[...lists[0], ...lists[1]] as T;
     }
     if (invocation is PluginTransferListInvocation) {
-      final lists = await Future.wait(<Future<List<PluginTransferArtifact>>>[
-        _node.invoke(const PluginTransferListInvocation()),
-        _native.invoke(const PluginTransferListInvocation()),
-      ]);
-      return <PluginTransferArtifact>[...lists[0], ...lists[1]] as T;
+      final node = await _node.invoke(const PluginTransferListInvocation());
+      final native = await _tryListNativeTransferArtifacts();
+      return <PluginTransferArtifact>[...node, ...native] as T;
     }
     if (invocation is PluginTransferOfferListInvocation) {
-      final lists = await Future.wait(<Future<List<PluginTransferOffer>>>[
-        _node.invoke(const PluginTransferOfferListInvocation()),
-        _native.invoke(const PluginTransferOfferListInvocation()),
-      ]);
-      return <PluginTransferOffer>[...lists[0], ...lists[1]] as T;
+      final node = await _node.invoke(
+        const PluginTransferOfferListInvocation(),
+      );
+      final native = await _tryListNativeTransferOffers();
+      return <PluginTransferOffer>[...node, ...native] as T;
     }
     if (invocation is PluginTransferPlanInvocation) {
       return await _planArtifacts(invocation as PluginTransferPlanInvocation)
@@ -201,6 +199,28 @@ final class _HybridRuntimeSupervisor implements _RuntimeSupervisor {
       return result;
     }
     return _node.invoke(invocation, cancellation: cancellation);
+  }
+
+  /// Some native backends expose installed sources but deliberately do not
+  /// expose portable plugin artifacts. OHOS's built-in Rust source is one of
+  /// those backends: it must not prevent the Node source catalog from being
+  /// advertised for LAN transfer.
+  Future<List<PluginTransferArtifact>> _tryListNativeTransferArtifacts() async {
+    try {
+      return await _native.invoke(const PluginTransferListInvocation());
+    } on PluginRuntimeException catch (error) {
+      if (error.code != 'unsupported') rethrow;
+      return const <PluginTransferArtifact>[];
+    }
+  }
+
+  Future<List<PluginTransferOffer>> _tryListNativeTransferOffers() async {
+    try {
+      return await _native.invoke(const PluginTransferOfferListInvocation());
+    } on PluginRuntimeException catch (error) {
+      if (error.code != 'unsupported') rethrow;
+      return const <PluginTransferOffer>[];
+    }
   }
 
   Future<List<PluginTransferPlanItem>> _planArtifacts(
