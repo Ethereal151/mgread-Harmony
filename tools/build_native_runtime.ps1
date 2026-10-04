@@ -4,6 +4,8 @@ Build the independent Rust worker; no Node/npm is used.
 .DESCRIPTION
 Owns reproducible host compilation and staging only. Does not build Flutter or
 install devices. Native libraries use Android API 24 and 16 KiB ELF alignment.
+Rust is resolved from the repository toolchain.lock; this script never depends
+on a cargo executable supplied by PATH.
 #>
 [CmdletBinding()]
 param(
@@ -14,12 +16,39 @@ $ErrorActionPreference='Stop'
 $nativeRepo=Split-Path -Parent $PSScriptRoot
 $nativePackage=Join-Path $nativeRepo 'packages/mg_read_native_runtime'
 $nativeLogs=Join-Path $nativeRepo 'artifacts/native-runtime'
+$toolchainLockPath=Join-Path $nativeRepo 'toolchain.lock'
+
+function Get-LockedToolchainValue([string]$Section,[string]$Name) {
+    if(-not(Test-Path -LiteralPath $toolchainLockPath -PathType Leaf)){throw "Toolchain lock is missing: $toolchainLockPath"}
+    $lockText=Get-Content -LiteralPath $toolchainLockPath -Raw
+    $sectionMatch=[regex]::Match($lockText,"(?ms)^\[$([regex]::Escape($Section))\]\s*(?<body>.*?)(?=^\[|\z)")
+    if(-not $sectionMatch.Success){throw "Toolchain section [$Section] is missing."}
+    $valuePattern='(?m)^\s*'+[regex]::Escape($Name)+'\s*=\s*"([^"]+)"\s*$'
+    $valueMatch=[regex]::Match($sectionMatch.Groups['body'].Value,$valuePattern)
+    if(-not $valueMatch.Success){throw "Toolchain value $Name is missing from [$Section]."}
+    return $valueMatch.Groups[1].Value
+}
+
+$rustRoot=Get-LockedToolchainValue 'rust' 'root'
+$rustToolchain=Get-LockedToolchainValue 'rust' 'toolchain'
+$cargoExecutable=Join-Path $rustRoot 'cargo\bin\cargo.exe'
+$rustupExecutable=Join-Path $rustRoot 'cargo\bin\rustup.exe'
+foreach($path in @($cargoExecutable,$rustupExecutable)){
+    if(-not(Test-Path -LiteralPath $path -PathType Leaf)){throw "Pinned Rust executable is missing: $path"}
+}
+$env:CARGO_HOME=Join-Path $rustRoot 'cargo'
+$env:RUSTUP_HOME=Join-Path $rustRoot 'rustup'
+$rustcVersion=(& $rustupExecutable run $rustToolchain rustc --version).Trim()
+$expectedRustVersion=[regex]::Match($rustToolchain,'^\d+\.\d+\.\d+').Value
+if($rustcVersion -notmatch "^rustc $([regex]::Escape($expectedRustVersion))(?:\s|$)"){
+    throw "Pinned Rust toolchain mismatch: expected $expectedRustVersion, got $rustcVersion"
+}
 New-Item -ItemType Directory -Force -Path $nativeLogs | Out-Null
 function Build-NativeTarget([string]$Target,[string]$Abi) {
     $nativeLog=Join-Path $nativeLogs "build-host-$Target.log"
     $nativeArgs=@('build','--manifest-path',"$nativePackage/Cargo.toml",'--locked','--release','--target',$Target)
     if($Target -like '*android'){$nativeArgs+='--lib'}else{$nativeArgs+=@('--bin','mgread-native-host')}
-    & cargo '+1.97.1' @nativeArgs *> $nativeLog
+    & $cargoExecutable "+$rustToolchain" @nativeArgs *> $nativeLog
     if($LASTEXITCODE -ne 0){Get-Content -LiteralPath $nativeLog -Tail 35;throw "Native build failed: $Target"}
     if($Target -like '*android'){
         $nativeOut=Join-Path $nativeRepo "packages/mgread_plugin_runtime/android/src/native/jniLibs/$Abi"
