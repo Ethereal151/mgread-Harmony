@@ -1,4 +1,6 @@
 import {
+  AbilityAware,
+  AbilityPluginBinding,
   FlutterPlugin,
   FlutterPluginBinding,
   MethodCall,
@@ -6,11 +8,15 @@ import {
   MethodChannel,
   MethodResult,
 } from '@ohos/flutter_ohos'
+import common from '@ohos.app.ability.common'
+import fs from '@ohos.file.fs'
+import { picker } from '@kit.CoreFileKit'
 import nativeRuntime from 'libmgread_ohos_native_runtime.so'
 
 /** Explicit test/rollout bridge; the application keeps Node Runtime as default. */
-export default class OhosNativeRuntimePlugin implements FlutterPlugin, MethodCallHandler {
+export default class OhosNativeRuntimePlugin implements FlutterPlugin, MethodCallHandler, AbilityAware {
   private channel?: MethodChannel
+  private context?: common.UIAbilityContext
 
   getUniqueClassName(): string {
     return 'OhosNativeRuntimePlugin'
@@ -21,9 +27,18 @@ export default class OhosNativeRuntimePlugin implements FlutterPlugin, MethodCal
     this.channel.setMethodCallHandler(this)
   }
 
+  onAttachedToAbility(binding: AbilityPluginBinding): void {
+    this.context = binding.getAbility().context as common.UIAbilityContext
+  }
+
+  onDetachedFromAbility(): void {
+    this.context = undefined
+  }
+
   onDetachedFromEngine(binding: FlutterPluginBinding): void {
     this.channel?.setMethodCallHandler(null)
     this.channel = undefined
+    this.context = undefined
     nativeRuntime.dispose()
   }
 
@@ -56,6 +71,23 @@ export default class OhosNativeRuntimePlugin implements FlutterPlugin, MethodCal
       case 'restart':
         result.success(nativeRuntime.restart())
         break
+      case 'hostStart':
+        try {
+          result.success(nativeRuntime.hostStart(
+            `${this.context?.filesDir ?? ''}/mgread-native-runtime`,
+            String(args?.get('token') ?? ''),
+            Boolean(args?.get('testMode') ?? false),
+          ))
+        } catch (error) {
+          result.error('native_runtime_start_failed', String(error), null)
+        }
+        break
+      case 'hostStop':
+        result.success(nativeRuntime.hostStop())
+        break
+      case 'pickPlugin':
+        this.pickPlugin(result)
+        break
       case 'dispose':
         nativeRuntime.dispose()
         result.success(null)
@@ -63,6 +95,57 @@ export default class OhosNativeRuntimePlugin implements FlutterPlugin, MethodCal
       default:
         result.notImplemented()
         break
+    }
+  }
+
+  private async pickPlugin(result: MethodResult): Promise<void> {
+    const context = this.context
+    if (context === undefined) {
+      result.error('picker_unavailable', 'The OHOS file picker context is unavailable.', null)
+      return
+    }
+    try {
+      const options = new picker.DocumentSelectOptions()
+      options.fileSuffixFilters = ['.mgplugin']
+      options.maxSelectNumber = 1
+      const pickerView = new picker.DocumentViewPicker(context as common.UIAbilityContext)
+      const selected = await pickerView.select(options)
+      if (selected.length === 0) {
+        result.success(null)
+        return
+      }
+      const target = `${context.cacheDir}/mgread-native-import-${Date.now()}.mgplugin`
+      try {
+        this.copyFile(selected[0], target)
+        result.success({ path: target })
+      } catch (error) {
+        try {
+          fs.unlinkSync(target)
+        } catch (_) {
+          // The destination may not have been created; preserve the copy error.
+        }
+        result.error('picker_failed', String(error), null)
+      }
+    } catch (error) {
+      result.error('picker_failed', String(error), null)
+    }
+  }
+
+  private copyFile(sourcePath: string, targetPath: string): void {
+    let source: fs.File | undefined
+    let target: fs.File | undefined
+    try {
+      source = fs.openSync(sourcePath, fs.OpenMode.READ_ONLY)
+      target = fs.openSync(targetPath, fs.OpenMode.READ_WRITE | fs.OpenMode.CREATE | fs.OpenMode.TRUNC)
+      const buffer = new ArrayBuffer(64 * 1024)
+      let read = fs.readSync(source.fd, buffer)
+      while (read > 0) {
+        fs.writeSync(target.fd, buffer.slice(0, read))
+        read = fs.readSync(source.fd, buffer)
+      }
+    } finally {
+      if (source !== undefined) fs.closeSync(source.fd)
+      if (target !== undefined) fs.closeSync(target.fd)
     }
   }
 }

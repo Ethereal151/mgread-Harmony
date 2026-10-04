@@ -8,6 +8,7 @@ extern "C" {
 #endif
 
 typedef struct mgread_runtime_handle mgread_runtime_handle;
+typedef struct mgread_native_host_handle mgread_native_host_handle;
 
 enum mgread_runtime_error {
   MGREAD_RUNTIME_OK = 0,
@@ -32,6 +33,15 @@ int32_t mgread_runtime_stop(mgread_runtime_handle* runtime);
 int32_t mgread_runtime_restart(mgread_runtime_handle* runtime);
 void mgread_runtime_free_string(char* value);
 void mgread_runtime_free(mgread_runtime_handle* runtime);
+
+mgread_native_host_handle* mgread_native_host_create(void);
+int32_t mgread_native_host_start(mgread_native_host_handle* host,
+                                 const char* root,
+                                 const char* token,
+                                 int32_t test_mode,
+                                 char** ready_json);
+int32_t mgread_native_host_stop(mgread_native_host_handle* host);
+void mgread_native_host_free(mgread_native_host_handle* host);
 
 #ifdef __cplusplus
 }

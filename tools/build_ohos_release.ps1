@@ -628,7 +628,7 @@ try {
   Ensure-OhosLocalPluginOverrides
   Remove-StaleFlutterBuildOutputs
   Install-OhosDependencies
-  $flutterArguments = 'build', 'hap', "--$BuildMode", '--target-platform', $targetPlatform, '--no-pub', '--no-tree-shake-icons', '--dart-define=MGREAD_OHOS_NATIVE_RUNTIME=true', "--dart-define=MGREAD_OHOS_ARCH=$Architecture"
+  $flutterArguments = 'build', 'hap', "--$BuildMode", '--target-platform', $targetPlatform, '--no-pub', '--no-tree-shake-icons', "--dart-define=MGREAD_OHOS_ARCH=$Architecture", '--dart-define=MGREAD_OHOS_NATIVE_RUNTIME=true'
   if ($NoCodesign) {
     $flutterArguments += '--no-codesign'
   }

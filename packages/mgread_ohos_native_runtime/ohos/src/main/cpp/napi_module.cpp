@@ -8,6 +8,7 @@
 
 namespace {
 std::shared_ptr<RuntimeBridge> g_runtime;
+std::shared_ptr<NativeHostBridge> g_native_host;
 std::mutex g_runtime_mutex;
 
 std::string ReadString(napi_env env, napi_value value) {
@@ -42,6 +43,37 @@ napi_value Create(napi_env env, napi_callback_info info) {
 napi_value Start(napi_env env, napi_callback_info) {
   std::lock_guard<std::mutex> lock(g_runtime_mutex);
   return Code(env, g_runtime == nullptr ? MGREAD_RUNTIME_NOT_INITIALIZED : g_runtime->Start());
+}
+
+napi_value HostStart(napi_env env, napi_callback_info info) {
+  size_t argc = 3;
+  napi_value argv[3];
+  napi_get_cb_info(env, info, &argc, argv, nullptr, nullptr);
+  if (argc != 3) {
+    napi_throw_error(env, "invalid_argument", "hostStart expects root, token and testMode");
+    return nullptr;
+  }
+  std::lock_guard<std::mutex> lock(g_runtime_mutex);
+  if (g_native_host == nullptr) g_native_host = std::make_shared<NativeHostBridge>();
+  const std::string root = ReadString(env, argv[0]);
+  const std::string token = ReadString(env, argv[1]);
+  bool test_mode = false;
+  napi_get_value_bool(env, argv[2], &test_mode);
+  std::string ready;
+  const int code = g_native_host->Start(root, token, test_mode, &ready);
+  if (code != MGREAD_RUNTIME_OK) {
+    napi_throw_error(env, "native_runtime_start_failed", "OHOS native Rust worker failed to start");
+    return nullptr;
+  }
+  napi_value result;
+  napi_create_string_utf8(env, ready.c_str(), NAPI_AUTO_LENGTH, &result);
+  return result;
+}
+
+napi_value HostStop(napi_env env, napi_callback_info) {
+  std::lock_guard<std::mutex> lock(g_runtime_mutex);
+  const int code = g_native_host == nullptr ? MGREAD_RUNTIME_NOT_INITIALIZED : g_native_host->Stop();
+  return Code(env, code);
 }
 napi_value Stop(napi_env env, napi_callback_info) {
   std::lock_guard<std::mutex> lock(g_runtime_mutex);
@@ -108,6 +140,7 @@ napi_value Invoke(napi_env env, napi_callback_info info) {
 
 napi_value Dispose(napi_env env, napi_callback_info) {
   std::lock_guard<std::mutex> lock(g_runtime_mutex);
+  g_native_host.reset();
   g_runtime.reset();
   napi_value result; napi_get_undefined(env, &result); return result;
 }
@@ -117,6 +150,8 @@ napi_value Init(napi_env env, napi_value exports) {
       {"version", nullptr, Version, nullptr, nullptr, nullptr, napi_default, nullptr},
       {"create", nullptr, Create, nullptr, nullptr, nullptr, napi_default, nullptr},
       {"start", nullptr, Start, nullptr, nullptr, nullptr, napi_default, nullptr},
+      {"hostStart", nullptr, HostStart, nullptr, nullptr, nullptr, napi_default, nullptr},
+      {"hostStop", nullptr, HostStop, nullptr, nullptr, nullptr, napi_default, nullptr},
       {"invoke", nullptr, Invoke, nullptr, nullptr, nullptr, napi_default, nullptr},
       {"lastError", nullptr, LastError, nullptr, nullptr, nullptr, napi_default, nullptr},
       {"cancel", nullptr, Cancel, nullptr, nullptr, nullptr, napi_default, nullptr},

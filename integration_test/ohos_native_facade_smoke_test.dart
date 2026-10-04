@@ -7,7 +7,7 @@ import 'package:mgread_plugin_runtime/mgread_plugin_runtime.dart';
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('OHOS Native Runtime starts with no installed data sources', (tester) async {
+  testWidgets('OHOS hybrid Runtime starts with no installed data sources', (tester) async {
     if (Platform.operatingSystem != 'ohos') return;
 
     final runtime = PluginRuntime();
@@ -18,8 +18,8 @@ void main() {
       tester,
       runtime.invoke(const RuntimeStatusInvocation()).timeout(const Duration(seconds: 10)),
     );
-    const architecture = String.fromEnvironment('MGREAD_OHOS_ARCH', defaultValue: 'arm64');
-    expect(runtimeStatus.nativeStatus?.arch, architecture == 'x64' ? 'x86_64' : 'arm64-v8a');
+    expect(runtimeStatus.nativeStatus?.runtimeKind, 'native-rust');
+    expect(runtimeStatus.nativeStatus?.plugins, isEmpty);
 
     final plugins = await _invokeWithFrames(
       tester,

@@ -39,11 +39,18 @@ pub struct Runtime {
     loaded: Mutex<BTreeMap<String, Arc<NativePlugin>>>,
     initialization_gate: Mutex<()>,
     proxy: Mutex<Option<String>>,
-    stopping: AtomicBool,
+    pub(crate) stopping: AtomicBool,
+    pub(crate) embedded: bool,
     recovered: AtomicUsize,
 }
 impl Runtime {
-    fn open(root: PathBuf, token: String, _port: u16, test_mode: bool) -> Result<Arc<Self>> {
+    fn open(
+        root: PathBuf,
+        token: String,
+        _port: u16,
+        test_mode: bool,
+        embedded: bool,
+    ) -> Result<Arc<Self>> {
         if token.len() < 32 || token.len() > 256 {
             return Err(invalid("Control token must contain at least 32 characters"));
         }
@@ -59,6 +66,7 @@ impl Runtime {
             initialization_gate: Mutex::new(()),
             proxy: Mutex::new(None),
             stopping: AtomicBool::new(false),
+            embedded,
             recovered: AtomicUsize::new(recovered),
         }))
     }
@@ -138,6 +146,13 @@ async fn rpc(
     })
     .into_response()
 }
+fn router(runtime: Arc<Runtime>) -> Router {
+    Router::new()
+        .route("/rpc", post(rpc))
+        .layer(DefaultBodyLimit::max(90 * 1024 * 1024))
+        .with_state(runtime)
+}
+
 pub async fn serve(
     root: PathBuf,
     token: String,
@@ -146,11 +161,31 @@ pub async fn serve(
 ) -> Result<()> {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
     let port = listener.local_addr()?.port();
-    let runtime = Runtime::open(root, token.clone(), port, test_mode)?;
-    let router = Router::new()
-        .route("/rpc", post(rpc))
-        .layer(DefaultBodyLimit::max(90 * 1024 * 1024))
-        .with_state(runtime);
+    let runtime = Runtime::open(root, token.clone(), port, test_mode, false)?;
+    let router = router(runtime);
     ready(json!({"port":port,"token":token,"runtimeKind":"native-rust"}));
     axum::serve(listener, router).await.map_err(Into::into)
+}
+
+/// Runs the same native worker inside the OHOS NAPI module. OHOS cannot spawn
+/// the Windows executable or Android private Service, so the worker owns its
+/// Tokio runtime on a dedicated native thread and exposes the same loopback
+/// HTTP contract to the Flutter Facade.
+pub async fn serve_embedded(
+    root: PathBuf,
+    token: String,
+    test_mode: bool,
+    stop: tokio::sync::oneshot::Receiver<()>,
+    ready: impl FnOnce(Value),
+) -> Result<()> {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+    let port = listener.local_addr()?.port();
+    let runtime = Runtime::open(root, token.clone(), port, test_mode, true)?;
+    ready(json!({"port":port,"token":token,"runtimeKind":"native-rust"}));
+    axum::serve(listener, router(runtime))
+        .with_graceful_shutdown(async {
+            let _ = stop.await;
+        })
+        .await
+        .map_err(Into::into)
 }

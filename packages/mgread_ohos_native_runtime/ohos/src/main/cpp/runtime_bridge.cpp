@@ -45,3 +45,30 @@ int RuntimeBridge::Restart() {
   std::lock_guard<std::mutex> lock(mutex_);
   return mgread_runtime_restart(handle_);
 }
+
+NativeHostBridge::NativeHostBridge() {
+  handle_ = mgread_native_host_create();
+}
+
+NativeHostBridge::~NativeHostBridge() {
+  std::lock_guard<std::mutex> lock(mutex_);
+  mgread_native_host_free(handle_);
+  handle_ = nullptr;
+}
+
+int NativeHostBridge::Start(const std::string& root, const std::string& token,
+                            bool test_mode, std::string* ready) {
+  if (ready == nullptr) return MGREAD_RUNTIME_INVALID_ARGUMENT;
+  std::lock_guard<std::mutex> lock(mutex_);
+  char* raw = nullptr;
+  const int code = mgread_native_host_start(handle_, root.c_str(), token.c_str(),
+                                            test_mode ? 1 : 0, &raw);
+  if (code == MGREAD_RUNTIME_OK && raw != nullptr) *ready = raw;
+  mgread_runtime_free_string(raw);
+  return code;
+}
+
+int NativeHostBridge::Stop() {
+  std::lock_guard<std::mutex> lock(mutex_);
+  return mgread_native_host_stop(handle_);
+}

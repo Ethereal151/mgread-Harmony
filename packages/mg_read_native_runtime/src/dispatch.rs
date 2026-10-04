@@ -172,6 +172,10 @@ pub fn control(runtime: &Arc<Runtime>, method: &str, params: &Value) -> Result<V
             )
         }
         "runtime.native.shutdown.v1" => {
+            if runtime.embedded {
+                runtime.stopping.store(true, Ordering::SeqCst);
+                return Ok(json!({"stopping":true}));
+            }
             runtime.shutdown()?;
             std::thread::spawn(|| {
                 std::thread::sleep(std::time::Duration::from_millis(250));

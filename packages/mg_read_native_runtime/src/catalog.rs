@@ -14,6 +14,13 @@ use std::{
 };
 
 pub const MAX_ARCHIVE: usize = 64 * 1024 * 1024;
+const SUPPORTED_TARGETS: &[&str] = &[
+    "windows-x86_64",
+    "android-arm64-v8a",
+    "android-x86_64",
+    "ohos-arm64",
+    "ohos-x86_64",
+];
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Target {
     pub path: String,
@@ -55,6 +62,12 @@ pub fn target() -> &'static str {
             "android-arm64-v8a"
         } else {
             "android-x86_64"
+        }
+    } else if cfg!(target_env = "ohos") {
+        if cfg!(target_arch = "aarch64") {
+            "ohos-arm64"
+        } else {
+            "ohos-x86_64"
         }
     } else {
         "windows-x86_64"
@@ -223,12 +236,12 @@ impl Catalog {
                 .any(|k| !["novel", "manga", "audio", "video"].contains(&k.as_str()))
             || m.content_kinds.iter().collect::<HashSet<_>>().len() != m.content_kinds.len()
             || m.targets.is_empty()
-            || m.targets.len() > 3
+            || m.targets.len() > 5
         {
             return Err(invalid("Unsupported native manifest"));
         }
         for (name, t) in &m.targets {
-            if !["windows-x86_64", "android-arm64-v8a", "android-x86_64"].contains(&name.as_str())
+            if !SUPPORTED_TARGETS.contains(&name.as_str())
                 || !safe_relative(&t.path)
                 || t.sha256.len() != 64
                 || !t.sha256.bytes().all(|c| c.is_ascii_hexdigit())
@@ -443,6 +456,11 @@ mod tests {
             assert!(!safe_name(p));
         }
         assert!(safe_name("org.mgread.alice"));
+    }
+    #[test]
+    fn supports_ohos_native_targets() {
+        assert!(SUPPORTED_TARGETS.contains(&"ohos-arm64"));
+        assert!(SUPPORTED_TARGETS.contains(&"ohos-x86_64"));
     }
     #[test]
     fn platform_subset_is_the_same_installed_build() {

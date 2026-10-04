@@ -311,9 +311,11 @@ extension _NativeRuntimeSupervisorTransport on _NativeRuntimeSupervisor {
     _intentionalStop = true;
     _stopUnconfirmed = true;
     try {
-      if (_isAndroid) {
-        await _NativeRuntimeSupervisor._channel
-            .invokeMethod<void>('stop')
+      if (_isAndroid || _isOhos) {
+        await (_isOhos
+                ? _NativeRuntimeSupervisor._ohosChannel
+                : _NativeRuntimeSupervisor._channel)
+            .invokeMethod<void>(_isOhos ? 'hostStop' : 'stop')
             .timeout(_NativeRuntimeSupervisor._shutdownTimeout);
       }
 

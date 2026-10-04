@@ -64,13 +64,8 @@ class _PluginRuntimeHelpPageState extends ConsumerState<PluginRuntimeHelpPage> {
   Widget build(BuildContext context) {
     final bool canSelectDevelopmentDirectory = Platform.isWindows || Platform.isMacOS;
     final bool canOpenPrivateDirectory = Platform.isWindows || Platform.isMacOS;
-    final bool nativeRuntimeBuild =
-        const bool.fromEnvironment('MGREAD_NATIVE_RUNTIME') ||
-        (Platform.operatingSystem == 'ohos' && const bool.fromEnvironment('MGREAD_OHOS_NATIVE_RUNTIME'));
-    final bool ohosHybridRuntimeBuild =
-        Platform.operatingSystem == 'ohos' &&
-        const bool.fromEnvironment('MGREAD_OHOS_NATIVE_RUNTIME') &&
-        !const bool.fromEnvironment('MGREAD_NATIVE_RUNTIME');
+    final bool nativeRuntimeBuild = const bool.fromEnvironment('MGREAD_NATIVE_RUNTIME') && Platform.operatingSystem != 'ohos';
+    final bool ohosHybridRuntimeBuild = Platform.operatingSystem == 'ohos' && const bool.fromEnvironment('MGREAD_OHOS_NATIVE_RUNTIME');
     return Scaffold(
       body: SafeArea(
         bottom: false,
@@ -97,7 +92,7 @@ class _PluginRuntimeHelpPageState extends ConsumerState<PluginRuntimeHelpPage> {
                       icon: Icons.auto_stories_outlined,
                       title: '管理数据源',
                       body: ohosHybridRuntimeBuild
-                          ? '点击“添加数据源”，可选择 Node 数据源、数据源合集或原生数据源；三类可以同时使用。Node 支持 .mgplugin.js 和 .mgplugin，合集支持 .mgplugins，原生支持适用于当前平台的 .mgplugin。列表右侧开关控制启用状态。'
+                          ? '点击“添加数据源”，可选择 Node 数据源或适用于当前 OHOS ABI 的 Rust 原生 .mgplugin 文件；两类可以同时使用。Rust 包会校验 manifest、ABI 和目标 .so 后再加载，列表右侧开关控制启用状态。'
                           : nativeRuntimeBuild
                           ? '点击“添加数据源”，选择原生 .mgplugin 文件导入；列表右侧开关控制启用状态。'
                           : Platform.isMacOS || const bool.fromEnvironment('MGREAD_NODE_ONLY')

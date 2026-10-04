@@ -14,9 +14,9 @@ enum DataSourceManagementAction { verify, diagnostics, help, uninstall }
 
 enum DataSourceImportChoice { node, native, collection }
 
-bool get _isOhosHybridRuntimeBuild => Platform.operatingSystem == 'ohos' && const bool.fromEnvironment('MGREAD_OHOS_NATIVE_RUNTIME');
+bool get _isNativeOnlyRuntimeBuild => const bool.fromEnvironment('MGREAD_NATIVE_RUNTIME') && Platform.operatingSystem != 'ohos';
 
-bool get _isNativeOnlyRuntimeBuild => const bool.fromEnvironment('MGREAD_NATIVE_RUNTIME') && !_isOhosHybridRuntimeBuild;
+bool get _isOhosHybridRuntimeBuild => Platform.operatingSystem == 'ohos' && const bool.fromEnvironment('MGREAD_OHOS_NATIVE_RUNTIME');
 
 bool get supportsNativeSourceImport =>
     !_isNativeOnlyRuntimeBuild &&
@@ -53,8 +53,8 @@ Future<DataSourceImportChoice?> showDataSourceImportSheet(BuildContext context) 
         _ActionTile(
           actionKey: const Key('data-source-add-native'),
           icon: Icons.developer_board_outlined,
-          title: _isNativeOnlyRuntimeBuild && Platform.operatingSystem == 'ohos' ? 'Rust 原生数据源' : '原生数据源',
-          subtitle: _isNativeOnlyRuntimeBuild && Platform.operatingSystem == 'ohos' ? '启用内置 Rust 数据源引擎' : '选择适用于当前平台的 .mgplugin 安装包',
+          title: _isOhosHybridRuntimeBuild ? 'Rust 原生数据源' : '原生数据源',
+          subtitle: _isOhosHybridRuntimeBuild ? '选择适用于当前 OHOS ABI 的 .mgplugin 安装包' : '选择适用于当前平台的 .mgplugin 安装包',
           onTap: () => Navigator.pop(context, DataSourceImportChoice.native),
         ),
     ],

@@ -23,3 +23,19 @@ class RuntimeBridge final {
   std::mutex mutex_;
   mgread_runtime_handle* handle_ = nullptr;
 };
+
+class NativeHostBridge final {
+ public:
+  NativeHostBridge();
+  ~NativeHostBridge();
+  NativeHostBridge(const NativeHostBridge&) = delete;
+  NativeHostBridge& operator=(const NativeHostBridge&) = delete;
+
+  int Start(const std::string& root, const std::string& token, bool test_mode,
+            std::string* ready);
+  int Stop();
+
+ private:
+  std::mutex mutex_;
+  mgread_native_host_handle* handle_ = nullptr;
+};

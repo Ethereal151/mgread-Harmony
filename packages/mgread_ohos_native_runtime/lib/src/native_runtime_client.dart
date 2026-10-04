@@ -27,4 +27,13 @@ final class OhosNativeRuntimeClient {
   Future<int> stop() async => await _channel.invokeMethod<int>('stop') ?? -1;
 
   Future<int> restart() async => await _channel.invokeMethod<int>('restart') ?? -1;
+
+  Future<String> hostStart({required String token, bool testMode = false}) async =>
+      await _channel.invokeMethod<String>('hostStart', <String, Object?>{
+        'token': token,
+        'testMode': testMode,
+      }) ??
+      '';
+
+  Future<int> hostStop() async => await _channel.invokeMethod<int>('hostStop') ?? -1;
 }

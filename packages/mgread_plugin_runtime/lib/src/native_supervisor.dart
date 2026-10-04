@@ -8,12 +8,14 @@ part of mgread_plugin_runtime;
 final class _NativeRuntimeSupervisor implements _RuntimeSupervisor {
   _NativeRuntimeSupervisor._({
     required bool isAndroid,
+    required bool isOhos,
     required Directory? dataRoot,
     required File? hostExecutable,
     required bool testMode,
     Uri? testControlUri,
     String? testToken,
   }) : _isAndroid = isAndroid,
+       _isOhos = isOhos,
        _dataRoot = dataRoot,
        _hostExecutable = hostExecutable,
        _testMode = testMode,
@@ -21,11 +23,15 @@ final class _NativeRuntimeSupervisor implements _RuntimeSupervisor {
        _testToken = testToken;
 
   static const MethodChannel _channel = MethodChannel('mgread/native_runtime');
+  static const MethodChannel _ohosChannel = MethodChannel(
+    'mgread_ohos_native_runtime',
+  );
   static const Duration _startupTimeout = Duration(seconds: 30);
   static const Duration _shutdownTimeout = Duration(seconds: 3);
   static const int _maxControlResponseBytes = 100 * 1024 * 1024;
 
   final bool _isAndroid;
+  final bool _isOhos;
   final Directory? _dataRoot;
   final File? _hostExecutable;
   final bool _testMode;
@@ -67,6 +73,7 @@ final class _NativeRuntimeSupervisor implements _RuntimeSupervisor {
     if (Platform.isAndroid) {
       return _NativeRuntimeSupervisor._(
         isAndroid: true,
+        isOhos: false,
         dataRoot: null,
         hostExecutable: null,
         testMode: false,
@@ -83,6 +90,7 @@ final class _NativeRuntimeSupervisor implements _RuntimeSupervisor {
       final appDirectory = File(Platform.resolvedExecutable).parent;
       return _NativeRuntimeSupervisor._(
         isAndroid: false,
+        isOhos: false,
         dataRoot: Directory(
           _joinPath(<String>[dataHome, 'MgRead', 'native-runtime']),
         ),
@@ -93,6 +101,15 @@ final class _NativeRuntimeSupervisor implements _RuntimeSupervisor {
             'mgread-native-host.exe',
           ]),
         ),
+        testMode: false,
+      );
+    }
+    if (Platform.operatingSystem == 'ohos') {
+      return _NativeRuntimeSupervisor._(
+        isAndroid: false,
+        isOhos: true,
+        dataRoot: null,
+        hostExecutable: null,
         testMode: false,
       );
     }
@@ -135,6 +152,7 @@ final class _NativeRuntimeSupervisor implements _RuntimeSupervisor {
     }
     return _NativeRuntimeSupervisor._(
       isAndroid: Platform.isAndroid,
+      isOhos: false,
       dataRoot: Directory(dataRoot),
       hostExecutable: File(executablePath),
       testMode: testMode,
@@ -167,7 +185,10 @@ final class _NativeRuntimeSupervisor implements _RuntimeSupervisor {
   }
 
   @override
-  Future<void> configurePluginHttpProxy(Uri? proxyUri, {String? noProxy}) async {
+  Future<void> configurePluginHttpProxy(
+    Uri? proxyUri, {
+    String? noProxy,
+  }) async {
     _assertOpen();
     if (_pluginHttpProxyConfigured && _pluginHttpProxy == proxyUri) return;
     _pluginHttpProxy = proxyUri;
@@ -265,14 +286,15 @@ final class _NativeRuntimeSupervisor implements _RuntimeSupervisor {
   @override
   Future<bool> pickAndImportLocalPlugin() async {
     _assertOpen();
-    if (!_isAndroid) {
+    if (!_isAndroid && !_isOhos) {
       throw const PluginRuntimeException(
         'unsupported',
-        'The native Android package picker is unavailable on desktop.',
+        'The native package picker is unavailable on this platform.',
       );
     }
     try {
-      final raw = await _channel.invokeMethod<Object?>('pickPlugin');
+      final raw = await (_isOhos ? _ohosChannel : _channel)
+          .invokeMethod<Object?>('pickPlugin');
       if (raw == null) return false;
       final result = _nativeObject(raw, 'Native package picker result');
       final path = result['path'];
@@ -385,12 +407,15 @@ final class _NativeRuntimeSupervisor implements _RuntimeSupervisor {
 
       final token = _newToken();
       late final _NativeRuntimeReady ready;
-      if (_isAndroid) {
-        final response = await _channel
-            .invokeMethod<Object?>('start', <String, Object?>{
-              'token': token,
-              if (_testMode) 'testMode': true,
-            })
+      if (_isAndroid || _isOhos) {
+        final response = await (_isOhos ? _ohosChannel : _channel)
+            .invokeMethod<Object?>(
+              _isOhos ? 'hostStart' : 'start',
+              <String, Object?>{
+                'token': token,
+                if (_testMode) 'testMode': true,
+              },
+            )
             .timeout(_startupTimeout);
         ready = _NativeRuntimeReady.fromMap(response, expectedToken: token);
       } else {
@@ -712,6 +737,7 @@ final class _NativeRuntimeReady {
     Object? raw, {
     required String expectedToken,
   }) {
+    if (raw is String) raw = jsonDecode(raw);
     final value = _nativeObject(raw, 'Native Runtime ready record');
     final port = value['port'];
     final token = value['token'];
