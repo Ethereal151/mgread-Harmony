@@ -258,23 +258,33 @@ final class _NativeRuntimeSupervisor implements _RuntimeSupervisor {
   Future<void> importLocalPlugin(String sourcePath) async {
     _assertOpen();
     final lowerPath = sourcePath.toLowerCase();
-    if (sourcePath.isEmpty ||
-        !lowerPath.endsWith('.mgplugin') ||
-        lowerPath.endsWith('.mgplugin.js')) {
+    final isPackage =
+        lowerPath.endsWith('.mgplugin') && !lowerPath.endsWith('.mgplugin.js');
+    final isRawLibrary =
+        lowerPath.endsWith('.so') || lowerPath.endsWith('.dll');
+    final rawLibrarySupported = (_isAndroid || _isOhos)
+        ? lowerPath.endsWith('.so')
+        : Platform.isWindows && lowerPath.endsWith('.dll');
+    if (sourcePath.isEmpty || (!isPackage && !isRawLibrary)) {
       throw const PluginRuntimeException(
         'invalid_request',
-        'The native Runtime accepts .mgplugin source packages only.',
+        '原生 Rust 数据源请选择 .so 或 .dll 文件，或选择 .mgplugin 安装包。',
       );
+    }
+    if (isRawLibrary && !rawLibrarySupported) {
+      throw const PluginRuntimeException('unsupported', '当前平台不支持所选原生库格式。');
     }
     if (!await File(sourcePath).exists()) {
       throw const PluginRuntimeException(
         'not_found',
-        'The selected native source package is unavailable.',
+        '所选 Rust 原生数据源文件不存在或无法访问。',
       );
     }
     await _runLifecycleTransition<void>(() async {
       final raw = await _invokeRpc(
-        method: 'plugins.native.import.v1',
+        method: isRawLibrary
+            ? 'plugins.native.importRaw.v1'
+            : 'plugins.native.import.v1',
         params: <String, Object?>{'path': sourcePath},
         timeout: const Duration(minutes: 2),
       );
@@ -309,7 +319,7 @@ final class _NativeRuntimeSupervisor implements _RuntimeSupervisor {
     } on PlatformException catch (error) {
       throw PluginRuntimeException(
         error.code,
-        'The native source package could not be selected.',
+        'Rust 原生数据源无法导入。',
         diagnostics: latestDiagnostics,
       );
     }

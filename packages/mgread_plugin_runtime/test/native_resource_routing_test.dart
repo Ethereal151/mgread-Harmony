@@ -41,9 +41,7 @@ void main() {
           request.response.write(
             jsonEncode({
               'ok': true,
-              'result': {
-                'pluginId': plugin,
-                'sourceName': 'Fixture',
+              'value': {
                 'chapterId': 'chapter',
                 'contentKind': 'audio',
                 'title': null,
@@ -83,6 +81,7 @@ void main() {
             'result': input['method'] == 'plugins.native.initialize.v1'
                 ? {
                     'pluginId': plugin,
+                    'sourceName': 'Fixture',
                     'generation': generation,
                     'port': pluginServer.port,
                     'controlToken': 'b' * 64,

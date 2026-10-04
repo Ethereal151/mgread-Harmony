@@ -349,3 +349,60 @@ function Build-MgReadOhosRustRuntime {
   }
   return @{ Library = $rustTarget; Include = $rustInclude }
 }
+
+function Build-MgReadOhosAliceSource {
+  param(
+    [Parameter(Mandatory = $true)][hashtable]$Toolchain,
+    [Parameter(Mandatory = $true)][string]$ProjectRoot,
+    [Parameter(Mandatory = $true)][string]$TargetDirectory,
+    [Parameter(Mandatory = $true)][ValidateSet('arm64', 'x64')][string]$Architecture,
+    [Parameter(Mandatory = $true)][string]$OutputDirectory
+  )
+
+  $rustRoot = $Toolchain.Rust.Root
+  $cargoExecutable = Join-Path $rustRoot 'cargo\bin\cargo.exe'
+  $rustProject = Join-Path $ProjectRoot 'plugins\sources\aisishuwu-native'
+  $rustTargetTriple = $Toolchain.Rust.Targets[$Architecture]
+  $rustTargetEnvironment = $rustTargetTriple.Replace('-', '_')
+  $rustTargetEnvironmentUpper = $rustTargetEnvironment.ToUpperInvariant()
+  $rustTarget = Join-Path $TargetDirectory "$rustTargetTriple\release\libaisishuwu_native.so"
+  $rustLinker = Join-Path $ProjectRoot 'packages\mgread_ohos_native_runtime\native\ohos-clang-linker.cmd'
+  $rustCompiler = Join-Path $ProjectRoot 'packages\mgread_ohos_native_runtime\native\ohos-clang-cc.cmd'
+  $ohosSdkNative = Join-Path $Toolchain.Harmony.SdkRoot 'openharmony\native'
+  foreach ($requiredPath in @($cargoExecutable, $rustProject, $rustLinker, $rustCompiler, $ohosSdkNative)) {
+    if (-not (Test-Path -LiteralPath $requiredPath)) {
+      throw "OHOS Alice source build input is missing: $requiredPath"
+    }
+  }
+
+  $previousTargetDirectory = [Environment]::GetEnvironmentVariable('CARGO_TARGET_DIR', 'Process')
+  $previousTargetArchitecture = [Environment]::GetEnvironmentVariable('MGREAD_OHOS_TARGET_ARCH', 'Process')
+  try {
+    $env:CARGO_TARGET_DIR = $TargetDirectory
+    $env:OHOS_SDK_NATIVE = $ohosSdkNative
+    $env:MGREAD_OHOS_TARGET_ARCH = $Architecture
+    [Environment]::SetEnvironmentVariable("CARGO_TARGET_${rustTargetEnvironmentUpper}_LINKER", $rustLinker, 'Process')
+    [Environment]::SetEnvironmentVariable("CC_${rustTargetEnvironment}", $rustCompiler, 'Process')
+    [Environment]::SetEnvironmentVariable("AR_${rustTargetEnvironment}", (Join-Path $ohosSdkNative 'llvm\bin\llvm-ar.exe'), 'Process')
+    Push-Location $rustProject
+    try {
+      & $cargoExecutable "+$($Toolchain.Rust.Toolchain)" build --locked --release --target $rustTargetTriple
+      if ($LASTEXITCODE -ne 0) {
+        throw "OHOS $Architecture Alice source build failed with exit code $LASTEXITCODE"
+      }
+    } finally {
+      Pop-Location
+    }
+  } finally {
+    [Environment]::SetEnvironmentVariable('CARGO_TARGET_DIR', $previousTargetDirectory, 'Process')
+    [Environment]::SetEnvironmentVariable('MGREAD_OHOS_TARGET_ARCH', $previousTargetArchitecture, 'Process')
+  }
+  if (-not (Test-Path -LiteralPath $rustTarget -PathType Leaf)) {
+    throw "OHOS Alice source build completed without producing: $rustTarget"
+  }
+  New-Item -ItemType Directory -Force -Path $OutputDirectory | Out-Null
+  $outputPath = Join-Path $OutputDirectory 'libaisishuwu_native.so'
+  Copy-Item -LiteralPath $rustTarget -Destination $outputPath -Force
+  Write-Host "OHOS $Architecture Alice source: $outputPath"
+  return $outputPath
+}

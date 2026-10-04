@@ -9,7 +9,7 @@ use sha2::{Digest, Sha256};
 use std::{
     collections::{BTreeMap, HashSet},
     fs,
-    io::{Cursor, Read},
+    io::{Cursor, Read, Write},
     path::{Component, Path, PathBuf},
 };
 
@@ -89,6 +89,168 @@ fn same_installed_build(stored: &Manifest, incoming: &Manifest) -> bool {
 pub fn hash(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }
+
+fn replace_ascii_padded(bytes: &mut [u8], needle: &[u8], replacement: &[u8]) -> usize {
+    if replacement.len() > needle.len() {
+        return 0;
+    }
+    let mut count = 0;
+    let mut offset = 0;
+    while let Some(relative) = bytes[offset..]
+        .windows(needle.len())
+        .position(|window| window == needle)
+    {
+        let start = offset + relative;
+        bytes[start..start + needle.len()].fill(0);
+        bytes[start..start + replacement.len()].copy_from_slice(replacement);
+        offset = start + needle.len();
+        count += 1;
+    }
+    count
+}
+
+/// Android's NDK emits loader names and a marker that OHOS does not accept
+/// even when the library only uses symbols exported by OHOS libc. Keep the
+/// selected library's code intact and normalize only that loader metadata.
+fn normalize_android_library_for_ohos(mut bytes: Vec<u8>) -> Vec<u8> {
+    neutralize_android_ident_section(&mut bytes);
+    replace_ascii_padded(&mut bytes, b"libdl.so", b"libc.so");
+    replace_ascii_padded(&mut bytes, b"libm.so", b"libc.so");
+    replace_ascii_padded(&mut bytes, b".note.android.ident", b".note.ohos.ident");
+    normalize_elf_load_alignment(&mut bytes);
+    bytes
+}
+
+fn neutralize_android_ident_section(bytes: &mut [u8]) {
+    const ELF64_HEADER: usize = 64;
+    const ELF64_SECTION_HEADER: usize = 64;
+    if bytes.len() < ELF64_HEADER || &bytes[..4] != b"\x7fELF" || bytes[4] != 2 || bytes[5] != 1 {
+        return;
+    }
+    let Some(shoff) = read_u64_le(bytes, 40).and_then(|value| usize::try_from(value).ok()) else {
+        return;
+    };
+    let Some(shentsize) = read_u16_le(bytes, 58).map(usize::from) else {
+        return;
+    };
+    let Some(shnum) = read_u16_le(bytes, 60).map(usize::from) else {
+        return;
+    };
+    let Some(shstrndx) = read_u16_le(bytes, 62).map(usize::from) else {
+        return;
+    };
+    if shentsize < ELF64_SECTION_HEADER || shstrndx >= shnum {
+        return;
+    }
+    let Some(shstr) = section_header(bytes, shoff, shentsize, shstrndx) else {
+        return;
+    };
+    let Some(shstr_offset) = usize::try_from(read_u64_le(shstr, 24).unwrap_or(0)).ok() else {
+        return;
+    };
+    let Some(shstr_size) = usize::try_from(read_u64_le(shstr, 32).unwrap_or(0)).ok() else {
+        return;
+    };
+    let Some(shstr_end) = shstr_offset.checked_add(shstr_size) else {
+        return;
+    };
+    if shstr_end > bytes.len() {
+        return;
+    }
+    for index in 0..shnum {
+        let Some(header) = section_header(bytes, shoff, shentsize, index) else {
+            return;
+        };
+        let Some(name_offset) =
+            read_u32_le(header, 0).and_then(|value| usize::try_from(value).ok())
+        else {
+            continue;
+        };
+        let name_start = shstr_offset.saturating_add(name_offset);
+        if name_start >= shstr_end {
+            continue;
+        }
+        let name_end = bytes[name_start..shstr_end]
+            .iter()
+            .position(|byte| *byte == 0)
+            .map(|offset| name_start + offset)
+            .unwrap_or(shstr_end);
+        if &bytes[name_start..name_end] != b".note.android.ident" {
+            continue;
+        }
+        let section_offset = usize::try_from(read_u64_le(header, 24).unwrap_or(0)).ok();
+        let section_size = usize::try_from(read_u64_le(header, 32).unwrap_or(0)).ok();
+        if let (Some(section_offset), Some(section_size)) = (section_offset, section_size)
+            && let Some(section_end) = section_offset.checked_add(section_size)
+            && section_end <= bytes.len()
+        {
+            bytes[section_offset..section_end].fill(0);
+        }
+        let header_offset = shoff + index * shentsize;
+        bytes[header_offset..header_offset + ELF64_SECTION_HEADER].fill(0);
+        return;
+    }
+}
+
+fn section_header(bytes: &[u8], shoff: usize, shentsize: usize, index: usize) -> Option<&[u8]> {
+    let offset = shoff.checked_add(index.checked_mul(shentsize)?)?;
+    let end = offset.checked_add(64)?;
+    bytes.get(offset..end)
+}
+
+fn normalize_elf_load_alignment(bytes: &mut [u8]) {
+    const ELF64_HEADER: usize = 64;
+    const ELF64_PROGRAM_HEADER: usize = 56;
+    const PT_LOAD: u32 = 1;
+    if bytes.len() < ELF64_HEADER || &bytes[..4] != b"\x7fELF" || bytes[4] != 2 || bytes[5] != 1 {
+        return;
+    }
+    let Some(phoff) = read_u64_le(bytes, 32).and_then(|value| usize::try_from(value).ok()) else {
+        return;
+    };
+    let Some(phentsize) = read_u16_le(bytes, 54).map(usize::from) else {
+        return;
+    };
+    let Some(phnum) = read_u16_le(bytes, 56).map(usize::from) else {
+        return;
+    };
+    if phentsize < ELF64_PROGRAM_HEADER {
+        return;
+    }
+    for index in 0..phnum {
+        let Some(offset) = phoff.checked_add(index.saturating_mul(phentsize)) else {
+            return;
+        };
+        let Some(end) = offset.checked_add(ELF64_PROGRAM_HEADER) else {
+            return;
+        };
+        if end > bytes.len() || read_u32_le(bytes, offset) != Some(PT_LOAD) {
+            continue;
+        }
+        let align_offset = offset + 48;
+        if read_u64_le(bytes, align_offset).is_some_and(|align| align > 0x1000) {
+            bytes[align_offset..align_offset + 8].copy_from_slice(&0x1000u64.to_le_bytes());
+        }
+    }
+}
+
+fn read_u16_le(bytes: &[u8], offset: usize) -> Option<u16> {
+    Some(u16::from_le_bytes(
+        bytes.get(offset..offset + 2)?.try_into().ok()?,
+    ))
+}
+
+fn read_u32_le(bytes: &[u8], offset: usize) -> Option<u32> {
+    Some(u32::from_le_bytes(
+        bytes.get(offset..offset + 4)?.try_into().ok()?,
+    ))
+}
+
+fn read_u64_le(bytes: &[u8], offset: usize) -> Option<u64> {
+    Some(u64::from_le_bytes(
+        bytes.get(offset..offset + 8)?.try_into().ok()?,
+    ))
+}
 /// Existing public transfer envelopes use IEEE CRC32; binary manifests use SHA256.
 pub fn transfer_checksum(bytes: &[u8]) -> String {
     let mut crc = !0u32;
@@ -106,7 +268,7 @@ pub fn safe_name(s: &str) -> bool {
         && s != "."
         && s != ".."
         && s.bytes()
-            .all(|c| c.is_ascii_alphanumeric() || b"._-".contains(&c))
+            .all(|c| c.is_ascii_alphanumeric() || b"._-+".contains(&c))
 }
 pub fn safe_relative(s: &str) -> bool {
     !s.is_empty()
@@ -362,6 +524,122 @@ impl Catalog {
         self.save()?;
         Ok(manifest)
     }
+    /// Wrap a user-selected native library in the immutable native package
+    /// format. Raw libraries do not carry the catalog metadata required by
+    /// the Runtime, so the well-known Alice filename keeps its public
+    /// identity and other libraries receive a stable hash-based identity.
+    pub fn install_raw(&mut self, path: &Path) -> Result<Manifest> {
+        let file_name = path
+            .file_name()
+            .and_then(|value| value.to_str())
+            .ok_or_else(|| invalid("Native library filename is invalid"))?;
+        let lower_name = file_name.to_ascii_lowercase();
+        let extension = if target() == "windows-x86_64" {
+            ".dll"
+        } else {
+            ".so"
+        };
+        if !lower_name.ends_with(extension) {
+            return Err(invalid(
+                "Native library extension does not match this platform",
+            ));
+        }
+        let raw_bytes = fs::read(path)?;
+        if raw_bytes.is_empty() || raw_bytes.len() > 32 * 1024 * 1024 {
+            return Err(invalid("Native library is empty or too large"));
+        }
+        let bytes = if target().starts_with("ohos")
+            && raw_bytes
+                .windows(b".note.android.ident".len())
+                .any(|window| window == b".note.android.ident")
+        {
+            normalize_android_library_for_ohos(raw_bytes)
+        } else {
+            raw_bytes
+        };
+        let digest = hash(&bytes);
+        let alice = lower_name.contains("aisishuwu") || lower_name.contains("alice");
+        let (id, name, version, description) = if alice {
+            (
+                "org.mgread.aisishuwu.native".to_string(),
+                "爱丽丝书屋（Rust）".to_string(),
+                "0.3.0".to_string(),
+                "手动导入的 Rust 原生小说数据源".to_string(),
+            )
+        } else {
+            let stem = file_name
+                .rsplit_once('.')
+                .map(|(value, _)| value)
+                .unwrap_or(file_name);
+            let safe_stem = stem
+                .chars()
+                .filter(|value| value.is_ascii_alphanumeric() || matches!(value, '.' | '_' | '-'))
+                .collect::<String>();
+            let safe_stem = if safe_stem.is_empty() {
+                "source"
+            } else {
+                safe_stem.as_str()
+            };
+            let safe_stem = &safe_stem[..safe_stem.len().min(100)];
+            (
+                format!("org.mgread.native.{}-{}", safe_stem, &digest[..12]),
+                stem.chars().take(256).collect::<String>(),
+                format!("0.0.0+{}", &digest[..12]),
+                "手动导入的 Rust 原生数据源".to_string(),
+            )
+        };
+        let archive_path = format!(
+            "native/{}/{}",
+            target(),
+            if extension == ".dll" {
+                "source.dll"
+            } else {
+                "libsource.so"
+            }
+        );
+        let manifest = Manifest {
+            format: "mgread-native".into(),
+            engine: "native".into(),
+            abi: mgread_native_abi::ABI_VERSION,
+            id,
+            name,
+            version,
+            description,
+            content_kinds: vec!["novel".into()],
+            capabilities: vec![
+                "discover".into(),
+                "search".into(),
+                "searchSuggestions".into(),
+                "getDetail".into(),
+                "getChapters".into(),
+                "getContent".into(),
+            ],
+            targets: BTreeMap::from([(
+                target().into(),
+                Target {
+                    path: archive_path.clone(),
+                    sha256: digest,
+                },
+            )]),
+        };
+        Self::validate_manifest(&manifest)?;
+        let mut output = Cursor::new(Vec::new());
+        {
+            let mut zip = zip::ZipWriter::new(&mut output);
+            let options = zip::write::SimpleFileOptions::default()
+                .compression_method(zip::CompressionMethod::Deflated);
+            let manifest_bytes = serde_json::to_vec(&manifest)?;
+            zip.start_file("manifest.json", options)
+                .map_err(|_| invalid("Native package creation failed"))?;
+            zip.write_all(&manifest_bytes)?;
+            zip.start_file(&archive_path, options)
+                .map_err(|_| invalid("Native package creation failed"))?;
+            zip.write_all(&bytes)?;
+            zip.finish()
+                .map_err(|_| invalid("Native package creation failed"))?;
+        }
+        self.install(output.get_ref(), None)
+    }
     pub fn projection(&self, e: &Entry) -> Value {
         let m = &e.manifest;
         json!({"id":m.id,"name":m.name,"displayName":m.name,"description":m.description,"iconUrl":null,
@@ -492,5 +770,70 @@ mod tests {
         subset = manifest.clone();
         subset.version = "0.1.1".into();
         assert!(!same_installed_build(&manifest, &subset));
+    }
+    #[test]
+    fn raw_library_import_creates_a_standard_native_package() {
+        let root = std::env::temp_dir().join(format!(
+            "mgread-native-catalog-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let library = root.join(if target() == "windows-x86_64" {
+            "aisishuwu-native.dll"
+        } else {
+            "aisishuwu-native.so"
+        });
+        fs::create_dir_all(&root).unwrap();
+        fs::write(&library, b"native-library-fixture").unwrap();
+        let mut catalog = Catalog::open(root.join("runtime")).unwrap();
+        let manifest = catalog.install_raw(&library).unwrap();
+        assert_eq!(manifest.id, "org.mgread.aisishuwu.native");
+        assert_eq!(manifest.version, "0.3.0");
+        assert!(
+            catalog
+                .versions(&manifest.id)
+                .join(&manifest.version)
+                .join("source.mgplugin")
+                .is_file()
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn android_library_loader_metadata_is_normalized_for_ohos() {
+        let bytes = normalize_android_library_for_ohos(
+            b"libdl.so\0libm.so\0libc.so\0.note.android.ident\0".to_vec(),
+        );
+        assert!(!bytes.windows(b"libdl.so".len()).any(|w| w == b"libdl.so"));
+        assert!(!bytes.windows(b"libm.so".len()).any(|w| w == b"libm.so"));
+        assert!(bytes.windows(b"libc.so".len()).any(|w| w == b"libc.so"));
+        assert!(
+            bytes
+                .windows(b".note.ohos.ident".len())
+                .any(|w| w == b".note.ohos.ident")
+        );
+        assert!(
+            !bytes
+                .windows(b".note.android.ident".len())
+                .any(|w| w == b".note.android.ident")
+        );
+    }
+
+    #[test]
+    fn android_elf_load_alignment_is_reduced_to_ohos_page_alignment() {
+        let mut bytes = vec![0u8; 128];
+        bytes[..4].copy_from_slice(b"\x7fELF");
+        bytes[4] = 2;
+        bytes[5] = 1;
+        bytes[32..40].copy_from_slice(&64u64.to_le_bytes());
+        bytes[54..56].copy_from_slice(&64u16.to_le_bytes());
+        bytes[56..58].copy_from_slice(&1u16.to_le_bytes());
+        bytes[64..68].copy_from_slice(&1u32.to_le_bytes());
+        bytes[64 + 48..64 + 56].copy_from_slice(&0x4000u64.to_le_bytes());
+        normalize_elf_load_alignment(&mut bytes);
+        assert_eq!(read_u64_le(&bytes, 64 + 48), Some(0x1000));
     }
 }

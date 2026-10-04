@@ -1,9 +1,13 @@
-# Package only Windows x64 and Android arm64 in one standard Deflate ZIP.
+# Package Windows x64, Android arm64, and optionally OHOS arm64 in one standard
+# Deflate ZIP. The OHOS target is intentionally opt-in so the portable Android
+# package remains unchanged for existing consumers.
 # NanaZip 7.0 (2609.2) uses exhaustive Deflate passes for the smallest
 # compatible local-import archive; LAN sync sends only the receiver's binary.
 param(
   [string]$WindowsDll = (Join-Path $PSScriptRoot '..\target\x86_64-pc-windows-msvc\release\aisishuwu_native.dll'),
   [string]$AndroidArm64So = (Join-Path $PSScriptRoot '..\target\aarch64-linux-android\release\libaisishuwu_native.so'),
+  [string]$OhosArm64So = '',
+  [switch]$IncludeOhos,
   [string]$Output = (Join-Path $PSScriptRoot '..\dist\aisishuwu-native-0.3.0.mgplugin')
 )
 
@@ -17,6 +21,12 @@ if ($archiverBanner -notmatch '^NanaZip 7\.0 , version 2609\.2 \(x64\)') {
 $libraries = [ordered]@{
   'windows-x86_64' = @{ Path = $WindowsDll; ArchivePath = 'native/windows-x86_64/aisishuwu_native.dll' }
   'android-arm64-v8a' = @{ Path = $AndroidArm64So; ArchivePath = 'native/android-arm64-v8a/libaisishuwu_native.so' }
+}
+if ($IncludeOhos) {
+  if ([string]::IsNullOrWhiteSpace($OhosArm64So)) {
+    throw 'The OHOS arm64 native library path is required when -IncludeOhos is used.'
+  }
+  $libraries['ohos-arm64'] = @{ Path = $OhosArm64So; ArchivePath = 'native/ohos-arm64/libaisishuwu_native.so' }
 }
 
 foreach ($target in $libraries.Keys) {
@@ -85,4 +95,6 @@ function Write-Package([string]$Path, [string[]]$SelectedTargets) {
   Write-Output "SHA-256 $((Get-FileHash -LiteralPath $outputPath -Algorithm SHA256).Hash.ToLowerInvariant())"
 }
 
-Write-Package $Output @('windows-x86_64', 'android-arm64-v8a')
+$selectedTargets = @('windows-x86_64', 'android-arm64-v8a')
+if ($IncludeOhos) { $selectedTargets += 'ohos-arm64' }
+Write-Package $Output $selectedTargets

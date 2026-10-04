@@ -290,7 +290,10 @@ class NativeRuntimeBackendPlugin : FlutterPlugin, MethodChannel.MethodCallHandle
         val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
             addCategory(Intent.CATEGORY_OPENABLE)
             type = "application/octet-stream"
-            putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("application/zip", "application/octet-stream"))
+            putExtra(
+                Intent.EXTRA_MIME_TYPES,
+                arrayOf("application/x-sharedlib", "application/octet-stream", "application/zip"),
+            )
         }
         pendingPicker = result
         pickerGeneration += 1
@@ -359,7 +362,7 @@ class NativeRuntimeBackendPlugin : FlutterPlugin, MethodChannel.MethodCallHandle
             .substringAfterLast('\\')
             .replace(Regex("[^A-Za-z0-9._-]"), "_")
             .take(MAX_FILE_NAME_LENGTH)
-            .ifBlank { "plugin.mgplugin" }
+            .ifBlank { "native-source.so" }
         val id = UUID.randomUUID().toString()
         val temporary = File(inbox, ".$id.part")
         val destination = File(inbox, "$id-$safeName")
@@ -395,9 +398,9 @@ class NativeRuntimeBackendPlugin : FlutterPlugin, MethodChannel.MethodCallHandle
             cursor = context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
             if (cursor != null && cursor.moveToFirst()) {
                 val column = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                if (column >= 0) cursor.getString(column).orEmpty() else "plugin.mgplugin"
+                if (column >= 0) cursor.getString(column).orEmpty() else "native-source.so"
             } else {
-                "plugin.mgplugin"
+                "native-source.so"
             }
         } finally {
             cursor?.close()

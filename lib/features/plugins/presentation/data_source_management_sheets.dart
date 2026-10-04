@@ -54,7 +54,7 @@ Future<DataSourceImportChoice?> showDataSourceImportSheet(BuildContext context) 
           actionKey: const Key('data-source-add-native'),
           icon: Icons.developer_board_outlined,
           title: _isOhosHybridRuntimeBuild ? 'Rust 原生数据源' : '原生数据源',
-          subtitle: _isOhosHybridRuntimeBuild ? '选择适用于当前 OHOS ABI 的 .mgplugin 安装包' : '选择适用于当前平台的 .mgplugin 安装包',
+          subtitle: Platform.isWindows ? '选择当前平台的 Rust 原生 .dll 文件' : '选择当前平台的 Rust 原生 .so 文件',
           onTap: () => Navigator.pop(context, DataSourceImportChoice.native),
         ),
     ],

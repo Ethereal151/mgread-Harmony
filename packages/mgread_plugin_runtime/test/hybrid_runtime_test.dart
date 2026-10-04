@@ -96,6 +96,7 @@ void main() {
         ],
         'plugins.native.initialize.v1' => {
           'pluginId': 'org.mgread.fixture.native',
+          'sourceName': 'Native Fixture',
           'generation': 'a' * 64,
           'port': server.port,
           'controlToken': 'b' * 64,

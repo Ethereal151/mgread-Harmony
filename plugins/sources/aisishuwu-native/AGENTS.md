@@ -12,6 +12,8 @@ retain host pointers. Cache values are complete public source values with
 resource descriptors, never Runtime-generated proxy URLs. `cargo test --locked`
 is the direct portable parsing/cache fixture test entry point. `tools/package.ps1`
 requires NanaZip 7.0 version 2609.2 on PATH and builds one reproducible
-high-compression Deflate ZIP with Windows x64 and Android arm64
-libraries. Both platforms import the same archive; LAN transfer filters it to
-the receiver's platform and recomputes the transfer descriptor.
+high-compression Deflate ZIP with Windows x64 and Android arm64 libraries, with
+an optional OHOS arm64 library. Windows and Android import the portable archive;
+OHOS release builds also bundle the OHOS-targeted Alice library because an
+Android ELF cannot be loaded from an OHOS app namespace. LAN transfer filters
+the archive to the receiver's platform and recomputes the transfer descriptor.

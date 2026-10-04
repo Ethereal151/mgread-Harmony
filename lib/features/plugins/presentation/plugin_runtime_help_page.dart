@@ -92,12 +92,12 @@ class _PluginRuntimeHelpPageState extends ConsumerState<PluginRuntimeHelpPage> {
                       icon: Icons.auto_stories_outlined,
                       title: '管理数据源',
                       body: ohosHybridRuntimeBuild
-                          ? '点击“添加数据源”，可选择 Node 数据源或适用于当前 OHOS ABI 的 Rust 原生 .mgplugin 文件；两类可以同时使用。Rust 包会校验 manifest、ABI 和目标 .so 后再加载，列表右侧开关控制启用状态。'
+                          ? '点击“添加数据源”，可选择 Node 数据源或适用于当前 OHOS ABI 的 Rust 原生 .so 文件；两类可以同时使用。Rust Runtime 会自动生成安装清单并校验 ABI 后加载，列表右侧开关控制启用状态。'
                           : nativeRuntimeBuild
-                          ? '点击“添加数据源”，选择原生 .mgplugin 文件导入；列表右侧开关控制启用状态。'
+                          ? '点击“添加数据源”，选择当前平台的 Rust 原生 .so 或 .dll 文件导入；列表右侧开关控制启用状态。'
                           : Platform.isMacOS || const bool.fromEnvironment('MGREAD_NODE_ONLY')
                           ? '点击“添加数据源”，选择 Node 数据源并导入 .mgplugin.js 或 .mgplugin 文件；列表右侧开关控制启用状态。'
-                          : '点击“添加数据源”，按提供方说明选择 Node 或原生类型，两类可以同时使用。Node 支持 .mgplugin.js 和 .mgplugin；原生支持 .mgplugin。列表右侧开关控制启用状态。',
+                          : '点击“添加数据源”，按提供方说明选择 Node 或原生类型，两类可以同时使用。Node 支持 .mgplugin.js 和 .mgplugin；Rust 原生支持当前平台的 .so 或 .dll。列表右侧开关控制启用状态。',
                     ),
                     if (canSelectDevelopmentDirectory) ...<Widget>[
                       const SizedBox(height: AppSpacing.regular),

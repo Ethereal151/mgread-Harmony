@@ -49,6 +49,11 @@ pub fn control(runtime: &Arc<Runtime>, method: &str, params: &Value) -> Result<V
             let m = runtime.catalog.lock().unwrap().install(&bytes, expected)?;
             Ok(json!({"pluginId":m.id,"version":m.version,"restartRequired":true}))
         }
+        "plugins.native.importRaw.v1" => {
+            let path = std::path::Path::new(string(params, "path")?);
+            let m = runtime.catalog.lock().unwrap().install_raw(path)?;
+            Ok(json!({"pluginId":m.id,"version":m.version,"restartRequired":true}))
+        }
         "runtime.native.proxy.v1" => {
             let proxy = params["url"].as_str();
             if !runtime.loaded.lock().unwrap().is_empty() {

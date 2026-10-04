@@ -184,12 +184,26 @@ extension _NativeRuntimeSupervisorTransport on _NativeRuntimeSupervisor {
         'transport_disconnected',
         'Native worker generation has changed.',
       );
-    if (envelope['ok'] == true && envelope.containsKey('result')) {
+    final legacyValueEnvelope =
+        envelope['ok'] == true &&
+        !envelope.containsKey('result') &&
+        envelope.containsKey('value');
+    if (envelope['ok'] == true &&
+        (envelope.containsKey('result') || legacyValueEnvelope)) {
       if (endpoint != null) {
         final result = _nativeObject(
-          envelope['result'],
+          envelope[legacyValueEnvelope ? 'value' : 'result'],
           'Native source result',
         );
+        if (legacyValueEnvelope) {
+          // ABI v3 libraries built before the shared HTTP host migration use
+          // the original {ok,value} envelope and do not add source ownership
+          // fields inside the library. The initialized endpoint is trusted by
+          // this authenticated worker, so restore the fields required by the
+          // current typed source contract before resource validation.
+          result.putIfAbsent('pluginId', () => params['pluginId']);
+          result.putIfAbsent('sourceName', () => endpoint.sourceName);
+        }
         if (result['pluginId'] != params['pluginId'])
           throw const PluginRuntimeException(
             'invalid_response',
@@ -200,7 +214,7 @@ extension _NativeRuntimeSupervisorTransport on _NativeRuntimeSupervisor {
           params['pluginId'] as String?,
         );
       }
-      return envelope['result'];
+      return envelope[legacyValueEnvelope ? 'value' : 'result'];
     }
     if (envelope['ok'] == false) {
       final error = _nativeObject(envelope['error'], 'Native HTTP error');

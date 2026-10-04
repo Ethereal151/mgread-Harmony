@@ -62,10 +62,16 @@ final class _SourceResourceUrl {
 }
 
 final class _NativePluginEndpoint {
-  const _NativePluginEndpoint(this.port, this.generation, this.controlToken);
+  const _NativePluginEndpoint(
+    this.port,
+    this.generation,
+    this.controlToken,
+    this.sourceName,
+  );
   final int port;
   final String generation;
   final String controlToken;
+  final String sourceName;
 }
 
 /// Only authenticated worker initialization can register endpoints. Content URLs
@@ -85,6 +91,7 @@ final class _NativeResourceEndpoints {
         !_SourceResourceUrl._hex.hasMatch(generation) ||
         token is! String ||
         token.length < 32 ||
+        data['sourceName'] is! String ||
         port is! int ||
         port < 1 ||
         port > 65535)
@@ -95,7 +102,12 @@ final class _NativeResourceEndpoints {
             previous.generation != generation ||
             previous.controlToken != token))
       _invalid();
-    return _entries[owner] = _NativePluginEndpoint(port, generation, token);
+    return _entries[owner] = _NativePluginEndpoint(
+      port,
+      generation,
+      token,
+      data['sourceName'] as String,
+    );
   }
 
   void validate(String url, String? pluginId) {

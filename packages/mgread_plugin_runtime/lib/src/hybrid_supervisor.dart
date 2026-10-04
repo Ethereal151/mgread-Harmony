@@ -318,7 +318,7 @@ final class _HybridRuntimeSupervisor implements _RuntimeSupervisor {
     } else {
       final file = await openFile(
         acceptedTypeGroups: <XTypeGroup>[
-          XTypeGroup(label: 'MgRead 原生数据源', extensions: <String>['mgplugin']),
+          XTypeGroup(label: 'MgRead Rust 原生数据源', extensions: <String>['dll']),
         ],
         confirmButtonText: '导入',
       );
@@ -332,8 +332,10 @@ final class _HybridRuntimeSupervisor implements _RuntimeSupervisor {
 
   Future<void> importLocalPluginForTesting(String sourcePath) async {
     final lowerPath = sourcePath.toLowerCase();
-    if (lowerPath.endsWith('.mgplugin') &&
-        !lowerPath.endsWith('.mgplugin.js')) {
+    if ((lowerPath.endsWith('.mgplugin') &&
+            !lowerPath.endsWith('.mgplugin.js')) ||
+        lowerPath.endsWith('.so') ||
+        lowerPath.endsWith('.dll')) {
       await _native.importLocalPlugin(sourcePath);
     } else {
       await _node.importLocalPlugin(sourcePath);

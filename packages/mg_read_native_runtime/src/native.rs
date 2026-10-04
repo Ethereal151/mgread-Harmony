@@ -7,7 +7,10 @@ use crate::{
 use libloading::Library;
 use mgread_native_abi::{ABI_VERSION, InitResult};
 use serde_json::{Value, json};
-use std::{mem::ManuallyDrop, path::Path};
+use std::{
+    mem::ManuallyDrop,
+    path::{Path, PathBuf},
+};
 
 pub struct NativePlugin {
     _library: ManuallyDrop<Library>,
@@ -25,8 +28,23 @@ impl NativePlugin {
             return Err(invalid("Native binary integrity failed"));
         }
         unsafe {
-            let library = ManuallyDrop::new(Library::new(path).map_err(|_| {
-                Error::new("plugin_load_failed", "Native binary could not be loaded")
+            let library = ManuallyDrop::new(Library::new(path).or_else(|error| {
+                if cfg!(target_env = "ohos") && manifest.id == "org.mgread.aisishuwu.native" {
+                    let bundled = ohos_bundled_library("libaisishuwu_native.so")
+                        .unwrap_or_else(|| PathBuf::from("libaisishuwu_native.so"));
+                    Library::new(&bundled).map_err(|bundled_error| Error {
+                        code: "plugin_load_failed".into(),
+                        message: format!(
+                            "Native binary could not be loaded: {error}; bundled OHOS fallback {} failed: {bundled_error}",
+                            bundled.display()
+                        ),
+                    })
+                } else {
+                    Err(Error {
+                        code: "plugin_load_failed".into(),
+                        message: format!("Native binary could not be loaded: {error}"),
+                    })
+                }
             })?);
             let init: libloading::Symbol<unsafe extern "C" fn(*const u8, usize) -> InitResult> =
                 library
@@ -46,7 +64,7 @@ impl NativePlugin {
             }
             Ok(Self {
                 _library: library,
-                endpoint: json!({"pluginId":manifest.id,"generation":config["generation"],"port":ready.port,"controlToken":config["controlToken"]}),
+                endpoint: json!({"pluginId":manifest.id,"sourceName":manifest.name,"generation":config["generation"],"port":ready.port,"controlToken":config["controlToken"]}),
             })
         }
     }
@@ -74,6 +92,15 @@ impl NativePlugin {
         .await
         .map_err(|_| Error::new("shutdown_failed", "Plugin listener did not stop"))?
     }
+}
+
+fn ohos_bundled_library(name: &str) -> Option<PathBuf> {
+    let maps = std::fs::read_to_string("/proc/self/maps").ok()?;
+    maps.lines()
+        .filter_map(|line| line.split_whitespace().last())
+        .find(|path| path.ends_with("/libmgread_rust_runtime.so"))
+        .and_then(|path| Path::new(path).parent())
+        .map(|directory| directory.join(name))
 }
 pub fn init_config(
     root: &Path,

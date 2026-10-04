@@ -106,7 +106,7 @@ export default class OhosNativeRuntimePlugin implements FlutterPlugin, MethodCal
     }
     try {
       const options = new picker.DocumentSelectOptions()
-      options.fileSuffixFilters = ['.mgplugin']
+      options.fileSuffixFilters = ['.so']
       options.maxSelectNumber = 1
       const pickerView = new picker.DocumentViewPicker(context as common.UIAbilityContext)
       const selected = await pickerView.select(options)
@@ -114,7 +114,9 @@ export default class OhosNativeRuntimePlugin implements FlutterPlugin, MethodCal
         result.success(null)
         return
       }
-      const target = `${context.cacheDir}/mgread-native-import-${Date.now()}.mgplugin`
+      const sourceName = selected[0].split('/').pop() ?? 'native-source.so'
+      const safeSourceName = sourceName.replace(/[^A-Za-z0-9._-]/g, '_')
+      const target = `${context.cacheDir}/${safeSourceName}-${Date.now()}.so`
       try {
         this.copyFile(selected[0], target)
         result.success({ path: target })

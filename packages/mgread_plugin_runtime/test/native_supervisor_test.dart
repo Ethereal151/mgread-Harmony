@@ -79,6 +79,7 @@ void main() {
         'runtime.status.v1' => _nativeStatus(),
         'plugins.native.initialize.v1' => {
           'pluginId': 'native-test',
+          'sourceName': 'Native Test',
           'generation': 'a' * 64,
           'port': server.port,
           'controlToken': 'b' * 64,

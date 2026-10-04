@@ -624,6 +624,12 @@ try {
     $env:MGREAD_RUST_RUNTIME_INCLUDE = $rustRuntime.Include
     Write-Host "OHOS Rust runtime: $($rustRuntime.Library)"
   }
+  Build-MgReadOhosAliceSource `
+    -Toolchain $toolchain `
+    -ProjectRoot $projectRoot `
+    -TargetDirectory (Join-Path $variantRoot 'alice-target') `
+    -Architecture $Architecture `
+    -OutputDirectory (Join-Path $nativeLibsRoot $variant.Abi)
   Set-OhosFlutterRuntimeOverrides
   Ensure-OhosLocalPluginOverrides
   Remove-StaleFlutterBuildOutputs
@@ -675,6 +681,7 @@ try {
     "${selectedArchitecturePath}libmgread_node_host.so"
     "${selectedArchitecturePath}libmgread_ohos_native_runtime.so"
     "${selectedArchitecturePath}libmgread_rust_runtime.so"
+    "${selectedArchitecturePath}libaisishuwu_native.so"
   )
   foreach ($requiredRuntimePath in $requiredRuntimePaths) {
     if ($hapEntries -notcontains $requiredRuntimePath) {
