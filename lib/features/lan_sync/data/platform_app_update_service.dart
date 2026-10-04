@@ -1,9 +1,11 @@
-/// Windows/Android App 制品来源与安装入口。
+/// Windows/Android/OHOS App 制品来源与安装入口。
 ///
 /// Windows 仅归档当前 [mg_read.exe] 所在发布 bundle 的普通文件，并写入受限
 /// 静态文件清单。进程退出后，外部更新器只按该清单覆盖或清理由前一清单管理的
 /// 文件；用户数据和未声明文件永远不删除。Android 交给系统 Package Installer
-/// 验签和确认。Windows Debug 可从工程相对路径探测 release APK 及其真实元数据。
+/// 验签和确认。OHOS 从 Bundle Manager 暴露的当前 HAP 路径复制出可传输副本，
+/// 接收端仍交给应用市场完成安装。Windows Debug 可从工程相对路径探测 release
+/// APK 及其真实元数据。
 library;
 
 import 'dart:async';
@@ -87,6 +89,7 @@ final class PlatformAppUpdateService implements AppUpdateService {
   final PlatformAppUpdateDependencies _dependencies;
   Future<AppVersionInfo>? _currentFuture;
   Future<List<AppPackageOffer>>? _offersFuture;
+  Future<OhosPackageInfo?>? _ohosPackageInfoFuture;
 
   @override
   Future<AppVersionInfo> currentVersion() => _currentFuture ??= _readCurrentVersion();
@@ -102,9 +105,8 @@ final class PlatformAppUpdateService implements AppUpdateService {
     return switch (platform) {
       AppUpdatePlatform.android => _prepareAndroidPackage(offer.version),
       AppUpdatePlatform.windows => _prepareWindowsPackage(offer.version),
-      AppUpdatePlatform.macos ||
-      AppUpdatePlatform.ohos ||
-      AppUpdatePlatform.unknown => throw UnsupportedError('app_update_platform_unsupported'),
+      AppUpdatePlatform.ohos => _prepareOhosPackage(offer.version),
+      AppUpdatePlatform.macos || AppUpdatePlatform.unknown => throw UnsupportedError('app_update_platform_unsupported'),
     };
   }
 
@@ -154,7 +156,7 @@ final class PlatformAppUpdateService implements AppUpdateService {
 
   Future<AppVersionInfo> _readCurrentVersion() async {
     if (_dependencies.isOhos) {
-      final info = await OhosSystemClient.getPackageInfo();
+      final info = await _readOhosPackageInfo();
       return AppVersionInfo(
         platform: AppUpdatePlatform.ohos,
         version: info?.version.trim().isNotEmpty == true ? info!.version.trim() : '0.0.0',
@@ -181,14 +183,19 @@ final class PlatformAppUpdateService implements AppUpdateService {
 
   Future<List<AppPackageOffer>> _readAvailablePackages() async {
     final current = await currentVersion();
+    final ohosPackage = current.platform == AppUpdatePlatform.ohos ? await _readOhosPackageInfo() : null;
+    final ohosPackageAvailable = ohosPackage?.hapPath?.isNotEmpty == true;
     final offers = <AppPackageOffer>[
       AppPackageOffer(
         version: current,
-        available: current.platform == AppUpdatePlatform.android || current.platform == AppUpdatePlatform.windows,
+        available:
+            current.platform == AppUpdatePlatform.android ||
+            current.platform == AppUpdatePlatform.windows ||
+            (current.platform == AppUpdatePlatform.ohos && ohosPackageAvailable),
         reason: current.platform == AppUpdatePlatform.macos
             ? 'app_update_platform_unsupported'
             : current.platform == AppUpdatePlatform.ohos
-            ? 'app_update_market_fallback_required'
+            ? (ohosPackageAvailable ? null : 'app_update_package_unavailable')
             : null,
       ),
     ];
@@ -211,6 +218,36 @@ final class PlatformAppUpdateService implements AppUpdateService {
     final packageName = _dependencies.isAndroid ? (await PackageInfo.fromPlatform()).packageName : 'com.mgread.mg_read';
     return _existingPackage(source, version, 'mg_read-${version.version}-android.apk', packageName: packageName);
   }
+
+  Future<PreparedAppPackage> _prepareOhosPackage(AppVersionInfo version) async {
+    if (!_dependencies.isOhos) throw StateError('app_update_platform_mismatch');
+    final info = await _readOhosPackageInfo();
+    final sourcePath = info?.hapPath;
+    if (info == null || sourcePath == null || sourcePath.isEmpty || info.packageName.isEmpty) {
+      throw StateError('app_update_package_unavailable');
+    }
+    final source = File(sourcePath);
+    if (!await source.exists()) throw StateError('app_update_package_unavailable');
+    final temporary = await _dependencies.createTemporaryDirectory('mgread-app-package-');
+    final copy = File('${temporary.path}${Platform.pathSeparator}mg_read-${version.version}-ohos.hap');
+    try {
+      await source.copy(copy.path);
+      final prepared = await _existingPackage(copy, version, copy.uri.pathSegments.last, packageName: info.packageName);
+      return PreparedAppPackage(
+        descriptor: prepared.descriptor,
+        file: prepared.file,
+        onClose: () async {
+          await prepared.close();
+          if (await temporary.exists()) await temporary.delete(recursive: true);
+        },
+      );
+    } on Object {
+      if (await temporary.exists()) await temporary.delete(recursive: true);
+      rethrow;
+    }
+  }
+
+  Future<OhosPackageInfo?> _readOhosPackageInfo() => _ohosPackageInfoFuture ??= OhosSystemClient.getPackageInfo();
 
   Future<PreparedAppPackage> _prepareWindowsPackage(AppVersionInfo version) async {
     if (!_dependencies.isWindows) throw StateError('app_update_platform_mismatch');

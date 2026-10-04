@@ -197,6 +197,43 @@ void main() {
     await service.ensureInstallPermission();
   });
 
+  test('OHOS exposes the installed HAP as a sendable package', () async {
+    final hap = File('${temporary.path}${Platform.pathSeparator}entry.hap');
+    final bytes = <int>[7, 8, 9, 10];
+    await hap.writeAsBytes(bytes);
+    final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    const channel = MethodChannel('mgread/ohos_system');
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      if (call.method == 'getPackageInfo') {
+        return <String, Object?>{'version': '3.2.0', 'build': 43, 'packageName': 'com.ohos.mgread', 'hapPath': hap.path};
+      }
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+    final service = PlatformAppUpdateService(
+      dependencies: PlatformAppUpdateDependencies(
+        isAndroid: false,
+        isWindows: false,
+        isMacOS: false,
+        isOhos: true,
+        isDebug: false,
+        resolvedExecutable: temporary.path,
+        currentDirectory: temporary,
+        processId: 123,
+        startWindowsUpdater: (_, _) async {},
+        exitAfterWindowsUpdater: () async {},
+        createTemporaryDirectory: (prefix) => temporary.createTemp(prefix),
+      ),
+    );
+
+    final offers = await service.availablePackages();
+    expect(offers.single.available, isTrue);
+    final prepared = await service.preparePackage(AppUpdatePlatform.ohos);
+    addTearDown(prepared.close);
+    expect(await prepared.file.readAsBytes(), orderedEquals(bytes));
+    expect(prepared.descriptor.packageName, 'com.ohos.mgread');
+  });
+
   test('OHOS verifies the received HAP and opens the application market', () async {
     final package = File('${temporary.path}${Platform.pathSeparator}received.hap');
     final bytes = <int>[1, 2, 3, 4];

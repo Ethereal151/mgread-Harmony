@@ -401,8 +401,27 @@ export default class MgReadOhosSystemPlugin implements FlutterPlugin, MethodCall
 
   private async getPackageInfo(result: MethodResult): Promise<void> {
     try {
-      const info = await bundleManager.getBundleInfoForSelf(bundleManager.BundleFlag.GET_BUNDLE_INFO_DEFAULT)
-      result.success({version: info.versionName, build: info.versionCode, packageName: info.name})
+      const info = await bundleManager.getBundleInfoForSelf(
+        bundleManager.BundleFlag.GET_BUNDLE_INFO_DEFAULT | bundleManager.BundleFlag.GET_BUNDLE_INFO_WITH_HAP_MODULE,
+      )
+      let hapPath = ''
+      const candidates: Array<string> = [`/data/app/el1/bundle/public/${info.name}/entry.hap`]
+      for (const moduleInfo of info.hapModulesInfo) {
+        candidates.push(`/data/app/el1/bundle/public/${info.name}/${moduleInfo.name}.hap`)
+      }
+      for (const candidate of candidates) {
+        let handle: fs.File | undefined
+        try {
+          handle = fs.openSync(candidate, fs.OpenMode.READ_ONLY)
+          hapPath = candidate
+          break
+        } catch (_) {
+          // Ordinary applications may not be able to read the installed HAP.
+        } finally {
+          if (handle !== undefined) fs.closeSync(handle.fd)
+        }
+      }
+      result.success({version: info.versionName, build: info.versionCode, packageName: info.name, hapPath})
     } catch (error) {
       result.error('package_info_failed', this.errorMessage(error), null)
     }

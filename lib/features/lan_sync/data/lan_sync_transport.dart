@@ -109,13 +109,15 @@ final class LanSyncSenderService {
   int get port => _server.port;
   List<String> get addresses => List.unmodifiable(_addresses);
   static Future<LanSyncSenderService> start({required LanSyncManifest manifest, required LanSyncPluginStreamOpener openPlugin}) async {
+    final addresses = await eligibleLanSyncAddresses();
+    if (addresses.isEmpty) throw const LanSyncTransportException('lan_sync_local_network_unavailable');
     final server = await HttpServer.bind(InternetAddress.anyIPv4, 0);
     final result = LanSyncSenderService._(
       sessionId: _randomToken(18),
       manifest: manifest,
       openPlugin: openPlugin,
       server: server,
-      addresses: await eligibleLanSyncAddresses(),
+      addresses: addresses,
     );
     result._start();
     return result;

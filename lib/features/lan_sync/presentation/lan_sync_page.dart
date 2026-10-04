@@ -76,6 +76,7 @@ class _LanSyncPageState extends ConsumerState<LanSyncPage> {
     final appState = ref.watch(appTransferControllerProvider);
     final deviceState = ref.watch(deviceSyncControllerProvider);
     final tokens = AppThemeTokens.of(context);
+    final canSendApp = !platformCapabilities.isOhos;
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) {
@@ -134,9 +135,9 @@ class _LanSyncPageState extends ConsumerState<LanSyncPage> {
                           key: const Key('lan-sync-send-app'),
                           icon: Icons.mobile_friendly_rounded,
                           title: '发送 App',
-                          description: '将当前 App 安装包发送给局域网中的其他设备',
+                          description: canSendApp ? '将当前 App 安装包发送给局域网中的其他设备' : '鸿蒙普通应用无法读取自身安装 HAP，请从电脑或安卓设备发送',
                           actionLabel: '发送 App',
-                          onTap: appState.active ? null : _showAppTransferSheet,
+                          onTap: canSendApp && !appState.active ? _showAppTransferSheet : null,
                         ),
                         const SizedBox(height: AppSpacing.regular),
                         _CapabilityCard(
