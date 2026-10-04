@@ -1,7 +1,7 @@
 /// Capability description for the staged OHOS Native/Rust Runtime.
 ///
-/// The application intentionally keeps this false until the native module is
-/// built, loaded, and accepted on a real arm64 device.
+/// Each OHOS ABI enables the Native Runtime only when its matching Rust module
+/// is built into the HAP and accepted by that ABI's integration checks.
 library;
 
 export 'src/native_runtime_client.dart';

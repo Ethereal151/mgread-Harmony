@@ -1,9 +1,9 @@
 # MgRead OHOS Native Runtime
 
-This is the staged, opt-in Native/Rust Runtime boundary for HarmonyOS. Its HAR
-is linked into the main HAP so the arm64 smoke path can be verified on a real
-device, but the existing Node Runtime remains the default and no installed
-Node/ArkWeb data source changes engine.
+This is the Native/Rust Runtime boundary for HarmonyOS on both arm64 and x64.
+The selected ABI's Rust shared library is linked into the HAP alongside the
+embedded Node Runtime. JavaScript sources continue to use Node; Native sources
+are routed by the existing Runtime Facade according to their engine metadata.
 
 The boundary is:
 
@@ -17,9 +17,9 @@ GETs, bounded HTML responses, and cancellation checks between requests. The
 source-scoped image resource fetches, and cancellation checks between requests.
 The fixed-plugin lifecycle remains available as an ABI regression test.
 
-The package expects the OpenHarmony NDK to provide `napi/native_api.h`. When
-`MGREAD_RUST_RUNTIME_LIB` and `MGREAD_RUST_RUNTIME_INCLUDE` are supplied to
-CMake it builds the arm64 Rust bridge; otherwise it builds an explicit
-`unsupported` stub, preserving ordinary Node Runtime builds. x86_64 remains an
-explicit unsupported target until a Rust TLS build and emulator run are
-available.
+The package expects the OpenHarmony NDK to provide `napi/native_api.h`. The
+OHOS release and integration adapters compile the pinned Rust target selected
+for the HAP ABI and pass it to CMake through `MGREAD_RUST_RUNTIME_LIB` and
+`MGREAD_RUST_RUNTIME_INCLUDE`. CMake retains an explicit `unsupported` stub for
+direct builds that do not supply a matching Rust artifact; production and
+integration builds must supply the selected ABI's library.

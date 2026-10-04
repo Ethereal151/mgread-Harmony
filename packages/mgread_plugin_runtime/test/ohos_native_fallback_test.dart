@@ -17,17 +17,11 @@ void main() {
             .having(
               (error) => error.message,
               'message',
-              'The OHOS native Runtime is not staged; use the default Node Runtime.',
+              'The OHOS native Runtime is disabled for this test configuration; use the default Node Runtime.',
             ),
       ),
     );
-    await expectLater(
-      runtime.configurePluginHttpProxy(Uri.parse('http://127.0.0.1:8080')),
-      throwsA(isA<PluginRuntimeException>()),
-    );
-    expect(
-      () => runtime.importNativeLocalPlugin(),
-      throwsA(isA<PluginRuntimeException>()),
-    );
+    await expectLater(runtime.configurePluginHttpProxy(Uri.parse('http://127.0.0.1:8080')), throwsA(isA<PluginRuntimeException>()));
+    expect(() => runtime.importNativeLocalPlugin(), throwsA(isA<PluginRuntimeException>()));
   });
 }

@@ -33,7 +33,9 @@
     ".git"
   ],
   "excludedPathPrefixes": [
-    "packages/mg_read_node_runtime/tools/node-v"
+    "packages/mg_read_node_runtime/tools/node-v",
+    "packages/mgread_plugin_runtime/ohos/src/main/cpp/node-source/",
+    "packages/mgread_plugin_runtime/ohos/src/main/cpp/node-runtime/"
   ],
   "generatedSuffixes": [
     ".g.dart",

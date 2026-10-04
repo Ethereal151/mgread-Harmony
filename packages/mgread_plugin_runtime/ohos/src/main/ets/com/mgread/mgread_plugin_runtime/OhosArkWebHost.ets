@@ -690,7 +690,7 @@ export class OhosArkWebPlatformView extends PlatformView {
       const scriptId = `${key}_script`
       const scriptIdLiteral = JSON.stringify(scriptId)
       const injected = `(()=>{const cleanup=()=>{document.getElementById(${scriptIdLiteral})?.remove()};const originalFetch=window.fetch;const restore=()=>{window.fetch=originalFetch};const publish=(value)=>{window[${keyLiteral}]=JSON.stringify(value)};const finish=(value)=>{publish({value:value===undefined?null:value});cleanup();restore()};const fail=(error)=>{publish({error:'plugin_execution_failed',detail:String(error)});cleanup();restore()};const asyncFetch=(input,init={})=>{const requestUrl=new URL(typeof input==='string'?input:input?.url||String(input),location.href).toString();const method=init.method||'GET';const requestHeaders=Object.assign({},init.headers||{});if(requestHeaders.origin===undefined&&requestHeaders.Origin===undefined)requestHeaders.origin=location.origin;const xhr=new XMLHttpRequest();xhr.open(method,requestUrl,false);xhr.withCredentials=init.credentials==='include'||init.credentials==='same-origin';Object.entries(requestHeaders).forEach(([name,value])=>xhr.setRequestHeader(name,String(value)));try{xhr.send(init.body===undefined||init.body===null?null:String(init.body));window.stop();const responseHeaders={};(xhr.getAllResponseHeaders()||'').trim().split(/[\\r\\n]+/).forEach((line)=>{const separator=line.indexOf(':');if(separator>0)responseHeaders[line.slice(0,separator).trim()]=line.slice(separator+1).trim()});const rawBody=xhr.responseText||'';const body=rawBody;const response={bodyUsed:false,ok:xhr.status>=200&&xhr.status<300,status:xhr.status,statusText:xhr.statusText||'',url:xhr.responseURL||requestUrl,headers:{get:(name)=>responseHeaders[name]??responseHeaders[name.toLowerCase()]??null},text:()=>Promise.resolve(body),json:()=>Promise.resolve(JSON.parse(body)),arrayBuffer:()=>Promise.resolve(new TextEncoder().encode(body).buffer)};return Promise.resolve(response)}catch(error){return Promise.reject(error)}};window.fetch=asyncFetch;try{const value=(async(fetch)=>{${source}\n})(asyncFetch);if(value&&typeof value.then==='function'){value.then(finish,fail)}else{finish(value)}}catch(error){fail(error)}})()`
-      const expression = `(()=>{const key=${keyLiteral};window[key]=null;const script=document.createElement('script');script.id=${scriptIdLiteral};const nonce=document.querySelector('script[nonce]')?.nonce||'';if(nonce)script.nonce=nonce;script.textContent=${JSON.stringify(injected)};(document.head||document.documentElement).appendChild(script);return 'started'})()`
+      const expression = `(()=>{const key=${keyLiteral};window[key]={pending:true};const script=document.createElement('script');script.id=${scriptIdLiteral};const nonce=document.querySelector('script[nonce]')?.nonce||'';if(nonce)script.nonce=nonce;script.textContent=${JSON.stringify(injected)};(document.head||document.documentElement).appendChild(script);return 'started'})()`
       await this.script(expression)
       await new Promise<void>((resolve): void => {
         setTimeout((): void => resolve(), EVALUATE_POLL_MS)
@@ -702,8 +702,7 @@ export class OhosArkWebPlatformView extends PlatformView {
         decoded = this.parseScriptResult(pending)
         const unresolved = decoded === null || (
           typeof decoded === 'object' && decoded !== null &&
-          (decoded as Record<string, Any>)['value'] === null &&
-          (decoded as Record<string, Any>)['error'] === undefined
+          (decoded as Record<string, Any>)['pending'] === true
         )
         if (!unresolved) break
         await new Promise<void>((resolve): void => {

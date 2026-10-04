@@ -8,15 +8,15 @@ import 'package:mg_read/platform/platform_capabilities.dart';
 import 'package:mgread_ohos_system/mgread_ohos_system.dart';
 import 'package:mgread_plugin_runtime/mgread_plugin_runtime.dart';
 
-/// OHOS arm64 real-device acceptance for the embedded Node Runtime.
+/// OHOS selected-ABI acceptance for the embedded Node Runtime.
 ///
 /// The test intentionally probes the native host before creating the facade so
-/// an x86_64 stub or an unregistered plugin cannot be mistaken for a healthy
-/// Runtime.
+/// a missing architecture-specific host or an unregistered plugin cannot be
+/// mistaken for a healthy Runtime.
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('OHOS arm64 Runtime host is available and responds to ping', (WidgetTester tester) async {
+  testWidgets('OHOS Runtime host is available and responds to ping', (WidgetTester tester) async {
     if (Platform.operatingSystem != 'ohos') return;
 
     expect(await PluginRuntime.ohosNodeHostAvailable(), isTrue);

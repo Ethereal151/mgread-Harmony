@@ -15,7 +15,7 @@ endif()
 
 set(MGREAD_RUST_RUNTIME_LIB "$ENV{MGREAD_RUST_RUNTIME_LIB}" CACHE FILEPATH "Rust OHOS runtime library")
 set(MGREAD_RUST_RUNTIME_INCLUDE "$ENV{MGREAD_RUST_RUNTIME_INCLUDE}" CACHE PATH "Rust runtime C header directory")
-if(OHOS_ARCH STREQUAL "x86_64" OR NOT MGREAD_RUST_RUNTIME_LIB OR NOT EXISTS "${MGREAD_RUST_RUNTIME_LIB}" OR NOT MGREAD_RUST_RUNTIME_INCLUDE OR NOT EXISTS "${MGREAD_RUST_RUNTIME_INCLUDE}/mgread_runtime.h")
+if(NOT MGREAD_RUST_RUNTIME_LIB OR NOT EXISTS "${MGREAD_RUST_RUNTIME_LIB}" OR NOT MGREAD_RUST_RUNTIME_INCLUDE OR NOT EXISTS "${MGREAD_RUST_RUNTIME_INCLUDE}/mgread_runtime.h")
   # Keep ordinary builds loadable while returning an explicit unsupported
   # result until an architecture-specific Rust artifact is supplied.
   add_library(mgread_ohos_native_runtime SHARED napi_module_x86_stub.cpp)
@@ -33,7 +33,7 @@ set_target_properties(mgread_ohos_native_runtime PROPERTIES
   BUILD_WITH_INSTALL_RPATH TRUE
   BUILD_RPATH "$ORIGIN"
   INSTALL_RPATH "$ORIGIN")
-if(TARGET mgread_ohos_native_runtime AND NOT OHOS_ARCH STREQUAL "x86_64" AND MGREAD_RUST_RUNTIME_LIB AND EXISTS "${MGREAD_RUST_RUNTIME_LIB}" AND MGREAD_RUST_RUNTIME_INCLUDE AND EXISTS "${MGREAD_RUST_RUNTIME_INCLUDE}/mgread_runtime.h")
+if(TARGET mgread_ohos_native_runtime AND MGREAD_RUST_RUNTIME_LIB AND EXISTS "${MGREAD_RUST_RUNTIME_LIB}" AND MGREAD_RUST_RUNTIME_INCLUDE AND EXISTS "${MGREAD_RUST_RUNTIME_INCLUDE}/mgread_runtime.h")
   add_custom_command(TARGET mgread_ohos_native_runtime POST_BUILD
     COMMAND "${CMAKE_COMMAND}" -E copy_if_different
       "${MGREAD_RUST_RUNTIME_LIB}"

@@ -56,7 +56,8 @@ source_url="https://nodejs.org/dist/${node_version}/node-${node_version}.tar.gz"
 source_sums_url="https://nodejs.org/dist/${node_version}/SHASUMS256.txt"
 source_archive="${work_root}/node-${node_version}.tar.gz"
 source_sums="${work_root}/SHASUMS256.txt"
-source_root="${work_root}/node-${node_version}"
+source_archive_root="${work_root}/node-${node_version}"
+source_root="${work_root}/node-${node_version}-openharmony-${target_cpu}-source"
 install_root="${work_root}/node-${node_version}-openharmony-${target_cpu}"
 target_triple="aarch64-unknown-linux-ohos"
 target_clang="aarch64-unknown-linux-ohos-clang"
@@ -127,8 +128,15 @@ if [[ -n "$ohos_cxx_frontend" ]]; then
   cxx_path="${toolchain_wrapper_root}/${target_clangxx}"
 fi
 
-if [[ ! -f "${source_root}/configure.py" ]]; then
+if [[ ! -f "${source_archive_root}/configure.py" ]]; then
   tar --extract --gzip --file "$source_archive" --directory "$work_root"
+fi
+if [[ ! -f "${source_root}/configure.py" ]]; then
+  cp --archive "$source_archive_root" "$source_root"
+fi
+if [[ ! -f "${source_root}/configure.py" ]]; then
+  echo "Node source tree was not materialized for ${target_cpu}: ${source_root}" >&2
+  exit 1
 fi
 
 mkdir -p "$install_root"
@@ -231,6 +239,9 @@ shared_library="$(find "$install_root" -type f \( -name 'libnode.so' -o -name 'l
 if [[ -z "$shared_library" ]]; then
   echo "Node shared library was not produced; refusing to stage an executable-only build." >&2
   exit 1
+fi
+if [[ "$shared_library" != "${install_root}/lib/libnode.so" ]]; then
+  cp --force "$shared_library" "${install_root}/lib/libnode.so"
 fi
 
 source_commit="$(git -C "$source_root" rev-parse HEAD 2>/dev/null || echo "source-archive-${node_version}")"

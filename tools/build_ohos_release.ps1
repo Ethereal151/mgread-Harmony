@@ -21,8 +21,7 @@ $toolchain = Get-MgReadOhosToolchain -ProjectRoot $projectRoot
 Assert-MgReadOhosToolchain `
   -Toolchain $toolchain `
   -Variant $variant `
-  -ProjectRoot $projectRoot `
-  -RequireRuntimeNode ($Architecture -eq 'arm64')
+  -ProjectRoot $projectRoot
 $variantRoot = Set-MgReadOhosBuildEnvironment -Toolchain $toolchain -Variant $variant -ProjectRoot $projectRoot
 
 # The build host uses Node 20 for DevEco/Hvigor. Runtime asset staging is
@@ -39,8 +38,12 @@ $rustEnvironmentNames = @(
   'RUSTUP_HOME',
   'OHOS_SDK_NATIVE',
   'CARGO_TARGET_AARCH64_UNKNOWN_LINUX_OHOS_LINKER',
+  'CARGO_TARGET_X86_64_UNKNOWN_LINUX_OHOS_LINKER',
   'CC_aarch64_unknown_linux_ohos',
+  'CC_x86_64_unknown_linux_ohos',
   'AR_aarch64_unknown_linux_ohos',
+  'AR_x86_64_unknown_linux_ohos',
+  'MGREAD_OHOS_TARGET_ARCH',
   'MGREAD_RUST_RUNTIME_LIB',
   'MGREAD_RUST_RUNTIME_INCLUDE',
   'MGREAD_NODE_ROOT',
@@ -72,14 +75,12 @@ $hadRootPackageLock = Test-Path -LiteralPath $rootPackageLock -PathType Leaf
 $hadEntryPackageLock = Test-Path -LiteralPath $entryPackageLock -PathType Leaf
 
 $packagesRoot = Join-Path $projectRoot 'packages'
-$armOnlyNativeRuntimeRoot = Join-Path $packagesRoot 'mgread_ohos_native_runtime\ohos'
 $packageMetadataFiles = @()
 if (Test-Path -LiteralPath $packagesRoot -PathType Container) {
   $packageMetadataFiles = @(
     Get-ChildItem -LiteralPath $packagesRoot -Recurse -File |
       Where-Object {
-        $_.Name -in @('BuildProfile.ets', 'oh-package-lock.json5') -and
-        -not $_.FullName.StartsWith($armOnlyNativeRuntimeRoot, [StringComparison]::OrdinalIgnoreCase)
+        $_.Name -in @('BuildProfile.ets', 'oh-package-lock.json5')
       }
   )
 }
@@ -88,8 +89,7 @@ if (Test-Path -LiteralPath $packagesRoot -PathType Container) {
   $packageBuildProfileFiles = @(
     Get-ChildItem -LiteralPath $packagesRoot -Recurse -File -Filter 'build-profile.json5' |
       Where-Object {
-        (Get-Content -LiteralPath $_.FullName -Raw) -match '"abiFilters"' -and
-        -not $_.FullName.Equals((Join-Path $armOnlyNativeRuntimeRoot 'build-profile.json5'), [StringComparison]::OrdinalIgnoreCase)
+        (Get-Content -LiteralPath $_.FullName -Raw) -match '"abiFilters"'
       }
   )
 }
@@ -221,54 +221,6 @@ function Assert-OhosHapNativeLibrariesCompressed {
   }
 }
 
-function Set-OhosNativeBuildProfileArchitecture {
-  $selectedAbi = if ($Architecture -eq 'arm64') { 'arm64-v8a' } else { 'x86_64' }
-  $abiArrayPattern = '(?s)"abiFilters"\s*:\s*\[(?<values>.*?)\]'
-  foreach ($profileFile in $packageBuildProfileFiles) {
-    $source = Get-Content -LiteralPath $profileFile.FullName -Raw
-    $match = [regex]::Match($source, $abiArrayPattern)
-    if (-not $match.Success) {
-      throw "Native architecture filters were not recognized in: $($profileFile.FullName)"
-    }
-    $currentValues = $match.Groups['values'].Value
-    $normalizedValues = $currentValues.Trim().Trim('"', "'").Trim()
-    $selectedAbiPresent = $currentValues -match [regex]::Escape($selectedAbi)
-    $unselectedAbi = if ($selectedAbi -eq 'arm64-v8a') { 'x86_64' } else { 'arm64-v8a' }
-    $unselectedAbiPresent = $currentValues -match [regex]::Escape($unselectedAbi)
-    if (-not $selectedAbiPresent -and -not $unselectedAbiPresent -and $normalizedValues.Length -gt 0) {
-      throw "Native architecture filters contain no recognized ABI for $($profileFile.FullName)"
-    }
-    if ($selectedAbiPresent -and -not $unselectedAbiPresent) {
-      Write-Host "OHOS native build profile already keeps only ${selectedAbi}: $($profileFile.FullName)"
-      continue
-    }
-    $updated = [regex]::Replace(
-      $source,
-      $abiArrayPattern,
-      ('"abiFilters": ["' + $selectedAbi + '"]'),
-      1
-    )
-    Set-Content -LiteralPath $profileFile.FullName -Value $updated -Encoding utf8
-    Write-Host "OHOS native build profile keeps only ${selectedAbi}: $($profileFile.FullName)"
-  }
-}
-
-function Set-OhosBuildModeMetadata {
-  $buildModeFiles = @(
-    Get-ChildItem -LiteralPath $packagesRoot -Recurse -File -Filter 'BuildProfile.ets' -ErrorAction SilentlyContinue
-  )
-  $debugLiteral = if ($BuildMode -eq 'debug') { 'true' } else { 'false' }
-  foreach ($modeFile in $buildModeFiles) {
-    $source = Get-Content -LiteralPath $modeFile.FullName -Raw
-    $updated = $source -replace "export const BUILD_MODE_NAME = '(?:debug|profile|release)';", "export const BUILD_MODE_NAME = '$BuildMode';"
-    $updated = $updated -replace 'export const DEBUG = (?:true|false);', "export const DEBUG = $debugLiteral;"
-    if ($updated -ne $source) {
-      Set-Content -LiteralPath $modeFile.FullName -Value $updated -Encoding utf8
-      Write-Host "OHOS $BuildMode metadata: $($modeFile.FullName)"
-    }
-  }
-}
-
 function Select-OhosVariantLocks {
   if (-not (Test-Path -LiteralPath $variantLockRoot -PathType Container)) {
     return
@@ -281,7 +233,8 @@ function Select-OhosVariantLocks {
     }
   }
   foreach ($lockFile in @($rootPackageLock, $entryPackageLock)) {
-    $savedPath = Join-Path $variantLockRoot ([IO.Path]::GetRelativePath($projectRoot, $lockFile))
+    $relativePath = $lockFile.Substring($projectRoot.Length + 1)
+    $savedPath = Join-Path $variantLockRoot $relativePath
     if (Test-Path -LiteralPath $savedPath -PathType Leaf) {
       New-Item -ItemType Directory -Force -Path (Split-Path -Parent $lockFile) | Out-Null
       Copy-Item -LiteralPath $savedPath -Destination $lockFile -Force
@@ -301,7 +254,8 @@ function Save-OhosVariantLocks {
     if (-not (Test-Path -LiteralPath $lockFile -PathType Leaf)) {
       continue
     }
-    $savedPath = Join-Path $variantLockRoot ([IO.Path]::GetRelativePath($projectRoot, $lockFile))
+    $relativePath = $lockFile.Substring($projectRoot.Length + 1)
+    $savedPath = Join-Path $variantLockRoot $relativePath
     New-Item -ItemType Directory -Force -Path (Split-Path -Parent $savedPath) | Out-Null
     Copy-Item -LiteralPath $lockFile -Destination $savedPath -Force
   }
@@ -401,7 +355,9 @@ function Ensure-OhosLocalPluginOverrides {
     if (-not (Test-Path -LiteralPath $localPluginPath -PathType Container)) {
       continue
     }
-    $relativePluginPath = [IO.Path]::GetRelativePath($rootDirectory, $localPluginPath).Replace('\', '/')
+    $rootUri = [Uri]($rootDirectory.TrimEnd('\') + '\')
+    $pluginUri = [Uri]$localPluginPath
+    $relativePluginPath = [Uri]::UnescapeDataString($rootUri.MakeRelativeUri($pluginUri).ToString()).Replace('\', '/')
     $property.Value = "file:$relativePluginPath"
     Write-Host "OHOS local plugin override uses the checked-out package: $pluginName"
   }
@@ -477,52 +433,6 @@ function Install-OhosDependencies {
   if (Test-Path -LiteralPath (Join-Path $entryModules $unselectedNativeModule)) {
     throw "OHOS entry dependency installation materialized the unselected architecture: $unselectedNativeModule"
   }
-}
-
-function Build-OhosRustRuntime {
-  param([string]$TargetArchitecture)
-
-  if ($TargetArchitecture -ne 'arm64') {
-    return $null
-  }
-
-  $rustRoot = $toolchain.Rust.Root
-  $cargoExecutable = Join-Path $rustRoot 'cargo\bin\cargo.exe'
-  $rustToolchainBin = Join-Path $rustRoot "rustup\toolchains\$($toolchain.Rust.Toolchain)\bin"
-  $rustProject = Join-Path $projectRoot 'packages\mgread_ohos_native_runtime\native\rust-runtime'
-  $env:CARGO_TARGET_DIR = Join-Path $variantRoot 'rust-target'
-  $rustTarget = Join-Path $env:CARGO_TARGET_DIR 'aarch64-unknown-linux-ohos\release\libmgread_rust_runtime.so'
-  $rustInclude = Join-Path $projectRoot 'packages\mgread_ohos_native_runtime\native\rust-runtime\include'
-  $rustLinker = Join-Path $projectRoot 'packages\mgread_ohos_native_runtime\native\ohos-clang-linker.cmd'
-  $rustCompiler = Join-Path $projectRoot 'packages\mgread_ohos_native_runtime\native\ohos-clang-cc.cmd'
-
-  foreach ($requiredPath in @($cargoExecutable, $rustProject, $rustLinker, $rustCompiler, (Join-Path $rustInclude 'mgread_runtime.h'))) {
-    if (-not (Test-Path -LiteralPath $requiredPath)) {
-      throw "OHOS Rust runtime build input is missing: $requiredPath"
-    }
-  }
-
-  $env:CARGO_HOME = Join-Path $rustRoot 'cargo'
-  $env:RUSTUP_HOME = Join-Path $rustRoot 'rustup'
-  $env:Path = "$rustRoot\cargo\bin;$rustToolchainBin;$env:Path"
-  $env:OHOS_SDK_NATIVE = Join-Path $toolchain.Harmony.SdkRoot 'openharmony\native'
-  $env:CARGO_TARGET_AARCH64_UNKNOWN_LINUX_OHOS_LINKER = $rustLinker
-  $env:CC_aarch64_unknown_linux_ohos = $rustCompiler
-  $env:AR_aarch64_unknown_linux_ohos = Join-Path $env:OHOS_SDK_NATIVE 'llvm\bin\llvm-ar.exe'
-
-  Push-Location $rustProject
-  try {
-    & $cargoExecutable build --locked --release --target aarch64-unknown-linux-ohos
-    if ($LASTEXITCODE -ne 0) {
-      throw "OHOS Rust runtime build failed with exit code $LASTEXITCODE"
-    }
-  } finally {
-    Pop-Location
-  }
-  if (-not (Test-Path -LiteralPath $rustTarget -PathType Leaf)) {
-    throw "OHOS Rust runtime build completed without producing: $rustTarget"
-  }
-  return @{ Library = $rustTarget; Include = $rustInclude }
 }
 
 function Assert-OhosAotToolchainCompatibility {
@@ -680,8 +590,8 @@ try {
     )) {
     throw 'OHOS release entry package lock still contains a debug or unselected architecture Flutter package.'
   }
-  Set-OhosNativeBuildProfileArchitecture
-  Set-OhosBuildModeMetadata
+  Set-MgReadOhosNativeBuildProfileArchitecture -ProfileFiles $packageBuildProfileFiles -Architecture $Architecture
+  Set-MgReadOhosBuildModeMetadata -PackagesRoot $packagesRoot -BuildMode $BuildMode
   Set-Content -LiteralPath (Join-Path $variantRoot 'variant.json') -Value (
     [ordered]@{
       id = $variant.Id
@@ -704,7 +614,11 @@ try {
 
   # Release HAPs use the accepted arm64 Rust source engine. The normal
   # development build remains Node-backed unless this explicit opt-in is set.
-  $rustRuntime = Build-OhosRustRuntime -TargetArchitecture $Architecture
+  $rustRuntime = Build-MgReadOhosRustRuntime `
+    -Toolchain $toolchain `
+    -ProjectRoot $projectRoot `
+    -TargetDirectory (Join-Path $variantRoot 'rust-target') `
+    -Architecture $Architecture
   if ($null -ne $rustRuntime) {
     $env:MGREAD_RUST_RUNTIME_LIB = $rustRuntime.Library
     $env:MGREAD_RUST_RUNTIME_INCLUDE = $rustRuntime.Include
@@ -714,7 +628,7 @@ try {
   Ensure-OhosLocalPluginOverrides
   Remove-StaleFlutterBuildOutputs
   Install-OhosDependencies
-  $flutterArguments = 'build', 'hap', "--$BuildMode", '--target-platform', $targetPlatform, '--no-pub', '--no-tree-shake-icons', '--dart-define=MGREAD_OHOS_NATIVE_RUNTIME=true'
+  $flutterArguments = 'build', 'hap', "--$BuildMode", '--target-platform', $targetPlatform, '--no-pub', '--no-tree-shake-icons', '--dart-define=MGREAD_OHOS_NATIVE_RUNTIME=true', "--dart-define=MGREAD_OHOS_ARCH=$Architecture"
   if ($NoCodesign) {
     $flutterArguments += '--no-codesign'
   }
@@ -747,8 +661,28 @@ try {
   if ($selectedArchitectureEntries.Count -eq 0) {
     throw "The generated HAP does not contain the requested architecture: $selectedArchitecturePath"
   }
+  $nodeRuntimeRoot = Join-Path (Join-Path $packagesRoot 'mgread_plugin_runtime\ohos\src\main\cpp\node-runtime') $Architecture
+  $nodeSoname = 'libnode.so'
+  $nodeSonameFile = Join-Path $nodeRuntimeRoot 'mgread-node-soname.txt'
+  if (Test-Path -LiteralPath $nodeSonameFile -PathType Leaf) {
+    $nodeSoname = (Get-Content -LiteralPath $nodeSonameFile -Raw).Trim()
+  }
+  if ($nodeSoname -notmatch '^libnode\.so(?:\.\d+)*$') {
+    throw "OHOS $Architecture Node SONAME is invalid: $nodeSoname"
+  }
+  $requiredRuntimePaths = @(
+    "${selectedArchitecturePath}${nodeSoname}"
+    "${selectedArchitecturePath}libmgread_node_host.so"
+    "${selectedArchitecturePath}libmgread_ohos_native_runtime.so"
+    "${selectedArchitecturePath}libmgread_rust_runtime.so"
+  )
+  foreach ($requiredRuntimePath in $requiredRuntimePaths) {
+    if ($hapEntries -notcontains $requiredRuntimePath) {
+      throw "The generated HAP is missing a required $Architecture Runtime library: $requiredRuntimePath"
+    }
+  }
   $selectedSqlitePath = $selectedArchitecturePath + 'libsqlite3.so'
-  if ($Architecture -eq 'arm64' -and -not ($hapEntries -contains $selectedSqlitePath)) {
+  if ($Architecture -eq 'arm64' -and $hapEntries -notcontains $selectedSqlitePath) {
     throw "The generated HAP is missing the selected architecture SQLite runtime: $selectedSqlitePath"
   }
   $unexpectedArchitecturePath = if ($Architecture -eq 'arm64') { 'libs/x86_64/' } else { 'libs/arm64-v8a/' }

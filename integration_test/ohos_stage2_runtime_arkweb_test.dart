@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:mgread_plugin_runtime/mgread_plugin_runtime.dart';
+import 'fixtures/ohos_connect_proxy.dart';
 
 const String _artifactsJson = String.fromEnvironment('MGREAD_STAGE2_ARTIFACTS_JSON');
 
@@ -17,6 +18,8 @@ const List<String> _fixtureIds = <String>[
   'org.mgread.ohos.stage2.interaction',
 ];
 
+const List<String> _plainFixtureIds = <String>['org.mgread.ohos.stage2.source-one', 'org.mgread.ohos.stage2.source-two'];
+
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
@@ -24,6 +27,12 @@ void main() {
     if (Platform.operatingSystem != 'ohos') return;
     await tester.pumpWidget(const MaterialApp(home: OhosBrowserSessionSurface(prewarm: true)));
     await tester.pump();
+    final browserProxy = await OhosConnectProxy.start();
+    await OhosBrowserSessionHost.configureProxy(Uri(scheme: 'http', host: '127.0.0.1', port: browserProxy.port));
+    addTearDown(() async {
+      await OhosBrowserSessionHost.configureProxy(null);
+      await browserProxy.close();
+    });
 
     final runtime = PluginRuntime();
     final artifacts = _decodeArtifacts();
@@ -66,7 +75,7 @@ void main() {
       }
     }
 
-    for (final id in _fixtureIds) {
+    for (final id in _plainFixtureIds) {
       final discovery = await runtime.invoke(SourceDiscoverInvocation(pluginId: id, pageSize: 20));
       expect(discovery, isA<PluginDiscoveryDocumentResult>(), reason: id);
       final search = await _invokeWithFrames(tester, runtime.invoke(SourceSearchInvocation(pluginId: id, query: 'stage2', pageSize: 20)));
@@ -81,10 +90,16 @@ void main() {
       expect(content.text, contains('Runtime'), reason: id);
     }
 
-    final cookieTitle = (await _invokeWithFrames(
-      tester,
-      runtime.invoke(const SourceSearchInvocation(pluginId: 'org.mgread.ohos.stage2.cookie-js', query: 'stage2')),
-    )).items.single.title;
+    late final String cookieTitle;
+    try {
+      cookieTitle = (await _invokeWithFrames(
+        tester,
+        runtime.invoke(const SourceSearchInvocation(pluginId: 'org.mgread.ohos.stage2.cookie-js', query: 'stage2')),
+      )).items.single.title;
+    } on Object catch (error) {
+      debugPrint('STAGE2_COOKIE_PROXY_CONNECTIONS=${browserProxy.connectCount} TARGETS=${browserProxy.targetHosts} ERROR=$error');
+      rethrow;
+    }
     expect(cookieTitle, 'cookie-js:200:true:true');
 
     final jsTitle = (await _invokeWithFrames(
@@ -135,6 +150,8 @@ void main() {
     await runtime.invoke(const UninstallPluginInvocation(pluginId: 'org.mgread.ohos.stage2.source-one'));
     final afterUninstall = await runtime.invoke(const InstalledPluginsInvocation());
     expect(afterUninstall.any((plugin) => plugin.id == 'org.mgread.ohos.stage2.source-one'), isFalse);
+    expect(browserProxy.connectCount, greaterThan(0));
+    expect(browserProxy.targetHosts, contains('example.com'));
   }, timeout: const Timeout(Duration(minutes: 8)));
 }
 

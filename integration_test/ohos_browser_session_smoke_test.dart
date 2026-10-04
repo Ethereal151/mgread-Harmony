@@ -43,11 +43,22 @@ void main() {
       deadlineUnixMs: deadline(),
       raw: const <String, Object?>{'pluginId': pluginId, 'pluginName': pluginName, 'operation': 'page.navigate', 'url': 'about:blank'},
     );
+    await host.request(
+      jobId: 'browser-smoke-evaluate',
+      deadlineUnixMs: deadline(),
+      raw: const <String, Object?>{
+        'pluginId': pluginId,
+        'pluginName': pluginName,
+        'operation': 'page.evaluate',
+        'code': "document.title = 'MgRead ArkWeb smoke'; true",
+      },
+    );
     final html = await host.request(
       jobId: 'browser-smoke-html',
       deadlineUnixMs: deadline(),
       raw: const <String, Object?>{'pluginId': pluginId, 'pluginName': pluginName, 'operation': 'page.html'},
     );
     expect(html['html'], isA<String>());
+    expect(html['html'], contains('MgRead ArkWeb smoke'));
   });
 }

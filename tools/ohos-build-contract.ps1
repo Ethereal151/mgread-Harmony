@@ -64,6 +64,10 @@ function Get-MgReadOhosToolchain {
   $rust = [ordered]@{
     Root = Get-MgReadToolchainValue $lockText 'rust' 'root'
     Toolchain = Get-MgReadToolchainValue $lockText 'rust' 'toolchain'
+    Targets = [ordered]@{
+      arm64 = Get-MgReadToolchainValue $lockText 'rust' 'ohos_arm64_target'
+      x64 = Get-MgReadToolchainValue $lockText 'rust' 'ohos_x64_target'
+    }
   }
   return [ordered]@{
     LockPath = $lockPath
@@ -141,8 +145,7 @@ function Assert-MgReadOhosToolchain {
   param(
     [Parameter(Mandatory = $true)][hashtable]$Toolchain,
     [Parameter(Mandatory = $true)][hashtable]$Variant,
-    [Parameter(Mandatory = $true)][string]$ProjectRoot,
-    [bool]$RequireRuntimeNode = $true
+    [Parameter(Mandatory = $true)][string]$ProjectRoot
   )
 
   $flutterBat = Join-Path $Toolchain.Flutter.Root 'bin\flutter.bat'
@@ -150,10 +153,7 @@ function Assert-MgReadOhosToolchain {
   $buildNpm = Join-Path $Toolchain.BuildNode.Root 'npm.cmd'
   $runtimeNode = Join-Path $Toolchain.RuntimeNode.Root 'node.exe'
   $runtimeNpm = Join-Path $Toolchain.RuntimeNode.Root 'npm.cmd'
-  $requiredToolchainPaths = @($flutterBat, $buildNpm)
-  if ($RequireRuntimeNode) {
-    $requiredToolchainPaths += $runtimeNpm
-  }
+  $requiredToolchainPaths = @($flutterBat, $buildNpm, $runtimeNpm)
   foreach ($path in $requiredToolchainPaths) {
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
       throw "Pinned OHOS toolchain input is missing: $path"
@@ -161,10 +161,8 @@ function Assert-MgReadOhosToolchain {
   }
   Assert-MgReadExactNode $buildNode $Toolchain.BuildNode.Version 'OHOS build'
   Assert-MgReadExactNpm $buildNpm $Toolchain.BuildNode.NpmVersion 'OHOS build'
-  if ($RequireRuntimeNode) {
-    Assert-MgReadExactNode $runtimeNode $Toolchain.RuntimeNode.Version 'Runtime'
-    Assert-MgReadExactNpm $runtimeNpm $Toolchain.RuntimeNode.NpmVersion 'Runtime'
-  }
+  Assert-MgReadExactNode $runtimeNode $Toolchain.RuntimeNode.Version 'Runtime'
+  Assert-MgReadExactNpm $runtimeNpm $Toolchain.RuntimeNode.NpmVersion 'Runtime'
 
   $flutterInfo = (& $flutterBat --version --machine 2>$null | ConvertFrom-Json)
   if ($flutterInfo.frameworkVersion -ne $Toolchain.Flutter.Version -or
@@ -187,21 +185,27 @@ Pinned Flutter toolchain mismatch.
       throw "Pinned Flutter $($Variant.Id) HAR is missing: $harPath"
     }
   }
-  if ($RequireRuntimeNode) {
-    $nodeRoot = Join-Path (Join-Path $ProjectRoot 'packages\mgread_plugin_runtime\ohos\src\main\cpp\node-runtime') $Variant.Architecture
-    foreach ($path in @(
-        (Join-Path $nodeRoot 'lib\libnode.so'),
-        (Join-Path $nodeRoot 'mgread-node-target.txt'),
-        (Join-Path $ProjectRoot 'packages\mgread_plugin_runtime\ohos\src\main\cpp\node-source\src\node.h')
-      )) {
-      if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
-        throw "Pinned OHOS native Runtime input is missing: $path"
-      }
+  $nodeRoot = Join-Path (Join-Path $ProjectRoot 'packages\mgread_plugin_runtime\ohos\src\main\cpp\node-runtime') $Variant.Architecture
+  $nodeSoname = 'libnode.so'
+  $nodeSonameFile = Join-Path $nodeRoot 'mgread-node-soname.txt'
+  if (Test-Path -LiteralPath $nodeSonameFile -PathType Leaf) {
+    $nodeSoname = (Get-Content -LiteralPath $nodeSonameFile -Raw).Trim()
+  }
+  if ($nodeSoname -notmatch '^libnode\.so(?:\.\d+)*$') {
+    throw "Pinned OHOS Node SONAME is invalid: $nodeSoname"
+  }
+  foreach ($path in @(
+      (Join-Path $nodeRoot "lib\$nodeSoname"),
+      (Join-Path $nodeRoot 'mgread-node-target.txt'),
+      (Join-Path $ProjectRoot 'packages\mgread_plugin_runtime\ohos\src\main\cpp\node-source\src\node.h')
+    )) {
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+      throw "Pinned OHOS native Runtime input is missing: $path"
     }
-    $nodeTarget = (Get-Content -LiteralPath (Join-Path $nodeRoot 'mgread-node-target.txt') -Raw).Trim()
-    if ($nodeTarget -ne $Variant.Architecture) {
-      throw "OHOS native Node target '$nodeTarget' does not match $($Variant.Architecture)."
-    }
+  }
+  $nodeTarget = (Get-Content -LiteralPath (Join-Path $nodeRoot 'mgread-node-target.txt') -Raw).Trim()
+  if ($nodeTarget -ne $Variant.Architecture) {
+    throw "OHOS native Node target '$nodeTarget' does not match $($Variant.Architecture)."
   }
 }
 
@@ -220,4 +224,128 @@ function Set-MgReadOhosBuildEnvironment {
   $env:OHOS_SDK_NATIVE = Join-Path $Toolchain.Harmony.SdkRoot 'openharmony\native'
   $env:Path = "$($Toolchain.BuildNode.Root);$(Join-Path $Toolchain.Flutter.Root 'bin');$env:Path"
   return $variantRoot
+}
+
+function Set-MgReadOhosNativeBuildProfileArchitecture {
+  param(
+    [Parameter(Mandatory = $true)][object[]]$ProfileFiles,
+    [Parameter(Mandatory = $true)][ValidateSet('arm64', 'x64')][string]$Architecture
+  )
+
+  $selectedAbi = if ($Architecture -eq 'arm64') { 'arm64-v8a' } else { 'x86_64' }
+  $abiArrayPattern = '(?s)"abiFilters"\s*:\s*\[(?<values>.*?)\]'
+  foreach ($profileFile in $ProfileFiles) {
+    $source = Get-Content -LiteralPath $profileFile.FullName -Raw
+    $match = [regex]::Match($source, $abiArrayPattern)
+    if (-not $match.Success) {
+      throw "Native architecture filters were not recognized in: $($profileFile.FullName)"
+    }
+    $currentValues = $match.Groups['values'].Value
+    $normalizedValues = $currentValues.Trim().Trim('"', "'").Trim()
+    $selectedAbiPresent = $currentValues -match [regex]::Escape($selectedAbi)
+    $unselectedAbi = if ($selectedAbi -eq 'arm64-v8a') { 'x86_64' } else { 'arm64-v8a' }
+    $unselectedAbiPresent = $currentValues -match [regex]::Escape($unselectedAbi)
+    if (-not $selectedAbiPresent -and -not $unselectedAbiPresent -and $normalizedValues.Length -gt 0) {
+      throw "Native architecture filters contain no recognized ABI for $($profileFile.FullName)"
+    }
+    if ($selectedAbiPresent -and -not $unselectedAbiPresent) {
+      Write-Host "OHOS native build profile already keeps only ${selectedAbi}: $($profileFile.FullName)"
+      continue
+    }
+    $updated = [regex]::Replace(
+      $source,
+      $abiArrayPattern,
+      ('"abiFilters": ["' + $selectedAbi + '"]'),
+      1
+    )
+    Set-Content -LiteralPath $profileFile.FullName -Value $updated -Encoding utf8
+    Write-Host "OHOS native build profile keeps only ${selectedAbi}: $($profileFile.FullName)"
+  }
+}
+
+function Set-MgReadOhosBuildModeMetadata {
+  param(
+    [Parameter(Mandatory = $true)][string]$PackagesRoot,
+    [Parameter(Mandatory = $true)][ValidateSet('debug', 'release')][string]$BuildMode
+  )
+
+  $buildModeFiles = @(
+    Get-ChildItem -LiteralPath $PackagesRoot -Recurse -File -Filter 'BuildProfile.ets' -ErrorAction SilentlyContinue
+  )
+  $debugLiteral = if ($BuildMode -eq 'debug') { 'true' } else { 'false' }
+  foreach ($modeFile in $buildModeFiles) {
+    $source = Get-Content -LiteralPath $modeFile.FullName -Raw
+    $updated = $source -replace "export const BUILD_MODE_NAME = '(?:debug|profile|release)';", "export const BUILD_MODE_NAME = '$BuildMode';"
+    $updated = $updated -replace 'export const DEBUG = (?:true|false);', "export const DEBUG = $debugLiteral;"
+    if ($updated -ne $source) {
+      Set-Content -LiteralPath $modeFile.FullName -Value $updated -Encoding utf8
+      Write-Host "OHOS $BuildMode metadata: $($modeFile.FullName)"
+    }
+  }
+}
+
+function Build-MgReadOhosRustRuntime {
+  param(
+    [Parameter(Mandatory = $true)][hashtable]$Toolchain,
+    [Parameter(Mandatory = $true)][string]$ProjectRoot,
+    [Parameter(Mandatory = $true)][string]$TargetDirectory,
+    [Parameter(Mandatory = $true)][ValidateSet('arm64', 'x64')][string]$Architecture
+  )
+
+  $rustRoot = $Toolchain.Rust.Root
+  $cargoExecutable = Join-Path $rustRoot 'cargo\bin\cargo.exe'
+  $rustupExecutable = Join-Path $rustRoot 'cargo\bin\rustup.exe'
+  $rustToolchainBin = Join-Path $rustRoot "rustup\toolchains\$($Toolchain.Rust.Toolchain)\bin"
+  $rustProject = Join-Path $ProjectRoot 'packages\mgread_ohos_native_runtime\native\rust-runtime'
+  $rustTargetTriple = $Toolchain.Rust.Targets[$Architecture]
+  if ([string]::IsNullOrWhiteSpace($rustTargetTriple)) {
+    throw "OHOS Rust target is not pinned for architecture $Architecture."
+  }
+  $rustTargetEnvironment = $rustTargetTriple.Replace('-', '_')
+  $rustTargetEnvironmentUpper = $rustTargetEnvironment.ToUpperInvariant()
+  $env:CARGO_TARGET_DIR = $TargetDirectory
+  $rustTarget = Join-Path $env:CARGO_TARGET_DIR "$rustTargetTriple\release\libmgread_rust_runtime.so"
+  $rustInclude = Join-Path $rustProject 'include'
+  $rustLinker = Join-Path $ProjectRoot 'packages\mgread_ohos_native_runtime\native\ohos-clang-linker.cmd'
+  $rustCompiler = Join-Path $ProjectRoot 'packages\mgread_ohos_native_runtime\native\ohos-clang-cc.cmd'
+
+  foreach ($requiredPath in @($cargoExecutable, $rustupExecutable, $rustProject, $rustLinker, $rustCompiler, (Join-Path $rustInclude 'mgread_runtime.h'))) {
+    if (-not (Test-Path -LiteralPath $requiredPath)) {
+      throw "OHOS Rust runtime build input is missing: $requiredPath"
+    }
+  }
+
+  $env:CARGO_HOME = Join-Path $rustRoot 'cargo'
+  $env:RUSTUP_HOME = Join-Path $rustRoot 'rustup'
+  $rustStdDirectory = Join-Path $rustRoot "rustup\toolchains\$($Toolchain.Rust.Toolchain)\lib\rustlib\$rustTargetTriple\lib"
+  if (-not (Test-Path -LiteralPath $rustStdDirectory -PathType Container)) {
+    & $rustupExecutable target add --toolchain $Toolchain.Rust.Toolchain $rustTargetTriple
+    if ($LASTEXITCODE -ne 0) {
+      throw "Pinned Rust toolchain could not install OHOS target $rustTargetTriple."
+    }
+  }
+  if (-not (Test-Path -LiteralPath $rustStdDirectory -PathType Container)) {
+    throw "Pinned Rust standard library for OHOS target $rustTargetTriple is missing: $rustStdDirectory"
+  }
+
+  $env:Path = "$rustRoot\cargo\bin;$rustToolchainBin;$env:Path"
+  $env:OHOS_SDK_NATIVE = Join-Path $Toolchain.Harmony.SdkRoot 'openharmony\native'
+  $env:MGREAD_OHOS_TARGET_ARCH = $Architecture
+  [Environment]::SetEnvironmentVariable("CARGO_TARGET_${rustTargetEnvironmentUpper}_LINKER", $rustLinker, 'Process')
+  [Environment]::SetEnvironmentVariable("CC_${rustTargetEnvironment}", $rustCompiler, 'Process')
+  [Environment]::SetEnvironmentVariable("AR_${rustTargetEnvironment}", (Join-Path $env:OHOS_SDK_NATIVE 'llvm\bin\llvm-ar.exe'), 'Process')
+
+  Push-Location $rustProject
+  try {
+    & $cargoExecutable "+$($Toolchain.Rust.Toolchain)" build --locked --release --target $rustTargetTriple
+    if ($LASTEXITCODE -ne 0) {
+      throw "OHOS $Architecture Rust runtime build failed with exit code $LASTEXITCODE"
+    }
+  } finally {
+    Pop-Location
+  }
+  if (-not (Test-Path -LiteralPath $rustTarget -PathType Leaf)) {
+    throw "OHOS Rust runtime build completed without producing: $rustTarget"
+  }
+  return @{ Library = $rustTarget; Include = $rustInclude }
 }

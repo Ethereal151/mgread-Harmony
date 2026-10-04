@@ -39,6 +39,8 @@ npm_version = "11.19.1"
 [rust]
 root = "D:\\rust"
 toolchain = "1.97.1-x86_64-pc-windows-msvc"
+ohos_arm64_target = "aarch64-unknown-linux-ohos"
+ohos_x64_target = "x86_64-unknown-linux-ohos"
 
 [application]
 name = "mg_read"
