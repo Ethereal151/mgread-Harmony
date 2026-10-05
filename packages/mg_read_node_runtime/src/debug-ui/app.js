@@ -7,7 +7,6 @@
 (() => {
   'use strict';
 
-  const defaultPlugin = 'org.mgread.shudugu';
   // Keep the live view scannable while retaining every entry for filters/copy.
   const defaultVisibleLogEntryLimit = 10;
   const hiddenLogCategoriesStorageKey = 'mgread.debug.logs.hiddenCategories.v1';
@@ -254,9 +253,12 @@
       });
     }
 
-    setPlugins(ids) {
-      const previous = this.plugin.value || defaultPlugin;
+    setPlugins(ids, emptyLabel = '暂无可用数据源') {
+      const previous = this.plugin.value;
       this.plugin.replaceChildren(...ids.map((id) => new Option(id, id)));
+      if (ids.length === 0) this.plugin.append(new Option(emptyLabel, ''));
+      this.plugin.disabled = ids.length === 0;
+      this.submit.disabled = ids.length === 0;
       this.plugin.value = ids.includes(previous) ? previous : ids[0] || '';
     }
 
@@ -400,9 +402,12 @@
       });
     }
 
-    setPlugins(ids) {
-      const previous = this.plugin.value || defaultPlugin;
+    setPlugins(ids, emptyLabel = '暂无可用数据源') {
+      const previous = this.plugin.value;
       this.plugin.replaceChildren(...ids.map((id) => new Option(id, id)));
+      if (ids.length === 0) this.plugin.append(new Option(emptyLabel, ''));
+      this.plugin.disabled = ids.length === 0;
+      this.submit.disabled = ids.length === 0;
       this.plugin.value = ids.includes(previous) ? previous : ids[0] || '';
     }
 
@@ -780,12 +785,12 @@
       try {
         const data = await api('/__debug/api/plugins');
         const raw = Array.isArray(data.plugins) ? data.plugins : [];
-        const ids = [...new Set([defaultPlugin, ...raw.map((plugin) => plugin.id).filter((id) => typeof id === 'string')])];
+        const ids = [...new Set(raw.map((plugin) => plugin.id).filter((id) => typeof id === 'string' && id.length > 0))];
         this.search.setPlugins(ids);
         this.discovery.setPlugins(ids);
       } catch {
-        this.search.setPlugins([defaultPlugin]);
-        this.discovery.setPlugins([defaultPlugin]);
+        this.search.setPlugins([], '数据源清单加载失败');
+        this.discovery.setPlugins([], '数据源清单加载失败');
       }
     }
   }

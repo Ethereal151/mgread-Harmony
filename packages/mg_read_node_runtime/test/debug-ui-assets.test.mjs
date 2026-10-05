@@ -42,6 +42,9 @@ test("Debug inspector ships native static assets with a Web Components entrypoin
   assert.match(script, /heading-actions log-status/);
   assert.match(script, /defaultVisibleLogEntryLimit = 10/);
   assert.match(script, /entries\.slice\(-defaultVisibleLogEntryLimit\)/);
+  assert.doesNotMatch(script, /org\.mgread\.shudugu/);
+  assert.match(script, /数据源清单加载失败/);
+  assert.match(script, /暂无可用数据源/);
   assert.match(script, /dataset\.action = 'show-all'/);
   assert.match(script, /latestSequence/);
   assert.match(script, /workspaceRoutes/);
