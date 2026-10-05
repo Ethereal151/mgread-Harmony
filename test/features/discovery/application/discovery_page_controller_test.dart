@@ -338,6 +338,27 @@ void main() {
     expect(gateway.documentRequestCount, 3);
   });
 
+  test('catalog update during initial source loading restarts the source request', () async {
+    final gateway = _TreeGateway()..initialSourceListGate = Completer<List<PluginSourceDescriptor>>();
+    final container = ProviderContainer(
+      overrides: [
+        sourceContentGatewayProvider.overrideWithValue(gateway),
+        discoverySourceSelectionStoreProvider.overrideWithValue(_MemoryDiscoverySourceSelectionStore(null)),
+      ],
+    );
+    addTearDown(container.dispose);
+    final listener = container.listen<DiscoveryPageState>(discoveryPageControllerProvider, (_, _) {}, fireImmediately: true);
+    addTearDown(listener.close);
+
+    await _waitUntil(() => gateway.sourceListCalls == 1);
+    container.read(pluginRuntimeCatalogChangeProvider.notifier).publish();
+    await _waitUntil(() => gateway.sourceListCalls == 2);
+    await _waitUntil(() => _isLoaded(container));
+
+    expect(container.read(discoveryPageControllerProvider).selectedSourceId, _TreeGateway._pluginId);
+    gateway.initialSourceListGate!.complete(const <PluginSourceDescriptor>[]);
+  });
+
   test('unrelated source catalog update preserves the current document', () async {
     final gateway = _TreeGateway();
     final container = ProviderContainer(
@@ -414,6 +435,8 @@ final class _TreeGateway implements SourceContentGateway, CancellableSourceConte
   bool failFirstBrokenCategory = false;
   AppError? brokenCategoryError;
   bool includePrimary = true;
+  int sourceListCalls = 0;
+  Completer<List<PluginSourceDescriptor>>? initialSourceListGate;
   final List<PluginInvocationCancellation> cancellations = <PluginInvocationCancellation>[];
 
   @override
@@ -423,15 +446,19 @@ final class _TreeGateway implements SourceContentGateway, CancellableSourceConte
   }
 
   @override
-  Future<List<PluginSourceDescriptor>> listSources() async => <PluginSourceDescriptor>[
-    if (includePrimary)
-      PluginSourceDescriptor(id: _pluginId, displayName: '树测试数据源', contentKinds: const <PluginContentKind>[PluginContentKind.novel]),
-    PluginSourceDescriptor(
-      id: alternatePluginId,
-      displayName: '备用树测试数据源',
-      contentKinds: const <PluginContentKind>[PluginContentKind.novel],
-    ),
-  ];
+  Future<List<PluginSourceDescriptor>> listSources() {
+    sourceListCalls += 1;
+    if (sourceListCalls == 1 && initialSourceListGate != null) return initialSourceListGate!.future;
+    return Future<List<PluginSourceDescriptor>>.value(<PluginSourceDescriptor>[
+      if (includePrimary)
+        PluginSourceDescriptor(id: _pluginId, displayName: '树测试数据源', contentKinds: const <PluginContentKind>[PluginContentKind.novel]),
+      PluginSourceDescriptor(
+        id: alternatePluginId,
+        displayName: '备用树测试数据源',
+        contentKinds: const <PluginContentKind>[PluginContentKind.novel],
+      ),
+    ]);
+  }
 
   @override
   Future<PluginDiscoverResult> discover({

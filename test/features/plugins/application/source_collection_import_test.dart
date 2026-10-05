@@ -28,6 +28,7 @@ void main() {
     expect(parsed.plugins[0].artifact.checksum, matches(RegExp(r'^[a-f0-9]{8}$')));
     expect(parsed.plugins[0].artifact.bytes, parsed.plugins[0].byteLength);
     expect(await parsed.plugins[0].openBytes().expand((chunk) => chunk).toList(), utf8.encode('export default {};'));
+    expect(await parsed.plugins[0].openBytes().expand((chunk) => chunk).toList(), utf8.encode('export default {};'));
   });
 
   test('accepts an optional empty plugins directory entry', () {

@@ -247,6 +247,10 @@ SourceCollection parseSourceCollection(List<int> input) {
       throw const SourceCollectionImportException('合集中的数据源总大小超过 512 MiB。');
     }
     final checksum = getCrc32(bytes).toRadixString(16).padLeft(8, '0');
+    // The entry has already been decompressed and verified above. Keep that
+    // verified payload for the later Runtime hand-off instead of decoding the
+    // complete collection ZIP once per selected plugin.
+    final verifiedBytes = bytes;
     entry.clear();
     plugins.add(
       SourceCollectionPlugin(
@@ -256,7 +260,7 @@ SourceCollection parseSourceCollection(List<int> input) {
         format: format,
         byteLength: bytes.length,
         checksum: checksum,
-        openBytes: () => _openVerifiedEntry(input, path, size, sha),
+        openBytes: () => Stream<List<int>>.value(verifiedBytes),
       ),
     );
   }
@@ -265,22 +269,6 @@ SourceCollection parseSourceCollection(List<int> input) {
     throw const SourceCollectionImportException('合集包含清单未声明的文件或缺少数据源文件。');
   }
   return SourceCollection(List<SourceCollectionPlugin>.unmodifiable(plugins));
-}
-
-Stream<List<int>> _openVerifiedEntry(List<int> archiveBytes, String path, int expectedBytes, String expectedSha256) async* {
-  try {
-    final archive = ZipDecoder().decodeBytes(archiveBytes);
-    final file = archive.findFile(path);
-    final bytes = file?.readBytes();
-    if (bytes == null || bytes.length != expectedBytes || sha256.convert(bytes).toString() != expectedSha256) {
-      throw const SourceCollectionImportException('导入时数据源 SHA-256 二次校验失败。');
-    }
-    yield bytes;
-  } on SourceCollectionImportException {
-    rethrow;
-  } on Object {
-    throw const SourceCollectionImportException('导入时数据源文件无法解压。');
-  }
 }
 
 @immutable

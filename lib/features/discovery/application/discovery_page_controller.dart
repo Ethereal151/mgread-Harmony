@@ -64,6 +64,15 @@ class DiscoveryPageController extends Notifier<DiscoveryPageState> {
   }
 
   Future<void> _applyCatalogChange(PluginRuntimeCatalogChange change) async {
+    if (state.status == DiscoveryPageStatus.loadingSources) {
+      // A catalog refresh can arrive while the first source request is still
+      // in flight (for example immediately after an import). Restart that
+      // request against the new provider generation; otherwise the controller
+      // can retain the loading state after the stale request is invalidated.
+      ref.invalidate(availablePluginSourcesProvider);
+      await _initialize(++_latestGeneration);
+      return;
+    }
     final selected = state.selectedSourceId;
     final affectsSelected = selected != null && change.affects(selected);
     final generation = affectsSelected ? ++_latestGeneration : null;
@@ -77,6 +86,7 @@ class DiscoveryPageController extends Notifier<DiscoveryPageState> {
       // before reading the refreshed catalog. Riverpod does not define sibling
       // listener ordering for one state change.
       await Future<void>.value();
+      ref.invalidate(availablePluginSourcesProvider);
       final sources = await ref.read(availablePluginSourcesProvider.future);
       if (_disposed || (generation != null && !_isCurrent(generation))) return;
       if (sources.isEmpty) {
@@ -100,9 +110,20 @@ class DiscoveryPageController extends Notifier<DiscoveryPageState> {
         return;
       }
       state = state.withSources(sources);
-    } on Object {
-      // The retained document remains usable. Runtime diagnostics and the
-      // normal source provider surface a later explicit retry failure.
+    } on Object catch (error) {
+      if (!_disposed && state.status == DiscoveryPageStatus.loadingSources) {
+        state = DiscoveryPageState.failure(
+          sources: const <PluginSourceDescriptor>[],
+          selectedSourceId: null,
+          error: AppError.fromUnknown(error),
+          canNavigateBack: false,
+          navigationDepth: 0,
+          target: null,
+          previousResult: null,
+        );
+      }
+      // A loaded document remains usable. Runtime diagnostics and the normal
+      // source provider surface the later explicit retry failure.
     }
   }
 
