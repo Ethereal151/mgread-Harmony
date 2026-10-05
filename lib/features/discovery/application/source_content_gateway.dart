@@ -382,7 +382,9 @@ int _componentItemCount(PluginDiscoveryComponent component) => switch (component
 };
 
 final sourceContentGatewayProvider = Provider<SourceContentGateway>((Ref ref) {
-  ref.watch(pluginRuntimeCatalogChangeProvider);
+  // availablePluginSourcesProvider owns catalog generations. Keeping this
+  // adapter stable prevents page controllers from rebuilding while their
+  // catalog listeners are applying the same refresh.
   return MgReadSourceContentGateway(
     ref.watch(pluginRuntimeFacadeProvider),
     ref.watch(diagnosticsManagerProvider),

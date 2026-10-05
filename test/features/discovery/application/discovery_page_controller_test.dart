@@ -359,6 +359,38 @@ void main() {
     gateway.initialSourceListGate!.complete(const <PluginSourceDescriptor>[]);
   });
 
+  test('catalog update does not rebuild discovery through the source gateway dependency', () async {
+    final readiness = <int, Completer<PluginRuntimeConnection>>{
+      0: Completer<PluginRuntimeConnection>(),
+      1: Completer<PluginRuntimeConnection>(),
+    };
+    final container = ProviderContainer(
+      overrides: [
+        pluginRuntimeConnectionProvider.overrideWith((ref) {
+          final revision = ref.watch(pluginRuntimeCatalogChangeProvider).revision;
+          return readiness[revision]!.future;
+        }),
+        discoverySourceSelectionStoreProvider.overrideWithValue(_MemoryDiscoverySourceSelectionStore(null)),
+      ],
+    );
+    addTearDown(container.dispose);
+    final statuses = <DiscoveryPageStatus>[];
+    final listener = container.listen<DiscoveryPageState>(discoveryPageControllerProvider, (_, next) => statuses.add(next.status), fireImmediately: true);
+    addTearDown(listener.close);
+
+    readiness[0]!.complete(_emptyRuntimeConnection());
+    await _waitUntil(() => container.read(discoveryPageControllerProvider).status == DiscoveryPageStatus.noSources);
+    statuses.clear();
+
+    container.read(pluginRuntimeCatalogChangeProvider.notifier).publish();
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    expect(container.read(discoveryPageControllerProvider).status, DiscoveryPageStatus.noSources);
+    expect(statuses, isNot(contains(DiscoveryPageStatus.loadingSources)));
+
+    readiness[1]!.complete(_emptyRuntimeConnection());
+    await _waitUntil(() => container.read(discoveryPageControllerProvider).status == DiscoveryPageStatus.noSources);
+  });
+
   test('unrelated source catalog update preserves the current document', () async {
     final gateway = _TreeGateway();
     final container = ProviderContainer(
@@ -527,6 +559,13 @@ final class _TreeGateway implements SourceContentGateway, CancellableSourceConte
   Future<PluginChapterContent> getContent({required String pluginId, required String id, required String chapterId}) =>
       throw UnsupportedError('Not used by discovery tree test.');
 }
+
+PluginRuntimeConnection _emptyRuntimeConnection() => const PluginRuntimeConnection(
+  isHealthy: true,
+  nodeVersion: 'test',
+  runtimeVersion: 'test',
+  plugins: <PluginRuntimePlugin>[],
+);
 
 final class _MemoryDiscoverySourceSelectionStore implements DiscoverySourceSelectionStore {
   _MemoryDiscoverySourceSelectionStore(this.selectedSourceId);
