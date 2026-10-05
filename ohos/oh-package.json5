@@ -13,7 +13,7 @@
   "overrides": {
     "integration_test": "file:D:\\f\\packages\\integration_test\\ohos",
     "screen_brightness_ohos": "file:../packages/screen_brightness_ohos/ohos",
-    "@ohos/flutter_ohos": "file:D:\\f-ohos-3449\\bin\\cache\\artifacts\\engine\\ohos-arm64-release\\flutter_embedding_release.har",
-    "flutter_native_arm64_v8a": "file:D:\\f-ohos-3449\\bin\\cache\\artifacts\\engine\\ohos-arm64-release\\arm64_v8a_release.har"
+    "@ohos/flutter_ohos": "file:D:\\f-ohos-3449\\bin\\cache\\artifacts\\engine\\ohos-arm64\\flutter_embedding_debug.har",
+    "flutter_native_arm64_v8a": "file:D:\\f-ohos-3449\\bin\\cache\\artifacts\\engine\\ohos-arm64\\arm64_v8a_debug.har"
   }
 }
