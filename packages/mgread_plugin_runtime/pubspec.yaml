@@ -38,3 +38,4 @@ flutter:
     - assets/runtime/macos-arm64/dist/debug-ui/
     - assets/runtime/ohos/runtime-version.txt
     - assets/runtime/ohos/dist/
+    - assets/runtime/ohos/dist/debug-ui/
