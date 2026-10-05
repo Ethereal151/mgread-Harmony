@@ -48,6 +48,10 @@ $rustEnvironmentNames = @(
   'MGREAD_RUST_RUNTIME_INCLUDE',
   'MGREAD_NODE_ROOT',
   'MGREAD_NODE_SOURCE_ROOT',
+  'MGREAD_NODE_INPUT_MODE',
+  'MGREAD_NODE_ARTIFACT_ID',
+  'MGREAD_NODE_LIBRARY_SHA256',
+  'MGREAD_NODE_SOURCE_SHA256',
   'MGREAD_OHOS_VARIANT',
   'CARGO_TARGET_DIR'
 )
@@ -602,6 +606,10 @@ try {
       targetPlatform = $targetPlatform
       abi = $variant.Abi
       mode = $BuildMode
+      nodeInputMode = $env:MGREAD_NODE_INPUT_MODE
+      nodeArtifact = $env:MGREAD_NODE_ARTIFACT_ID
+      nodeLibrarySha256 = $env:MGREAD_NODE_LIBRARY_SHA256
+      nodeSourceSha256 = $env:MGREAD_NODE_SOURCE_SHA256
     } | ConvertTo-Json
   ) -Encoding utf8
 
@@ -667,7 +675,7 @@ try {
   if ($selectedArchitectureEntries.Count -eq 0) {
     throw "The generated HAP does not contain the requested architecture: $selectedArchitecturePath"
   }
-  $nodeRuntimeRoot = Join-Path (Join-Path $packagesRoot 'mgread_plugin_runtime\ohos\src\main\cpp\node-runtime') $Architecture
+  $nodeRuntimeRoot = $env:MGREAD_NODE_ROOT
   $nodeSoname = 'libnode.so'
   $nodeSonameFile = Join-Path $nodeRuntimeRoot 'mgread-node-soname.txt'
   if (Test-Path -LiteralPath $nodeSonameFile -PathType Leaf) {

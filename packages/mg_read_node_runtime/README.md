@@ -34,4 +34,32 @@ GYP 配置。stage 命令校验 Node 头文件版本、共享库 ELF ABI/SONAME 
 架构的 `node-runtime/<abi>` 输入；HAP 会随 Node host 打包其 ELF `DT_NEEDED` 对应的 SONAME 文件。
 两种 ABI 都必须通过 OHOS native host、HAP 和对应设备或模拟器验证后才能作为支持目标发布。
 
+## OHOS Node Artifact
+
+源码交付迁移后，OHOS 构建输入是外部 Artifact，而不是仓库中的 `node-source` 或
+`node-runtime/<abi>/include`。Artifact 名称固定为：
+
+```text
+mgread-ohos-node-26.10.0-arm64
+mgread-ohos-node-26.10.0-x64
+```
+
+创建并验证 Artifact（示例使用仓库现有的迁移期输入）：
+
+```powershell
+$node = 'D:\mgread-env\node-v26.10.0-win-x64\node.exe'
+& $node tools/ohos-node-artifact.mjs create arm64 `
+  ../mgread_plugin_runtime/ohos/src/main/cpp/node-runtime/arm64 `
+  ../mgread_plugin_runtime/ohos/src/main/cpp/node-source `
+  D:/mgread-artifacts/mgread-ohos-node-26.10.0-arm64
+& $node tools/ohos-node-artifact.mjs verify arm64 `
+  D:/mgread-artifacts/mgread-ohos-node-26.10.0-arm64
+```
+
+将 `MGREAD_NODE_ARTIFACT_ROOT` 指向 Artifact 目录本身，或指向同时包含两个固定名称
+目录的缓存根。OHOS 契约会在编译前校验 manifest、Node 版本、ELF machine、SONAME、
+Node/V8 源树哈希和 `libnode.so` 哈希，然后设置 `MGREAD_NODE_ROOT` 与
+`MGREAD_NODE_SOURCE_ROOT`。设置 `MGREAD_NODE_ARTIFACT_REQUIRED=true` 可禁止迁移期的
+仓库旧路径回退；构建证据会记录实际输入模式和指纹。
+
 开发和 AI 规则只在 [AGENTS.md](AGENTS.md) 维护。

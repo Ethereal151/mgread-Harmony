@@ -1,8 +1,0 @@
-{
-  "nodeVersion": "26.10.0",
-  "target": "openharmony-x64",
-  "sharedLibrary": "lib/libnode.so.147",
-  "soname": "libnode.so.147",
-  "moduleVersion": 147,
-  "elfMachine": 62
-}

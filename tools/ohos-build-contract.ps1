@@ -111,6 +111,145 @@ function Get-MgReadOhosVariantRoot {
   return Join-Path $ProjectRoot ".mgread-build\ohos\$($Variant.Id)"
 }
 
+function Get-MgReadOhosNodeArtifactRoot {
+  param(
+    [Parameter(Mandatory = $true)][string]$ProjectRoot,
+    [Parameter(Mandatory = $true)][ValidateSet('arm64', 'x64')][string]$Architecture
+  )
+
+  $configuredRoot = [Environment]::GetEnvironmentVariable('MGREAD_NODE_ARTIFACT_ROOT', 'Process')
+  if ([string]::IsNullOrWhiteSpace($configuredRoot)) {
+    $configuredRoot = Join-Path $ProjectRoot '.mgread-build\node-artifacts'
+  }
+  $configuredRoot = [IO.Path]::GetFullPath($configuredRoot)
+  if (Test-Path -LiteralPath (Join-Path $configuredRoot 'manifest.json') -PathType Leaf) {
+    return $configuredRoot
+  }
+  return Join-Path $configuredRoot "mgread-ohos-node-26.10.0-$Architecture"
+}
+
+function Get-MgReadOhosNodeInputs {
+  param(
+    [Parameter(Mandatory = $true)][string]$ProjectRoot,
+    [Parameter(Mandatory = $true)][ValidateSet('arm64', 'x64')][string]$Architecture
+  )
+
+  $artifactRoot = Get-MgReadOhosNodeArtifactRoot -ProjectRoot $ProjectRoot -Architecture $Architecture
+  $legacyRoot = Join-Path (Join-Path $ProjectRoot 'packages\mgread_plugin_runtime\ohos\src\main\cpp\node-runtime') $Architecture
+  $legacySourceRoot = Join-Path $ProjectRoot 'packages\mgread_plugin_runtime\ohos\src\main\cpp\node-source'
+  $artifactExists = Test-Path -LiteralPath $artifactRoot -PathType Container
+  $manifestExists = Test-Path -LiteralPath (Join-Path $artifactRoot 'manifest.json') -PathType Leaf
+  $requireArtifact = [Environment]::GetEnvironmentVariable('MGREAD_NODE_ARTIFACT_REQUIRED', 'Process') -eq 'true'
+  if ($artifactExists -and -not $manifestExists) {
+    throw "OHOS Node Artifact directory exists without manifest.json: $artifactRoot"
+  }
+  if ($manifestExists) {
+    return [ordered]@{
+      Mode = 'artifact'
+      RuntimeRoot = $artifactRoot
+      SourceRoot = Join-Path $artifactRoot 'node-source'
+      ArtifactRoot = $artifactRoot
+      ArtifactName = "mgread-ohos-node-26.10.0-$Architecture"
+    }
+  }
+  if ($requireArtifact) {
+    throw "OHOS Node Artifact is required but missing: $artifactRoot"
+  }
+  return [ordered]@{
+    Mode = 'legacy'
+    RuntimeRoot = $legacyRoot
+    SourceRoot = $legacySourceRoot
+    ArtifactRoot = $null
+    ArtifactName = $null
+  }
+}
+
+function Assert-MgReadOhosNodeInputs {
+  param(
+    [Parameter(Mandatory = $true)][hashtable]$Toolchain,
+    [Parameter(Mandatory = $true)][hashtable]$Variant,
+    [Parameter(Mandatory = $true)][string]$ProjectRoot
+  )
+
+  $inputs = Get-MgReadOhosNodeInputs -ProjectRoot $ProjectRoot -Architecture $Variant.Architecture
+  $nodeExecutable = Join-Path $Toolchain.BuildNode.Root 'node.exe'
+  $artifactVerifier = Join-Path $ProjectRoot 'packages\mg_read_node_runtime\tools\ohos-node-artifact.mjs'
+  if ($inputs.Mode -eq 'artifact') {
+    if (-not (Test-Path -LiteralPath $artifactVerifier -PathType Leaf)) {
+      throw "OHOS Node Artifact verifier is missing: $artifactVerifier"
+    }
+    $verificationOutput = (& $nodeExecutable $artifactVerifier verify $Variant.Architecture $inputs.ArtifactRoot 2>&1 | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0) {
+      throw "OHOS Node Artifact verification failed for $($inputs.ArtifactRoot): $verificationOutput"
+    }
+    try {
+      $verification = $verificationOutput | ConvertFrom-Json
+    } catch {
+      throw "OHOS Node Artifact verifier returned invalid JSON: $verificationOutput"
+    }
+    return [ordered]@{
+      Mode = $inputs.Mode
+      RuntimeRoot = $inputs.RuntimeRoot
+      SourceRoot = $inputs.SourceRoot
+      ArtifactRoot = $inputs.ArtifactRoot
+      ArtifactName = $inputs.ArtifactName
+      Soname = $verification.soname
+      LibrarySha256 = $verification.librarySha256
+      SourceSha256 = $verification.sourceSha256
+      SourceFiles = $verification.sourceFiles
+      SourceBytes = $verification.sourceBytes
+    }
+  }
+
+  $sonameFile = Join-Path $inputs.RuntimeRoot 'mgread-node-soname.txt'
+  $soname = 'libnode.so'
+  if (Test-Path -LiteralPath $sonameFile -PathType Leaf) {
+    $soname = (Get-Content -LiteralPath $sonameFile -Raw).Trim()
+  }
+  foreach ($path in @(
+      (Join-Path $inputs.RuntimeRoot "lib\$soname"),
+      (Join-Path $inputs.RuntimeRoot 'mgread-node-target.txt'),
+      (Join-Path $inputs.RuntimeRoot 'include\node\node_version.h'),
+      (Join-Path $inputs.SourceRoot 'src\node.h'),
+      (Join-Path $inputs.SourceRoot 'deps\v8\include\include\v8.h')
+    )) {
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+      throw "Legacy OHOS Node input is missing: $path"
+    }
+  }
+  $target = (Get-Content -LiteralPath (Join-Path $inputs.RuntimeRoot 'mgread-node-target.txt') -Raw).Trim()
+  if ($target -ne $Variant.Architecture) {
+    throw "Legacy OHOS Node target '$target' does not match $($Variant.Architecture)."
+  }
+  $metadataPath = Join-Path $inputs.RuntimeRoot 'mgread-node-build.json'
+  if (Test-Path -LiteralPath $metadataPath -PathType Leaf) {
+    $metadata = Get-Content -LiteralPath $metadataPath -Raw | ConvertFrom-Json
+    if ($metadata.nodeVersion -ne '26.10.0' -or $metadata.target -ne "openharmony-$($Variant.Architecture)") {
+      throw "Legacy OHOS Node metadata does not match Node 26.10.0 $($Variant.Architecture)."
+    }
+  } else {
+    $versionHeader = Get-Content -LiteralPath (Join-Path $inputs.RuntimeRoot 'include\node\node_version.h') -Raw
+    if ($versionHeader -notmatch '(?m)^\s*#define\s+NODE_MAJOR_VERSION\s+26\s*$' -or
+        $versionHeader -notmatch '(?m)^\s*#define\s+NODE_MINOR_VERSION\s+10\s*$' -or
+        $versionHeader -notmatch '(?m)^\s*#define\s+NODE_PATCH_VERSION\s+0\s*$') {
+      throw "Legacy OHOS Node headers do not report Node 26.10.0 $($Variant.Architecture)."
+    }
+  }
+  $libraryPath = Join-Path $inputs.RuntimeRoot "lib\$soname"
+  return [ordered]@{
+    Mode = $inputs.Mode
+    RuntimeRoot = $inputs.RuntimeRoot
+    SourceRoot = $inputs.SourceRoot
+    ArtifactRoot = $null
+    ArtifactName = $null
+    Soname = $soname
+    LibrarySha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $libraryPath).Hash
+    SourceSha256 = $null
+    SourceFiles = $null
+    SourceBytes = $null
+  }
+}
+
 function Assert-MgReadExactNode {
   param(
     [Parameter(Mandatory = $true)][string]$NodeExecutable,
@@ -185,28 +324,7 @@ Pinned Flutter toolchain mismatch.
       throw "Pinned Flutter $($Variant.Id) HAR is missing: $harPath"
     }
   }
-  $nodeRoot = Join-Path (Join-Path $ProjectRoot 'packages\mgread_plugin_runtime\ohos\src\main\cpp\node-runtime') $Variant.Architecture
-  $nodeSoname = 'libnode.so'
-  $nodeSonameFile = Join-Path $nodeRoot 'mgread-node-soname.txt'
-  if (Test-Path -LiteralPath $nodeSonameFile -PathType Leaf) {
-    $nodeSoname = (Get-Content -LiteralPath $nodeSonameFile -Raw).Trim()
-  }
-  if ($nodeSoname -notmatch '^libnode\.so(?:\.\d+)*$') {
-    throw "Pinned OHOS Node SONAME is invalid: $nodeSoname"
-  }
-  foreach ($path in @(
-      (Join-Path $nodeRoot "lib\$nodeSoname"),
-      (Join-Path $nodeRoot 'mgread-node-target.txt'),
-      (Join-Path $ProjectRoot 'packages\mgread_plugin_runtime\ohos\src\main\cpp\node-source\src\node.h')
-    )) {
-    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
-      throw "Pinned OHOS native Runtime input is missing: $path"
-    }
-  }
-  $nodeTarget = (Get-Content -LiteralPath (Join-Path $nodeRoot 'mgread-node-target.txt') -Raw).Trim()
-  if ($nodeTarget -ne $Variant.Architecture) {
-    throw "OHOS native Node target '$nodeTarget' does not match $($Variant.Architecture)."
-  }
+  Assert-MgReadOhosNodeInputs -Toolchain $Toolchain -Variant $Variant -ProjectRoot $ProjectRoot | Out-Null
 }
 
 function Set-MgReadOhosBuildEnvironment {
@@ -217,10 +335,16 @@ function Set-MgReadOhosBuildEnvironment {
   )
 
   $variantRoot = Get-MgReadOhosVariantRoot $ProjectRoot $Variant
+  $nodeInputs = Assert-MgReadOhosNodeInputs -Toolchain $Toolchain -Variant $Variant -ProjectRoot $ProjectRoot
   New-Item -ItemType Directory -Force -Path $variantRoot | Out-Null
   $env:MGREAD_OHOS_VARIANT = $Variant.Id
-  $env:MGREAD_NODE_ROOT = Join-Path (Join-Path $ProjectRoot 'packages\mgread_plugin_runtime\ohos\src\main\cpp\node-runtime') $Variant.Architecture
-  $env:MGREAD_NODE_SOURCE_ROOT = Join-Path $ProjectRoot 'packages\mgread_plugin_runtime\ohos\src\main\cpp\node-source'
+  $env:MGREAD_NODE_ROOT = $nodeInputs.RuntimeRoot
+  $env:MGREAD_NODE_SOURCE_ROOT = $nodeInputs.SourceRoot
+  $env:MGREAD_NODE_INPUT_MODE = $nodeInputs.Mode
+  $env:MGREAD_NODE_ARTIFACT_ID = if ($nodeInputs.ArtifactName) { $nodeInputs.ArtifactName } else { 'legacy-repository-input' }
+  $env:MGREAD_NODE_LIBRARY_SHA256 = $nodeInputs.LibrarySha256
+  $env:MGREAD_NODE_SOURCE_SHA256 = if ($nodeInputs.SourceSha256) { $nodeInputs.SourceSha256 } else { 'unverified-legacy-source' }
+  Write-Host "OHOS Node input: $($nodeInputs.Mode) ($($env:MGREAD_NODE_ARTIFACT_ID))"
   $env:OHOS_SDK_NATIVE = Join-Path $Toolchain.Harmony.SdkRoot 'openharmony\native'
   $env:Path = "$($Toolchain.BuildNode.Root);$(Join-Path $Toolchain.Flutter.Root 'bin');$env:Path"
   return $variantRoot
