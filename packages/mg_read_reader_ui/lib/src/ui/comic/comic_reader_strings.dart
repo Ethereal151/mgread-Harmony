@@ -24,9 +24,9 @@ abstract final class ComicReaderStrings {
   static const pageTurnVertical = '上下区域';
   static const pageTurnHorizontal = '左右区域';
   static const readingMode = '正文阅读模式';
-  static const readingModeScroll = '卷轴模式（从上往下）';
-  static const readingModeLeftToRight = '普通模式（从左往右）';
-  static const readingModeRightToLeft = '日漫模式（从右往左）';
+  static const readingModeScroll = '卷轴模式';
+  static const readingModeLeftToRight = '普通模式';
+  static const readingModeRightToLeft = '日漫模式';
   static const singleHandMode = '单手模式';
   static const previousChapter = '上一章';
   static const nextChapter = '下一章';

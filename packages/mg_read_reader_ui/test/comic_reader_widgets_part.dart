@@ -115,7 +115,7 @@ void _registerComicWidgetTests() {
       expect(find.text('点击翻页方向'), findsOneWidget);
       expect(find.text('上下区域'), findsOneWidget);
       expect(find.text('正文阅读模式'), findsOneWidget);
-      expect(find.text('卷轴模式（从上往下）'), findsOneWidget);
+      expect(find.text('卷轴模式'), findsOneWidget);
       expect(find.text('单手模式'), findsOneWidget);
 
       await tester.tap(
@@ -138,7 +138,7 @@ void _registerComicWidgetTests() {
         find.byKey(const ValueKey<String>('comic-reader-reading-mode')),
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.text('日漫模式（从右往左）').last);
+      await tester.tap(find.text('日漫模式').last);
       await tester.pumpAndSettle();
       expect(
         store.preferences?.readingMode,
