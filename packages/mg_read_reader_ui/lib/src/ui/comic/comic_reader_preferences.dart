@@ -13,7 +13,8 @@ extension _ComicReaderPreferences on _ComicReaderViewState {
         '${normalized.brightness}\u0000${normalized.imageSpacing}\u0000'
         '${normalized.keepScreenOn}\u0000${normalized.immersiveMode}\u0000'
         '${normalized.pageTurnShortcuts}\u0000${normalized.pageTurnFraction}\u0000'
-        '${normalized.pageTurnLayout.name}\u0000${normalized.singleHandMode}';
+        '${normalized.pageTurnLayout.name}\u0000${normalized.readingMode.name}\u0000'
+        '${normalized.singleHandMode}';
     if (_lastPreferenceWriteKeys[targetStore] == writeKey) {
       return _preferenceWrites[targetStore] ?? Future<void>.value();
     }
@@ -34,6 +35,7 @@ extension _ComicReaderPreferences on _ComicReaderViewState {
             normalized.pageTurnShortcuts == _preferences.pageTurnShortcuts &&
             normalized.pageTurnFraction == _preferences.pageTurnFraction &&
             normalized.pageTurnLayout == _preferences.pageTurnLayout &&
+            normalized.readingMode == _preferences.readingMode &&
             normalized.singleHandMode == _preferences.singleHandMode) {
           _preferencesDirty = true;
         }
@@ -629,6 +631,13 @@ extension _ComicReaderPreferences on _ComicReaderViewState {
     _entryStarts = List<double>.unmodifiable(starts);
     return _entryCache;
   }
+
+  List<_ComicListEntry> _pageEntries() => List<_ComicListEntry>.unmodifiable(
+    _entries().where(
+      (_ComicListEntry entry) =>
+          entry is _ComicImageEntry || entry is _ComicBoundaryEntry,
+    ),
+  );
 
   int _entryIndexAt(double contentOffset) {
     if (_entryStarts.isEmpty) return 0;

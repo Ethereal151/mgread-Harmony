@@ -114,6 +114,8 @@ void _registerComicWidgetTests() {
       expect(find.text('90%'), findsOneWidget);
       expect(find.text('点击翻页方向'), findsOneWidget);
       expect(find.text('上下区域'), findsOneWidget);
+      expect(find.text('正文阅读模式'), findsOneWidget);
+      expect(find.text('卷轴模式（从上往下）'), findsOneWidget);
       expect(find.text('单手模式'), findsOneWidget);
 
       await tester.tap(
@@ -132,11 +134,61 @@ void _registerComicWidgetTests() {
       await tester.pumpAndSettle();
       expect(store.preferences?.pageTurnLayout, ComicPageTurnLayout.horizontal);
 
+      await tester.tap(
+        find.byKey(const ValueKey<String>('comic-reader-reading-mode')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('日漫模式（从右往左）').last);
+      await tester.pumpAndSettle();
+      expect(
+        store.preferences?.readingMode,
+        ComicReadingMode.horizontalRightToLeft,
+      );
+
       await tester.tap(find.text('单手模式'));
       await tester.pump();
       expect(store.preferences?.singleHandMode, isTrue);
     },
   );
+
+  testWidgets('comic reading modes use the requested page direction', (
+    WidgetTester tester,
+  ) async {
+    final store = _MemoryComicStateStore()
+      ..preferences = ComicReaderPreferences.defaults.copyWith(
+        readingMode: ComicReadingMode.horizontalRightToLeft,
+      );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ComicReaderView(
+          bookId: 'book',
+          dataSource: _FakeComicSource(),
+          stateStore: store,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(PageView), findsOneWidget);
+    expect(tester.widget<PageView>(find.byType(PageView)).reverse, isTrue);
+
+    final nextStore = _MemoryComicStateStore()
+      ..preferences = ComicReaderPreferences.defaults.copyWith(
+        readingMode: ComicReadingMode.horizontalLeftToRight,
+      );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ComicReaderView(
+          bookId: 'book',
+          dataSource: _FakeComicSource(),
+          stateStore: nextStore,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(PageView), findsOneWidget);
+    expect(tester.widget<PageView>(find.byType(PageView)).reverse, isFalse);
+  });
 
   testWidgets('comic catalog completes pages and centers the current chapter', (
     WidgetTester tester,

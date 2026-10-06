@@ -485,6 +485,7 @@ void main() {
       pageTurnShortcuts: false,
       pageTurnFraction: .5,
       pageTurnLayout: ComicPageTurnLayout.horizontal,
+      readingMode: ComicReadingMode.horizontalRightToLeft,
       singleHandMode: true,
       imageSpacing: 12,
     );

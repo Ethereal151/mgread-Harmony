@@ -9,7 +9,7 @@ typedef OpenComicChapterCommand = Future<void> Function(String chapterId);
 /// Imperative controller and read-only snapshot for a comic reader.
 ///
 /// Commands safely complete without effect before binding or after disposal.
-/// A comic reader is vertically scrolling only, so no page commands exist.
+/// Page commands use the active comic reading mode.
 class ComicReaderController extends ChangeNotifier {
   /// Creates an unattached controller with an initial loading snapshot.
   ComicReaderController();

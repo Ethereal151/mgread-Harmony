@@ -547,6 +547,15 @@ final class ContentLibraryComicReaderStateStore implements ComicReaderStateStore
   @override
   Future<ComicReaderPreferences?> loadPreferences() async {
     final raw = settings?.get(AppSettingKeys.comicReaderPreferences) ?? const <String, Object?>{};
+    final Object? rawReadingMode = raw['readingMode'];
+    final ComicReadingMode readingMode = rawReadingMode == null
+        ? ComicReadingMode.verticalScroll
+        : switch (rawReadingMode) {
+            'verticalScroll' => ComicReadingMode.verticalScroll,
+            'horizontalLeftToRight' => ComicReadingMode.horizontalLeftToRight,
+            'horizontalRightToLeft' => ComicReadingMode.horizontalRightToLeft,
+            _ => throw StateError('Unknown comic reading mode.'),
+          };
     return raw.isEmpty
         ? null
         : ComicReaderPreferences(
@@ -556,6 +565,7 @@ final class ContentLibraryComicReaderStateStore implements ComicReaderStateStore
             pageTurnShortcuts: raw['pageTurnShortcuts'] as bool? ?? true,
             pageTurnFraction: (raw['pageTurnFraction'] as num?)?.toDouble() ?? .9,
             pageTurnLayout: raw['pageTurnLayout'] == 'horizontal' ? ComicPageTurnLayout.horizontal : ComicPageTurnLayout.vertical,
+            readingMode: readingMode,
             singleHandMode: raw['singleHandMode'] as bool? ?? false,
             imageSpacing: (raw['imageSpacing'] as num?)?.toDouble() ?? 0,
           ).normalized();
@@ -572,6 +582,7 @@ final class ContentLibraryComicReaderStateStore implements ComicReaderStateStore
       'pageTurnShortcuts': p.pageTurnShortcuts,
       'pageTurnFraction': p.pageTurnFraction,
       'pageTurnLayout': p.pageTurnLayout.name,
+      'readingMode': p.readingMode.name,
       'singleHandMode': p.singleHandMode,
       'imageSpacing': p.imageSpacing,
     });

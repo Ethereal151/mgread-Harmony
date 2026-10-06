@@ -427,8 +427,24 @@ class ComicReaderBookmark {
 /// The screen axis used by comic edge taps when single-hand mode is off.
 enum ComicPageTurnLayout { vertical, horizontal }
 
+/// The reading direction used by the comic content surface.
+///
+/// The image manifest remains in source order. Horizontal modes change the
+/// page surface direction only, so semantic image IDs and saved progress stay
+/// stable when the user changes the mode.
+enum ComicReadingMode {
+  /// Shows all images in one top-to-bottom scrolling surface.
+  verticalScroll,
+
+  /// Turns pages from left to right.
+  horizontalLeftToRight,
+
+  /// Turns pages from right to left, as in Japanese manga.
+  horizontalRightToLeft,
+}
+
 @immutable
-/// Persisted presentation settings for the vertical comic reader.
+/// Persisted presentation settings for the comic reader.
 class ComicReaderPreferences {
   /// Creates comic reader preferences with safe defaults.
   const ComicReaderPreferences({
@@ -438,6 +454,7 @@ class ComicReaderPreferences {
     this.pageTurnShortcuts = true,
     this.pageTurnFraction = .9,
     this.pageTurnLayout = ComicPageTurnLayout.vertical,
+    this.readingMode = ComicReadingMode.verticalScroll,
     this.singleHandMode = false,
     this.imageSpacing = 0,
   });
@@ -466,6 +483,9 @@ class ComicReaderPreferences {
   /// Whether the normal edge-tap rails are vertical or horizontal.
   final ComicPageTurnLayout pageTurnLayout;
 
+  /// Layout and direction used by the comic content surface.
+  final ComicReadingMode readingMode;
+
   /// Makes both side rails advance, for one-handed use.
   final bool singleHandMode;
 
@@ -483,6 +503,7 @@ class ComicReaderPreferences {
     pageTurnShortcuts: pageTurnShortcuts,
     pageTurnFraction: _nearestPageTurnFraction(pageTurnFraction),
     pageTurnLayout: pageTurnLayout,
+    readingMode: readingMode,
     singleHandMode: singleHandMode,
     imageSpacing: 0,
   );
@@ -506,6 +527,7 @@ class ComicReaderPreferences {
     bool? pageTurnShortcuts,
     double? pageTurnFraction,
     ComicPageTurnLayout? pageTurnLayout,
+    ComicReadingMode? readingMode,
     bool? singleHandMode,
     double? imageSpacing,
   }) => ComicReaderPreferences(
@@ -515,6 +537,7 @@ class ComicReaderPreferences {
     pageTurnShortcuts: pageTurnShortcuts ?? this.pageTurnShortcuts,
     pageTurnFraction: pageTurnFraction ?? this.pageTurnFraction,
     pageTurnLayout: pageTurnLayout ?? this.pageTurnLayout,
+    readingMode: readingMode ?? this.readingMode,
     singleHandMode: singleHandMode ?? this.singleHandMode,
     imageSpacing: imageSpacing ?? this.imageSpacing,
   );
@@ -528,6 +551,7 @@ class ComicReaderPreferences {
       pageTurnShortcuts == other.pageTurnShortcuts &&
       pageTurnFraction == other.pageTurnFraction &&
       pageTurnLayout == other.pageTurnLayout &&
+      readingMode == other.readingMode &&
       singleHandMode == other.singleHandMode &&
       imageSpacing == other.imageSpacing;
 
@@ -539,6 +563,7 @@ class ComicReaderPreferences {
     pageTurnShortcuts,
     pageTurnFraction,
     pageTurnLayout,
+    readingMode,
     singleHandMode,
     imageSpacing,
   );

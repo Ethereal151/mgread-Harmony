@@ -207,7 +207,8 @@ extension _ComicReaderSheets on _ComicReaderViewState {
                   final ComicReaderPreferences normalized = value.normalized();
                   final ComicReaderProgress? anchor = _progress;
                   final bool layoutChanged =
-                      normalized.imageSpacing != _preferences.imageSpacing;
+                      normalized.imageSpacing != _preferences.imageSpacing ||
+                      normalized.readingMode != _preferences.readingMode;
                   setState(() {
                     _preferences = normalized;
                     _preferencesAuthoritative = true;
@@ -237,7 +238,7 @@ extension _ComicReaderSheets on _ComicReaderViewState {
                 return _darkSheet(
                   SafeArea(
                     child: SizedBox(
-                      height: MediaQuery.sizeOf(context).height * .55,
+                      height: MediaQuery.sizeOf(context).height * .72,
                       child: Column(
                         children: <Widget>[
                           _sheetHeader(ComicReaderStrings.settings),
@@ -344,6 +345,53 @@ extension _ComicReaderSheets on _ComicReaderViewState {
                                       update(
                                         _preferences.copyWith(
                                           pageTurnLayout: value,
+                                        ),
+                                      );
+                                    }
+                                  },
+                                ),
+                                DropdownButtonFormField<ComicReadingMode>(
+                                  key: const ValueKey<String>(
+                                    'comic-reader-reading-mode',
+                                  ),
+                                  initialValue: _preferences.readingMode,
+                                  decoration: const InputDecoration(
+                                    labelText: ComicReaderStrings.readingMode,
+                                  ),
+                                  items:
+                                      const <
+                                        DropdownMenuItem<ComicReadingMode>
+                                      >[
+                                        DropdownMenuItem<ComicReadingMode>(
+                                          value:
+                                              ComicReadingMode.verticalScroll,
+                                          child: Text(
+                                            ComicReaderStrings
+                                                .readingModeScroll,
+                                          ),
+                                        ),
+                                        DropdownMenuItem<ComicReadingMode>(
+                                          value: ComicReadingMode
+                                              .horizontalLeftToRight,
+                                          child: Text(
+                                            ComicReaderStrings
+                                                .readingModeLeftToRight,
+                                          ),
+                                        ),
+                                        DropdownMenuItem<ComicReadingMode>(
+                                          value: ComicReadingMode
+                                              .horizontalRightToLeft,
+                                          child: Text(
+                                            ComicReaderStrings
+                                                .readingModeRightToLeft,
+                                          ),
+                                        ),
+                                      ],
+                                  onChanged: (ComicReadingMode? value) {
+                                    if (value != null) {
+                                      update(
+                                        _preferences.copyWith(
+                                          readingMode: value,
                                         ),
                                       );
                                     }

@@ -53,6 +53,7 @@ class ComicProgressiveImageTile extends StatefulWidget {
     this.commentFeed,
     this.bookId,
     this.onOpenComments,
+    this.pageMode = false,
   });
 
   final ComicImageByteCache cache;
@@ -68,6 +69,7 @@ class ComicProgressiveImageTile extends StatefulWidget {
   final ReaderCommentFeed? commentFeed;
   final String? bookId;
   final ValueChanged<ReaderCommentTarget>? onOpenComments;
+  final bool pageMode;
 
   @override
   State<ComicProgressiveImageTile> createState() =>
@@ -195,60 +197,61 @@ class _ComicProgressiveImageTileState extends State<ComicProgressiveImageTile> {
               widget.image,
             );
           }
-          return AspectRatio(
-            aspectRatio: _decodedAspectRatio ?? _declaredAspectRatio,
-            child: Semantics(
-              image: true,
-              label: ComicReaderStrings.imageSemantics(widget.image.index + 1),
-              child: Stack(
-                fit: StackFit.expand,
-                children: <Widget>[
-                  Image(
-                    key: ValueKey<String>(
-                      'comic-reader-image-${widget.chapterId}-${widget.image.id}',
-                    ),
-                    image: _decodedProvider!,
-                    // The outer tile already uses the encoded image ratio.
-                    // Fill it once that ratio is known so integer decode-size
-                    // rounding cannot expose a fractional black row between
-                    // vertically adjacent pages at non-integer desktop DPI.
-                    fit: _decodedAspectRatio == null
-                        ? BoxFit.contain
-                        : BoxFit.fill,
-                    alignment: Alignment.topCenter,
-                    filterQuality: FilterQuality.medium,
-                    errorBuilder:
-                        (
-                          BuildContext context,
-                          Object error,
-                          StackTrace? stack,
-                        ) {
-                          _reportErrorOnce(error);
-                          return _error();
-                        },
+          final Widget content = Semantics(
+            image: true,
+            label: ComicReaderStrings.imageSemantics(widget.image.index + 1),
+            child: Stack(
+              fit: StackFit.expand,
+              children: <Widget>[
+                Image(
+                  key: ValueKey<String>(
+                    'comic-reader-image-${widget.chapterId}-${widget.image.id}',
                   ),
-                  if (widget.commentFeed != null &&
-                      widget.bookId != null &&
-                      widget.onOpenComments != null)
-                    Positioned(
-                      right: 8,
-                      bottom: 8,
-                      child: _ComicImageCommentButton(
-                        feed: widget.commentFeed!,
-                        target: ReaderCommentTarget.comicImage(
-                          widget.bookId!,
-                          widget.chapterId,
-                          widget.image.id,
-                        ),
-                        palette: widget.palette,
-                        onFailure: widget.onFailure,
-                        onOpen: widget.onOpenComments!,
+                  image: _decodedProvider!,
+                  // The outer tile already uses the encoded image ratio.
+                  // Fill it once that ratio is known so integer decode-size
+                  // rounding cannot expose a fractional black row between
+                  // vertically adjacent pages at non-integer desktop DPI.
+                  fit: widget.pageMode
+                      ? BoxFit.contain
+                      : _decodedAspectRatio == null
+                      ? BoxFit.contain
+                      : BoxFit.fill,
+                  alignment: Alignment.topCenter,
+                  filterQuality: FilterQuality.medium,
+                  errorBuilder:
+                      (BuildContext context, Object error, StackTrace? stack) {
+                        _reportErrorOnce(error);
+                        return _error();
+                      },
+                ),
+                if (widget.commentFeed != null &&
+                    widget.bookId != null &&
+                    widget.onOpenComments != null)
+                  Positioned(
+                    right: 8,
+                    bottom: 8,
+                    child: _ComicImageCommentButton(
+                      feed: widget.commentFeed!,
+                      target: ReaderCommentTarget.comicImage(
+                        widget.bookId!,
+                        widget.chapterId,
+                        widget.image.id,
                       ),
+                      palette: widget.palette,
+                      onFailure: widget.onFailure,
+                      onOpen: widget.onOpenComments!,
                     ),
-                ],
-              ),
+                  ),
+              ],
             ),
           );
+          return widget.pageMode
+              ? SizedBox.expand(child: content)
+              : AspectRatio(
+                  aspectRatio: _decodedAspectRatio ?? _declaredAspectRatio,
+                  child: content,
+                );
         }
         if (snapshot.hasError) {
           _reportErrorOnce(snapshot.error!);

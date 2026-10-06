@@ -11,7 +11,9 @@ extension _ComicReaderChrome on _ComicReaderViewState {
         _settingsVisible ||
         _controlsVisible ||
         _currentChapter == null ||
-        !_scrollController.hasClients) {
+        (_isPageMode
+            ? !_pageController.hasClients
+            : !_scrollController.hasClients)) {
       return;
     }
     _scrollByViewport(key == ReaderVolumeKey.down ? 1 : -1);
@@ -42,34 +44,64 @@ extension _ComicReaderChrome on _ComicReaderViewState {
               PointerDeviceKind.mouse,
             },
           ),
-          child: ListView.builder(
-            key: _readingSurfaceKey,
-            controller: _scrollController,
-            physics: ComicScrollPhysics(takeCorrection: _takeLayoutCorrection),
-            padding: EdgeInsets.fromLTRB(
-              _horizontalInset,
-              _topPadding,
-              _horizontalInset,
-              MediaQuery.paddingOf(context).bottom + 48,
-            ),
-            scrollCacheExtent: const ScrollCacheExtent.viewport(.7),
-            itemCount: entries.length,
-            itemExtentBuilder: (int index, _) => entries[index].extent,
-            itemBuilder: (BuildContext context, int index) {
-              final _ComicListEntry entry = entries[index];
-              return switch (entry) {
-                _ComicHeaderEntry() => _buildChapterHeader(entry),
-                _ComicImageEntry() => _buildImageTile(entry, palette),
-                _ComicBoundaryEntry() => _buildBoundary(entry, palette),
-              };
-            },
-          ),
+          child: _isPageMode
+              ? _buildPageSurface(palette)
+              : ListView.builder(
+                  key: _readingSurfaceKey,
+                  controller: _scrollController,
+                  physics: ComicScrollPhysics(
+                    takeCorrection: _takeLayoutCorrection,
+                  ),
+                  padding: EdgeInsets.fromLTRB(
+                    _horizontalInset,
+                    _topPadding,
+                    _horizontalInset,
+                    MediaQuery.paddingOf(context).bottom + 48,
+                  ),
+                  scrollCacheExtent: const ScrollCacheExtent.viewport(.7),
+                  itemCount: entries.length,
+                  itemExtentBuilder: (int index, _) => entries[index].extent,
+                  itemBuilder: (BuildContext context, int index) {
+                    final _ComicListEntry entry = entries[index];
+                    return switch (entry) {
+                      _ComicHeaderEntry() => _buildChapterHeader(entry),
+                      _ComicImageEntry() => _buildImageTile(entry, palette),
+                      _ComicBoundaryEntry() => _buildBoundary(entry, palette),
+                    };
+                  },
+                ),
         ),
       ),
     );
   }
 
-  Widget _buildImageTile(_ComicImageEntry entry, ReaderPalette palette) {
+  Widget _buildPageSurface(ReaderPalette palette) {
+    final List<_ComicListEntry> entries = _pageEntries();
+    return PageView.builder(
+      key: _readingSurfaceKey,
+      controller: _pageController,
+      reverse:
+          _preferences.readingMode == ComicReadingMode.horizontalRightToLeft,
+      onPageChanged: _handlePageChanged,
+      itemCount: entries.length,
+      itemBuilder: (BuildContext context, int index) {
+        final _ComicListEntry entry = entries[index];
+        return switch (entry) {
+          _ComicImageEntry() => _buildImageTile(entry, palette, pageMode: true),
+          _ComicBoundaryEntry() => SizedBox.expand(
+            child: Center(child: _buildBoundary(entry, palette)),
+          ),
+          _ComicHeaderEntry() => const SizedBox.shrink(),
+        };
+      },
+    );
+  }
+
+  Widget _buildImageTile(
+    _ComicImageEntry entry,
+    ReaderPalette palette, {
+    bool pageMode = false,
+  }) {
     final String retryKey = '${entry.chapter.info.id}\u0000${entry.image.id}';
     return ComicProgressiveImageTile(
       key: _imageKeyFor(entry),
@@ -77,7 +109,8 @@ extension _ComicReaderChrome on _ComicReaderViewState {
       chapterId: entry.chapter.info.id,
       image: entry.image,
       width: _viewportWidth,
-      placeholderHeight: entry.placeholderExtent,
+      placeholderHeight: pageMode ? _viewportHeight : entry.placeholderExtent,
+      pageMode: pageMode,
       palette: palette,
       decodeBudget: _decodeBudget,
       onPresented: (bool cacheHit) {

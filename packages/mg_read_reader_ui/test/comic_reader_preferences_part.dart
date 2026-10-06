@@ -12,6 +12,10 @@ void _registerComicPreferencesTests() {
   test('comic reader keeps page-turn shortcut preference in copies', () {
     expect(ComicReaderPreferences.defaults.pageTurnShortcuts, isTrue);
     expect(ComicReaderPreferences.defaults.pageTurnFraction, .9);
+    expect(
+      ComicReaderPreferences.defaults.readingMode,
+      ComicReadingMode.verticalScroll,
+    );
     expect(ComicReaderPreferences.pageTurnFractions, <double>[
       .3,
       .5,
@@ -25,6 +29,7 @@ void _registerComicPreferencesTests() {
             pageTurnShortcuts: false,
             pageTurnFraction: .5,
             pageTurnLayout: ComicPageTurnLayout.horizontal,
+            readingMode: ComicReadingMode.horizontalRightToLeft,
             singleHandMode: true,
           )
           .pageTurnShortcuts,
@@ -34,11 +39,13 @@ void _registerComicPreferencesTests() {
         .copyWith(
           pageTurnFraction: .5,
           pageTurnLayout: ComicPageTurnLayout.horizontal,
+          readingMode: ComicReadingMode.horizontalRightToLeft,
           singleHandMode: true,
         )
         .normalized();
     expect(configured.pageTurnFraction, .5);
     expect(configured.pageTurnLayout, ComicPageTurnLayout.horizontal);
+    expect(configured.readingMode, ComicReadingMode.horizontalRightToLeft);
     expect(configured.singleHandMode, isTrue);
     expect(
       const ComicReaderPreferences(

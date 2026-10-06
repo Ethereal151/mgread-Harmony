@@ -665,6 +665,33 @@ extension _ComicReaderSession on _ComicReaderViewState {
   }
 
   void _restorePosition(ComicReaderProgress? saved) {
+    if (_isPageMode) {
+      if (!_pageController.hasClients || _window.isEmpty) return;
+      final List<_ComicListEntry> entries = _pageEntries();
+      final int page = saved == null
+          ? entries.indexWhere(
+              (_ComicListEntry entry) =>
+                  entry is _ComicImageEntry &&
+                  entry.chapter.info.id == _currentChapter?.id,
+            )
+          : entries.indexWhere(
+              (_ComicListEntry entry) =>
+                  entry is _ComicImageEntry &&
+                  entry.chapter.info.id == saved.chapterId &&
+                  entry.image.id == saved.imageId,
+            );
+      if (page >= 0) {
+        _pageController.jumpToPage(page);
+        final _ComicListEntry entry = entries[page];
+        if (entry case final _ComicImageEntry image) {
+          _updateProgressFromImage(
+            image,
+            saved?.imageFraction.clamp(0, 1).toDouble() ?? 0,
+          );
+        }
+      }
+      return;
+    }
     if (!_scrollController.hasClients || _window.isEmpty) return;
     double anchorOffset = _topPadding;
     bool found = false;
@@ -720,8 +747,15 @@ extension _ComicReaderSession on _ComicReaderViewState {
         !image.hasSize) {
       return false;
     }
-    final double surfaceTop = surface.localToGlobal(Offset.zero).dy;
-    final double imageTop = image.localToGlobal(Offset.zero).dy - surfaceTop;
+    final Offset surfaceOrigin = surface.localToGlobal(Offset.zero);
+    final Offset imageOrigin = image.localToGlobal(Offset.zero);
+    if (_isPageMode) {
+      final double padding = surface.size.width * .75;
+      final double imageLeft = imageOrigin.dx - surfaceOrigin.dx;
+      return imageLeft + image.size.width >= -padding &&
+          imageLeft <= surface.size.width + padding;
+    }
+    final double imageTop = imageOrigin.dy - surfaceOrigin.dy;
     final double padding = surface.size.height * .75;
     return imageTop + image.size.height >= -padding &&
         imageTop <= surface.size.height + padding;
@@ -751,6 +785,10 @@ extension _ComicReaderSession on _ComicReaderViewState {
       }
     }
     if (selected == null) return;
+    _updateProgressFromImage(selected, fraction);
+  }
+
+  void _updateProgressFromImage(_ComicImageEntry selected, double fraction) {
     final _LoadedComicChapter chapter = selected.chapter;
     final int imageIndex = selected.image.index.clamp(
       0,

@@ -9,6 +9,25 @@ extension _ComicReaderPageTurning on _ComicReaderViewState {
   static const double _tapTurnZoneFraction = .25;
   static const double _singleHandTurnZoneFraction = .3;
 
+  bool get _isPageMode =>
+      _preferences.readingMode != ComicReadingMode.verticalScroll;
+
+  void _handlePageChanged(int page) {
+    if (_disposed || _restoring || !_isPageMode) return;
+    final List<_ComicListEntry> entries = _pageEntries();
+    if (page < 0 || page >= entries.length) return;
+    final _ComicListEntry entry = entries[page];
+    if (entry case final _ComicImageEntry image) {
+      _updateProgressFromImage(image, 0);
+      _imageRetryCoordinator.onViewportChanged();
+      if (page >= entries.length - 2) {
+        unawaited(_loadNextAdjacent(image.chapter.info.index + 1));
+      }
+    } else if (entry case final _ComicBoundaryEntry boundary) {
+      unawaited(_loadNextAdjacent(boundary.index));
+    }
+  }
+
   void _handleReadingSurfaceTap(TapUpDetails details) {
     if (_preferences.pageTurnShortcuts) {
       final int? direction = _tapPageTurnDirection(details);
@@ -32,8 +51,18 @@ extension _ComicReaderPageTurning on _ComicReaderViewState {
       final double width = MediaQuery.sizeOf(context).width;
       final double edgeZone = width * _tapTurnZoneFraction;
       final double x = details.localPosition.dx;
-      if (x <= edgeZone) return -1;
-      if (x >= width - edgeZone) return 1;
+      if (x <= edgeZone) {
+        return _preferences.readingMode ==
+                ComicReadingMode.horizontalRightToLeft
+            ? 1
+            : -1;
+      }
+      if (x >= width - edgeZone) {
+        return _preferences.readingMode ==
+                ComicReadingMode.horizontalRightToLeft
+            ? -1
+            : 1;
+      }
       return null;
     }
     final double edgeZone = _viewportHeight * _tapTurnZoneFraction;
@@ -44,7 +73,7 @@ extension _ComicReaderPageTurning on _ComicReaderViewState {
   }
 
   void _scheduleScrollByViewport(int direction) {
-    // Let the ListView finish resolving the pointer-up gesture first. Without
+    // Let the scroll view finish resolving the pointer-up gesture first. Without
     // this deferral its zero-velocity ballistic activity can cancel the tap's
     // programmatic scroll before it moves.
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -60,6 +89,10 @@ extension _ComicReaderPageTurning on _ComicReaderViewState {
   }
 
   void _scrollByViewport(int direction, {bool animate = true}) {
+    if (_isPageMode) {
+      _turnPage(direction, animate: animate);
+      return;
+    }
     _scrollBy(
       direction * _viewportHeight * _preferences.pageTurnFraction,
       animate: animate,
@@ -87,6 +120,34 @@ extension _ComicReaderPageTurning on _ComicReaderViewState {
     } else {
       unawaited(
         _scrollController.animateTo(
+          target,
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOutCubic,
+        ),
+      );
+    }
+  }
+
+  void _turnPage(int direction, {bool animate = true}) {
+    if (!_preferences.pageTurnShortcuts ||
+        !_foreground ||
+        _settingsVisible ||
+        _controlsVisible ||
+        _currentChapter == null ||
+        !_pageController.hasClients) {
+      return;
+    }
+    final int current = _pageController.page?.round() ?? 0;
+    final int target = (current + direction).clamp(
+      0,
+      math.max(_pageEntries().length - 1, 0),
+    );
+    if (target == current) return;
+    if (!animate || MediaQuery.disableAnimationsOf(context)) {
+      _pageController.jumpToPage(target);
+    } else {
+      unawaited(
+        _pageController.animateToPage(
           target,
           duration: const Duration(milliseconds: 180),
           curve: Curves.easeOutCubic,

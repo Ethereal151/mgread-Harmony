@@ -71,7 +71,7 @@ const _comicReaderControlsSystemUiStyle = SystemUiOverlayStyle(
   systemNavigationBarContrastEnforced: false,
 );
 
-/// A vertically scrolling, progressively loaded comic reading surface.
+/// A progressively loaded comic reading surface.
 ///
 /// The host owns networking, files, authentication, and persistent image
 /// caching through [ComicReaderDataSource]. This widget retains only the
@@ -143,6 +143,7 @@ class _ComicReaderViewState extends State<ComicReaderView>
   final FocusNode _focusNode = FocusNode(debugLabel: 'ComicReader');
   StreamSubscription<ReaderVolumeKey>? _volumeKeySubscription;
   final ScrollController _scrollController = ScrollController();
+  final PageController _pageController = PageController();
   final ComicDecodedImageBudget _decodeBudget = ComicDecodedImageBudget();
   final ComicImageRetryCoordinator _imageRetryCoordinator =
       ComicImageRetryCoordinator();
@@ -351,6 +352,7 @@ class _ComicReaderViewState extends State<ComicReaderView>
     _scrollController
       ..removeListener(_handleScroll)
       ..dispose();
+    _pageController.dispose();
     _imageRetryCoordinator.dispose();
     _focusNode.dispose();
     _volumeKeySubscription?.cancel();
