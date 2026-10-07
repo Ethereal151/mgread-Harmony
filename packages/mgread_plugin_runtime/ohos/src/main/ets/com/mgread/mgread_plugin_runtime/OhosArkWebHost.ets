@@ -750,7 +750,9 @@ export class OhosArkWebPlatformView extends PlatformView {
       }
       const resultKey = `__mgreadGatekeeperVerify_${this.evaluateSequence++}`
       const resultKeyLiteral = JSON.stringify(resultKey)
-      const injected = `(()=>{try{const xhr=new XMLHttpRequest();xhr.open('POST',${JSON.stringify(verifyUrl)},false);xhr.withCredentials=true;xhr.setRequestHeader('content-type','application/json');xhr.send(JSON.stringify({challenge_id:${JSON.stringify(challengeId)},ticket:${JSON.stringify(ticket)},nonce:${JSON.stringify(nonce)}}));window.stop();window[${resultKeyLiteral}]=JSON.stringify({status:xhr.status,body:xhr.responseText||''})}catch(error){window[${resultKeyLiteral}]=JSON.stringify({error:String(error)})}})()`
+      // waitReady pauses the challenge page's automatic verifier. Reuse the
+      // saved native fetch so ArkWeb supplies its normal same-origin headers.
+      const injected = `(()=>{try{const fetcher=window.__mgreadOhosChallengeFetch;if(typeof fetcher!=='function')throw new Error('challenge_fetch_unavailable');fetcher(${JSON.stringify(verifyUrl)},{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json'},body:JSON.stringify({challenge_id:${JSON.stringify(challengeId)},ticket:${JSON.stringify(ticket)},nonce:${JSON.stringify(nonce)}})}).then(async(response)=>{window[${resultKeyLiteral}]=JSON.stringify({status:response.status,body:await response.text()})},(error)=>{window[${resultKeyLiteral}]=JSON.stringify({error:String(error)})})}catch(error){window[${resultKeyLiteral}]=JSON.stringify({error:String(error)})}})()`
       const scriptId = `${resultKey}_script`
       const scriptIdLiteral = JSON.stringify(scriptId)
       const expression = `(()=>{const script=document.createElement('script');script.id=${scriptIdLiteral};const nonce=document.querySelector('script[nonce]')?.nonce||'';if(nonce)script.nonce=nonce;script.textContent=${JSON.stringify(injected)};(document.head||document.documentElement).appendChild(script);return 'started'})()`
