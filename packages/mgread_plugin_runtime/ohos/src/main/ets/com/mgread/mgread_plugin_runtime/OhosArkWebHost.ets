@@ -420,9 +420,6 @@ export default class OhosArkWebHost implements MethodCallHandler {
         }
         if (challengeTarget && currentUrl.includes('/__gatekeeper_challenge/') &&
             body.includes('challengeId:') && body.includes('verifyUrl:')) {
-          // Expose the challenge as soon as its parameters are present. The
-          // page's own worker may replace it immediately after verification.
-          await page.script('window.__mgreadOhosChallengeFetch=window.fetch;window.fetch=()=>new Promise(()=>{});true')
           return
         }
         if (state === 'complete') {
@@ -691,9 +688,6 @@ export class OhosArkWebPlatformView extends PlatformView {
 
   async evaluate(source: string): Promise<Any> {
     try {
-      if (source.includes('/__gatekeeper_challenge/verify') && source.includes('challenge_id')) {
-        return await this.evaluateGatekeeperVerify(source)
-      }
       const trimmed = source.trim()
       if (!trimmed.includes(';') && !/\breturn\b/.test(trimmed)) {
         const value = await this.script(`JSON.stringify(${source})`)
@@ -797,48 +791,6 @@ export class OhosArkWebPlatformView extends PlatformView {
     const decoded: Any = this.parseScriptResult(value)
     if (decoded === null || typeof decoded !== 'object') throw new OhosArkWebError('plugin_execution_failed')
      return decoded
-  }
-
-  private async evaluateGatekeeperVerify(source: string): Promise<Any> {
-    let stage = 'extract'
-    try {
-      const verifyMatch = /fetch\(\s*(['"])([^'"]+\/__gatekeeper_challenge\/verify[^'"]*)\1/.exec(source)
-      const challengeMatch = /challenge_id\s*:\s*(['"])([0-9a-f]{64})\1/i.exec(source)
-      const ticketMatch = /ticket\s*:\s*(['"])([A-Za-z0-9_.-]{200,})\1/.exec(source)
-      const nonceMatch = /nonce\s*:\s*(?:(['"])(\d+)\1|(\d+))/.exec(source)
-      const verifyUrl = verifyMatch?.[2] ?? ''
-      const challengeId = challengeMatch?.[2] ?? ''
-      const ticket = ticketMatch?.[2] ?? ''
-      const nonce = nonceMatch?.[2] ?? nonceMatch?.[3] ?? ''
-      if (verifyUrl.length === 0 || challengeId.length === 0 || ticket.length === 0 || nonce.length === 0) {
-        return {value: `__mgreadGateError:extract:${verifyUrl.length}:${challengeId.length}:${ticket.length}:${nonce.length}`}
-      }
-      const resultKey = `__mgreadGatekeeperVerify_${this.evaluateSequence++}`
-      const resultKeyLiteral = JSON.stringify(resultKey)
-      // waitReady pauses the challenge page's automatic verifier. Reuse the
-      // saved native fetch so ArkWeb supplies its normal same-origin headers.
-      const injected = `(()=>{try{const fetcher=window.__mgreadOhosChallengeFetch;if(typeof fetcher!=='function')throw new Error('challenge_fetch_unavailable');fetcher(${JSON.stringify(verifyUrl)},{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json'},body:JSON.stringify({challenge_id:${JSON.stringify(challengeId)},ticket:${JSON.stringify(ticket)},nonce:${JSON.stringify(nonce)}})}).then(async(response)=>{window[${resultKeyLiteral}]=JSON.stringify({status:response.status,body:await response.text()})},(error)=>{window[${resultKeyLiteral}]=JSON.stringify({error:String(error)})})}catch(error){window[${resultKeyLiteral}]=JSON.stringify({error:String(error)})}})()`
-      const scriptId = `${resultKey}_script`
-      const scriptIdLiteral = JSON.stringify(scriptId)
-      const expression = `(()=>{const script=document.createElement('script');script.id=${scriptIdLiteral};const nonce=document.querySelector('script[nonce]')?.nonce||'';if(nonce)script.nonce=nonce;script.textContent=${JSON.stringify(injected)};(document.head||document.documentElement).appendChild(script);return 'started'})()`
-      stage = 'inject'
-      await this.script(expression)
-      const deadline = Date.now() + 30_000
-      stage = 'poll'
-      while (Date.now() < deadline) {
-        const pending: Any = this.parseScriptResult(await this.script(`JSON.stringify(window[${resultKeyLiteral}]??null)`))
-        if (pending !== null) {
-          await this.script(`delete window[${resultKeyLiteral}];document.getElementById(${scriptIdLiteral})?.remove()`)
-          return {value: pending}
-        }
-        await new Promise<void>((resolve): void => {
-          setTimeout((): void => resolve(), POLL_MS)
-        })
-      }
-      throw new OhosArkWebError('timeout')
-    } catch (error) {
-      return {value: `__mgreadGateError:${stage}:${error instanceof Error ? error.message : String(error)}`}
-    }
   }
 
   async click(x: number, y: number): Promise<Any> {
