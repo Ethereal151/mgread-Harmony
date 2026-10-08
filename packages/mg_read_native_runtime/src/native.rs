@@ -9,6 +9,85 @@ use mgread_native_abi::{ABI_VERSION, InitResult};
 use serde_json::{Value, json};
 use std::{mem::ManuallyDrop, path::Path};
 
+#[cfg(target_env = "ohos")]
+mod ohos_loader {
+    use super::Error;
+    use libloading::os::unix::Library as UnixLibrary;
+    use std::{
+        ffi::CString,
+        os::raw::{c_char, c_int, c_void},
+        path::Path,
+    };
+
+    const NS_NAME_MAX: usize = 255;
+    const CREATE_INHERIT_DEFAULT: c_int = 1;
+    const RTLD_NOW: c_int = 2;
+    const RTLD_LOCAL: c_int = 0;
+
+    #[repr(C)]
+    struct DlNamespace {
+        name: [c_char; NS_NAME_MAX + 1],
+    }
+
+    type DlnsCreate2 = unsafe extern "C" fn(*mut DlNamespace, *const c_char, c_int) -> c_int;
+    type DlopenNs = unsafe extern "C" fn(*mut DlNamespace, *const c_char, c_int) -> *mut c_void;
+
+    pub(super) unsafe fn load(path: &Path) -> Result<libloading::Library, Error> {
+        let symbols = UnixLibrary::this();
+        let create2: DlnsCreate2 = *unsafe { symbols.get(b"dlns_create2\0") }
+            .map_err(|_| {
+                Error::new(
+                    "plugin_load_failed",
+                    "OpenHarmony namespace loader is unavailable",
+                )
+            })?;
+        let open_ns: DlopenNs = *unsafe { symbols.get(b"dlopen_ns\0") }.map_err(|_| {
+            Error::new(
+                "plugin_load_failed",
+                "OpenHarmony namespace loader is unavailable",
+            )
+        })?;
+
+        let parent = path.parent().ok_or_else(|| {
+            Error::new("plugin_load_failed", "Native binary has no load directory")
+        })?;
+        let parent = CString::new(parent.to_string_lossy().as_bytes()).map_err(|_| {
+            Error::new("plugin_load_failed", "Native binary path contains a NUL byte")
+        })?;
+        let filename = CString::new(path.to_string_lossy().as_bytes()).map_err(|_| {
+            Error::new("plugin_load_failed", "Native binary path contains a NUL byte")
+        })?;
+
+        // OpenHarmony permits application code to create the reserved WebView
+        // namespace, while moduleNs_default cannot create an arbitrary one.
+        // This is the platform's supported escape hatch for private libraries.
+        let name = "nweb_ns_legacy";
+        let mut namespace = DlNamespace {
+            name: [0; NS_NAME_MAX + 1],
+        };
+        for (slot, byte) in namespace.name.iter_mut().zip(name.bytes()) {
+            *slot = byte as c_char;
+        }
+
+        let result = unsafe { create2(&mut namespace, parent.as_ptr(), CREATE_INHERIT_DEFAULT) };
+        if result != 0 {
+            return Err(Error::new(
+                "plugin_load_failed",
+                "OpenHarmony rejected the native library namespace",
+            ));
+        }
+        let handle = unsafe { open_ns(&mut namespace, filename.as_ptr(), RTLD_NOW | RTLD_LOCAL) };
+        if handle.is_null() {
+            return Err(Error::new(
+                "plugin_load_failed",
+                "OpenHarmony rejected the native library path",
+            ));
+        }
+
+        Ok(libloading::Library::from(unsafe { UnixLibrary::from_raw(handle) }))
+    }
+}
+
 pub struct NativePlugin {
     _library: ManuallyDrop<Library>,
     pub endpoint: Value,
@@ -25,7 +104,11 @@ impl NativePlugin {
             return Err(invalid("Native binary integrity failed"));
         }
         unsafe {
-            let library = ManuallyDrop::new(Library::new(path).map_err(|error| Error {
+            #[cfg(target_env = "ohos")]
+            let loaded = ohos_loader::load(path);
+            #[cfg(not(target_env = "ohos"))]
+            let loaded = Library::new(path);
+            let library = ManuallyDrop::new(loaded.map_err(|error| Error {
                 code: "plugin_load_failed".into(),
                 message: format!("Native binary could not be loaded: {error}"),
             })?);

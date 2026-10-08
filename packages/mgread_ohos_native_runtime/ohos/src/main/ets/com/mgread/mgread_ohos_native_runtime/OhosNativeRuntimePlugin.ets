@@ -118,7 +118,7 @@ export default class OhosNativeRuntimePlugin implements FlutterPlugin, MethodCal
       const safeSourceName = sourceName.replace(/[^A-Za-z0-9._-]/g, '_')
       const target = `${context.cacheDir}/${safeSourceName}-${Date.now()}.so`
       try {
-        this.copyFile(selected[0], target)
+        await this.copyFile(selected[0], target)
         result.success({ path: target })
       } catch (error) {
         try {
@@ -133,21 +133,21 @@ export default class OhosNativeRuntimePlugin implements FlutterPlugin, MethodCal
     }
   }
 
-  private copyFile(sourcePath: string, targetPath: string): void {
+  private async copyFile(sourcePath: string, targetPath: string): Promise<void> {
     let source: fs.File | undefined
     let target: fs.File | undefined
     try {
-      source = fs.openSync(sourcePath, fs.OpenMode.READ_ONLY)
-      target = fs.openSync(targetPath, fs.OpenMode.READ_WRITE | fs.OpenMode.CREATE | fs.OpenMode.TRUNC)
+      source = await fs.open(sourcePath, fs.OpenMode.READ_ONLY)
+      target = await fs.open(targetPath, fs.OpenMode.READ_WRITE | fs.OpenMode.CREATE | fs.OpenMode.TRUNC)
       const buffer = new ArrayBuffer(64 * 1024)
-      let read = fs.readSync(source.fd, buffer)
+      let read = await fs.read(source.fd, buffer)
       while (read > 0) {
-        fs.writeSync(target.fd, buffer.slice(0, read))
-        read = fs.readSync(source.fd, buffer)
+        await fs.write(target.fd, buffer.slice(0, read))
+        read = await fs.read(source.fd, buffer)
       }
     } finally {
-      if (source !== undefined) fs.closeSync(source.fd)
-      if (target !== undefined) fs.closeSync(target.fd)
+      if (source !== undefined) await fs.close(source.fd)
+      if (target !== undefined) await fs.close(target.fd)
     }
   }
 }
