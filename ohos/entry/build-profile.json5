@@ -10,7 +10,7 @@
         "buildOption": {
           "nativeLib": {
             "filter": {
-              "excludes": ["**/x86_64/*.so"]
+              "excludes": ["**/arm64-v8a/*.so"]
             }
           }
         }
