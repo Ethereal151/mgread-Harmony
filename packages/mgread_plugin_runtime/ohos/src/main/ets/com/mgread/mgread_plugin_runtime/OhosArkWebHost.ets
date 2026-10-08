@@ -426,8 +426,8 @@ export default class OhosArkWebHost implements MethodCallHandler {
           return
         }
         if (state === 'complete') {
-          if (!challengeTarget && body.trim().length > 0) return
-          if (challengeTarget && !currentUrl.includes('/__gatekeeper_challenge/')) return
+          if (!challengeTarget && page.isPageEnded(currentUrl) && body.trim().length > 0) return
+          if (challengeTarget && !currentUrl.includes('/__gatekeeper_challenge/') && page.isPageEnded(currentUrl)) return
         }
       } catch (_) {
         // The first controller call can race Web initialization; keep polling.
@@ -591,6 +591,7 @@ export class OhosArkWebPlatformView extends PlatformView {
   private ready = false
   private evaluateSequence = 0
   private explicitNavigationUrl = ''
+  private pageEndUrl = ''
 
   constructor(pluginId: string, host: OhosArkWebHost) {
     super()
@@ -626,6 +627,18 @@ export class OhosArkWebPlatformView extends PlatformView {
     }
   }
 
+  onPageEnd(event: Any): void {
+    try {
+      this.pageEndUrl = String(event.url ?? '')
+    } catch (_) {
+      this.pageEndUrl = ''
+    }
+  }
+
+  isPageEnded(url: string): boolean {
+    return this.pageEndUrl === url
+  }
+
   getView(): WrappedBuilder<[Params]> {
     return wrapBuilder(buildOhosArkWeb)
   }
@@ -636,6 +649,7 @@ export class OhosArkWebPlatformView extends PlatformView {
     for (let attempt = 0; attempt < 75; attempt++) {
       try {
         this.explicitNavigationUrl = url
+        this.pageEndUrl = ''
         this.controller.loadUrl(url, headers)
         if (url === 'about:blank') return
         for (let waitAttempt = 0; waitAttempt < 75; waitAttempt++) {
@@ -689,11 +703,62 @@ export class OhosArkWebPlatformView extends PlatformView {
       const keyLiteral = JSON.stringify(key)
       const scriptId = `${key}_script`
       const scriptIdLiteral = JSON.stringify(scriptId)
-      // ArkWeb's page evaluator has to provide fetch for the Runtime bridge.
-      // Keep the XHR asynchronous and preserve the response bytes; synchronous
-      // XHR exposes responseText and corrupts binary source resources.
-      const injected = `(()=>{const cleanup=()=>{document.getElementById(${scriptIdLiteral})?.remove()};const originalFetch=window.fetch;const restore=()=>{window.fetch=originalFetch};const publish=(value)=>{window[${keyLiteral}]=JSON.stringify(value)};const finish=(value)=>{publish({value:value===undefined?null:value});cleanup();restore()};const fail=(error)=>{publish({error:'plugin_execution_failed',detail:String(error)});cleanup();restore()};const asyncFetch=(input,init={})=>new Promise((resolve,reject)=>{const requestUrl=new URL(typeof input==='string'?input:input?.url||String(input),location.href).toString();const method=init.method||'GET';const requestHeaders=Object.assign({},init.headers||{});if(requestHeaders.origin===undefined&&requestHeaders.Origin===undefined)requestHeaders.origin=location.origin;const xhr=new XMLHttpRequest();xhr.open(method,requestUrl,true);xhr.responseType='arraybuffer';xhr.withCredentials=init.credentials==='include'||init.credentials==='same-origin';Object.entries(requestHeaders).forEach(([name,value])=>xhr.setRequestHeader(name,String(value)));const complete=()=>{try{const responseHeaders={};(xhr.getAllResponseHeaders()||'').trim().split(/[\\r\\n]+/).forEach((line)=>{const separator=line.indexOf(':');if(separator>0)responseHeaders[line.slice(0,separator).trim()]=line.slice(separator+1).trim()});const rawBytes=xhr.response instanceof ArrayBuffer?new Uint8Array(xhr.response):new Uint8Array();const body=new TextDecoder().decode(rawBytes);resolve({bodyUsed:false,ok:xhr.status>=200&&xhr.status<300,status:xhr.status,statusText:xhr.statusText||'',url:xhr.responseURL||requestUrl,headers:{get:(name)=>responseHeaders[name]??responseHeaders[name.toLowerCase()]??null},text:()=>Promise.resolve(body),json:()=>Promise.resolve(JSON.parse(body)),arrayBuffer:()=>Promise.resolve(rawBytes.buffer.slice(rawBytes.byteOffset,rawBytes.byteOffset+rawBytes.byteLength))})}catch(error){reject(error)}};xhr.onload=complete;xhr.onerror=()=>reject(new Error('network_error'));xhr.onabort=()=>reject(new Error('aborted'));try{xhr.send(init.body===undefined||init.body===null?null:String(init.body))}catch(error){reject(error)}});window.fetch=asyncFetch;try{const value=(async(fetch)=>{${source}\n})(asyncFetch);if(value&&typeof value.then==='function'){value.then(finish,fail)}else{finish(value)}}catch(error){fail(error)}})()`
-      const expression = `(()=>{const key=${keyLiteral};window[key]={pending:true};const script=document.createElement('script');script.id=${scriptIdLiteral};const nonce=document.querySelector('script[nonce]')?.nonce||'';if(nonce)script.nonce=nonce;script.textContent=${JSON.stringify(injected)};(document.head||document.documentElement).appendChild(script);return 'started'})()`
+      const injected = `(()=>{
+        const cleanup=()=>document.getElementById(${scriptIdLiteral})?.remove()
+        const originalFetch=window.fetch
+        const restore=()=>{window.fetch=originalFetch}
+        const publish=(value)=>{window[${keyLiteral}]=JSON.stringify(value)}
+        const finish=(value)=>{publish({value:value===undefined?null:value});cleanup();restore()}
+        const fail=(error)=>{publish({error:'plugin_execution_failed',detail:String(error)});cleanup();restore()}
+        const asyncFetch=(input,init={})=>new Promise((resolve,reject)=>{
+          const requestUrl=new URL(typeof input==='string'?input:input?.url||String(input),location.href).toString()
+          const method=init.method||'GET'
+          const requestHeaders=Object.assign({},init.headers||{})
+          if(requestHeaders.origin===undefined&&requestHeaders.Origin===undefined)requestHeaders.origin=location.origin
+          const xhr=new XMLHttpRequest()
+          xhr.open(method,requestUrl,true)
+          xhr.responseType='arraybuffer'
+          xhr.withCredentials=init.credentials==='include'||init.credentials==='same-origin'
+          Object.entries(requestHeaders).forEach(([name,value])=>xhr.setRequestHeader(name,String(value)))
+          const complete=()=>{
+            try{
+              const responseHeaders={}
+              ;(xhr.getAllResponseHeaders()||'').trim().split(/[\\r\\n]+/).forEach((line)=>{
+                const separator=line.indexOf(':')
+                if(separator>0)responseHeaders[line.slice(0,separator).trim().toLowerCase()]=line.slice(separator+1).trim()
+              })
+              const rawBytes=xhr.response instanceof ArrayBuffer?new Uint8Array(xhr.response):new Uint8Array()
+              const body=new TextDecoder().decode(rawBytes)
+              resolve({bodyUsed:false,ok:xhr.status>=200&&xhr.status<300,status:xhr.status,statusText:xhr.statusText||'',url:xhr.responseURL||requestUrl,headers:{get:(name)=>responseHeaders[String(name).toLowerCase()]??null},text:()=>Promise.resolve(body),json:()=>Promise.resolve(JSON.parse(body)),arrayBuffer:()=>Promise.resolve(rawBytes.buffer.slice(rawBytes.byteOffset,rawBytes.byteOffset+rawBytes.byteLength))})
+            }catch(error){reject(error)}
+          }
+          xhr.onload=complete
+          xhr.onerror=()=>reject(new Error('network_error'))
+          xhr.onabort=()=>reject(new Error('aborted'))
+          if(init.signal){
+            if(init.signal.aborted){xhr.abort()}
+            else init.signal.addEventListener('abort',()=>xhr.abort(),{once:true})
+          }
+          try{xhr.send(init.body===undefined||init.body===null?null:String(init.body))}catch(error){reject(error)}
+        })
+        window.fetch=asyncFetch
+        try{
+          const value=(async(fetch)=>{${source}\n})(asyncFetch)
+          if(value&&typeof value.then==='function')value.then(finish,fail)
+          else finish(value)
+        }catch(error){fail(error)}
+      })()`
+      const expression = `(()=>{
+        const key=${keyLiteral}
+        window[key]={pending:true}
+        const script=document.createElement('script')
+        script.id=${scriptIdLiteral}
+        const nonce=document.querySelector('script[nonce]')?.nonce||''
+        if(nonce)script.nonce=nonce
+        script.textContent=${JSON.stringify(injected)}
+        ;(document.head||document.documentElement).appendChild(script)
+        return 'started'
+      })()`
       await this.script(expression)
       await new Promise<void>((resolve): void => {
         setTimeout((): void => resolve(), EVALUATE_POLL_MS)
@@ -841,6 +906,7 @@ function buildOhosArkWeb(params: Params): void {
     .height('100%')
     .javaScriptAccess(true)
     .zoomAccess(true)
+    .onPageEnd((event: Any): void => (params.platformView as OhosArkWebPlatformView).onPageEnd(event))
     .onLoadIntercept((event: Any): boolean => (params.platformView as OhosArkWebPlatformView).shouldInterceptNavigation(event))
     .onControllerAttached((): void => (params.platformView as OhosArkWebPlatformView).markReady())
 }
