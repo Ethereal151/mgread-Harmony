@@ -501,10 +501,16 @@ function Build-MgReadOhosAliceSource {
 
   $previousTargetDirectory = [Environment]::GetEnvironmentVariable('CARGO_TARGET_DIR', 'Process')
   $previousTargetArchitecture = [Environment]::GetEnvironmentVariable('MGREAD_OHOS_TARGET_ARCH', 'Process')
+  $previousRustFlags = [Environment]::GetEnvironmentVariable('RUSTFLAGS', 'Process')
   try {
     $env:CARGO_TARGET_DIR = $TargetDirectory
     $env:OHOS_SDK_NATIVE = $ohosSdkNative
     $env:MGREAD_OHOS_TARGET_ARCH = $Architecture
+    if ($Architecture -eq 'arm64') {
+      [Environment]::SetEnvironmentVariable('RUSTFLAGS', '-C link-arg=-Wl,-z,max-page-size=16384', 'Process')
+    } else {
+      [Environment]::SetEnvironmentVariable('RUSTFLAGS', $null, 'Process')
+    }
     [Environment]::SetEnvironmentVariable("CARGO_TARGET_${rustTargetEnvironmentUpper}_LINKER", $rustLinker, 'Process')
     [Environment]::SetEnvironmentVariable("CC_${rustTargetEnvironment}", $rustCompiler, 'Process')
     [Environment]::SetEnvironmentVariable("AR_${rustTargetEnvironment}", (Join-Path $ohosSdkNative 'llvm\bin\llvm-ar.exe'), 'Process')
@@ -520,6 +526,7 @@ function Build-MgReadOhosAliceSource {
   } finally {
     [Environment]::SetEnvironmentVariable('CARGO_TARGET_DIR', $previousTargetDirectory, 'Process')
     [Environment]::SetEnvironmentVariable('MGREAD_OHOS_TARGET_ARCH', $previousTargetArchitecture, 'Process')
+    [Environment]::SetEnvironmentVariable('RUSTFLAGS', $previousRustFlags, 'Process')
   }
   if (-not (Test-Path -LiteralPath $rustTarget -PathType Leaf)) {
     throw "OHOS Alice source build completed without producing: $rustTarget"
