@@ -1,6 +1,8 @@
 /// Small application-owned bridge for OHOS system UI, package, and LAN services.
 library;
 
+import 'dart:io';
+
 import 'package:flutter/services.dart';
 
 final class OhosSystemClient {
@@ -50,6 +52,16 @@ final class OhosSystemClient {
     final label = value['label'];
     if (model is! String || model.trim().isEmpty || label is! String || label.trim().isEmpty) return null;
     return OhosDeviceInfo(model: model, label: label);
+  }
+
+  /// Returns the current UIAbility files directory from the OHOS context.
+  ///
+  /// The path is owned by the platform sandbox and must not be reconstructed
+  /// from a hard-coded `/data` layout in Dart.
+  static Future<Directory?> getFilesDirectory() async {
+    final value = await _channel.invokeMethod<Object?>('getFilesDirectory');
+    if (value is! String || value.trim().isEmpty) return null;
+    return Directory(value.trim());
   }
 
   static Future<List<String>> getLocalNetworkAddresses() async {

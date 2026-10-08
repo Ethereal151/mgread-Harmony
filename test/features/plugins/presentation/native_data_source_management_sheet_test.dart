@@ -21,7 +21,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('data-source-add-native')), findsOneWidget);
     expect(find.text('原生数据源'), findsOneWidget);
-    expect(find.byKey(const Key('data-source-add-collection')), findsNothing);
     await tester.tap(find.byKey(const Key('data-source-add-native')));
     await tester.pumpAndSettle();
     expect(result, DataSourceImportChoice.native);

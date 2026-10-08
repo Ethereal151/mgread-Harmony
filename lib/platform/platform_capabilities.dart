@@ -11,6 +11,8 @@ import 'package:mgread_plugin_runtime/mgread_plugin_runtime.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:mgread_ohos_system/mgread_ohos_system.dart';
 
+typedef OhosFilesDirectoryResolver = Future<Directory?> Function();
+
 /// Immutable result of one native OHOS capability probe.
 final class OhosCapability {
   const OhosCapability({required this.available, required this.reason, required this.apiVersion, required this.architecture});
@@ -75,16 +77,18 @@ enum OhosPlatformCapability {
 
 /// The platform services that the current Flutter host can safely use.
 final class PlatformCapabilities {
-  PlatformCapabilities._(this.operatingSystem);
+  PlatformCapabilities._(this.operatingSystem, this._ohosFilesDirectoryResolver);
 
   /// Creates a capability description for tests without consulting plugins.
   @pragma('vm:prefer-inline')
-  factory PlatformCapabilities.forOperatingSystem(String operatingSystem) => PlatformCapabilities._(operatingSystem);
+  factory PlatformCapabilities.forOperatingSystem(String operatingSystem, {OhosFilesDirectoryResolver? ohosFilesDirectoryResolver}) =>
+      PlatformCapabilities._(operatingSystem, ohosFilesDirectoryResolver);
 
   /// The current process platform, normalized by `dart:io`.
-  factory PlatformCapabilities.current() => PlatformCapabilities._(Platform.operatingSystem);
+  factory PlatformCapabilities.current() => PlatformCapabilities._(Platform.operatingSystem, null);
 
   final String operatingSystem;
+  final OhosFilesDirectoryResolver? _ohosFilesDirectoryResolver;
   Future<OhosCapabilitySnapshot>? _probeFuture;
 
   bool get isOhos => operatingSystem == 'ohos';
@@ -211,7 +215,11 @@ final class PlatformCapabilities {
   /// HAP updates. Other platforms continue to use the platform provider.
   Future<Directory> resolvePersistenceRoot() async {
     if (isOhos) {
-      return Directory('/data/storage/el2/base/haps/entry/files/persistence');
+      final filesDirectory = await (_ohosFilesDirectoryResolver?.call() ?? OhosSystemClient.getFilesDirectory());
+      if (filesDirectory == null || filesDirectory.path.trim().isEmpty) {
+        throw StateError('ohos_files_directory_unavailable');
+      }
+      return Directory('${filesDirectory.path}/persistence');
     }
     final support = await getApplicationSupportDirectory();
     return Directory('${support.path}${Platform.pathSeparator}persistence');

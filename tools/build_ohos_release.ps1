@@ -70,10 +70,8 @@ $hapDirectory = Join-Path $projectRoot 'build\ohos\hap'
 $targetPlatform = $variant.TargetPlatform
 $variantLockRoot = Join-Path $variantRoot 'locks'
 $variantOutputRoot = Join-Path $variantRoot 'output'
-$requiredArm64Sqlite = Join-Path $projectRoot 'ohos\entry\libs\arm64-v8a\libsqlite3.so'
 $nativeLibsRoot = Join-Path $projectRoot 'ohos\entry\libs'
 $protectedNativeRoot = Join-Path $variantRoot 'protected-native'
-$protectedArm64Sqlite = Join-Path $protectedNativeRoot 'libsqlite3.so'
 $protectedUnselectedNativeRoot = Join-Path $protectedNativeRoot 'unselected-libs'
 $hadRootPackageLock = Test-Path -LiteralPath $rootPackageLock -PathType Leaf
 $hadEntryPackageLock = Test-Path -LiteralPath $entryPackageLock -PathType Leaf
@@ -156,12 +154,27 @@ function Remove-StaleFlutterBuildOutputs {
 }
 
 function Assert-OhosRequiredNativeInputs {
-  if (-not (Test-Path -LiteralPath $requiredArm64Sqlite -PathType Leaf)) {
-    throw "Required arm64 SQLite runtime is missing and must not be deleted: $requiredArm64Sqlite"
+  $selectedNativeLibDirectory = if ($Architecture -eq 'arm64') { 'arm64-v8a' } else { 'x86_64' }
+  $requiredSqlite = Join-Path (Join-Path $nativeLibsRoot $selectedNativeLibDirectory) 'libsqlite3.so'
+  if (-not (Test-Path -LiteralPath $requiredSqlite -PathType Leaf)) {
+    throw "Required $Architecture SQLite runtime is missing and must not be deleted: $requiredSqlite"
   }
-  $sqliteLength = (Get-Item -LiteralPath $requiredArm64Sqlite).Length
+  $sqliteLength = (Get-Item -LiteralPath $requiredSqlite).Length
   if ($sqliteLength -le 0) {
-    throw "Required arm64 SQLite runtime is empty and must not be replaced: $requiredArm64Sqlite"
+    throw "Required $Architecture SQLite runtime is empty and must not be replaced: $requiredSqlite"
+  }
+  $readelf = Join-Path $toolchain.Harmony.SdkRoot 'openharmony\native\llvm\bin\llvm-readelf.exe'
+  if (-not (Test-Path -LiteralPath $readelf -PathType Leaf)) {
+    throw "Pinned OHOS llvm-readelf is missing; cannot validate $Architecture SQLite runtime: $readelf"
+  }
+  $elfHeader = (& $readelf -h $requiredSqlite 2>&1 | Out-String)
+  $expectedMachine = if ($Architecture -eq 'arm64') { 'AArch64' } else { 'Advanced Micro Devices X86-64' }
+  if ($elfHeader -notmatch [regex]::Escape($expectedMachine)) {
+    throw "The $Architecture SQLite runtime has the wrong ELF machine; expected ${expectedMachine}: $requiredSqlite"
+  }
+  $elfDynamic = (& $readelf -d $requiredSqlite 2>&1 | Out-String)
+  if ($elfDynamic -notmatch '\[libsqlite3\.so\]') {
+    throw "The $Architecture SQLite runtime has no libsqlite3.so SONAME: $requiredSqlite"
   }
 }
 
@@ -501,7 +514,6 @@ if (-not (Test-Path -LiteralPath $entryBuildProfile -PathType Leaf)) {
 Assert-OhosAotToolchainCompatibility
 Assert-OhosRequiredNativeInputs
 New-Item -ItemType Directory -Force -Path $protectedNativeRoot | Out-Null
-Copy-Item -LiteralPath $requiredArm64Sqlite -Destination $protectedArm64Sqlite -Force
 
 try {
   # Hvigor's frozen Flutter adapter prunes the other ABI from entry/libs after
@@ -697,7 +709,7 @@ try {
     }
   }
   $selectedSqlitePath = $selectedArchitecturePath + 'libsqlite3.so'
-  if ($Architecture -eq 'arm64' -and $hapEntries -notcontains $selectedSqlitePath) {
+  if ($hapEntries -notcontains $selectedSqlitePath) {
     throw "The generated HAP is missing the selected architecture SQLite runtime: $selectedSqlitePath"
   }
   $unexpectedArchitecturePath = if ($Architecture -eq 'arm64') { 'libs/x86_64/' } else { 'libs/arm64-v8a/' }

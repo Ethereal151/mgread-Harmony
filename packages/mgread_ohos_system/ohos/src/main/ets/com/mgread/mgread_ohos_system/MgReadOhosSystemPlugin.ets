@@ -99,6 +99,9 @@ export default class MgReadOhosSystemPlugin implements FlutterPlugin, MethodCall
       case 'getDeviceInfo':
         this.getDeviceInfo(result)
         break
+      case 'getFilesDirectory':
+        this.getFilesDirectory(result)
+        break
       case 'isLocalNetworkAvailable':
         this.isLocalNetworkAvailable(result)
         break
@@ -115,6 +118,15 @@ export default class MgReadOhosSystemPlugin implements FlutterPlugin, MethodCall
         result.notImplemented()
         break
     }
+  }
+
+  private getFilesDirectory(result: MethodResult): void {
+    const filesDir = this.context?.filesDir
+    if (filesDir === undefined || filesDir.length === 0) {
+      result.error('system_unavailable', 'The OHOS UIAbility context is not ready.', null)
+      return
+    }
+    result.success(filesDir)
   }
 
   private async isLocalNetworkAvailable(result: MethodResult): Promise<void> {

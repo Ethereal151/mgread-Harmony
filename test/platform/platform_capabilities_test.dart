@@ -1,11 +1,16 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mg_read/platform/platform_capabilities.dart';
 
 void main() {
-  test('OHOS uses its EL2 persistence directory and safe fallbacks', () async {
-    final capabilities = PlatformCapabilities.forOperatingSystem('ohos');
+  test('OHOS uses the UIAbility files directory for persistence', () async {
+    final capabilities = PlatformCapabilities.forOperatingSystem(
+      'ohos',
+      ohosFilesDirectoryResolver: () async => Directory('/data/app/el2/100/base/com.ohos.mgread/files'),
+    );
 
-    expect((await capabilities.resolvePersistenceRoot()).path, '/data/storage/el2/base/haps/entry/files/persistence');
+    expect((await capabilities.resolvePersistenceRoot()).path, '/data/app/el2/100/base/com.ohos.mgread/files/persistence');
     expect(capabilities.isOhos, isTrue);
     expect(capabilities.supportsFilePicker, isTrue);
     expect(capabilities.supportsSharing, isTrue);
