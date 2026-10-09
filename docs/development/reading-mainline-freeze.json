@@ -1,6 +1,7 @@
 {
   "version": 1,
   "status": "frozen",
+  "allowCleanHead": true,
   "scope": [
     { "kind": "file", "path": "lib/app/app_router.dart" },
     { "kind": "file", "path": "lib/app/app_router.g.dart" },

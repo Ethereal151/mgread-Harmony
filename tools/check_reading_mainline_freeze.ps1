@@ -67,6 +67,7 @@ if ($scopeDifferences.Count -gt 0) {
 }
 
 $hashDifferences = [System.Collections.Generic.List[string]]::new()
+$allowCleanHead = $manifest.allowCleanHead -eq $true
 foreach ($path in $expectedPaths) {
   $actualHash = (Get-FileHash -LiteralPath $scopedFiles[$path] -Algorithm SHA256).Hash.ToLowerInvariant()
   $descriptor = $manifest.files.PSObject.Properties[$path].Value
@@ -77,13 +78,13 @@ foreach ($path in $expectedPaths) {
   }
   $matchesSnapshot = $expectedHashes -contains $actualHash
   $matchesCleanHead = $false
-  if (-not $matchesSnapshot -and $descriptor -isnot [string] -and $descriptor.allowCleanHead -eq $true) {
+  if (-not $matchesSnapshot -and ($allowCleanHead -or ($descriptor -isnot [string] -and $descriptor.allowCleanHead -eq $true))) {
     & git -C $repositoryRoot diff --quiet HEAD -- $path
     $matchesCleanHead = $LASTEXITCODE -eq 0
   }
   if (-not $matchesSnapshot -and -not $matchesCleanHead) {
     $expectedDescription = $expectedHashes -join ', '
-    if ($descriptor -isnot [string] -and $descriptor.allowCleanHead -eq $true) {
+    if ($allowCleanHead -or ($descriptor -isnot [string] -and $descriptor.allowCleanHead -eq $true)) {
       $expectedDescription += ', clean HEAD'
     }
     $hashDifferences.Add("$path (expected $expectedDescription, actual $actualHash)")
