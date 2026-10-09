@@ -177,6 +177,12 @@ try {
     (Join-Path $PSScriptRoot 'check_source_file_sizes.ps1')
   )
 
+  Invoke-NativeCheck -Label 'Reading mainline freeze' -Program 'pwsh' -Arguments @(
+    '-NoProfile'
+    '-File'
+    (Join-Path $PSScriptRoot 'check_reading_mainline_freeze.ps1')
+  )
+
   Invoke-NativeCheck -Label 'Dart format (owned files)' -Program $pinnedFlutter.Dart -Arguments (@('format', '--output=none', '--set-exit-if-changed') + $dartFiles)
 
   if ($Mode -eq 'Fast') {

@@ -45,3 +45,13 @@
   `tools/build_ohos_release.ps1` 及其对应的锁定版本记录，不能再改主构建链路。
 - OHOS 构建必须使用 `tools/ohos-build-contract.ps1` 选择单一变体。禁止回退全局 Flutter/Node/ohpm，
   禁止用临时备份恢复掩盖锁漂移；失败现场必须保留选中的清单、锁和变体指纹。
+
+## 阅读主链路冻结
+
+- 小说、漫画、音频、视频的生产阅读主链路已冻结，边界和 SHA-256 基线见
+  [`docs/development/reading-mainline-freeze.md`](docs/development/reading-mainline-freeze.md) 与
+  [`docs/development/reading-mainline-freeze.json`](docs/development/reading-mainline-freeze.json)。
+- 未经用户明确解冻授权，不得修改、格式化、重构、替换依赖、调整公开 API、改变路由接线或新增冻结范围内
+  的生产文件；测试和文档可以独立演进。
+- 每次 Flutter 检查和 CI 都必须运行 `tools/check_reading_mainline_freeze.ps1`。发现冻结范围变化时先停止，
+  不得更新基线掩盖变化。

@@ -1,0 +1,21 @@
+name: Reading mainline freeze
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Verify frozen reading mainline
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Check frozen production sources
+        shell: pwsh
+        run: ./tools/check_reading_mainline_freeze.ps1
