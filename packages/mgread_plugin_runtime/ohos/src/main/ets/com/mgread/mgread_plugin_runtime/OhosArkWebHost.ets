@@ -402,11 +402,17 @@ export default class OhosArkWebHost implements MethodCallHandler {
   }
 
   private async waitReady(page: OhosArkWebPlatformView, jobId: string, deadline: number, targetUrl: string): Promise<void> {
+    let previousFingerprint = ''
+    let stableSamples = 0
     while (true) {
       await this.ensureNotCancelled(jobId, deadline)
       try {
         const state = (await page.script('document.readyState')).replace(/"/g, '')
         if (targetUrl === 'about:blank') return
+        if (await page.navigationMarkerPresent()) {
+          await this.delay(POLL_MS)
+          continue
+        }
         const body = (await page.script('document.body?.innerHTML??""')).replace(/"/g, '')
         const challengeTarget = targetUrl.includes('/__gatekeeper_challenge/')
         const currentUrl = page.url()
@@ -418,13 +424,19 @@ export default class OhosArkWebHost implements MethodCallHandler {
           await this.delay(POLL_MS)
           continue
         }
-        if (challengeTarget && currentUrl.includes('/__gatekeeper_challenge/') &&
-            body.includes('challengeId:') && body.includes('verifyUrl:')) {
-          return
-        }
         if (state === 'complete') {
-          if (!challengeTarget && page.isPageEnded(currentUrl) && body.trim().length > 0) return
-          if (challengeTarget && !currentUrl.includes('/__gatekeeper_challenge/') && page.isPageEnded(currentUrl)) return
+          const ready = challengeTarget
+            ? currentUrl.includes('/__gatekeeper_challenge/') && body.includes('challengeId:') && body.includes('verifyUrl:')
+            : page.isPageEnded(currentUrl) && body.trim().length > 0
+          if (ready) {
+            const fingerprint = (await page.script('(()=>{const s=document.documentElement?.outerHTML??"";let h=0;for(let i=0;i<s.length;i++)h=((h<<5)-h+s.charCodeAt(i))|0;return `${s.length}:${h}`})()')).replace(/"/g, '')
+            stableSamples = fingerprint === previousFingerprint ? stableSamples + 1 : 1
+            previousFingerprint = fingerprint
+            if (stableSamples >= 3) return
+          } else {
+            stableSamples = 0
+            previousFingerprint = ''
+          }
         }
       } catch (_) {
         // The first controller call can race Web initialization; keep polling.
@@ -587,6 +599,7 @@ export class OhosArkWebPlatformView extends PlatformView {
   private readonly host: OhosArkWebHost
   private ready = false
   private evaluateSequence = 0
+  private navigationMarker = ''
   private explicitNavigationUrl = ''
   private pendingNavigationUrl = ''
   private replacementNavigationUrl = ''
@@ -695,8 +708,14 @@ export class OhosArkWebPlatformView extends PlatformView {
         this.pendingNavigationUrl = ''
         this.replacementNavigationUrl = ''
         this.pageEndUrl = ''
+        if (url === 'about:blank') {
+          this.navigationMarker = ''
+          this.controller.loadUrl(url, headers)
+          return
+        }
+        this.navigationMarker = `navigation-${Date.now()}-${this.evaluateSequence++}`
+        await this.script(`document.documentElement?.setAttribute('data-mgread-navigation-marker',${JSON.stringify(this.navigationMarker)})`)
         this.controller.loadUrl(url, headers)
-        if (url === 'about:blank') return
         for (let waitAttempt = 0; waitAttempt < 75; waitAttempt++) {
           try {
             const current = this.controller.getUrl()
@@ -720,6 +739,12 @@ export class OhosArkWebPlatformView extends PlatformView {
       }
     }
     throw new OhosArkWebError('plugin_execution_failed')
+  }
+
+  async navigationMarkerPresent(): Promise<boolean> {
+    if (this.navigationMarker.length === 0) return false
+    const value = await this.script(`document.documentElement?.getAttribute('data-mgread-navigation-marker')===${JSON.stringify(this.navigationMarker)}`)
+    return value.replace(/"/g, '') === 'true'
   }
 
   async script(source: string): Promise<string> {
