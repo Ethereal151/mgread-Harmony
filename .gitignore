@@ -46,6 +46,11 @@ migrate_working_dir/
 /tmp/
 **/failures/*.png
 
+# Local Codex/UI inspection snapshots and crash dumps.
+/.codex-*
+/ohos/*.dmp
+/flutter_*.log
+
 # Symbolication related
 app.*.symbols
 
