@@ -588,6 +588,8 @@ export class OhosArkWebPlatformView extends PlatformView {
   private ready = false
   private evaluateSequence = 0
   private explicitNavigationUrl = ''
+  private pendingNavigationUrl = ''
+  private replacementNavigationUrl = ''
   private pageEndUrl = ''
 
   constructor(pluginId: string, host: OhosArkWebHost) {
@@ -612,6 +614,30 @@ export class OhosArkWebPlatformView extends PlatformView {
   shouldInterceptNavigation(event: Any): boolean {
     try {
       const targetUrl = String(event.data.getRequestUrl())
+      if (/^https?:\/\//u.test(targetUrl)) {
+        // ArkWeb can expose the redirected target to the browser process while
+        // keeping the original origin in the renderer document. Cancel that
+        // server redirect and start the final URL as a new navigation so the
+        // renderer assigns the correct document base URL before page scripts
+        // run. This is limited to the first target after an explicit load.
+        const controllerUrl = this.controller.getUrl()
+        const redirectedFromExplicitLoad = this.explicitNavigationUrl.length > 0 &&
+          targetUrl !== this.explicitNavigationUrl && controllerUrl === this.explicitNavigationUrl
+        this.pendingNavigationUrl = targetUrl
+        this.pageEndUrl = targetUrl
+        if (redirectedFromExplicitLoad) {
+          this.explicitNavigationUrl = targetUrl
+          this.replacementNavigationUrl = targetUrl
+          setTimeout((): void => {
+            try {
+              this.controller.loadUrl('about:blank')
+            } catch (_) {
+              // The controller can be disposed while the replacement load is queued.
+            }
+          }, 0)
+          return true
+        }
+      }
       const currentUrl = this.controller.getUrl()
       if (!currentUrl.includes('/__gatekeeper_challenge/') || targetUrl.includes('/__gatekeeper_challenge/')) return false
       if (targetUrl === this.explicitNavigationUrl) {
@@ -626,9 +652,29 @@ export class OhosArkWebPlatformView extends PlatformView {
 
   onPageEnd(event: Any): void {
     try {
-      this.pageEndUrl = String(event.url ?? '')
+      const endedUrl = String(event.url ?? '')
+      const replacementUrl = this.replacementNavigationUrl
+      this.replacementNavigationUrl = ''
+      if (endedUrl === 'about:blank' && replacementUrl.length > 0) {
+        this.pageEndUrl = endedUrl
+        setTimeout((): void => {
+          try {
+            this.controller.loadUrl(replacementUrl)
+          } catch (_) {
+            // The controller can be disposed while the replacement load is queued.
+          }
+        }, 0)
+        return
+      }
+      if (this.pendingNavigationUrl.length > 0 && endedUrl !== this.pendingNavigationUrl) {
+        this.pageEndUrl = this.pendingNavigationUrl
+      } else {
+        this.pageEndUrl = endedUrl
+      }
+      this.pendingNavigationUrl = ''
     } catch (_) {
       this.pageEndUrl = ''
+      this.pendingNavigationUrl = ''
     }
   }
 
@@ -646,6 +692,8 @@ export class OhosArkWebPlatformView extends PlatformView {
     for (let attempt = 0; attempt < 75; attempt++) {
       try {
         this.explicitNavigationUrl = url
+        this.pendingNavigationUrl = ''
+        this.replacementNavigationUrl = ''
         this.pageEndUrl = ''
         this.controller.loadUrl(url, headers)
         if (url === 'about:blank') return
@@ -697,6 +745,7 @@ export class OhosArkWebPlatformView extends PlatformView {
       const keyLiteral = JSON.stringify(key)
       const scriptId = `${key}_script`
       const scriptIdLiteral = JSON.stringify(scriptId)
+      const navigationBaseLiteral = JSON.stringify(this.url())
       const injected = `(()=>{
         const cleanup=()=>document.getElementById(${scriptIdLiteral})?.remove()
         const originalFetch=window.fetch
@@ -705,15 +754,19 @@ export class OhosArkWebPlatformView extends PlatformView {
         const finish=(value)=>{publish({value:value===undefined?null:value});cleanup();restore()}
         const fail=(error)=>{publish({error:'plugin_execution_failed',detail:String(error)});cleanup();restore()}
         const asyncFetch=(input,init={})=>new Promise((resolve,reject)=>{
-          const requestUrl=new URL(typeof input==='string'?input:input?.url||String(input),location.href).toString()
+          const navigationBase=${navigationBaseLiteral}
+          const request=new URL(typeof input==='string'?input:input?.url||String(input),navigationBase)
+          const navigationOrigin=/^https?:\\/\\//.test(navigationBase)?new URL(navigationBase).origin:''
+          if(navigationOrigin.length>0&&request.pathname.startsWith('/__gatekeeper_challenge/')&&request.origin!==navigationOrigin)request.href=new URL(request.pathname+request.search+request.hash,navigationOrigin).toString()
+          const requestUrl=request.toString()
           const method=init.method||'GET'
           const requestHeaders=Object.assign({},init.headers||{})
-          if(requestHeaders.origin===undefined&&requestHeaders.Origin===undefined)requestHeaders.origin=location.origin
           const xhr=new XMLHttpRequest()
           xhr.open(method,requestUrl,true)
           xhr.responseType='arraybuffer'
           xhr.withCredentials=init.credentials==='include'||init.credentials==='same-origin'
-          Object.entries(requestHeaders).forEach(([name,value])=>xhr.setRequestHeader(name,String(value)))
+          const forbiddenRequestHeader=/^(?:accept-charset|accept-encoding|access-control-request-headers|access-control-request-method|connection|content-length|cookie2?|date|dnt|expect|host|keep-alive|origin|proxy-|referer|sec-|te|trailer|transfer-encoding|upgrade|user-agent|via)$/i
+          Object.entries(requestHeaders).forEach(([name,value])=>{if(!forbiddenRequestHeader.test(name))xhr.setRequestHeader(name,String(value))})
           const complete=()=>{
             try{
               const responseHeaders={}
@@ -790,7 +843,7 @@ export class OhosArkWebPlatformView extends PlatformView {
     const value = await this.script('JSON.stringify({html:document.documentElement?.outerHTML??""})')
     const decoded: Any = this.parseScriptResult(value)
     if (decoded === null || typeof decoded !== 'object') throw new OhosArkWebError('plugin_execution_failed')
-     return decoded
+    return decoded
   }
 
   async click(x: number, y: number): Promise<Any> {
@@ -811,6 +864,10 @@ export class OhosArkWebPlatformView extends PlatformView {
   }
 
   url(): string {
+    // ArkWeb can keep returning the pre-redirect controller URL after the
+    // load-end callback has reported the committed document.  The load-end
+    // URL is the authoritative page origin for subsequent script requests.
+    if (this.pageEndUrl.length > 0) return this.pageEndUrl
     try { return this.controller.getUrl() } catch (_) { return '' }
   }
 
