@@ -38,6 +38,7 @@ mgread_native_host_handle* mgread_native_host_create(void);
 int32_t mgread_native_host_start(mgread_native_host_handle* host,
                                  const char* root,
                                  const char* token,
+                                 const char* native_library_dir,
                                  int32_t test_mode,
                                  char** ready_json);
 int32_t mgread_native_host_stop(mgread_native_host_handle* host);

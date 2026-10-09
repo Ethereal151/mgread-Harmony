@@ -534,6 +534,10 @@ function Build-MgReadOhosAliceSource {
   New-Item -ItemType Directory -Force -Path $OutputDirectory | Out-Null
   $outputPath = Join-Path $OutputDirectory 'libaisishuwu_native.so'
   Copy-Item -LiteralPath $rustTarget -Destination $outputPath -Force
+  # Raw native imports use the stable archive target name `libsource.so`.
+  # The bytes are built for the selected OHOS ABI from the same source, so an
+  # Android arm64 import cannot be mistaken for a loadable OHOS ELF.
+  Copy-Item -LiteralPath $rustTarget -Destination (Join-Path $OutputDirectory 'libsource.so') -Force
   Write-Host "OHOS $Architecture Alice source: $outputPath"
   return $outputPath
 }

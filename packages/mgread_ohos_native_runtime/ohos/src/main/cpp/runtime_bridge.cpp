@@ -57,11 +57,13 @@ NativeHostBridge::~NativeHostBridge() {
 }
 
 int NativeHostBridge::Start(const std::string& root, const std::string& token,
+                            const std::string& native_library_dir,
                             bool test_mode, std::string* ready) {
   if (ready == nullptr) return MGREAD_RUNTIME_INVALID_ARGUMENT;
   std::lock_guard<std::mutex> lock(mutex_);
   char* raw = nullptr;
   const int code = mgread_native_host_start(handle_, root.c_str(), token.c_str(),
+                                            native_library_dir.c_str(),
                                             test_mode ? 1 : 0, &raw);
   if (code == MGREAD_RUNTIME_OK && raw != nullptr) *ready = raw;
   mgread_runtime_free_string(raw);

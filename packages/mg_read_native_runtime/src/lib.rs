@@ -32,6 +32,7 @@ use std::{
 
 pub struct Runtime {
     root: PathBuf,
+    native_library_dir: Option<PathBuf>,
     token: String,
     test_mode: bool,
     started: Instant,
@@ -50,6 +51,7 @@ impl Runtime {
         _port: u16,
         test_mode: bool,
         embedded: bool,
+        native_library_dir: Option<PathBuf>,
     ) -> Result<Arc<Self>> {
         if token.len() < 32 || token.len() > 256 {
             return Err(invalid("Control token must contain at least 32 characters"));
@@ -58,6 +60,7 @@ impl Runtime {
         let recovered = catalog.recovered;
         Ok(Arc::new(Self {
             root: catalog.root.clone(),
+            native_library_dir,
             token,
             test_mode,
             started: Instant::now(),
@@ -161,7 +164,7 @@ pub async fn serve(
 ) -> Result<()> {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
     let port = listener.local_addr()?.port();
-    let runtime = Runtime::open(root, token.clone(), port, test_mode, false)?;
+    let runtime = Runtime::open(root, token.clone(), port, test_mode, false, None)?;
     let router = router(runtime);
     ready(json!({"port":port,"token":token,"runtimeKind":"native-rust"}));
     axum::serve(listener, router).await.map_err(Into::into)
@@ -174,13 +177,21 @@ pub async fn serve(
 pub async fn serve_embedded(
     root: PathBuf,
     token: String,
+    native_library_dir: PathBuf,
     test_mode: bool,
     stop: tokio::sync::oneshot::Receiver<()>,
     ready: impl FnOnce(Value),
 ) -> Result<()> {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
     let port = listener.local_addr()?.port();
-    let runtime = Runtime::open(root, token.clone(), port, test_mode, true)?;
+    let runtime = Runtime::open(
+        root,
+        token.clone(),
+        port,
+        test_mode,
+        true,
+        Some(native_library_dir),
+    )?;
     ready(json!({"port":port,"token":token,"runtimeKind":"native-rust"}));
     axum::serve(listener, router(runtime))
         .with_graceful_shutdown(async {

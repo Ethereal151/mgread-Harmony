@@ -76,6 +76,7 @@ export default class OhosNativeRuntimePlugin implements FlutterPlugin, MethodCal
           result.success(nativeRuntime.hostStart(
             `${this.context?.filesDir ?? ''}/mgread-native-runtime`,
             String(args?.get('token') ?? ''),
+            this.context?.applicationInfo.nativeLibraryPath ?? '',
             Boolean(args?.get('testMode') ?? false),
           ))
         } catch (error) {

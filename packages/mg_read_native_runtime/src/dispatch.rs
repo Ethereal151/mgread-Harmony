@@ -247,7 +247,14 @@ pub fn initialize(runtime: &Arc<Runtime>, params: &Value) -> Result<Value> {
             runtime.proxy.lock().unwrap().clone(),
             runtime.test_mode,
         )
-        .and_then(|config| NativePlugin::load(&path, &manifest, config));
+        .and_then(|config| {
+            NativePlugin::load(
+                &path,
+                &manifest,
+                config,
+                runtime.native_library_dir.as_deref(),
+            )
+        });
         let mut catalog = runtime.catalog.lock().unwrap();
         let entry = catalog.entries.get_mut(&id).unwrap();
         entry.loading = false;

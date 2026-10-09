@@ -82,12 +82,19 @@ impl NativeHost {
         0
     }
 
-    fn start(&mut self, root: &str, token: &str, test_mode: bool) -> Result<String, String> {
+    fn start(
+        &mut self,
+        root: &str,
+        token: &str,
+        native_library_dir: &str,
+        test_mode: bool,
+    ) -> Result<String, String> {
         let _ = self.stop();
         let (ready_tx, ready_rx) = std::sync::mpsc::sync_channel(1);
         let (stop_tx, stop_rx) = tokio::sync::oneshot::channel();
         let root = root.to_owned();
         let token = token.to_owned();
+        let native_library_dir = native_library_dir.to_owned();
         let thread = std::thread::Builder::new()
             .name("mgread-native-ohos".to_owned())
             .spawn(move || {
@@ -99,6 +106,7 @@ impl NativeHost {
                 runtime.block_on(serve_embedded(
                     std::path::PathBuf::from(root),
                     token,
+                    std::path::PathBuf::from(native_library_dir),
                     test_mode,
                     stop_rx,
                     |ready| {
@@ -327,6 +335,7 @@ pub unsafe extern "C" fn mgread_native_host_start(
     host: *mut mgread_native_host_handle,
     root: *const c_char,
     token: *const c_char,
+    native_library_dir: *const c_char,
     test_mode: i32,
     ready_json: *mut *mut c_char,
 ) -> i32 {
@@ -343,10 +352,13 @@ pub unsafe extern "C" fn mgread_native_host_start(
     let Some(token) = input(token) else {
         return 1;
     };
+    let Some(native_library_dir) = input(native_library_dir) else {
+        return 1;
+    };
     let Ok(mut host) = host.host.lock() else {
         return 8;
     };
-    match host.start(root, token, test_mode != 0) {
+    match host.start(root, token, native_library_dir, test_mode != 0) {
         Ok(ready) => output(&ready, ready_json),
         Err(error) => {
             set_last_error(error);

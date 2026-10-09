@@ -46,21 +46,22 @@ napi_value Start(napi_env env, napi_callback_info) {
 }
 
 napi_value HostStart(napi_env env, napi_callback_info info) {
-  size_t argc = 3;
-  napi_value argv[3];
+  size_t argc = 4;
+  napi_value argv[4];
   napi_get_cb_info(env, info, &argc, argv, nullptr, nullptr);
-  if (argc != 3) {
-    napi_throw_error(env, "invalid_argument", "hostStart expects root, token and testMode");
+  if (argc != 4) {
+    napi_throw_error(env, "invalid_argument", "hostStart expects root, token, nativeLibraryDir and testMode");
     return nullptr;
   }
   std::lock_guard<std::mutex> lock(g_runtime_mutex);
   if (g_native_host == nullptr) g_native_host = std::make_shared<NativeHostBridge>();
   const std::string root = ReadString(env, argv[0]);
   const std::string token = ReadString(env, argv[1]);
+  const std::string native_library_dir = ReadString(env, argv[2]);
   bool test_mode = false;
-  napi_get_value_bool(env, argv[2], &test_mode);
+  napi_get_value_bool(env, argv[3], &test_mode);
   std::string ready;
-  const int code = g_native_host->Start(root, token, test_mode, &ready);
+  const int code = g_native_host->Start(root, token, native_library_dir, test_mode, &ready);
   if (code != MGREAD_RUNTIME_OK) {
     napi_throw_error(env, "native_runtime_start_failed", "OHOS native Rust worker failed to start");
     return nullptr;

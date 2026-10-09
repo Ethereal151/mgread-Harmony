@@ -7,7 +7,7 @@ declare const nativeRuntime: {
   cancel(requestId: string): number;
   stop(): number;
   restart(): number;
-  hostStart(root: string, token: string, testMode: boolean): string;
+  hostStart(root: string, token: string, nativeLibraryDir: string, testMode: boolean): string;
   hostStop(): number;
   dispose(): void;
 };

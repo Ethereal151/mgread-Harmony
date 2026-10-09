@@ -708,6 +708,10 @@ try {
       throw "The generated HAP is missing a required $Architecture Runtime library: $requiredRuntimePath"
     }
   }
+  $rawImportPath = "${selectedArchitecturePath}libsource.so"
+  if ($hapEntries -notcontains $rawImportPath) {
+    throw "The generated HAP is missing the raw native import target: $rawImportPath"
+  }
   $selectedSqlitePath = $selectedArchitecturePath + 'libsqlite3.so'
   if ($hapEntries -notcontains $selectedSqlitePath) {
     throw "The generated HAP is missing the selected architecture SQLite runtime: $selectedSqlitePath"

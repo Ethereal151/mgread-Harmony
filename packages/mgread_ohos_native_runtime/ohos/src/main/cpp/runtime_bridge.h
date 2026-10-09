@@ -31,7 +31,8 @@ class NativeHostBridge final {
   NativeHostBridge(const NativeHostBridge&) = delete;
   NativeHostBridge& operator=(const NativeHostBridge&) = delete;
 
-  int Start(const std::string& root, const std::string& token, bool test_mode,
+  int Start(const std::string& root, const std::string& token,
+            const std::string& native_library_dir, bool test_mode,
             std::string* ready);
   int Stop();
 
