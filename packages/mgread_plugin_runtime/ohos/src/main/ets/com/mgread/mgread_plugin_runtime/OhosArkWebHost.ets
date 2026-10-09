@@ -18,7 +18,10 @@ const VIEW_TYPE = 'mgread_ohos_arkweb'
 const MAX_WAIT_MS = 120_000
 const POLL_MS = 80
 const EVALUATE_POLL_MS = 500
-const MAX_RESPONSE_BYTES = 2 * 1024 * 1024
+// Keep the browser bridge at the Runtime resource contract's raw-byte limit;
+// the previous 2 MiB host default rejected valid media before Runtime could
+// validate or cache it.
+const MAX_RESPONSE_BYTES = 16 * 1024 * 1024
 interface WebHeaderPayload {
   headerKey: string
   headerValue: string
@@ -202,7 +205,16 @@ export default class OhosArkWebHost implements MethodCallHandler {
     if (jobId.length > 0) this.activeJobs.set(jobId, page)
     try {
       let response: Any
-      if (operation.startsWith('page.')) response = await this.pageOperation(page, raw, jobId)
+      if (operation.startsWith('page.')) {
+        // The Runtime serializes ordinary calls, but the platform bridge can
+        // still deliver requests from separate loopback consumers while a
+        // previous call is finishing. ArkWeb has one mutable document per
+        // page; navigation, script injection, and fetch must therefore share
+        // one host-side transaction boundary as well.
+        response = isPageControlOperation(operation)
+          ? await this.pageOperation(page, raw, jobId)
+          : await page.runExclusive(() => this.pageOperation(page, raw, jobId))
+      }
       else if (operation === 'interaction') response = await this.interaction(page, raw, jobId)
       else response = await this.legacyRequest(page, raw, jobId)
       return response
@@ -414,20 +426,18 @@ export default class OhosArkWebHost implements MethodCallHandler {
           continue
         }
         const body = (await page.script('document.body?.innerHTML??""')).replace(/"/g, '')
-        const challengeTarget = targetUrl.includes('/__gatekeeper_challenge/')
         const currentUrl = page.url()
-        if (!challengeTarget && currentUrl.includes('/__gatekeeper_challenge/')) {
-          await this.delay(POLL_MS)
-          continue
-        }
-        if (!challengeTarget && (body.includes('challengeId:') || body.includes('verifyUrl:'))) {
-          await this.delay(POLL_MS)
-          continue
-        }
+        // A source may navigate directly to a protected page after a
+        // previously verified page. ArkWeb then renders the challenge page,
+        // but the source must receive that DOM first so it can inspect and
+        // solve the challenge through the public WebView API. Waiting here for
+        // the challenge to finish deadlocks that source-side flow.
+        const challengePage = currentUrl.includes('/__gatekeeper_challenge/') &&
+          body.includes('challengeId:') && body.includes('verifyUrl:')
+        if (challengePage) return
+        if (isImageDocumentUrl(currentUrl, targetUrl) && page.isPageEnded(currentUrl)) return
         if (state === 'complete') {
-          const ready = challengeTarget
-            ? currentUrl.includes('/__gatekeeper_challenge/') && body.includes('challengeId:') && body.includes('verifyUrl:')
-            : page.isPageEnded(currentUrl) && body.trim().length > 0
+          const ready = body.trim().length > 0
           if (ready) {
             const fingerprint = (await page.script('(()=>{const s=document.documentElement?.outerHTML??"";let h=0;for(let i=0;i<s.length;i++)h=((h<<5)-h+s.charCodeAt(i))|0;return `${s.length}:${h}`})()')).replace(/"/g, '')
             stableSamples = fingerprint === previousFingerprint ? stableSamples + 1 : 1
@@ -577,6 +587,20 @@ class OhosArkWebError extends Error {
   }
 }
 
+function isPageControlOperation(operation: string): boolean {
+  return operation === 'page.open' || operation === 'page.show' ||
+    operation === 'page.hide' || operation === 'page.close'
+}
+
+function isImageDocumentUrl(currentUrl: string, requestUrl: string): boolean {
+  if (currentUrl.length === 0 || currentUrl !== requestUrl) return false
+  try {
+    return /\.(?:avif|gif|jpe?g|png|webp)(?:$|[?#])/iu.test(currentUrl)
+  } catch (_) {
+    return false
+  }
+}
+
 class OhosArkWebPlatformViewFactory extends PlatformViewFactory {
   private readonly host: OhosArkWebHost
 
@@ -599,10 +623,10 @@ export class OhosArkWebPlatformView extends PlatformView {
   private readonly host: OhosArkWebHost
   private ready = false
   private evaluateSequence = 0
+  private evaluateTail: Promise<void> = Promise.resolve()
+  private pageOperationTail: Promise<void> = Promise.resolve()
   private navigationMarker = ''
   private explicitNavigationUrl = ''
-  private pendingNavigationUrl = ''
-  private replacementNavigationUrl = ''
   private pageEndUrl = ''
 
   constructor(pluginId: string, host: OhosArkWebHost) {
@@ -628,28 +652,9 @@ export class OhosArkWebPlatformView extends PlatformView {
     try {
       const targetUrl = String(event.data.getRequestUrl())
       if (/^https?:\/\//u.test(targetUrl)) {
-        // ArkWeb can expose the redirected target to the browser process while
-        // keeping the original origin in the renderer document. Cancel that
-        // server redirect and start the final URL as a new navigation so the
-        // renderer assigns the correct document base URL before page scripts
-        // run. This is limited to the first target after an explicit load.
-        const controllerUrl = this.controller.getUrl()
-        const redirectedFromExplicitLoad = this.explicitNavigationUrl.length > 0 &&
-          targetUrl !== this.explicitNavigationUrl && controllerUrl === this.explicitNavigationUrl
-        this.pendingNavigationUrl = targetUrl
-        this.pageEndUrl = targetUrl
-        if (redirectedFromExplicitLoad) {
-          this.explicitNavigationUrl = targetUrl
-          this.replacementNavigationUrl = targetUrl
-          setTimeout((): void => {
-            try {
-              this.controller.loadUrl('about:blank')
-            } catch (_) {
-              // The controller can be disposed while the replacement load is queued.
-            }
-          }, 0)
-          return true
-        }
+        // Let ArkWeb follow the server redirect itself.
+        // Replaying redirects through about:blank can turn a legitimate
+        // multi-host chain into a redirect loop.
       }
       const currentUrl = this.controller.getUrl()
       if (!currentUrl.includes('/__gatekeeper_challenge/') || targetUrl.includes('/__gatekeeper_challenge/')) return false
@@ -666,28 +671,9 @@ export class OhosArkWebPlatformView extends PlatformView {
   onPageEnd(event: Any): void {
     try {
       const endedUrl = String(event.url ?? '')
-      const replacementUrl = this.replacementNavigationUrl
-      this.replacementNavigationUrl = ''
-      if (endedUrl === 'about:blank' && replacementUrl.length > 0) {
-        this.pageEndUrl = endedUrl
-        setTimeout((): void => {
-          try {
-            this.controller.loadUrl(replacementUrl)
-          } catch (_) {
-            // The controller can be disposed while the replacement load is queued.
-          }
-        }, 0)
-        return
-      }
-      if (this.pendingNavigationUrl.length > 0 && endedUrl !== this.pendingNavigationUrl) {
-        this.pageEndUrl = this.pendingNavigationUrl
-      } else {
-        this.pageEndUrl = endedUrl
-      }
-      this.pendingNavigationUrl = ''
+      this.pageEndUrl = endedUrl
     } catch (_) {
       this.pageEndUrl = ''
-      this.pendingNavigationUrl = ''
     }
   }
 
@@ -705,21 +691,23 @@ export class OhosArkWebPlatformView extends PlatformView {
     for (let attempt = 0; attempt < 75; attempt++) {
       try {
         this.explicitNavigationUrl = url
-        this.pendingNavigationUrl = ''
-        this.replacementNavigationUrl = ''
         this.pageEndUrl = ''
         if (url === 'about:blank') {
           this.navigationMarker = ''
           this.controller.loadUrl(url, headers)
           return
         }
-        this.navigationMarker = `navigation-${Date.now()}-${this.evaluateSequence++}`
-        await this.script(`document.documentElement?.setAttribute('data-mgread-navigation-marker',${JSON.stringify(this.navigationMarker)})`)
+        // Do not inject a marker into the current document before navigation.
+        // Image documents on ArkWeb can stop accepting scripts after repeated
+        // image-to-page transitions. The load-end callback is the platform
+        // navigation boundary and is sufficient for the subsequent readiness
+        // probe.
+        this.navigationMarker = ''
         this.controller.loadUrl(url, headers)
         for (let waitAttempt = 0; waitAttempt < 75; waitAttempt++) {
           try {
             const current = this.controller.getUrl()
-            if (current.length > 0 && current !== 'about:blank') {
+            if (current.length > 0 && current !== 'about:blank' && this.pageEndUrl.length > 0) {
               return
             }
           } catch (_) {
@@ -760,6 +748,36 @@ export class OhosArkWebPlatformView extends PlatformView {
   }
 
   async evaluate(source: string): Promise<Any> {
+    let release: () => void = (): void => {}
+    const turn = new Promise<void>((resolve): void => {
+      release = resolve
+    })
+    const previous = this.evaluateTail
+    this.evaluateTail = previous.then((): Promise<void> => turn)
+    await previous
+    try {
+      return await this.evaluateUnlocked(source)
+    } finally {
+      release()
+    }
+  }
+
+  async runExclusive(operation: () => Promise<Any>): Promise<Any> {
+    let release: () => void = (): void => {}
+    const turn = new Promise<void>((resolve): void => {
+      release = resolve
+    })
+    const previous = this.pageOperationTail
+    this.pageOperationTail = previous.then((): Promise<void> => turn)
+    await previous
+    try {
+      return await operation()
+    } finally {
+      release()
+    }
+  }
+
+  private async evaluateUnlocked(source: string): Promise<Any> {
     try {
       const trimmed = source.trim()
       if (!trimmed.includes(';') && !/\breturn\b/.test(trimmed)) {
@@ -768,16 +786,13 @@ export class OhosArkWebPlatformView extends PlatformView {
       }
       const key = `__mgreadEvaluate_${this.evaluateSequence++}`
       const keyLiteral = JSON.stringify(key)
-      const scriptId = `${key}_script`
-      const scriptIdLiteral = JSON.stringify(scriptId)
       const navigationBaseLiteral = JSON.stringify(this.url())
       const injected = `(()=>{
-        const cleanup=()=>document.getElementById(${scriptIdLiteral})?.remove()
         const originalFetch=window.fetch
         const restore=()=>{window.fetch=originalFetch}
         const publish=(value)=>{window[${keyLiteral}]=JSON.stringify(value)}
-        const finish=(value)=>{publish({value:value===undefined?null:value});cleanup();restore()}
-        const fail=(error)=>{publish({error:'plugin_execution_failed',detail:String(error)});cleanup();restore()}
+        const finish=(value)=>{publish({value:value===undefined?null:value});restore()}
+        const fail=(error)=>{publish({error:'plugin_execution_failed',detail:String(error)});restore()}
         const asyncFetch=(input,init={})=>new Promise((resolve,reject)=>{
           const navigationBase=${navigationBaseLiteral}
           const request=new URL(typeof input==='string'?input:input?.url||String(input),navigationBase)
@@ -823,12 +838,7 @@ export class OhosArkWebPlatformView extends PlatformView {
       const expression = `(()=>{
         const key=${keyLiteral}
         window[key]={pending:true}
-        const script=document.createElement('script')
-        script.id=${scriptIdLiteral}
-        const nonce=document.querySelector('script[nonce]')?.nonce||''
-        if(nonce)script.nonce=nonce
-        script.textContent=${JSON.stringify(injected)}
-        ;(document.head||document.documentElement).appendChild(script)
+        ;(${injected})
         return 'started'
       })()`
       await this.script(expression)

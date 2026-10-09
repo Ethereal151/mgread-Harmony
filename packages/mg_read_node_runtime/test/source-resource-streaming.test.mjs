@@ -6,6 +6,7 @@ import test from "node:test";
 import { serveSourceResource } from "../dist/loopback-resources.js";
 import { openSourceProxyResource } from "../dist/source-resource-proxy.js";
 import { SourceResourceCoordinator } from "../dist/source-resource-coordinator.js";
+import { normalizeBaozimhSourceResourceRequest } from "../dist/source-resource-coordinator.js";
 import { encodeSourceResourceToken } from "../dist/source-resource-token.js";
 
 const bmiKey = Buffer.from("aaaaaaaaaaaaaaaa", "ascii");
@@ -32,6 +33,70 @@ test("source image proxy forwards a bounded handler descriptor to the owning plu
     {}, new AbortController().signal, () => "unused");
   assert.equal(invalid, undefined);
   assert.equal(calls, 1);
+});
+
+test("source image handler transactions are serialized per plugin", async () => {
+  const firstStarted = Promise.withResolvers();
+  const releaseFirst = Promise.withResolvers();
+  let active = 0;
+  let maximumActive = 0;
+  let calls = 0;
+  const coordinator = new SourceResourceCoordinator({ fetch() { throw new Error("unexpected upstream fetch"); } },
+    () => {}, () => false, async () => {
+      calls += 1;
+      active += 1;
+      maximumActive = Math.max(maximumActive, active);
+      try {
+        if (calls === 1) {
+          firstStarted.resolve();
+          await releaseFirst.promise;
+        }
+        return new Response(Uint8Array.from([137, 80, 78, 71]), { headers: { "content-type": "image/png" } });
+      } finally {
+        active -= 1;
+      }
+    });
+  const request = (url) => ({ kind: "image", url, handler: "transactional-image-v1", params: {} });
+  const open = (url) => coordinator.open(
+    encodeSourceResourceToken("org.mgread.transactional", request(url)),
+    {}, new AbortController().signal, () => "unused",
+  );
+  const first = open("https://images.example/one.png");
+  await firstStarted.promise;
+  const second = open("https://images.example/two.png");
+  await Promise.resolve();
+  assert.equal(calls, 1);
+  releaseFirst.resolve();
+  await Promise.all([first, second]);
+  assert.equal(calls, 2);
+  assert.equal(maximumActive, 1);
+});
+
+test("OHOS normalizes the Baozimh CDN alias before its source handler", async () => {
+  const request = {
+    kind: "image",
+    url: "https://static-tw.bzmgcn.com/cover/sample.jpg?w=285&h=375&q=100",
+    handler: "baozimh-image-v1",
+    params: { origin: "https://static-tw.bzmgcn.com", path: "/cover/sample.jpg" },
+    headers: { Accept: "image/*", Referer: "https://cn.bzmgcn.com/classify?type=all&region=cn&state=all&filter=*" },
+  };
+  const normalized = normalizeBaozimhSourceResourceRequest(request);
+  assert.equal(normalized.url, "https://s1.bzcdn.net/cover/sample.jpg?w=285&h=375&q=100");
+  assert.deepEqual(normalized.params, { origin: "https://s1.bzcdn.net", path: "/cover/sample.jpg" });
+  assert.equal(normalized.headers.Referer, "https://www.baozimh.com/classify?type=all&region=cn&state=all&filter=*");
+  const decorated = normalizeBaozimhSourceResourceRequest({
+    ...request,
+    url: "https://s1-ogsm1-uspho.bzcdn.net/scomic/book/0/0-xguw/1.jpg",
+    params: { origin: "https://s1-ogsm1-uspho.bzcdn.net", path: "/scomic/book/0/0-xguw/1.jpg" },
+  });
+  assert.equal(decorated.url, "https://s1.bzcdn.net/scomic/book/0/0-xguw/1.jpg");
+  assert.deepEqual(decorated.params, { origin: "https://s1.bzcdn.net", path: "/scomic/book/0/0-xguw/1.jpg" });
+  const redirectedReferer = normalizeBaozimhSourceResourceRequest({
+    ...decorated,
+    headers: { ...decorated.headers, Referer: "https://cn.cnbzmg.com/comic/chapter/book/0_0.html" },
+  });
+  assert.equal(redirectedReferer.headers.Referer, "https://www.baozimh.com/comic/chapter/book/0_0.html");
+  assert.deepEqual(normalizeBaozimhSourceResourceRequest({ ...request, handler: "other-image-v1" }), { ...request, handler: "other-image-v1" });
 });
 
 test("source resources deliver the first chunk before the upstream body completes", async (t) => {
