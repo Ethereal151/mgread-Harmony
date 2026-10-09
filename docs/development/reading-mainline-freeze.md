@@ -9,8 +9,10 @@
 | 音频 | `lib/features/media`、主应用 `app_router.dart`/`app_startup.dart`、`mg_read_audio_player/lib` |
 | 视频 | `lib/features/media`、主应用 `app_router.dart`/`app_startup.dart`、`mg_read_video_player/lib` |
 
-冻结意味着：不得修改、格式化、重构、替换依赖、调整公开 API、改变路由接线或新增生产文件。每次 Flutter
-检查都会执行 `tools/check_reading_mainline_freeze.ps1`，并在 CI 中单独校验同一份 SHA-256 基线。
+冻结意味着：不得修改、格式化、重构、替换依赖、调整公开 API、改变路由接线或新增生产文件。当前工作区中已
+存在的阅读器 OHOS 与 OHOS 媒体 release/arm64 变体也已纳入本地快照；它们只额外允许干净提交态，不能再出现
+第三种状态。每次 Flutter 检查都会执行 `tools/check_reading_mainline_freeze.ps1`，并在 CI 中单独校验同一份
+SHA-256 基线。
 
 如确需改变主链路，必须先得到用户明确的解冻授权；解冻变更应单独说明影响范围、重新验证四条链路，并在同一
 变更中更新 `reading-mainline-freeze.json`，不得以修改基线来掩盖未经授权的源码变化。

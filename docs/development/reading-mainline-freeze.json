@@ -12,7 +12,11 @@
     { "kind": "directory", "path": "packages/mg_read_video_player/lib" },
     { "kind": "file", "path": "packages/mg_read_reader_ui/pubspec.yaml" },
     { "kind": "file", "path": "packages/mg_read_audio_player/pubspec.yaml" },
-    { "kind": "file", "path": "packages/mg_read_video_player/pubspec.yaml" }
+    { "kind": "file", "path": "packages/mg_read_video_player/pubspec.yaml" },
+    { "kind": "file", "path": "packages/mg_read_reader_ui/ohos/BuildProfile.ets" },
+    { "kind": "file", "path": "packages/mg_read_reader_ui/ohos/oh-package-lock.json5" },
+    { "kind": "file", "path": "packages/mgread_ohos_media/ohos/BuildProfile.ets" },
+    { "kind": "file", "path": "packages/mgread_ohos_media/ohos/oh-package-lock.json5" }
   ],
   "files": {
     "lib/features/media/application/android_audio_background_service.dart": "3cb6421f398352dc96f16af827d7f4ecc5eed6a664d06fcec0b31e5bbb8a8ef7",
@@ -171,6 +175,22 @@
     "lib/app/app_router.dart": "8f4ea7dcfd41217ac4d8f614881b1196727f63198db07b80e201000350c1e130",
     "lib/app/app_router.g.dart": "76a6e4bd5355c0feb401e38c57cfa37dedb7391e5a053016be914b60f50500cb",
     "packages/mg_read_audio_player/pubspec.yaml": "e6bb9cbf4f48b02362d7be8877b5c98818ad7d9ee87ae445dc867b1a72e1d9dd",
+    "packages/mg_read_reader_ui/ohos/BuildProfile.ets": {
+      "sha256": "85c875f24806f5b4519686d9584ec7488ecd5f689878f888aca509702fc29270",
+      "allowCleanHead": true
+    },
+    "packages/mg_read_reader_ui/ohos/oh-package-lock.json5": {
+      "sha256": "0050fef36c48339e5857ac60b267db63b585101e1ced14d284eb99d78927506d",
+      "allowCleanHead": true
+    },
+    "packages/mgread_ohos_media/ohos/BuildProfile.ets": {
+      "sha256": "b09cd6450628b149d89c68800ef296a3ccfdbab0fdda8700c286895be5a61d4c",
+      "allowCleanHead": true
+    },
+    "packages/mgread_ohos_media/ohos/oh-package-lock.json5": {
+      "sha256": "0050fef36c48339e5857ac60b267db63b585101e1ced14d284eb99d78927506d",
+      "allowCleanHead": true
+    },
     "packages/mg_read_reader_ui/pubspec.yaml": "b6e0392d0eb3ba9f7a13d71906dae0f0341213f3f5686df508aaff36f9c9e5eb",
     "packages/mg_read_video_player/pubspec.yaml": "c9b44bd85f9de233c0c30d62ce0480e2390ea40b5f9a57d5c5dc8fef0905d15a",
     "lib/app/app_startup.dart": "700daeaabc98ce7c1b5c764d79395794c719105d049e6ed0648aa1947d3678b6"
