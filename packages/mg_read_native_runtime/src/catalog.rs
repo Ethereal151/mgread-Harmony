@@ -112,13 +112,25 @@ fn replace_ascii_padded(bytes: &mut [u8], needle: &[u8], replacement: &[u8]) -> 
 /// Android's NDK emits loader names and a marker that OHOS does not accept
 /// even when the library only uses symbols exported by OHOS libc. Keep the
 /// selected library's code intact and normalize only that loader metadata.
-fn normalize_android_library_for_ohos(mut bytes: Vec<u8>) -> Vec<u8> {
+fn normalize_android_library_for_ohos(mut bytes: Vec<u8>) -> Result<Vec<u8>> {
     neutralize_android_ident_section(&mut bytes);
     replace_ascii_padded(&mut bytes, b"libdl.so", b"libc.so");
     replace_ascii_padded(&mut bytes, b"libm.so", b"libc.so");
     replace_ascii_padded(&mut bytes, b".note.android.ident", b".note.ohos.ident");
-    normalize_elf_load_alignment(&mut bytes);
-    bytes
+    if !normalize_elf_load_alignment(&mut bytes, ohos_page_alignment()) {
+        return Err(invalid(
+            "Native library load segments are incompatible with this OHOS page alignment",
+        ));
+    }
+    Ok(bytes)
+}
+
+fn ohos_page_alignment() -> u64 {
+    if cfg!(target_arch = "aarch64") {
+        0x4000
+    } else {
+        0x1000
+    }
 }
 
 fn neutralize_android_ident_section(bytes: &mut [u8]) {
@@ -198,40 +210,62 @@ fn section_header(bytes: &[u8], shoff: usize, shentsize: usize, index: usize) ->
     bytes.get(offset..end)
 }
 
-fn normalize_elf_load_alignment(bytes: &mut [u8]) {
+fn normalize_elf_load_alignment(bytes: &mut [u8], expected_alignment: u64) -> bool {
     const ELF64_HEADER: usize = 64;
     const ELF64_PROGRAM_HEADER: usize = 56;
     const PT_LOAD: u32 = 1;
     if bytes.len() < ELF64_HEADER || &bytes[..4] != b"\x7fELF" || bytes[4] != 2 || bytes[5] != 1 {
-        return;
+        return false;
     }
     let Some(phoff) = read_u64_le(bytes, 32).and_then(|value| usize::try_from(value).ok()) else {
-        return;
+        return false;
     };
     let Some(phentsize) = read_u16_le(bytes, 54).map(usize::from) else {
-        return;
+        return false;
     };
     let Some(phnum) = read_u16_le(bytes, 56).map(usize::from) else {
-        return;
+        return false;
     };
     if phentsize < ELF64_PROGRAM_HEADER {
-        return;
+        return false;
     }
+    let mut load_count = 0;
     for index in 0..phnum {
         let Some(offset) = phoff.checked_add(index.saturating_mul(phentsize)) else {
-            return;
+            return false;
         };
         let Some(end) = offset.checked_add(ELF64_PROGRAM_HEADER) else {
-            return;
+            return false;
         };
-        if end > bytes.len() || read_u32_le(bytes, offset) != Some(PT_LOAD) {
+        if end > bytes.len() {
+            return false;
+        }
+        if read_u32_le(bytes, offset) != Some(PT_LOAD) {
             continue;
         }
+        load_count += 1;
+        let Some(segment_offset) = read_u64_le(bytes, offset + 8) else {
+            return false;
+        };
+        let Some(segment_address) = read_u64_le(bytes, offset + 16) else {
+            return false;
+        };
+        let Some(align) = read_u64_le(bytes, offset + 48) else {
+            return false;
+        };
+        if align < expected_alignment
+            || segment_offset % expected_alignment != 0
+            || segment_address % expected_alignment != 0
+        {
+            return false;
+        }
         let align_offset = offset + 48;
-        if read_u64_le(bytes, align_offset).is_some_and(|align| align > 0x1000) {
-            bytes[align_offset..align_offset + 8].copy_from_slice(&0x1000u64.to_le_bytes());
+        if align != expected_alignment {
+            bytes[align_offset..align_offset + 8]
+                .copy_from_slice(&expected_alignment.to_le_bytes());
         }
     }
+    load_count > 0
 }
 
 fn read_u16_le(bytes: &[u8], offset: usize) -> Option<u16> {
@@ -553,7 +587,7 @@ impl Catalog {
                 .windows(b".note.android.ident".len())
                 .any(|window| window == b".note.android.ident")
         {
-            normalize_android_library_for_ohos(raw_bytes)
+            normalize_android_library_for_ohos(raw_bytes)?
         } else {
             raw_bytes
         };
@@ -563,7 +597,11 @@ impl Catalog {
             (
                 "org.mgread.aisishuwu.native".to_string(),
                 "爱丽丝书屋（Rust）".to_string(),
-                "0.3.0".to_string(),
+                // Raw imports are persisted by the wrapper rather than by the
+                // source manifest. Bump this wrapper version when the OHOS
+                // loader representation changes so an older normalized arm64
+                // binary cannot remain the active immutable installation.
+                "0.3.1".to_string(),
                 "手动导入的 Rust 原生小说数据源".to_string(),
             )
         } else {
@@ -791,7 +829,7 @@ mod tests {
         let mut catalog = Catalog::open(root.join("runtime")).unwrap();
         let manifest = catalog.install_raw(&library).unwrap();
         assert_eq!(manifest.id, "org.mgread.aisishuwu.native");
-        assert_eq!(manifest.version, "0.3.0");
+        assert_eq!(manifest.version, "0.3.1");
         assert!(
             catalog
                 .versions(&manifest.id)
@@ -804,9 +842,20 @@ mod tests {
 
     #[test]
     fn android_library_loader_metadata_is_normalized_for_ohos() {
-        let bytes = normalize_android_library_for_ohos(
-            b"libdl.so\0libm.so\0libc.so\0.note.android.ident\0".to_vec(),
-        );
+        let mut input = vec![0u8; 256];
+        input[..4].copy_from_slice(b"\x7fELF");
+        input[4] = 2;
+        input[5] = 1;
+        input[32..40].copy_from_slice(&64u64.to_le_bytes());
+        input[54..56].copy_from_slice(&56u16.to_le_bytes());
+        input[56..58].copy_from_slice(&1u16.to_le_bytes());
+        input[64..68].copy_from_slice(&1u32.to_le_bytes());
+        input[64 + 8..64 + 16].copy_from_slice(&0u64.to_le_bytes());
+        input[64 + 16..64 + 24].copy_from_slice(&0u64.to_le_bytes());
+        input[64 + 48..64 + 56].copy_from_slice(&0x4000u64.to_le_bytes());
+        let metadata = b"libdl.so\0libm.so\0libc.so\0.note.android.ident\0";
+        input[128..128 + metadata.len()].copy_from_slice(metadata);
+        let bytes = normalize_android_library_for_ohos(input).unwrap();
         assert!(!bytes.windows(b"libdl.so".len()).any(|w| w == b"libdl.so"));
         assert!(!bytes.windows(b"libm.so".len()).any(|w| w == b"libm.so"));
         assert!(bytes.windows(b"libc.so".len()).any(|w| w == b"libc.so"));
@@ -823,7 +872,7 @@ mod tests {
     }
 
     #[test]
-    fn android_elf_load_alignment_is_reduced_to_ohos_page_alignment() {
+    fn android_elf_load_alignment_is_normalized_to_ohos_page_alignment() {
         let mut bytes = vec![0u8; 128];
         bytes[..4].copy_from_slice(b"\x7fELF");
         bytes[4] = 2;
@@ -833,7 +882,21 @@ mod tests {
         bytes[56..58].copy_from_slice(&1u16.to_le_bytes());
         bytes[64..68].copy_from_slice(&1u32.to_le_bytes());
         bytes[64 + 48..64 + 56].copy_from_slice(&0x4000u64.to_le_bytes());
-        normalize_elf_load_alignment(&mut bytes);
+        assert!(normalize_elf_load_alignment(&mut bytes, 0x1000));
         assert_eq!(read_u64_le(&bytes, 64 + 48), Some(0x1000));
+    }
+
+    #[test]
+    fn arm64_alignment_rejects_four_kib_load_segments() {
+        let mut bytes = vec![0u8; 128];
+        bytes[..4].copy_from_slice(b"\x7fELF");
+        bytes[4] = 2;
+        bytes[5] = 1;
+        bytes[32..40].copy_from_slice(&64u64.to_le_bytes());
+        bytes[54..56].copy_from_slice(&56u16.to_le_bytes());
+        bytes[56..58].copy_from_slice(&1u16.to_le_bytes());
+        bytes[64..68].copy_from_slice(&1u32.to_le_bytes());
+        bytes[64 + 48..64 + 56].copy_from_slice(&0x1000u64.to_le_bytes());
+        assert!(!normalize_elf_load_alignment(&mut bytes, 0x4000));
     }
 }
