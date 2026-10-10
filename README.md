@@ -4,9 +4,11 @@
 
 # MgRead
 
-### 鸿蒙优先，阅读自由一点。
+### 阅读自由一点。
 
-**一个以 HarmonyOS 为重点适配平台、本地优先、可安装数据源、面向多种内容形态的跨平台阅读器。**
+**一个以本地优先、可安装数据源、面向多种内容形态的跨平台阅读器。**
+
+本仓库为MgRead的HarmonyOS分支仓库
 
 小说 · 漫画 · 音频 · 视频 · HarmonyOS · Android · Windows · macOS
 
@@ -143,7 +145,7 @@ Flutter 主应用
        └─ 视频播放器
 ```
 
-数据源采用 Node.js 24 ESM 项目形式，`package.json.mgread` 作为 MgRead 元数据入口。
+数据源采用 Node.js 26 ESM 项目形式，`package.json.mgread` 作为 MgRead 元数据入口。
 
 数据源发布为单个 `.mgplugin.js`，或包含单个 JS、元数据与图标的 `.mgplugin` 压缩包。开发时使用的第三方
 npm 包必须在构建时打入 JS，发布后只使用 Node.js 内置模块，不需要下载或安装 npm 依赖。
@@ -291,7 +293,7 @@ CLI 会等待完整链路测试结束后退出。
 欢迎通过 GitHub 参与 MgRead：
 
 - ⭐ 如果项目对你有帮助，可以点一个 Star
-- 🐛 发现问题可以提交 [Issue](https://github.com/lingy-Mg/mg_read/issues)
+- 🐛 发现问题可以提交 [Issue](https://github.com/Ethereal151/mgread-Harmony/issues)
 - 💡 新功能建议也可以通过 Issue 讨论
 - 🔧 欢迎提交 Pull Request
 - 🧩 也欢迎开发新的数据源与扩展能力
