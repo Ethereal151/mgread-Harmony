@@ -4,18 +4,18 @@
 
 # MgRead
 
-### 阅读，自由一点。
+### 鸿蒙优先，阅读自由一点。
 
-**一个本地优先、可安装数据源、面向多种内容形态的跨平台阅读器。**
+**一个以 HarmonyOS 为重点适配平台、本地优先、可安装数据源、面向多种内容形态的跨平台阅读器。**
 
-小说 · 漫画 · 音频 · 视频 · Android · Windows · macOS
+小说 · 漫画 · 音频 · 视频 · HarmonyOS · Android · Windows · macOS
 
 <br>
 
 [![Flutter](https://img.shields.io/badge/Flutter-3.x-02569B?logo=flutter&logoColor=white)](https://flutter.dev/)
 [![Dart](https://img.shields.io/badge/Dart-3.x-0175C2?logo=dart&logoColor=white)](https://dart.dev/)
 [![Node.js](https://img.shields.io/badge/Runtime-Node.js%2024-339933?logo=nodedotjs&logoColor=white)](https://nodejs.org/)
-[![Platform](https://img.shields.io/badge/Platform-Android%20%7C%20Windows%20%7C%20macOS-4F7CFF)](#-支持平台)
+[![Platform](https://img.shields.io/badge/Platform-HarmonyOS%20%7C%20Android%20%7C%20Windows%20%7C%20macOS-4F7CFF)](#-支持平台)
 [![GitHub stars](https://img.shields.io/github/stars/lingy-Mg/mg_read?style=flat&logo=github)](https://github.com/lingy-Mg/mg_read/stargazers)
 [![GitHub last commit](https://img.shields.io/github/last-commit/lingy-Mg/mg_read)](https://github.com/lingy-Mg/mg_read/commits/main)
 
@@ -27,9 +27,11 @@
 
 ## ✨ MgRead 是什么？
 
-MgRead 是一款 **本地优先（Local-first）** 的 Flutter 阅读应用。
+MgRead 是一款 **以 HarmonyOS 为重点适配平台的本地优先（Local-first）** Flutter 阅读应用。
 
 它不把在线内容入口固定在主应用里，而是通过 **可安装数据源** 扩展内容来源。主应用负责统一的书架、搜索、详情、阅读、播放与本地持久化，数据源负责连接不同内容服务。
+
+仓库包含完整的鸿蒙 Flutter 工程与原生 Runtime 接入，支持生成 HAP，并围绕 HarmonyOS 的 arm64 真机和 x64 模拟器持续验证。Android、Windows 和 macOS 仍由同一套主应用与 Runtime 提供支持。
 
 > **一个应用，统一管理小说、漫画、音频和视频。**
 
@@ -38,7 +40,8 @@ MgRead 是一款 **本地优先（Local-first）** 的 Flutter 阅读应用。
 - **本地优先**：书架、阅读进度和业务数据由本地应用掌控。
 - **数据源可扩展**：内容入口不写死，可以按需安装和开发数据源。
 - **多内容形态**：小说、漫画、音频、视频使用独立阅读器/播放器。
-- **跨平台**：面向 Android、Windows 和 macOS，其中 Android 优先。
+- **鸿蒙优先**：优先适配 HarmonyOS，覆盖 HAP 构建、原生 Runtime、ArkWeb 与多内容形态。
+- **跨平台**：同时面向 Android、Windows 和 macOS。
 - **开放开发**：Runtime、阅读器、播放器和数据源均按独立模块维护。
 
 ---
@@ -72,6 +75,28 @@ flutter pub get
 flutter run
 ```
 
+鸿蒙开发需要 Flutter OHOS 工具链与 DevEco Studio。完成工具链配置后，可先查看设备：
+
+```powershell
+flutter devices
+```
+
+鸿蒙构建、签名、安装和固定版本要求见：[OHOS 构建基线](docs/development/ohos-build.md)。
+
+### 鸿蒙构建
+
+MgRead 的鸿蒙工程位于 `ohos/`，发布构建通过仓库脚本选择唯一目标架构，避免将模拟器和真机 Runtime 混入同一个 HAP：
+
+```powershell
+# arm64 真机 Release
+.\tools\build_ohos_release.ps1 -BuildMode release -Architecture arm64
+
+# x64 模拟器 Debug
+.\tools\build_ohos_release.ps1 -BuildMode debug -Architecture x64
+```
+
+鸿蒙侧包含 Flutter 应用、ArkWeb、小说/漫画阅读、音视频播放以及 `mgread_ohos_native_runtime` 原生 Runtime 边界；原生库按 OHOS ABI 选择并校验后随 HAP 集成。签名 HAP、真机安装和完整验证步骤请以 [OHOS 构建基线](docs/development/ohos-build.md) 为准。
+
 ---
 
 ## 🌟 核心能力
@@ -87,7 +112,8 @@ flutter run
 | 🎬 **视频播放** | 独立视频播放器与按需播放资源解析 |
 | 💾 **本地优先** | 主应用拥有书架、目录、进度等业务权威 |
 | 🔄 **局域网同步** | 支持可信设备之间的前台点对点同步 |
-| 🖥️ **跨平台** | Android / Windows / macOS |
+| 🟣 **鸿蒙优先** | HarmonyOS HAP、arm64 真机与 x64 模拟器 |
+| 🖥️ **跨平台** | HarmonyOS / Android / Windows / macOS |
 
 ---
 
@@ -149,7 +175,8 @@ plugins/sources/aisishuwu/
 
 | 平台 | 状态 | 说明 |
 | --- | --- | --- |
-| **Android** | 🟢 主要平台 | 当前优先开发与验证 |
+| **HarmonyOS / OpenHarmony** | 🟢 重点适配 | Flutter OHOS 工程、HAP、arm64 真机与 x64 模拟器；包含原生 Runtime 边界 |
+| **Android** | 🟢 支持 | Android Runtime、阅读器与播放器 |
 | **Windows** | 🟢 支持 | 桌面 Runtime、阅读器与播放器 |
 | **macOS** | 🟢 支持 | arm64 Runtime 与桌面能力 |
 | **iOS** | ⚪ 暂未作为首发平台 | 后续可继续适配 |
@@ -162,12 +189,15 @@ plugins/sources/aisishuwu/
 mg_read/
 ├─ lib/                                Flutter 主应用
 │
+├─ ohos/                               HarmonyOS Flutter 工程与 HAP 构建入口
+│
 ├─ packages/
 │  ├─ mg_read_node_runtime/            Node.js Runtime Core
 │  ├─ mgread_plugin_runtime/           Flutter Runtime Facade / 平台宿主
 │  ├─ mg_read_reader_ui/               小说 / 漫画阅读器
 │  ├─ mg_read_audio_player/            音频播放器
 │  ├─ mg_read_video_player/            视频播放器
+│  ├─ mgread_ohos_native_runtime/      鸿蒙原生 Runtime 边界
 │  └─ mg_read_source_testkit/          数据源开发测试工具
 │
 ├─ plugins/
@@ -198,6 +228,8 @@ Node.js Runtime
     ▼
 Installed Sources
 ```
+
+在 HarmonyOS 上，Flutter 应用通过 OHOS 宿主接入 ArkWeb 与原生 Runtime；小说、漫画、音频和视频仍复用统一的内容与播放抽象。
 
 ---
 
@@ -278,7 +310,7 @@ MgRead 的定位是 **阅读应用、运行时与数据源扩展平台**。
 
 ### MgRead
 
-**阅读，自由一点。**
+**鸿蒙优先，阅读自由一点。**
 
 [回到顶部](#mgread)
 
