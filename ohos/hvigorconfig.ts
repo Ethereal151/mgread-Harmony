@@ -100,6 +100,11 @@ function applyOhosBuildContract(): void {
 const nodeHome = readLocalProperty('nodejs.dir') ?? path.dirname(process.execPath)
 const devecoToolsPath = path.dirname(nodeHome)
 const sdkHome = readLocalProperty('hwsdk.dir')
+const nodeArtifactRoot = readLocalProperty('mgread.nodeArtifactRoot')
+
+if (nodeArtifactRoot && !process.env.MGREAD_NODE_ARTIFACT_ROOT) {
+  process.env.MGREAD_NODE_ARTIFACT_ROOT = nodeArtifactRoot
+}
 
 // DevEco may export DEVECO_SDK_HOME with the legacy `sdk\\default` suffix.
 // The project property is the authoritative SDK root for this checkout and
