@@ -40,7 +40,7 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $generatedPaths = @(
-            '.mgread-build',
+            '.mgread-build/ohos',
             'build/ohos',
             'ohos/.hvigor',
             'ohos/oh_modules',
