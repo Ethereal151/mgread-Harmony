@@ -13,13 +13,16 @@ AudioPlaybackBackend createOhosAudioPlaybackBackend() =>
     OhosAudioPlaybackBackend();
 
 /// Audio backend backed by the OHOS AVPlayer API.
-final class OhosAudioPlaybackBackend implements AudioPlaybackBackend {
+final class OhosAudioPlaybackBackend
+    implements AudioPlaybackBackend, AudioPlaybackIntentEvents {
   OhosAudioPlaybackBackend({OhosMediaClient? client})
     : _client = client ?? OhosMediaClient.instance;
 
   final OhosMediaClient _client;
   final StreamController<AudioPlaybackBackendSnapshot> _snapshots =
       StreamController<AudioPlaybackBackendSnapshot>.broadcast(sync: true);
+  final StreamController<bool> _playbackIntentChanges =
+      StreamController<bool>.broadcast(sync: true);
   StreamSubscription<OhosMediaEvent>? _events;
   List<AudioTrack> _tracks = const <AudioTrack>[];
   String? _sessionId;
@@ -34,6 +37,9 @@ final class OhosAudioPlaybackBackend implements AudioPlaybackBackend {
 
   @override
   Stream<AudioPlaybackBackendSnapshot> get snapshots => _snapshots.stream;
+
+  @override
+  Stream<bool> get playbackIntentChanges => _playbackIntentChanges.stream;
 
   @override
   Future<void> open(
@@ -210,7 +216,15 @@ final class OhosAudioPlaybackBackend implements AudioPlaybackBackend {
           if (shouldResume) unawaited(play());
         }
       case 'remoteCommand':
-        if (value == 'next') {
+        if (value == 'pause') {
+          _pauseRequested = true;
+          _resumeAfterInterruption = false;
+          _playbackIntentChanges.add(false);
+          _emit(_snapshot.copyWith(playing: false, buffering: false));
+        } else if (value == 'play') {
+          _pauseRequested = false;
+          _playbackIntentChanges.add(true);
+        } else if (value == 'next') {
           unawaited(next());
         } else if (value == 'previous') {
           unawaited(previous());
@@ -294,5 +308,6 @@ final class OhosAudioPlaybackBackend implements AudioPlaybackBackend {
     _events = null;
     if (sessionId != null) await _client.command('dispose', sessionId);
     await _snapshots.close();
+    await _playbackIntentChanges.close();
   }
 }

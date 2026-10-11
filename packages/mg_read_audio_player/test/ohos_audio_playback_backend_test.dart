@@ -73,6 +73,23 @@ void main() {
       expect(playCalls, 1);
     },
   );
+
+  test('a live-window pause publishes an explicit playback intent', () async {
+    final backend = OhosAudioPlaybackBackend();
+    addTearDown(backend.dispose);
+    final intents = <bool>[];
+    final intentSubscription = backend.playbackIntentChanges.listen(
+      intents.add,
+    );
+    addTearDown(intentSubscription.cancel);
+    await backend.open(<AudioTrack>[_track], initialIndex: 0);
+
+    eventSink!.success(_event(sessionId, 'remoteCommand', 'pause'));
+    await Future<void>.delayed(Duration.zero);
+
+    expect(intents, <bool>[false]);
+    expect(backend.snapshot.playing, isFalse);
+  });
 }
 
 final AudioTrack _track = AudioTrack(

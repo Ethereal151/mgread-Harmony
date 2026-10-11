@@ -74,6 +74,11 @@ final class AudioPlayerSession extends ChangeNotifier {
       requestExit: requestExit,
     );
     _backendSubscription = backend.snapshots.listen(_acceptBackendSnapshot);
+    if (backend case final AudioPlaybackIntentEvents intentEvents) {
+      _playbackIntentSubscription = intentEvents.playbackIntentChanges.listen(
+        _acceptExternalPlaybackIntent,
+      );
+    }
   }
 
   final String collectionId;
@@ -100,6 +105,7 @@ final class AudioPlayerSession extends ChangeNotifier {
   AudioPlaylist? _playlist;
   late final StreamSubscription<AudioPlaybackBackendSnapshot>
   _backendSubscription;
+  StreamSubscription<bool>? _playbackIntentSubscription;
   Timer? _saveTimer;
   Timer? _sleepTimer;
   Timer? _stallTimer;
@@ -124,6 +130,19 @@ final class AudioPlayerSession extends ChangeNotifier {
   bool _closed = false;
 
   AudioPlayerSnapshot get snapshot => _snapshot;
+
+  void _acceptExternalPlaybackIntent(bool desired) {
+    if (_closing || _closed) return;
+    _recordPlaybackIntent(desired);
+    _cancelRecoveryTimers(resetAttempts: true);
+    if (!desired) {
+      _cancelContinuationLoad(retry: false);
+      if (_snapshot.resourceLoading) {
+        _emit(_snapshot.copyWith(resourceLoading: false));
+      }
+      unawaited(flushProgress());
+    }
+  }
 
   Future<void> initialize() async {
     if (_closing || _closed) return;
@@ -657,6 +676,8 @@ final class AudioPlayerSession extends ChangeNotifier {
       // Cancel delivery synchronously, but do not let a custom stream's
       // asynchronous onCancel hook retain the backend forever.
       _backendSubscription.cancel().ignore();
+      _playbackIntentSubscription?.cancel().ignore();
+      _playbackIntentSubscription = null;
       try {
         await backend.dispose();
       } on Object {

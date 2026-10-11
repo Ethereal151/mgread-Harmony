@@ -739,8 +739,14 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
       try {
         const session = await avSession.createAVSession(this.context, 'MgRead', sessionType)
         this.audioSession = session
-        session.on('play', () => this.runAudioCommand('play'))
-        session.on('pause', () => this.runAudioCommand('pause'))
+        session.on('play', () => {
+          this.runAudioCommand('play')
+          this.emitRemoteCommand('play')
+        })
+        session.on('pause', () => {
+          this.runAudioCommand('pause')
+          this.emitRemoteCommand('pause')
+        })
         session.on('playNext', () => this.emitRemoteCommand('next'))
         session.on('playPrevious', () => this.emitRemoteCommand('previous'))
         session.on('seek', (position: number) => this.runAudioCommand('seek', position))

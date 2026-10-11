@@ -111,3 +111,13 @@ abstract interface class AudioPlaybackBackend {
   Future<void> jump(int index);
   Future<void> dispose();
 }
+
+/// Optional backend notifications for playback commands issued outside the
+/// Flutter player controls, such as the OHOS AVSession live-window buttons.
+///
+/// The native player executes these commands itself. The session only needs
+/// the intent notification so foreground recovery does not undo an explicit
+/// external pause.
+abstract interface class AudioPlaybackIntentEvents {
+  Stream<bool> get playbackIntentChanges;
+}
