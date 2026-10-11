@@ -405,6 +405,52 @@ function Ensure-FlutterPackageConfig {
   }
 }
 
+function Repair-OhosFlutterPluginDependencies {
+  $dependenciesPath = Join-Path $projectRoot '.flutter-plugins-dependencies'
+  if (-not (Test-Path -LiteralPath $dependenciesPath -PathType Leaf)) {
+    return
+  }
+
+  $dependencies = Get-Content -LiteralPath $dependenciesPath -Raw | ConvertFrom-Json
+  $packageConfig = Get-Content -LiteralPath $rootPackage -Raw | ConvertFrom-Json
+  $changed = $false
+  foreach ($plugin in @($dependencies.plugins.ohos)) {
+    if ($plugin.native_build -eq $false -or $plugin.path -isnot [string]) {
+      continue
+    }
+
+    # Flutter's OHOS fork can serialize Windows paths with doubled
+    # backslashes. Normalize them before Flutter resolves plugin modules.
+    $normalizedPath = $plugin.path.Replace('\\', '\')
+    $override = $packageConfig.overrides.PSObject.Properties |
+      Where-Object { $_.Name -eq $plugin.name -and $_.Value -is [string] -and $_.Value.StartsWith('file:') } |
+      Select-Object -First 1
+    if ($null -ne $override) {
+      $overridePath = $override.Value.Substring(5)
+      if ([IO.Path]::IsPathRooted($overridePath)) {
+        $resolvedOverride = [IO.Path]::GetFullPath($overridePath)
+      } else {
+        $resolvedOverride = [IO.Path]::GetFullPath((Join-Path (Split-Path -Parent $rootPackage) $overridePath))
+      }
+      if (Test-Path -LiteralPath $resolvedOverride -PathType Container) {
+        $normalizedPath = if ([IO.Path]::GetFileName($resolvedOverride).ToLowerInvariant() -eq 'ohos') {
+          Split-Path -Parent $resolvedOverride
+        } else {
+          $resolvedOverride
+        }
+      }
+    }
+    if ($plugin.path -ne $normalizedPath) {
+      $plugin.path = $normalizedPath
+      $changed = $true
+    }
+  }
+  if ($changed) {
+    $dependencies | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $dependenciesPath -Encoding utf8
+    Write-Host 'OHOS Flutter plugin dependencies normalized for the selected local overrides.'
+  }
+}
+
 function Install-OhosDependencies {
   # Materialized oh_modules are variant-local in the lock/cache contract. The
   # project path is still shared by Hvigor, so stale materialization is removed
@@ -522,6 +568,7 @@ try {
   # validated before this snapshot is restored.
   Protect-OhosUnselectedNativeInputs
   Ensure-FlutterPackageConfig
+  Repair-OhosFlutterPluginDependencies
   $nodeRuntimeRoot = Join-Path $projectRoot 'packages\mg_read_node_runtime'
   $runtimeNodeRoot = Split-Path -Parent $mgreadRuntimeNpm
   $runtimeStagePath = $env:Path

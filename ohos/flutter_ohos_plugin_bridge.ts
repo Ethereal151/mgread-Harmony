@@ -16,6 +16,7 @@ const pluginDependenciesPath = path.join(flutterProjectPath, '.flutter-plugins-d
 const pluginBridgePath = path.join(nativeProjectPath, 'plugins', '.flutter_ohos_plugins')
 const legacyRootBridgePath = path.join(flutterProjectPath, '.flutter_ohos_plugins')
 const legacyNativeBridgePath = path.join(nativeProjectPath, '.flutter_ohos_plugins')
+const rootPackagePath = path.join(nativeProjectPath, 'oh-package.json5')
 
 function isInside(basePath: string, targetPath: string): boolean {
   const relativePath = path.relative(basePath, targetPath)
@@ -48,6 +49,35 @@ function copyPluginTree(sourcePath: string, targetPath: string): void {
   }
 }
 
+function readLocalPluginOverride(pluginName: string): string | undefined {
+  if (!fs.existsSync(rootPackagePath)) {
+    return undefined
+  }
+  try {
+    const packageConfig = JSON.parse(fs.readFileSync(rootPackagePath, 'utf8')) as {
+      overrides?: Record<string, unknown>
+    }
+    const configuredOverride = packageConfig.overrides?.[pluginName]
+    if (typeof configuredOverride !== 'string' || !configuredOverride.startsWith('file:')) {
+      return undefined
+    }
+    const overridePath = configuredOverride.slice('file:'.length)
+    const resolvedPath = path.isAbsolute(overridePath)
+      ? overridePath
+      : path.resolve(nativeProjectPath, overridePath)
+    if (!fs.existsSync(resolvedPath)) {
+      return undefined
+    }
+    // OHPM overrides point at the plugin's `ohos` directory, while Flutter's
+    // plugin metadata points at the package root.
+    return path.basename(resolvedPath).toLowerCase() === 'ohos'
+      ? path.dirname(resolvedPath)
+      : resolvedPath
+  } catch {
+    return undefined
+  }
+}
+
 export function bridgeCrossDrivePlugins(): void {
   if (!fs.existsSync(pluginDependenciesPath)) {
     return
@@ -62,9 +92,12 @@ export function bridgeCrossDrivePlugins(): void {
       continue
     }
 
-    const configuredPluginRoot = path.isAbsolute(plugin.path)
-      ? plugin.path
-      : path.resolve(nativeProjectPath, plugin.path)
+    const normalizedPluginPath = plugin.path.replace(/\\\\/gu, '\\')
+    const configuredPluginRoot = readLocalPluginOverride(plugin.name) ?? (
+      path.isAbsolute(normalizedPluginPath)
+        ? normalizedPluginPath
+        : path.resolve(nativeProjectPath, normalizedPluginPath)
+    )
     if (!fs.existsSync(configuredPluginRoot)) {
       continue
     }
