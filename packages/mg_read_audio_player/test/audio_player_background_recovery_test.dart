@@ -208,25 +208,21 @@ void main() {
   );
 
   test(
-    'a silently ignored next autoplay becomes a visible timeout failure',
+    'a delayed next autoplay is allowed past the old confirmation limit',
     () async {
       final harness = _Harness(
         recoveryStallTimeout: const Duration(milliseconds: 20),
       );
       addTearDown(harness.close);
       await harness.session.initialize();
-      harness.backend.ignoreNextPlay = true;
+      harness.backend.playingEventDelay = const Duration(milliseconds: 60);
 
       await harness.controller.next();
 
-      final failure = harness.controller.snapshot.failure;
       expect(harness.controller.snapshot.currentTrack?.id, 'b');
-      expect(harness.controller.snapshot.playing, isFalse);
+      expect(harness.controller.snapshot.playing, isTrue);
       expect(harness.controller.snapshot.resourceLoading, isFalse);
-      expect(failure?.code, 'audio_selected_autoplay_failed');
-      expect(failure?.location, '下一章节自动播放');
-      expect(failure?.debugDetail, contains('未收到 playing=true'));
-      expect(harness.observer.failures, contains(failure));
+      expect(harness.controller.snapshot.failure, isNull);
     },
   );
 
@@ -561,7 +557,6 @@ final class _Backend implements AudioPlaybackBackend {
   final List<int> jumpedIndices = <int>[];
   bool failNextOpen = false;
   bool failNextPlay = false;
-  bool ignoreNextPlay = false;
   Duration? playingEventDelay;
   Completer<void>? appendGate;
 
@@ -611,10 +606,6 @@ final class _Backend implements AudioPlaybackBackend {
     if (failNextPlay) {
       failNextPlay = false;
       throw StateError('play failed');
-    }
-    if (ignoreNextPlay) {
-      ignoreNextPlay = false;
-      return;
     }
     final delayed = playingEventDelay;
     if (delayed != null) {

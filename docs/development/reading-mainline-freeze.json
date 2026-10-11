@@ -61,7 +61,7 @@
     "packages/mg_read_audio_player/lib/src/api/audio_player_engine.dart": "88dc8b3c7fb9e409a952c52ac0076d89e270a7d94fadc821384798455fdfe4a3",
     "packages/mg_read_audio_player/lib/src/backend/media_kit_audio_backend.dart": "3ad2756e13ff6e437aed7cb5015a2f02187df48c8c2120c68630457ce3d302bd",
     "packages/mg_read_audio_player/lib/src/backend/ohos_audio_playback_backend.dart": "223c41a5ae55c8a0f722eec2bc5b765a89c2140cbe55c4452906f333661236a1",
-    "packages/mg_read_audio_player/lib/src/core/audio_player_session_playback.dart": "651f075d8f38e4bcbc0f825d2b93b8a4a0ffbd9d1c818f114dade556ab5a5f2a",
+    "packages/mg_read_audio_player/lib/src/core/audio_player_session_playback.dart": "c1da32309d74c1ccc3f6ea5d54bf16eb8ac8d4c75d9d5a6d0c1eee504fa0ad76",
     "packages/mg_read_audio_player/lib/src/core/audio_player_session_recovery.dart": "abfc35015e0d122ce5d9ff8e0726aaa4cdbc291432ab8bc43a9fbd6bceb1508a",
     "packages/mg_read_audio_player/lib/src/core/audio_player_session_selection.dart": "d724e269edb6c899094171a8f2739d26a1031efc935135e424f7513dcc550c6b",
     "packages/mg_read_audio_player/lib/src/core/audio_player_session.dart": "69b095f1d78d662d11d646363ce05cf0b0691acef6a78b248bf56bb0ab16d827",

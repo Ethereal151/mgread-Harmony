@@ -23,11 +23,11 @@ extension _AudioPlayerSessionPlayback on AudioPlayerSession {
     await backend.play();
     _recordOperation('trackPlayReturned', targetTrackId: targetTrackId);
 
-    final stopwatch = Stopwatch()..start();
-    final pollInterval =
-        recoveryStallTimeout < const Duration(milliseconds: 100)
-        ? recoveryStallTimeout
-        : const Duration(milliseconds: 100);
+    // The transport Future only means the command was accepted. OHOS can
+    // publish playing=true after resource recovery takes longer than the
+    // session's stall retry interval, so playback confirmation has no fixed
+    // deadline. Backend errors and a newer playback intent still terminate it.
+    const pollInterval = Duration(milliseconds: 100);
     while (_isPlaybackStartCurrent(generation, intentRevision)) {
       final backendState = backend.snapshot;
       final backendError = backendState.errorMessage?.trim();
@@ -49,14 +49,6 @@ extension _AudioPlayerSessionPlayback on AudioPlayerSession {
         }
         return true;
       }
-      if (stopwatch.elapsed >= recoveryStallTimeout) {
-        throw AudioPlayerLoadException(
-          code: failureCode,
-          location: failureLocation,
-          message: failureMessage,
-          debugDetail: _playbackStartStateDetail(backendState),
-        );
-      }
       await Future<void>.delayed(pollInterval);
     }
     return false;
@@ -66,11 +58,4 @@ extension _AudioPlayerSessionPlayback on AudioPlayerSession {
       _isCurrent(generation) &&
       _playbackDesired &&
       intentRevision == _playbackIntentRevision;
-
-  String _playbackStartStateDetail(AudioPlaybackBackendSnapshot state) =>
-      'play() 已返回，但 ${recoveryStallTimeout.inMilliseconds}ms 内未收到 '
-      'playing=true；currentIndex=${state.currentIndex}, '
-      'playing=${state.playing}, buffering=${state.buffering}, '
-      'completed=${state.completed}, positionMs=${state.position.inMilliseconds}, '
-      'durationMs=${state.duration.inMilliseconds}';
 }
