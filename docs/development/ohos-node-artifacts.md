@@ -42,9 +42,9 @@ CMake/编译前停止。
 
 ## 构建切换
 
-`tools/ohos-build-contract.ps1` 固定从仓库本地 `.mgread-build/node-artifacts/` 查找两个 Artifact。
-构建不接受 `MGREAD_NODE_ARTIFACT_ROOT` 外部覆盖，也不从 WSL、网络共享或旧仓库路径读取；缺少本地
-Artifact 时会在 CMake 前直接失败。两个本地 Artifact 中的 Node 库设为 Windows 只读；OHOS HAP
+`tools/ohos-build-contract.ps1` 默认从仓库本地 `.mgread-build/node-artifacts/` 查找两个 Artifact。
+CI 可以通过 `MGREAD_NODE_ARTIFACT_ROOT` 指向自托管 Windows runner 上的本地 artifact；构建拒绝 WSL、
+网络共享和旧仓库路径，缺少本地 Artifact 时会在 CMake 前直接失败。两个本地 Artifact 中的 Node 库设为 Windows 只读；OHOS HAP
 构建和集成构建清理器也会拒绝清理 Artifact 本身、其子项或包含它的父目录。选择成功后，它设置：
 
 ```text

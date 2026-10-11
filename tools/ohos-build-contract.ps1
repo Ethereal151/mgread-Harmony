@@ -117,19 +117,24 @@ function Get-MgReadOhosNodeArtifactRoot {
     [Parameter(Mandatory = $true)][ValidateSet('arm64', 'x64')][string]$Architecture
   )
 
-  # OHOS builds must consume the checked-out local artifact copy.  Do not
-  # follow an environment override into WSL, a network share, or another
-  # cache: cleanup and reproducibility both depend on this stable path.
+  # OHOS builds must consume a local Windows artifact copy.  The repository
+  # copy is the default; CI may provide another local runner directory. Do
+  # not follow WSL paths, network shares, or legacy repository inputs.
   $localRoot = [IO.Path]::GetFullPath((Join-Path $ProjectRoot '.mgread-build\node-artifacts'))
   $configuredRoot = [Environment]::GetEnvironmentVariable('MGREAD_NODE_ARTIFACT_ROOT', 'Process')
-  if (-not [string]::IsNullOrWhiteSpace($configuredRoot) -and
-      [IO.Path]::GetFullPath($configuredRoot) -ne $localRoot) {
-    throw "MGREAD_NODE_ARTIFACT_ROOT is not allowed for OHOS builds; use the repository-local artifact root: $localRoot"
+  if ([string]::IsNullOrWhiteSpace($configuredRoot)) {
+    $configuredRoot = $localRoot
+  } else {
+    $normalizedConfiguredRoot = $configuredRoot.Replace('/', '\')
+    if ($configuredRoot.StartsWith('/') -or $normalizedConfiguredRoot.StartsWith('\')) {
+      throw "MGREAD_NODE_ARTIFACT_ROOT must point to a local Windows directory, not WSL: $configuredRoot"
+    }
+    $configuredRoot = [IO.Path]::GetFullPath($configuredRoot)
   }
-  if (Test-Path -LiteralPath (Join-Path $localRoot 'manifest.json') -PathType Leaf) {
-    return $localRoot
+  if (Test-Path -LiteralPath (Join-Path $configuredRoot 'manifest.json') -PathType Leaf) {
+    return $configuredRoot
   }
-  return Join-Path $localRoot "mgread-ohos-node-26.10.0-$Architecture"
+  return Join-Path $configuredRoot "mgread-ohos-node-26.10.0-$Architecture"
 }
 
 function Get-MgReadOhosNodeInputs {
