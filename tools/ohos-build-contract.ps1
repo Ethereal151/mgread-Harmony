@@ -117,15 +117,19 @@ function Get-MgReadOhosNodeArtifactRoot {
     [Parameter(Mandatory = $true)][ValidateSet('arm64', 'x64')][string]$Architecture
   )
 
+  # OHOS builds must consume the checked-out local artifact copy.  Do not
+  # follow an environment override into WSL, a network share, or another
+  # cache: cleanup and reproducibility both depend on this stable path.
+  $localRoot = [IO.Path]::GetFullPath((Join-Path $ProjectRoot '.mgread-build\node-artifacts'))
   $configuredRoot = [Environment]::GetEnvironmentVariable('MGREAD_NODE_ARTIFACT_ROOT', 'Process')
-  if ([string]::IsNullOrWhiteSpace($configuredRoot)) {
-    $configuredRoot = Join-Path $ProjectRoot '.mgread-build\node-artifacts'
+  if (-not [string]::IsNullOrWhiteSpace($configuredRoot) -and
+      [IO.Path]::GetFullPath($configuredRoot) -ne $localRoot) {
+    throw "MGREAD_NODE_ARTIFACT_ROOT is not allowed for OHOS builds; use the repository-local artifact root: $localRoot"
   }
-  $configuredRoot = [IO.Path]::GetFullPath($configuredRoot)
-  if (Test-Path -LiteralPath (Join-Path $configuredRoot 'manifest.json') -PathType Leaf) {
-    return $configuredRoot
+  if (Test-Path -LiteralPath (Join-Path $localRoot 'manifest.json') -PathType Leaf) {
+    return $localRoot
   }
-  return Join-Path $configuredRoot "mgread-ohos-node-26.10.0-$Architecture"
+  return Join-Path $localRoot "mgread-ohos-node-26.10.0-$Architecture"
 }
 
 function Get-MgReadOhosNodeInputs {
@@ -135,11 +139,8 @@ function Get-MgReadOhosNodeInputs {
   )
 
   $artifactRoot = Get-MgReadOhosNodeArtifactRoot -ProjectRoot $ProjectRoot -Architecture $Architecture
-  $legacyRoot = Join-Path (Join-Path $ProjectRoot 'packages\mgread_plugin_runtime\ohos\src\main\cpp\node-runtime') $Architecture
-  $legacySourceRoot = Join-Path $ProjectRoot 'packages\mgread_plugin_runtime\ohos\src\main\cpp\node-source'
   $artifactExists = Test-Path -LiteralPath $artifactRoot -PathType Container
   $manifestExists = Test-Path -LiteralPath (Join-Path $artifactRoot 'manifest.json') -PathType Leaf
-  $requireArtifact = [Environment]::GetEnvironmentVariable('MGREAD_NODE_ARTIFACT_REQUIRED', 'Process') -eq 'true'
   if ($artifactExists -and -not $manifestExists) {
     throw "OHOS Node Artifact directory exists without manifest.json: $artifactRoot"
   }
@@ -152,16 +153,7 @@ function Get-MgReadOhosNodeInputs {
       ArtifactName = "mgread-ohos-node-26.10.0-$Architecture"
     }
   }
-  if ($requireArtifact) {
-    throw "OHOS Node Artifact is required but missing: $artifactRoot"
-  }
-  return [ordered]@{
-    Mode = 'legacy'
-    RuntimeRoot = $legacyRoot
-    SourceRoot = $legacySourceRoot
-    ArtifactRoot = $null
-    ArtifactName = $null
-  }
+  throw "Repository-local OHOS Node Artifact is required but missing: $artifactRoot"
 }
 
 function Assert-MgReadOhosNodeInputs {

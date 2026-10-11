@@ -95,7 +95,15 @@ function Remove-StaleIntegrationBuildOutputs {
     (Join-Path $projectRoot 'packages\mgread_ohos_native_runtime\ohos\build'),
     (Join-Path $projectRoot 'packages\mgread_ohos_native_runtime\ohos\.cxx')
   )
+  $protectedNodeArtifacts = [IO.Path]::GetFullPath((Join-Path $projectRoot '.mgread-build\node-artifacts'))
   foreach ($generatedPath in $generatedPaths) {
+    $resolvedGeneratedPath = [IO.Path]::GetFullPath($generatedPath)
+    $artifactOverlap = $resolvedGeneratedPath.Equals($protectedNodeArtifacts, [StringComparison]::OrdinalIgnoreCase) -or
+      $protectedNodeArtifacts.StartsWith($resolvedGeneratedPath.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase) -or
+      $resolvedGeneratedPath.StartsWith($protectedNodeArtifacts.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)
+    if ($artifactOverlap) {
+      throw "Refusing to clean a path that contains or targets protected local OHOS Node Artifacts: $resolvedGeneratedPath"
+    }
     if (Test-Path -LiteralPath $generatedPath) {
       try {
         Remove-Item -LiteralPath $generatedPath -Recurse -Force -ErrorAction Stop

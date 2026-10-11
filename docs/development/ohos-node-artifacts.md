@@ -42,17 +42,19 @@ CMake/编译前停止。
 
 ## 构建切换
 
-`tools/ohos-build-contract.ps1` 默认从 `.mgread-build/node-artifacts/` 查找两个 Artifact；也可以
-用 `MGREAD_NODE_ARTIFACT_ROOT` 指向 Artifact 本身或缓存根。选择成功后，它设置：
+`tools/ohos-build-contract.ps1` 固定从仓库本地 `.mgread-build/node-artifacts/` 查找两个 Artifact。
+构建不接受 `MGREAD_NODE_ARTIFACT_ROOT` 外部覆盖，也不从 WSL、网络共享或旧仓库路径读取；缺少本地
+Artifact 时会在 CMake 前直接失败。两个本地 Artifact 中的 Node 库设为 Windows 只读；OHOS HAP
+构建和集成构建清理器也会拒绝清理 Artifact 本身、其子项或包含它的父目录。选择成功后，它设置：
 
 ```text
 MGREAD_NODE_ROOT=<artifact-root>
 MGREAD_NODE_SOURCE_ROOT=<artifact-root>/node-source
 ```
 
-迁移期没有 Artifact 时仍允许旧仓库路径用于双路径比较；CI/发布和删除仓库 Node/V8 文件前必须
-设置 `MGREAD_NODE_ARTIFACT_REQUIRED=true`。`.mgread-build/ohos/<variant>/variant.json` 会保留
-实际输入模式和指纹，失败现场不覆盖。
+`.mgread-build/ohos/<variant>/variant.json` 会保留实际输入模式和指纹，失败现场不覆盖。构建清理列表
+明确排除 `.mgread-build/node-artifacts/`，其中的 `libnode.so`/`libnode.so.147` 作为本地受保护输入
+保留；需要更新时应替换完整 Artifact 并重新校验 manifest，而不是删除单个库文件。
 
 ## 删除旧输入前的门槛
 
