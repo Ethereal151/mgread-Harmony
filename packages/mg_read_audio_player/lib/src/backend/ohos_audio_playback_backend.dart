@@ -25,6 +25,7 @@ final class OhosAudioPlaybackBackend implements AudioPlaybackBackend {
   String? _sessionId;
   AudioPlaybackBackendSnapshot _snapshot = const AudioPlaybackBackendSnapshot();
   bool _disposed = false;
+  bool _pauseRequested = false;
   bool _resumeAfterInterruption = false;
   int _generation = 0;
 
@@ -108,7 +109,10 @@ final class OhosAudioPlaybackBackend implements AudioPlaybackBackend {
   }
 
   @override
-  Future<void> play() => _command('play');
+  Future<void> play() {
+    _pauseRequested = false;
+    return _command('play');
+  }
 
   @override
   Future<void> pause() {
@@ -116,6 +120,7 @@ final class OhosAudioPlaybackBackend implements AudioPlaybackBackend {
     // latch before sending the user pause command: OHOS can deliver the
     // matching interruption-end event after this command returns, and that
     // event must not turn an explicit pause back into play.
+    _pauseRequested = true;
     _resumeAfterInterruption = false;
     return _command('pause');
   }
@@ -197,11 +202,12 @@ final class OhosAudioPlaybackBackend implements AudioPlaybackBackend {
         );
       case 'interrupted':
         if (value == true) {
-          _resumeAfterInterruption = _snapshot.playing;
+          _resumeAfterInterruption = !_pauseRequested && _snapshot.playing;
           _emit(_snapshot.copyWith(playing: false, buffering: false));
-        } else if (_resumeAfterInterruption) {
+        } else {
+          final shouldResume = !_pauseRequested && _resumeAfterInterruption;
           _resumeAfterInterruption = false;
-          unawaited(play());
+          if (shouldResume) unawaited(play());
         }
       case 'remoteCommand':
         if (value == 'next') {
@@ -280,6 +286,7 @@ final class OhosAudioPlaybackBackend implements AudioPlaybackBackend {
     if (_disposed) return;
     _disposed = true;
     _generation++;
+    _pauseRequested = false;
     _resumeAfterInterruption = false;
     final sessionId = _sessionId;
     _sessionId = null;

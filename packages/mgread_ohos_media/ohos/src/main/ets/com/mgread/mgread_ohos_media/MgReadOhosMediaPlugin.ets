@@ -142,6 +142,9 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
   private audioVolume = 1
   private audioWasPlayingBeforeInterrupt = false
   private audioInterruptionActive = false
+  // A user pause remains authoritative while OHOS delivers a delayed
+  // interruption callback or TIME_OUT_STOP/RESUME pair.
+  private audioPauseRequested = false
   // AVPlayer emits timeUpdate much faster than the AVSession service can
   // consume state writes. Keep one write in flight and coalesce the newest
   // position so Bluetooth/Star Flash controllers see fresh state without
@@ -230,6 +233,9 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
         const playSessionId = this.sessionId(args)
         this.log(`command_received session=${playSessionId} method=play`)
         const playSession = this.sessions.get(playSessionId)
+        if (playSession !== undefined && !playSession.video) {
+          this.audioPauseRequested = false
+        }
         if (playSession !== undefined && playSession.player.state === 'completed') {
           this.log(`command_translated session=${playSessionId} method=play target=next reason=completed`)
           this.emit(playSessionId, 'remoteCommand', 'next')
@@ -329,6 +335,7 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
       if (!video) {
         await this.prepareSession(sessionId, args, session)
         if (this.booleanValue(args, 'play')) {
+          this.audioPauseRequested = false
           const revision = ++session.commandRevision
           await this.playSession(sessionId, session, revision)
         }
@@ -446,7 +453,7 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
   }
 
   private beginAudioInterruption(sessionId: string, player: media.AVPlayer): void {
-    if (this.audioInterruptionActive) return
+    if (this.audioPauseRequested || this.audioInterruptionActive) return
     this.audioInterruptionActive = true
     this.audioWasPlayingBeforeInterrupt = player.state === 'playing'
     if (this.audioWasPlayingBeforeInterrupt) {
@@ -458,7 +465,7 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
   }
 
   private endAudioInterruption(sessionId: string, player: media.AVPlayer): void {
-    if (!this.audioInterruptionActive) return
+    if (this.audioPauseRequested || !this.audioInterruptionActive) return
     this.audioInterruptionActive = false
     const resume = this.audioWasPlayingBeforeInterrupt
     this.audioWasPlayingBeforeInterrupt = false
@@ -552,6 +559,7 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
   }
 
   private async pauseSession(sessionId: string, session: MediaSession): Promise<void> {
+    if (this.audioSessionId === sessionId) this.audioPauseRequested = true
     ++session.commandRevision
     // A user pause supersedes any still-pending forced-interruption recovery.
     // Otherwise a delayed RESUME from an earlier notification/call can invoke
@@ -876,6 +884,7 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
           this.emitRemoteCommand('next')
           return
         }
+        this.audioPauseRequested = false
         const revision = ++session.commandRevision
         operation = this.playSession(activeSessionId, session, revision)
         break
@@ -910,6 +919,7 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
     this.audioSessionId = undefined
     this.audioWasPlayingBeforeInterrupt = false
     this.audioInterruptionActive = false
+    this.audioPauseRequested = false
     if (manager !== undefined) {
       manager.off('audioSessionStateChanged')
       try {
