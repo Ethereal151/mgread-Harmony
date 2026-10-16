@@ -3,7 +3,6 @@ library;
 
 import 'dart:async';
 
-import 'package:flutter/services.dart';
 import 'package:mgread_ohos_media/mgread_ohos_media.dart';
 
 import '../api/audio_contracts.dart';
@@ -186,15 +185,6 @@ final class OhosAudioPlaybackBackend
     return _client.command(method, sessionId, arguments: arguments);
   }
 
-  void _handleRemoteJump(Future<void> jump) {
-    unawaited(
-      jump.catchError((Object error, StackTrace stackTrace) {
-        if (error is PlatformException && error.code == 'open_failed') return;
-        Error.throwWithStackTrace(error, stackTrace);
-      }),
-    );
-  }
-
   void _handleEvent(OhosMediaEvent event, int generation) {
     if (!_isCurrent(generation)) return;
     final value = event.value;
@@ -235,9 +225,9 @@ final class OhosAudioPlaybackBackend
           _pauseRequested = false;
           _playbackIntentChanges.add(true);
         } else if (value == 'next') {
-          _handleRemoteJump(next());
+          unawaited(next());
         } else if (value == 'previous') {
-          _handleRemoteJump(previous());
+          unawaited(previous());
         }
       case 'volume':
         _emit(
