@@ -25,10 +25,7 @@ import OhosMediaEventStreamHandler from './OhosMediaEventStreamHandler'
 
 interface MediaSession {
   player: media.AVPlayer
-  audioMediaSource?: media.MediaSource
-  audioDataSourceDescriptor?: media.AVDataSrcDescriptor
   playerSurfaceId?: string
-  sourceRequest?: http.HttpRequest
   video: boolean
   initialPositionMs: number
   loop: boolean
@@ -322,7 +319,7 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
         this.log(`url_set session=${sessionId} mode=${mode}`)
       } else {
         const source = !video && this.isTingshijieAudioUrl(url)
-          ? await this.createTingshijieAudioSource(url, headers, session)
+          ? await this.createTingshijieAudioSource(url, headers)
           : media.createMediaSourceWithUrl(url, headers)
         // API 26 devices expose setMediaSource(strategy) in the type surface,
         // but the runtime does not expose preferredBufferDurationForPlaying or
@@ -624,9 +621,6 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
     const session = this.sessions.get(sessionId)
     if (session === undefined) return
     this.sessions.delete(sessionId)
-    if (session.sourceRequest !== undefined) this.log(`audio_data_stream_cancelled session=${sessionId}`)
-    session.sourceRequest?.destroy()
-    session.sourceRequest = undefined
     if (sessionId === this.audioSessionId && !preserveAudioSession) {
       await this.audioBackgroundTask.stop()
       await this.destroyAudioSession()
@@ -642,8 +636,6 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
       // Release is best effort after the session has been removed from the
       // registry; a native cleanup error must not block the next media item.
     } finally {
-      session.audioMediaSource = undefined
-      session.audioDataSourceDescriptor = undefined
       this.emit(sessionId, 'released', true)
     }
   }
@@ -711,44 +703,51 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
   private async createTingshijieAudioSource(
     url: string,
     sourceHeaders: Record<string, string>,
-    session: MediaSession,
   ): Promise<media.MediaSource> {
+    const data = await this.downloadTingshijieAudio(url, sourceHeaders)
+    const sourceData = new Uint8Array(data)
+    const descriptor: media.AVDataSrcDescriptor = {
+      fileSize: data.byteLength,
+      callback: (buffer: ArrayBuffer, length: number, pos?: number): number => {
+        if (pos === undefined || pos < 0 || length < 0) return -2
+        if (pos >= sourceData.byteLength) return -1
+        const target = new Uint8Array(buffer)
+        const count = Math.min(length, target.byteLength, sourceData.byteLength - pos)
+        if (count <= 0) return -1
+        target.set(sourceData.subarray(pos, pos + count))
+        return count
+      },
+    }
+    const source = media.createMediaSourceWithDataSource(descriptor)
+    if (source === undefined) throw new Error('Tingshijie audio data source could not be created.')
+    this.log(`audio_data_source_ready bytes=${data.byteLength}`)
+    return source
+  }
+
+  private async downloadTingshijieAudio(
+    url: string,
+    sourceHeaders: Record<string, string>,
+  ): Promise<ArrayBuffer> {
     const request = http.createHttp()
-    session.sourceRequest = request
-    const chunks: ArrayBuffer[] = []
-    let receivedBytes = 0
-    let expectedLength: number | undefined
-    let streamComplete = false
-    let streamFailure = false
-    let resolveInitialData: () => void = (): void => {}
-    let rejectInitialData: (error: Object) => void = (_error: Object): void => {}
-    const initialData = new Promise<void>((resolve, reject): void => {
-      resolveInitialData = resolve
-      rejectInitialData = reject
-    })
-    let loggedProgressBytes = 0
     const headers: Record<string, string> = {}
     Object.keys(sourceHeaders).forEach((name: string): void => {
       if (name.toLowerCase() !== 'range') headers[name] = sourceHeaders[name]
     })
+    const chunks: ArrayBuffer[] = []
+    let expectedLength: number | undefined
+    let receivedBytes = 0
+    let streamEnded = false
     request.on('headersReceive', (value: Object): void => {
       const responseHeaders = this.httpResponseHeaders(value)
       const contentLength = responseHeaders['content-length']
       if (contentLength !== undefined) expectedLength = Number(contentLength)
     })
-    request.on('dataReceiveProgress', (progress: http.DataReceiveProgressInfo): void => {
-      if (progress.receiveSize - loggedProgressBytes < 256 * 1024 && progress.receiveSize !== progress.totalSize) return
-      loggedProgressBytes = progress.receiveSize
-      this.log(`audio_data_stream_progress received=${progress.receiveSize} total=${progress.totalSize}`)
-    })
     request.on('dataReceive', (data: ArrayBuffer): void => {
       chunks.push(data)
       receivedBytes += data.byteLength
-      if (loggedProgressBytes === 0 || receivedBytes - loggedProgressBytes >= 256 * 1024) {
-        loggedProgressBytes = receivedBytes
-        this.log(`audio_data_stream_received bytes=${receivedBytes}`)
-      }
-      if (receivedBytes >= 8192) resolveInitialData()
+    })
+    request.on('dataEnd', (): void => {
+      streamEnded = true
     })
     const options: http.HttpRequestOptions = {
       method: http.RequestMethod.GET,
@@ -758,68 +757,24 @@ export default class MgReadOhosMediaPlugin implements FlutterPlugin, MethodCallH
       connectTimeout: 60000,
       maxLimit: 100 * 1024 * 1024,
     }
-    request.requestInStream(url, options).then((status: number): void => {
-      if (status !== 200 || receivedBytes === 0 ||
-        (expectedLength !== undefined && (!Number.isSafeInteger(expectedLength) || expectedLength !== receivedBytes))) {
-        streamFailure = true
-        rejectInitialData(new Error(`Tingshijie audio response was incomplete (HTTP ${status}, bytes ${receivedBytes}).`))
-      } else {
-        streamComplete = true
-        this.log(`audio_data_stream_complete bytes=${receivedBytes}`)
-        resolveInitialData()
-      }
-      request.destroy()
-      if (session.sourceRequest === request) session.sourceRequest = undefined
-    }, (error: Object): void => {
-      streamFailure = true
-      this.log('audio_data_stream_failed')
-      rejectInitialData(error)
-      request.destroy()
-      if (session.sourceRequest === request) session.sourceRequest = undefined
-    })
     try {
-      await initialData
-    } catch (error) {
+      const status = await request.requestInStream(url, options)
+      if (status !== 200) throw new Error(`Tingshijie audio download returned HTTP ${status}.`)
+      if (!streamEnded || receivedBytes === 0) throw new Error('Tingshijie audio response ended without complete data.')
+      if (expectedLength !== undefined && (!Number.isSafeInteger(expectedLength) || expectedLength !== receivedBytes)) {
+        throw new Error('Tingshijie audio response length does not match Content-Length.')
+      }
+      const data = new ArrayBuffer(receivedBytes)
+      const target = new Uint8Array(data)
+      let offset = 0
+      chunks.forEach((chunk: ArrayBuffer): void => {
+        target.set(new Uint8Array(chunk), offset)
+        offset += chunk.byteLength
+      })
+      return data
+    } finally {
       request.destroy()
-      if (session.sourceRequest === request) session.sourceRequest = undefined
-      throw new Error(this.errorMessage(error as Object))
     }
-    if (expectedLength === undefined || !Number.isSafeInteger(expectedLength) || expectedLength <= 0) {
-      throw new Error('Tingshijie audio response did not provide a valid Content-Length.')
-    }
-    const descriptor: media.AVDataSrcDescriptor = {
-      fileSize: expectedLength,
-      callback: (buffer: ArrayBuffer, length: number, pos?: number): number => {
-        if (streamFailure || pos === undefined || pos < 0 || length < 0) return -2
-        if (pos >= receivedBytes) return streamComplete ? -1 : 0
-        const count = Math.min(length, buffer.byteLength, receivedBytes - pos)
-        if (count <= 0) return streamComplete ? -1 : 0
-        const target = new Uint8Array(buffer)
-        let sourceOffset = 0
-        let targetOffset = 0
-        let absoluteOffset = pos
-        for (const chunkBuffer of chunks) {
-          const chunk = new Uint8Array(chunkBuffer)
-          const chunkEnd = sourceOffset + chunk.byteLength
-          if (absoluteOffset < chunkEnd && targetOffset < count) {
-            const chunkOffset = Math.max(0, absoluteOffset - sourceOffset)
-            const copyLength = Math.min(chunk.byteLength - chunkOffset, count - targetOffset)
-            target.set(chunk.subarray(chunkOffset, chunkOffset + copyLength), targetOffset)
-            targetOffset += copyLength
-            absoluteOffset += copyLength
-          }
-          sourceOffset = chunkEnd
-          if (targetOffset === count) break
-        }
-        return targetOffset
-      },
-    }
-    session.audioDataSourceDescriptor = descriptor
-    const source = media.createMediaSourceWithDataSource(descriptor)
-    if (source === undefined) throw new Error('Tingshijie audio data source could not be created.')
-    session.audioMediaSource = source
-    this.log(`audio_data_source_ready initialBytes=${receivedBytes} streaming=true`)
-    return source
   }
 
   private httpResponseHeaders(value: Object): Record<string, string> {
